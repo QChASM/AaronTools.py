@@ -1,0 +1,78 @@
+#! /usr/bin/env python3
+import unittest
+from copy import copy
+
+from AaronTools.comp_output import CompOutput
+from AaronTools.fileIO import FileReader
+
+
+class TestCompOutput(unittest.TestCase):
+    # with frequencies
+    normal = CompOutput("test_files/normal.log")
+    died = CompOutput("test_files/died.log")
+    error = CompOutput("test_files/error.log")
+    # optimization
+    opt_run = CompOutput("test_files/opt_running.log")
+    opt_norm = CompOutput("test_files/opt_normal.log")
+
+    def test_get_progress(self):
+        test = [TestCompOutput.died.get_progress()]
+        test += [TestCompOutput.error.get_progress()]
+        test += [TestCompOutput.normal.get_progress()]
+        test += [TestCompOutput.opt_run.get_progress()]
+
+        ref = ["Progress not found"]
+        ref += ["Max Force:0.003790/NO  RMS Force:0.000887/NO   Max Disp:1.095802/NO   RMS Disp:0.158612/NO"]
+        ref += ["Max Force:0.000016/YES RMS Force:0.000006/YES  Max Disp:0.011148/NO   RMS Disp:0.003723/NO"]
+        ref += ["Max Force:3.606006/NO  RMS Force:0.254588/NO   Max Disp:1.656082/NO   RMS Disp:0.279091/NO"]
+
+        for t, r in zip(test, ref):
+            self.assertTrue(t == r)
+
+    def test_grab_thermo(self):
+        logs = [TestCompOutput.normal,
+                TestCompOutput.error,
+                TestCompOutput.opt_norm]
+
+        tmp = logs[0]
+        test = [[copy(tmp.energy),
+                 copy(tmp.enthalpy),
+                 copy(tmp.free_energy),
+                 copy(tmp.calc_Grimme_G())]]
+        ref = [[-1856.01865834,
+                -1855.440611,
+                -1855.538011,
+                -1855.5328046892625]]
+
+        tmp = logs[1]
+        test += [[copy(tmp.energy),
+                  copy(tmp.enthalpy),
+                  copy(tmp.free_energy),
+                  None]]
+        ref += [[1.00054354503,
+                 None,
+                 None,
+                 None]]
+
+        tmp = logs[2]
+        test += [[copy(tmp.energy),
+                  copy(tmp.enthalpy),
+                  copy(tmp.free_energy),
+                  None]]
+        ref += [[-3511.5160178,
+                 None,
+                 None,
+                 None]]
+
+        for i, r in enumerate(ref):
+            if r[3] is None:
+                self.assertRaises(AttributeError, logs[i].calc_Grimme_G)
+            for j in range(3):
+                if r[j] is None:
+                    self.assertTrue(test[i][j] is None)
+                else:
+                    self.assertTrue(test[i][j] == r[j])
+
+
+if __name__ == "__main__":
+    unittest.main()

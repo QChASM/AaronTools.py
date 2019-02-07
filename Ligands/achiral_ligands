@@ -1,0 +1,41 @@
+BPE	1,2-Bis(4-pyridyl)ethane
+DMPE	1,2-Bis(dimethylphosphino)ethane
+DPPE	1,2-Bis(diphenylphosphino)ethane
+DPPP	1,3-Bis(diphenylphosphino)propane
+DPPF	1,1&prime;-Ferrocenediyl-bis(diphenylphosphine)
+Xphos	2-Dicyclohexylphosphino-2&prime;,4&prime;,6&prime;-triisopropylbiphenyl
+PhBP3	PhBP3	(from DOI: 10.1021/ja026433e)
+tBu-PCP	tetra(t-butyl)-2,6-bis(diphosphino)benzene	(from	DOI:	10.1126/science.1200514)
+tBu-PNPPyr	tetra(t-butyl)-2,6-bis(diphosphino)pyridine	(from DOI: 10.1021/ic901032c)
+iPr-PNPEt	{bis[2-(diisopropylphosphinomethyl)ethyl]amino}ethyl]amine	(from DOI: 10.1021/ja504034q)
+DPEphos	DPEphos	(from DOI: 10.1021/om201034m)
+Xantphos	Xantphos	(from DOI: 10.1021/om201034m)
+ACN	acetonitrile
+EDA	ethylene diamine
+BenQuin	Benzo[h]quinoline
+Milstein	Milstein catalyst	(from DOI: 10.1021/acscatal.7b01791)
+PHNNP	amine(imine)diphosphine	(from DOI: 10.1021/om500479q)
+DMP	2,9-dimethyl phenanthroline
+BPY	2,2&prime;-bipyridine
+DMBPY	4,4&prime;-dimethyl-2,2&prime;-bipyridine
+iPrPh-BIP	(N,N&prime;)-bis(2,6-diisoproylphenyl)imino pyridine	(from DOI: 10.1039/b107490c)
+TACN	1,4,7-triazacyclononane
+TACN_star	(N,N&prime;,N&prime;&prime;)-trimethyl-1,4,7-triazacyclononane
+Tp	tris(pyrazolyl)borate
+PyrOx	PyrOx
+PymdOx	PymdOx
+BiOX	Bioxazoline (Reisman)
+BDA	2,2'-bipyridine-6,6'-dicarboxylate
+CO	carbonyl
+KASBAI	2,6-dicyclohexyl-4-(2,4,6-trimethylphenyl)-3,5-diphenyl-2,4,6-triaza-3,5-diborinanylidene	(from DOI: 10.1021/ja052987g)
+iPr-NC3C	2,3-di(bisisopropylamino) cyclopropyl carbene	(&prime;8&prime; from DOI: 10.1021/ja202007s)
+Mes-NC5C	(N,N&prime;)-bis(mesityl) imidazolidinyl carbene	(&prime;6a&prime; from DOI: 10.1021/ja202007s)
+iPrPh-NC5C	(N,N&prime;)-bis(2,6-diisopropylphenyl) imidazolidinyl carbene	(&prime;6b&prime; from DOI: 10.1021/ja202007s)
+IMes	1,3-Dimesitylimidazol-2-ylidene	(&prime;5b&prime; from DOI: 10.1021/ja202007s)
+Ad-HC5C		(N,N&prime;)-bis(adamantyl) dihydroimidazolyl	carbene	(&prime;5c&prime; from DOI: 10.1021/ja202007s)
+Cp_star	pentamethylcyclopentadiene
+Cp	cyclopentadiene
+COD	cyclooctadiene
+NBD	2,5-Norbornadiene
+PIN	pinacolate
+AcAc	acetyl acetone
