@@ -2,8 +2,11 @@
 import os
 
 HOME = os.environ['HOME'].rstrip('/') + '/'
-QCHASM = os.environ['QCHASM'].rstrip('/') + '/'
 AARONLIB = os.environ['AARONLIB'].rstrip('/') + '/'
+
+QCHASM = os.path.dirname(os.path.abspath(__file__)).split('/')
+QCHASM = '/'.join(QCHASM[:-1]) + '/'
+
 CONNECTIVITY_THRESHOLD = 0.5
 
 ELEMENTS = [
