@@ -11,6 +11,7 @@ from AaronTools.const import CONNECTIVITY, ELECTRONEGATIVITY
 
 warn_LJ = set([])
 
+
 class BondOrder:
     bonds = {}
     warn_atoms = set([])
@@ -125,9 +126,18 @@ class Atom:
         tmp['flag'] = self.flag
         tmp['name'] = self.name
         tmp['tags'] = list(sorted(self.tags))
-        tmp['connected'] = sorted([a.name for a in self.connected])
-        tmp['constraint'] = sorted([a.name for a in self.constraint])
         return json.dumps(tmp)
+
+    def from_json(self, parse):
+        parse = json.loads(parse)
+        for key, val in parse.items():
+            if key == 'tags':
+                self.__dict__[key] = set(val)
+            elif key == 'coords':
+                self.__dict__[key] = np.array(val)
+            else:
+                self.__dict__[key] = val
+        return self
 
     def __float__(self):
         """
@@ -193,8 +203,8 @@ class Atom:
         try:
             self._connectivity = int(CONNECTIVITY[self.element])
         except KeyError:
-            raise NotImplementedError(
-                "Connectivity not found for element:", self.element)
+            warn(
+                "Connectivity not found for element: " + self.element)
         return
 
     def add_tag(self, *args):

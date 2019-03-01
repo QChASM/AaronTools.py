@@ -1,15 +1,17 @@
 #! /usr/bin/env python3
-"""Testing for Atoms class"""
 import unittest
 import random
+import json
 import numpy as np
 
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.geometry import Geometry
+from AaronTools.test import prefix
 
 
 class TestBondOrder(unittest.TestCase):
-    small_mol = "test_files/benzene_1-NO2_4-Cl.xyz"
+    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
+
     def test_get(self):
         mol = Geometry(TestBondOrder.small_mol)
 
@@ -34,7 +36,7 @@ class TestBondOrder(unittest.TestCase):
 
 class TestAtoms(unittest.TestCase):
     # Test constants
-    small_mol = "test_files/benzene_1-NO2_4-Cl.xyz"
+    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
 
     # helper functions
     def read_xyz(self, fname):
@@ -55,7 +57,7 @@ class TestAtoms(unittest.TestCase):
             atoms += [a]
         return atoms
 
-    ## test cases
+    # test cases
     def test_store_atoms(self):
         atoms_read = self.read_xyz(TestAtoms.small_mol)
         atoms_manual = []
@@ -139,8 +141,8 @@ class TestAtoms(unittest.TestCase):
                 sorted(old_tags.union(new_tags)), sorted(atom.tags))
 
     def test_get_invariant(self):
-        pentane = Geometry("test_files/pentane.xyz")
-        mol  = Geometry("test_files/6a2e5am1hex.xyz")
+        pentane = Geometry(prefix + "test_files/pentane.xyz")
+        mol = Geometry(prefix + "test_files/6a2e5am1hex.xyz")
 
         s = ''
         for a in pentane.atoms:
@@ -157,7 +159,31 @@ class TestAtoms(unittest.TestCase):
         ans = "3030061 2020062 2020062 3030061 2020062 2020062 2020062 2020062 1010081 1010063 1010072 1010072 "
         self.assertEqual(s, ans)
 
+    def test_json(self):
+        mol = Geometry(TestAtoms.small_mol)
+        ref_file = prefix + 'ref_files/json_atoms.txt'
+
+        test = []
+        for a in mol.atoms:
+            test += [a.to_json()]
+        with open(ref_file) as f:
+            self.assertEqual(json.dumps(test), f.read().strip())
+
+        with open(ref_file) as f:
+            for i, a in enumerate(json.load(f)):
+                a = Atom().from_json(a)
+                b = mol.atoms[i]
+                for key in ['element', 'coords', 'flag', 'name', 'tags']:
+                    if key == 'coords':
+                        self.assertTrue(np.linalg.norm(
+                            a.coords - b.coords) < 10**-12)
+                    elif key == 'tags':
+                        self.assertSetEqual(a.tags, b.tags)
+                    else:
+                        self.assertEqual(a.__dict__[key], b.__dict__[key])
+
     # measurement
+
     def test_is_connected(self):
         atoms = self.read_xyz(TestAtoms.small_mol)
         conn_valid = ['2,6,12',
@@ -198,7 +224,6 @@ class TestAtoms(unittest.TestCase):
         mol = self.read_xyz(TestAtoms.small_mol)
         angle = mol[11].angle(mol[12], mol[13])
         self.assertTrue(abs(np.rad2deg(angle) - 123.214) < 10**(-4))
-
 
 
 if __name__ == "__main__":
