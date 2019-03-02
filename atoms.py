@@ -116,29 +116,7 @@ class Atom:
         self.constraint = set([])
         self._rank = None
 
-        return
-
     # utilities
-    def to_json(self):
-        tmp = {}
-        tmp['element'] = self.element
-        tmp['coords'] = list(self.coords)
-        tmp['flag'] = self.flag
-        tmp['name'] = self.name
-        tmp['tags'] = list(sorted(self.tags))
-        return json.dumps(tmp)
-
-    def from_json(self, parse):
-        parse = json.loads(parse)
-        for key, val in parse.items():
-            if key == 'tags':
-                self.__dict__[key] = set(val)
-            elif key == 'coords':
-                self.__dict__[key] = np.array(val)
-            else:
-                self.__dict__[key] = val
-        return self
-
     def __float__(self):
         """
         converts self.name from a string to a floating point number

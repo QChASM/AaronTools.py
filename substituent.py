@@ -16,7 +16,6 @@ class Substituent(Geometry):
     """
     Attributes:
         name
-        comment
         atoms
         end         the atom substituent is connected to
         conf_num    number of conformers
@@ -33,16 +32,16 @@ class Substituent(Geometry):
         cache = {}
         cache['lengths'] = {}  # for storing number of atoms in each sub
 
-    def __init__(self, sub, targets=None, end=None):
+    def __init__(self, sub, name=None, targets=None, end=None,
+                 conf_num=None, conf_angle=None):
         """
         sub is either a file sub, a geometry, or an atom list
         """
         if isinstance(sub, (Geometry, list)):
             # we can create substituent object from fragment
-            self.name = ''
-            self.comment = ''
-            self.conf_num = None
-            self.conf_angle = None
+            self.name = name
+            self.conf_num = conf_num
+            self.conf_angle = conf_angle
             # save atom info
             if targets is None:
                 try:
@@ -51,14 +50,13 @@ class Substituent(Geometry):
                     self.atoms = sub
             else:
                 self.atoms = sub.find(targets)
-            self.refresh_connected()
+            self.refresh_connected(rank=False)
 
             # detect sub and conformer info
-            if not self.detect_sub():
-                raise LookupError("Substituent not found in library")
-
-        else:
-            # or we can create from file
+            if not conf_num or not conf_angle:
+                if not self.detect_sub():
+                    raise LookupError("Substituent not found in library")
+        else:  # or we can create from file
             # find substituent xyz file
             fsub = None
             for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
@@ -66,6 +64,10 @@ class Substituent(Geometry):
                 if match is not None:
                     fsub = f
                     break
+            # or assume we were given a file name instead
+            if not fsub and '.xyz' in sub:
+                fsub = sub
+                sub = sub.split('/')[-1].rstrip('.xyz')
 
             # load in atom info
             from_file = FileReader(fsub)
@@ -74,7 +76,7 @@ class Substituent(Geometry):
             self.atoms = from_file.atoms
             if targets is not None:
                 self.atoms = self.find(targets)
-            self.refresh_connected()
+            self.refresh_connected(rank=False)
 
             # set conformer info
             conf_info = re.search('CF:(\d+),(\d+)', self.comment)
@@ -86,20 +88,25 @@ class Substituent(Geometry):
 
         # end is connection point
         self.end = end
+        if not self.name:
+            self.name = "sub"
+        if self.name == "sub" and end is not None:
+            self.name += "-{}".format(end)
 
-    def copy(self, atoms=None, name=None, comment=None):
+    def copy(self, atoms=None, name=None, targets=None, end=None):
         """
         creates a new copy of the geometry
         parameters:
             atoms (list): defaults to all atoms
             name (str): defaults to NAME_copy
         """
-        rv = super().copy(atoms, name, comment)
-        rv.end = self.end
-        rv.conf_num = self.conf_num
-        rv.conf_angle = self.conf_angle
-        rv.refresh_connected()
-        return rv
+        if atoms is None:
+            atoms = deepcopy(self.atoms)
+        if name is None:
+            name = self.name
+        if end is None:
+            end = self.end
+        return Substituent(atoms, name, targets=targets, end=end)
 
     def detect_sub(self):
         """

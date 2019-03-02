@@ -5,9 +5,9 @@ import numpy as np
 from copy import copy
 
 from AaronTools.geometry import Geometry
-from AaronTools.substituent import Substituent
 from AaronTools.fileIO import FileReader
 from AaronTools.atoms import Atom
+from AaronTools.test import prefix, TestWithTimer
 
 
 def is_close(a, b, tol=10**-8, debug=False):
@@ -32,8 +32,8 @@ def check_atom_list(ref, comp):
     return rv
 
 
-class TestGeometry(unittest.TestCase):
-    benz_NO2_Cl = "test_files/benzene_1-NO2_4-Cl.xyz"
+class TestGeometry(TestWithTimer):
+    benz_NO2_Cl = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
     benz_NO2_Cl_conn = ['2,6,12',
                         '1,3,7',
                         '2,4,8',
@@ -49,12 +49,12 @@ class TestGeometry(unittest.TestCase):
                         '12',
                         '12']
     benz_NO2_Cl_conn = [i.split(',') for i in benz_NO2_Cl_conn]
-    benzene = "test_files/benzene.xyz"
-    benz_Cl = "test_files/benzene_4-Cl.xyz"
-    benz_OH_Cl = "test_files/benzene_1-OH_4-Cl.xyz"
-    benz_Ph_Cl = "test_files/benzene_1-Ph_4-Cl.xyz"
-    Et_NO2 = "test_files/Et_1-NO2.xyz"
-    pent = "test_files/pentane.xyz"
+    benzene = prefix + "test_files/benzene.xyz"
+    benz_Cl = prefix + "test_files/benzene_4-Cl.xyz"
+    benz_OH_Cl = prefix + "test_files/benzene_1-OH_4-Cl.xyz"
+    benz_Ph_Cl = prefix + "test_files/benzene_1-Ph_4-Cl.xyz"
+    Et_NO2 = prefix + "test_files/Et_1-NO2.xyz"
+    pent = prefix + "test_files/pentane.xyz"
 
     def test_init(self):
         ref = FileReader(TestGeometry.benz_NO2_Cl)
@@ -226,6 +226,7 @@ class TestGeometry(unittest.TestCase):
                 self.assertTrue(a.flag)
 
     # geometry measurement
+
     def test_angle(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
         angle = mol.angle('13', '12', '14')
@@ -433,7 +434,8 @@ class TestGeometry(unittest.TestCase):
         mol.change_dihedral(*atom_args, 30, radians=False, adjust=True)
         self.assertTrue(is_close(mol.dihedral(*atom_args),
                                  original_dihedral + np.deg2rad(30)))
-        self.assertEqual(mol, Geometry('test_files/change_dihedral_0.xyz'))
+        self.assertEqual(mol, Geometry(
+            prefix + 'test_files/change_dihedral_0.xyz'))
 
         # set dihedral to 60 deg
         mol.change_dihedral(*atom_args, 60, radians=False)

@@ -3,10 +3,11 @@ import unittest
 import numpy as np
 
 from AaronTools.fileIO import FileReader
+from AaronTools.test import prefix, TestWithTimer
 
 
-class TestFileReader(unittest.TestCase):
-    small_mol = "test_files/benzene_1-NO2_4-Cl.xyz"
+class TestFileReader(TestWithTimer):
+    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
 
     def xyz_matrix(self, fname):
         rv = []
@@ -60,15 +61,15 @@ class TestFileReader(unittest.TestCase):
 
     def test_read_log_structure(self):
         ref = FileReader("ref_files/file_io_normal.xyz")
-        test = FileReader("test_files/normal.log")
+        test = FileReader(prefix + "test_files/normal.log")
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_error.xyz")
-        test = FileReader("test_files/error.log")
+        test = FileReader(prefix + "test_files/error.log")
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_died.xyz")
-        test = FileReader("test_files/died.log")
+        test = FileReader(prefix + "test_files/died.log")
         self.assertTrue(self.validate_atoms(ref, test))
 
 

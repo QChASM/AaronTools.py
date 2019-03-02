@@ -11,34 +11,41 @@ from AaronTools.substituent import Substituent
 class Catalyst(Geometry):
     """
     Attributes:
-        name
-        comment
-        atoms
-        other
-        center      the metal center or active center
-        components  holds ligands and substrates
-        conf_num    conformer number
+        :name: str
+        :comment: str
+        :atoms: [Atom]
+        :other: dict
+        :center: [Atom] - the metal center or active center
+        :components: {'ligand': [Component], 'substrate': [Component]}
+        :conf_num: int - the conformer number
     """
 
-    def __init__(self, fname='', name='', comment='', atoms=None):
+    def __init__(self, structure='', name='', comment='', conf_num=1):
         self.center = None
         self.components = None
-        self.conf_num = 0
-        Geometry.__init__(self, fname, name, comment, atoms)
-        if isinstance(fname, str) and fname == '' and atoms is None:
+        self.conf_num = conf_num
+
+        Geometry.__init__(self, structure, name, comment)
+
+        if isinstance(structure, str) and structure == '':
             return
+
         self.other = self.parse_comment()
         self.detect_components()
-        self.conf_num = 1
 
     def copy(self, atoms=None, name=None, comment=None):
+        if atoms is None:
+            atoms = deepcopy(self.atoms)
+
         if name is None:
             name = self.name + "_copy"
+        elif name == '':
+            name = self.name
+
         if comment is None:
             comment = deepcopy(self.comment)
-        rv = super().copy(atoms, name, comment=self.comment)
-        rv = Catalyst(rv)
-        return rv
+
+        return Catalyst(atoms, name, comment)
 
     def rebuild(self):
         atoms = []
@@ -75,10 +82,10 @@ class Catalyst(Geometry):
                     center_max = float(a)
 
         if not lig_assigned and len(self.center) < 1:
-            raise IOError(
-                "Non-transition metal centered catalysts must either have "
-                + "active centers or ligand atoms specified in the comment "
-                + "line of the XYZ input file")
+            msg = "Non-transition metal centered catalysts must either have " \
+                + "active centers or ligand atoms specified in the comment " \
+                + "line of the XYZ input file"
+            raise IOError(msg)
 
         # label ligand and substrate
         lig = []
@@ -108,10 +115,12 @@ class Catalyst(Geometry):
             self.components['ligand'] = self.detect_fragments(lig, subst)
             self.components['substrate'] = self.detect_fragments(subst, lig)
         # rename
-        for lig in self.components['ligand']:
-            lig.name = self.name + '_lig-{}'.format(lig.atoms[0].name)
-        for sub in self.components['substrate']:
-            sub.name = self.name + '_sub-{}'.format(sub.atoms[0].name)
+        for i, lig in enumerate(self.components['ligand']):
+            name = self.name + '_lig-{}'.format(lig[0].name)
+            self.components['ligand'][i] = Component(lig, name)
+        for i, sub in enumerate(self.components['substrate']):
+            name = self.name + '_sub-{}'.format(sub[0].name)
+            self.components['substrate'][i] = Component(sub, name)
         return
 
     def detect_fragments(self, targets, avoid=None):
@@ -132,8 +141,7 @@ class Catalyst(Geometry):
             if a in avoid:
                 continue
             frag = self.get_fragment(a, avoid)
-            frag = Component(frag)
-            for f in frag.atoms:
+            for f in frag:
                 found.add(f)
             rv += [frag]
         return rv

@@ -5,6 +5,7 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.test import prefix, TestWithTimer
 
 
 def check_atom_list(ref, comp):
@@ -14,10 +15,10 @@ def check_atom_list(ref, comp):
     return rv
 
 
-class TestSubstituent(unittest.TestCase):
-    COCH3 = Geometry('test_files/COCH3.xyz')
-    NO2 = Geometry('test_files/NO2.xyz')
-    benz_NO2_Cl = Geometry("test_files/benzene_1-NO2_4-Cl.xyz")
+class TestSubstituent(TestWithTimer):
+    COCH3 = Geometry(prefix + 'test_files/COCH3.xyz')
+    NO2 = Geometry(prefix + 'test_files/NO2.xyz')
+    benz_NO2_Cl = Geometry(prefix + "test_files/benzene_1-NO2_4-Cl.xyz")
 
     def is_COCH3(self, sub):
         ref = TestSubstituent.COCH3

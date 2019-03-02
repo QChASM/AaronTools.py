@@ -13,16 +13,16 @@ from AaronTools.substituent import Substituent
 class Component(Geometry):
     """
     Attributes:
-        name
-        comment
-        atoms
-        other
-        substituents
-        backbone
-        key_atoms (for ligand only)
+        :name: str
+        :comment: str
+        :atoms: list(Atom)
+        :other: dict
+        :substituents: list(Substituent)
+        :backbone: list(Atom)
+        :key_atoms: list(Atom) for ligand only
     """
 
-    def __init__(self, comp, targets=None, tag=None, name='', comment=''):
+    def __init__(self, structure, name='', comment='', tag=None):
         """
         comp is either a file, a geometry, or an atom list
         """
@@ -33,49 +33,30 @@ class Component(Geometry):
         self.backbone = None
         self.key_atoms = []
 
-        if isinstance(comp, (Geometry, list)):
-            # we can create object from fragment
-            # save atom info
-            if targets is None:
-                try:
-                    self.atoms = comp.atoms
-                    if name == '':
-                        self.name = comp.name
-                    if comment == '':
-                        self.comment = comp.comment
-                except AttributeError:
-                    self.atoms = comp
-            else:
-                self.atoms = comp.find(targets)
-
-        else:
-            # or we can create from file
-            # load in atom info
-            from_file = FileReader(comp)
-            self.name = comp
-            self.comment = from_file.comment
-            self.atoms = from_file.atoms
-            if targets is not None:
-                self.atoms = self.find(targets)
+        super().__init__(structure, name, comment)
 
         if tag is not None:
             for a in self.atoms:
                 a.add_tag(tag)
+
         self.other = self.parse_comment()
+
         if 'key_atoms' in self.other:
             self.key_atoms = self.other['key_atoms']
+            # other should only have info we don't have a place for yet
+            del self.other['key_atoms']
 
-        self.refresh_connected()
+        self.refresh_connected(rank=False)
         self.detect_backbone()
 
     def copy(self, atoms=None, name=None, comment=None):
+        if atoms is None:
+            atoms = deepcopy(self.atoms)
         if name is None:
-            name = self.name + "_copy"
+            name = self.name
         if comment is None:
-            comment = deepcopy(self.comment)
-        rv = super().copy(atoms, name, comment)
-        rv = Component(rv)
-        return rv
+            comment = self.comment
+        return Component(atoms, name, comment)
 
     def substitute(self, sub, target, attached_to=None):
         """
@@ -168,7 +149,7 @@ class Component(Geometry):
         # fix bond distance
         self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
         # fix connection info
-        self.refresh_connected()
+        self.refresh_connected(rank=False)
 
     def get_frag_list(self, targets=None, max_order=None):
         """
@@ -342,43 +323,3 @@ class Component(Geometry):
                 axis = sub.atoms[0].bond(sub.end)
                 center = sub.end
                 self.minimize_torsion(sub.atoms, axis, center, geom)
-
-    def make_conformer(self, targets=None):
-        """
-        Yields conformers made by rotating substituents.
-        Returns:
-            updated component and a code indicating which substituents
-            were rotated
-            eg: new_conf, (1, 0, 2)
-        Parameters:
-            skip - atom list which, if any found in a substituent, will
-                skip rotation of that entire substituent
-            targets - a list of substituents. If provided, will only
-                rotate the substituents in `target`
-        """
-        # validate targets
-        if targets is None:
-            targets = self.substituents
-        tmp = list(targets)
-        for t in targets:
-            if t.conf_num == 1 or t.conf_angle == 0.0:
-                tmp.remove(t)
-                continue
-            if t not in self.substituents:
-                tmp.remove(t)
-                continue
-        targets = list(tmp)
-        if len(targets) == 0:
-            yield None, None
-            return
-
-        # yeild conformers
-        max_confs = max([t.conf_num for t in targets])
-        max_confs = list(range(max_confs+1))
-        for confs in it.product(max_confs, repeat=len(targets)):
-            for i, c in enumerate(confs):
-                if c != 0:
-                    targets[i].sub_rotate()
-                    for a in targets[i].atoms:
-                        a.flag = False
-            yield(self.name.split('_')[-1], confs)

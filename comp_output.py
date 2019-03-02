@@ -1,10 +1,11 @@
 #! /usr/bin/env python3
-import json
 import numpy as np
 
 from AaronTools.const import PHYSICAL, UNIT
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
+from AaronTools.atoms import Atom
+from AaronTools.utils.utils import float_vec, uptri2sym
 
 
 class CompOutput:
@@ -13,9 +14,10 @@ class CompOutput:
         geometry    the last Geometry
         opts        list of Geometry for each optimization steps
         frequency   Frequency object
+        archive     a string containing the archive entry
         energy, enthalpy, free_energy, grimme_g,
         mass, temperature, rotational_temperature,
-        multiplicty, charge, rotational_symmetry_number
+        multiplicity, charge, rotational_symmetry_number
         error, error_msg, finished,
         gradient, E_ZPVE, ZPVE
     """
@@ -24,18 +26,24 @@ class CompOutput:
         self.geometry = None
         self.opts = None
         self.frequency = None
+        self.archive = None
+
+        self.gradient, self.E_ZPVE, self.ZPVE = (None, None, None)
         self.energy, self.enthalpy = (None, None)
         self.free_energy, self.grimme_g = (None, None)
+
         self.mass, self.temperature = (None, None)
-        self.rotational_temperature = None
         self.multiplicity, self.charge = (None, None)
+
+        self.rotational_temperature = None
         self.rotational_symmetry_number = None
+
         self.error, self.error_msg, self.finished = (None, None, None)
-        self.gradient, self.E_ZPVE, self.ZPVE = (None, None, None)
+
         keys = ['energy', 'error', 'error_msg', 'gradient', 'finished',
                 'frequency', 'mass', 'temperature', 'rotational_temperature',
                 'free_energy', 'multiplicity', 'charge', 'E_ZPVE', 'ZPVE',
-                'rotational_symmetry_number', 'enthalpy']
+                'rotational_symmetry_number', 'enthalpy', 'archive']
 
         if isinstance(fname, str) and '.log' in fname:
             from_file = FileReader(fname, get_all, just_geom=False)
@@ -48,7 +56,7 @@ class CompOutput:
         if 'all_geom' in from_file.other:
             self.opts = []
             for g in from_file.other['all_geom']:
-                self.opts += [Geometry(atoms=g)]
+                self.opts += [Geometry(g)]
 
         for k in keys:
             if k in from_file.other:
@@ -148,16 +156,73 @@ class CompOutput:
                 break
         return n
 
-    def to_json(self, attr):
+    def parse_archive(self):
         """
-        Convert attribute to json
+        Reads info from archive string
+
+        Returns: a dictionary with the parsed information
         """
-        if attr == 'geometry':
-            return self.geometry.to_json()
-        elif attr == 'opts':
-            tmp = [g.to_json() for g in self.opts]
-            return json.dumps(tmp)
-        elif attr == 'frequency':
-            return self.frequency.to_json()
-        else:
-            raise NotImplementedError()
+        def grab_coords(line):
+            rv = {}
+            for i, word in enumerate(line.split('\\')):
+                word = word.split(',')
+                if i == 0:
+                    rv['charge'] = int(word[0])
+                    rv['multiplicity'] = int(word[1])
+                    rv['atoms'] = []
+                    continue
+                rv['atoms'] += [Atom(element=word[0],
+                                     coords=word[1:4], name=str(i))]
+            return rv
+
+        rv = {}
+        lines = iter(self.archive.split('\\\\'))
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith('@'):
+                line = line[1:]
+                for word in line.split('\\'):
+                    if 'summary' not in rv:
+                        rv['summary'] = [word]
+                    elif word not in rv['summary']:
+                        rv['summary'] += [word]
+                continue
+
+            if line.startswith('#'):
+                if 'route' not in rv:
+                    rv['route'] = line
+                elif isinstance(rv['route'], list):
+                    # for compound jobs, like opt freq
+                    rv['route'] += [line]
+                else:
+                    # for compound jobs, like opt freq
+                    rv['route'] = [rv['route']] + [line]
+
+                line = next(lines).strip()
+                if 'comment' not in line:
+                    rv['comment'] = line
+
+                line = next(lines).strip()
+                for key, val in grab_coords(line).items():
+                    rv[key] = val
+                continue
+
+            words = iter(line.split('\\'))
+            for word in words:
+                if not word:
+                    # get rid of pesky empty elements
+                    continue
+                if '=' in word:
+                    key, val = word.split('=')
+                    rv[key.lower()] = float_vec(val)
+                else:
+                    if 'hessian' not in rv:
+                        rv['hessian'] = uptri2sym(
+                            float_vec(word), 3*len(rv['atoms']),
+                            col_based=True)
+                    else:
+                        rv['gradient'] = float_vec(word)
+        return rv

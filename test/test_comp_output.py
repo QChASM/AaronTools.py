@@ -3,17 +3,17 @@ import unittest
 from copy import copy
 
 from AaronTools.comp_output import CompOutput
-from AaronTools.fileIO import FileReader
+from AaronTools.test import prefix, TestWithTimer
 
 
-class TestCompOutput(unittest.TestCase):
+class TestCompOutput(TestWithTimer):
     # with frequencies
-    normal = CompOutput("test_files/normal.log")
-    died = CompOutput("test_files/died.log")
-    error = CompOutput("test_files/error.log")
+    normal = CompOutput(prefix + "test_files/normal.log")
+    died = CompOutput(prefix + "test_files/died.log")
+    error = CompOutput(prefix + "test_files/error.log")
     # optimization
-    opt_run = CompOutput("test_files/opt_running.log")
-    opt_norm = CompOutput("test_files/opt_normal.log")
+    opt_run = CompOutput(prefix + "test_files/opt_running.log")
+    opt_norm = CompOutput(prefix + "test_files/opt_normal.log")
 
     def test_get_progress(self):
         test = [TestCompOutput.died.get_progress()]

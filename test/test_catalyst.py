@@ -5,18 +5,19 @@ from copy import deepcopy
 from AaronTools.catalyst import Catalyst
 from AaronTools.component import Component
 from AaronTools.geometry import Geometry
+from AaronTools.test import prefix, TestWithTimer
 
 
-class TestCatalyst(unittest.TestCase):
+class TestCatalyst(TestWithTimer):
     # C:34 L:35-93 K:1,2 F:1-34;1-2;2-34;2-3;3-34
-    tm_simple = Catalyst("test_files/catalysts/tm_single-lig.xyz")
-    tm_multi = Catalyst("test_files/catalysts/tm_multi-lig.xyz")
-    org_1 = Catalyst("test_files/catalysts/org_1.xyz")
-    org_tri = Catalyst("test_files/catalysts/org_tri.xyz")
+    tm_simple = Catalyst(prefix + "test_files/catalysts/tm_single-lig.xyz")
+    tm_multi = Catalyst(prefix + "test_files/catalysts/tm_multi-lig.xyz")
+    org_1 = Catalyst(prefix + "test_files/catalysts/org_1.xyz")
+    org_tri = Catalyst(prefix + "test_files/catalysts/org_tri.xyz")
 
-    monodentate = Component("test_files/ligands/ACN.xyz")
-    bidentate = Component("test_files/ligands/S-tBu-BOX.xyz")
-    tridentate = Component("test_files/ligands/squaramide.xyz")
+    monodentate = Component(prefix + "test_files/ligands/ACN.xyz")
+    bidentate = Component(prefix + "test_files/ligands/S-tBu-BOX.xyz")
+    tridentate = Component(prefix + "test_files/ligands/squaramide.xyz")
 
     def validate(self, test, ref):
         t_el = sorted([t.element for t in test.atoms])
@@ -32,7 +33,8 @@ class TestCatalyst(unittest.TestCase):
         return rmsd < 10**-6
 
     def test_init(self):
-        self.assertRaises(IOError, Catalyst, "test_files/R-Quinox-tBu3.xyz")
+        self.assertRaises(IOError, Catalyst, prefix +
+                          "test_files/R-Quinox-tBu3.xyz")
 
     def test_detect_components(self):
         def tester(ref, test):

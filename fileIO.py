@@ -181,8 +181,21 @@ class FileReader:
 
         all_geom = []
         line = f.readline()
+        self.other['archive'] = ''
+        found_archive = False
         n = 1
         while line != '':
+            # archive entry
+            if line.strip().startswith('1\\1\\'):
+                found_archive = True
+                line = '@' + line.strip()[4:]
+            if found_archive and line.strip().endswith('@'):
+                self.other['archive'] = self.other['archive'][:-2] + '\\\\'
+                found_archive = False
+            elif found_archive:
+                self.other['archive'] += line.strip()
+
+            # geometry
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
                     all_geom += [deepcopy(self.atoms)]
@@ -201,6 +214,8 @@ class FileReader:
                 if match is not None:
                     self.other['charge'] = int(match.group(1))
                     self.other['multiplicity'] = int(match.group(2))
+
+            # status
             if NORM_FINISH in line:
                 self.other['finished'] = True
             if "SCF Done" in line:
@@ -371,32 +386,52 @@ class FileReader:
 
 
 class Frequency:
+    """
+    ATTRIBUTES
+    :data: Data - contains frequencies, intensities, and normal mode vectors
+    :imaginary_frequencies: list(float)
+    :real_frequencies: list(float)
+    :lowest_frequency: float
+    :by_frequency: dict keyed by frequency containing intensities and vectors
+        {freq: {intensity: float, vector: np.array}}
+    :is_TS: bool - true if len(imaginary_frequencies) == 1, else False
+    """
     class Data:
-        def __init__(self, frequency):
+        """
+        ATTRIBUTES
+        :frequency: float
+        :intensity: float
+        :vector: dict - normal mode vectors keyed by atom
+        """
+
+        def __init__(self, frequency, intensity=None, vector={}):
             self.frequency = frequency
-            self.intensity = None
-            self.vector = {}
+            self.intensity = intensity
+            self.vector = vector
 
-        def to_json(self):
-            tmp = {}
-            tmp['frequency'] = self.frequency
-            tmp['intensity'] = self.intensity
-            tmp['vector'] = self.vector
-            return json.dumps(tmp)
-
-    def __init__(self, lines, hpmodes):
+    def __init__(self, data, hpmodes=None):
+        """
+        :data: should either be a str containing the lines of the output file
+            with frequency information, or a list of Data objects
+        :hpmodes: required when data is a string
+        """
         self.data = []
-        self.frequencies = []
-        self.intensities = []
-        self.vectors = []
-
         self.imaginary_frequencies = None
         self.real_frequencies = None
         self.lowest_frequency = None
         self.by_frequency = {}
         self.is_TS = None
 
-        lines = lines.split('\n')
+        if isinstance(data[0], Frequency.Data):
+            self.data = data
+            self.sort_frequencies()
+            return
+        else:
+            if hpmodes is None:
+                raise TypeError(
+                    'hpmode argument required when data is a string')
+
+        lines = data.split('\n')
         num_head = 0
         for line in lines:
             if "Harmonic frequencies" in line:
@@ -407,11 +442,6 @@ class Frequency:
         self.parse_lines(lines, hpmodes)
         self.sort_frequencies()
         return
-
-    def to_json(self):
-        tmp = {}
-        tmp['data'] = [d.to_json() for d in self.data]
-        tmp['is_TS'] = self.is_TS
 
     def parse_lines(self, lines, hpmodes):
         num_head = 0

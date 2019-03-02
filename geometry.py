@@ -25,44 +25,45 @@ class Geometry:
     """
     Primes()
 
-    def __init__(self, fname='', name='', comment='', atoms=None):
+    def __init__(self, structure='', name='', comment=''):
+        """
+        :structure: can be a Geometry(), a FileReader(), a file name, or a
+            list of atoms
+        """
         self.name = name
         self.comment = comment
         self.atoms = []
 
-        if isinstance(fname, Geometry):
+        if isinstance(structure, Geometry):
             # new from geometry
-            self.name = fname.name
-            self.comment = fname.comment
-            self.atoms = fname.atoms
+            self.atoms = structure.atoms
+            if not name:
+                self.name = structure.name
+            if not comment:
+                self.comment = structure.comment
             self.parse_comment()
             self.refresh_connected()
             return
-        elif isinstance(fname, FileReader):
+        elif isinstance(structure, FileReader):
             # get info from FileReader object
-            from_file = fname
-        elif isinstance(fname, str) and fname != '':
+            from_file = structure
+        elif isinstance(structure, str) and structure != '':
             # parse file
-            from_file = FileReader(fname)
-        elif hasattr(fname, '__iter__') and fname != '':
-            for a in fname:
+            from_file = FileReader(structure)
+        elif hasattr(structure, '__iter__') and structure != '':
+            for a in structure:
                 if not isinstance(a, Atom):
-                    break
+                    raise TypeError
             else:
                 # list of atoms supplied
-                self.atoms = fname
+                self.atoms = structure
                 self.parse_comment()
                 self.refresh_connected()
                 return
-        elif atoms is not None:
-            # kwarg list of atoms
-            self.atoms = atoms
-            self.parse_comment()
-            self.refresh_connected()
-            return
         else:
             return
 
+        # only get here if we were given a file reader object or a file name
         self.name = from_file.name
         self.comment = from_file.comment
         self.atoms = from_file.atoms
@@ -105,13 +106,6 @@ class Geometry:
         return rv
 
     # utilities
-    def to_json(self):
-        tmp = {}
-        tmp['name'] = self.name
-        tmp['comment'] = self.comment
-        tmp['atoms'] = [a.to_json() for a in self.atoms]
-        return json.dumps(tmp)
-
     def __eq__(self, other):
         """
         two geometries equal if:
@@ -180,39 +174,32 @@ class Geometry:
             atoms = deepcopy(self.find(atoms))
 
         if name is None:
-            name = self.name + '_copy'
-        if name is '':
             name = self.name
 
         if comment is None:
             comment = deepcopy(self.comment)
 
-        rv = Geometry()
-        rv.name = name
-        rv.comment = comment
-        rv.atoms = atoms
-        rv.refresh_connected()
-        return rv
+        return Geometry(atoms, name, comment)
 
-    def update_geometry(self, fname):
+    def update_geometry(self, structure):
         """
-        Replace current coords with those from fname
+        Replace current coords with those from :structure:
         """
-        tmp = Geometry(fname)
+        tmp = Geometry(structure)
         if len(tmp.atoms) != len(self.atoms):
+            print(len(tmp.atoms), len(self.atoms))
             raise RuntimeError(
                 "Updated geometry has different number of atoms")
         for i, a in enumerate(tmp.atoms):
             if a.element != self.atoms[i].element:
                 raise RuntimeError(
-                    "Updated coords atom order doesn't seem to " +
-                    "match original atom order. Stopping...")
+                    "Updated coords atom order doesn't seem to match original "
+                    + "atom order. Stopping...")
             self.atoms[i].coords = a.coords
-
         self.refresh_connected()
         return
 
-    def find(self, *args):
+    def find(self, *args, debug=False):
         """
         finds atom in geometry
         Parameters:
@@ -347,30 +334,108 @@ class Geometry:
             raise LookupError(err)
         return tuple(rv)
 
-    def refresh_connected(self, threshold=0.2):
+    def refresh_connected(self, threshold=0.2, rank=True):
         """
         reset connected atoms
         atoms are connected if they're distance from each other is less than
             the sum of their covalent radii plus a threshold
         """
         # clear current connectivity
+        old_connectivity = []
         for a in self.atoms:
+            old_connectivity += [a.connected]
             a.connected = set([])
 
         # determine connectivity
+        refresh_ranks = False
         for i, a in enumerate(self.atoms):
             for b in self.atoms[i+1:]:
                 if a.is_connected(b, threshold):
                     a.connected.add(b)
                     b.connected.add(a)
+            if not refresh_ranks and a.connected ^ old_connectivity[i]:
+                refresh_ranks = True
 
         # get ranks
+        if refresh_ranks and rank:
+            self.refresh_ranks()
+
+    def refresh_ranks(self):
         rank = self.canonical_rank()
         for a, r in zip(self.atoms, rank):
             a._rank = r
         return
 
     def canonical_rank(self, heavy_only=False):
+        """
+        put atoms in canonical smiles rank
+        (follows algorithm described in 10.1021/ci00062a008)
+        """
+        primes = Primes.list(len(self.atoms))
+        atoms = {}  # {atom: rank}
+        ranks = {}  # {rank: [atom]}
+
+        def get_rank(atoms):
+            new_atoms = {}
+            new_ranks = {}
+            rank_key = sorted(set(atoms.values()))
+
+            # looping through self.atoms should ensure that random flips
+            # between two tied atoms doesn't happen?
+            for a in self.atoms:
+                if heavy_only and a.element == 'H':
+                    continue
+                val = rank_key.index(atoms[a])
+                new_atoms[a] = val
+                if val in new_ranks:
+                    new_ranks[val] += [a]
+                else:
+                    new_ranks[val] = [a]
+
+            return new_atoms, new_ranks
+
+        # use invariants as initial rank
+        for a in self.atoms:
+            if heavy_only and a.element == 'H':
+                continue
+            atoms[a] = a.get_invariant()
+
+        atoms, ranks = get_rank(atoms)
+
+        # use neighbors to break ties
+        count = 0
+        while count < 50:
+            count += 1
+            new_atoms = {}
+            for a in atoms:
+                # new rank is product of neighbors' prime rank
+                val = primes[atoms[a]]
+                for c in a.connected:
+                    if heavy_only and c.element == 'H':
+                        continue
+                    val *= primes[atoms[c]]
+                new_atoms[a] = val
+            atoms, new_ranks = get_rank(new_atoms)
+            if new_ranks == ranks:
+                break
+            if sorted(new_ranks.keys()) == sorted(ranks.keys()):
+                for a in new_atoms:
+                    new_atoms[a] *= 2
+                new_atoms[ranks[0][0]] -= 1
+            atoms, new_ranks = get_rank(new_atoms)
+            ranks = new_ranks
+        else:
+            warn_str = "\nMax number of canonical ranking cycles exceeded: {}"
+            warn_str = warn_str.format(self.name)
+            warn(warn_str)
+
+        rv = []
+        for a in self.atoms:
+            if a in atoms:
+                rv += [atoms[a]]
+        return rv
+
+    def old_canonical_rank(self, heavy_only=False):
         """
         put atoms in canonical smiles rank
         (follows algorithm described in 10.1021/ci00062a008)
@@ -437,7 +502,10 @@ class Geometry:
             should come first)
         """
         def rank_sort(targets, reverse=False):
-            return sorted(targets, key=lambda a: a._rank, reverse=reverse)
+            try:
+                return sorted(targets, key=lambda a: a._rank, reverse=reverse)
+            except TypeError:
+                return sorted(targets, reverse=not reverse)
 
         def find_min(targets):
             return rank_sort(targets)[0]
@@ -736,6 +804,7 @@ class Geometry:
         if sort:
             orders = get_orders(self, targets)
             ref_targets = ref.reorder(targets)[0]
+
             # find min RMSD for each ordering
             min_rmsd = None
             for o in orders:

@@ -34,3 +34,75 @@ def quat_matrix(pt1, pt2):
          xp*xp + yp*yp + zm*zm]
     ])
     return matrix
+
+
+def uptri2sym(vec, n=None, col_based=False):
+    """
+    Converts upper triangular matrix to a symmetric matrix
+
+    :vec: the upper triangle array/matrix
+    :n: the number of rows/columns
+    :col_based: if true, triangular matirx is of the form
+                    0 1 3
+                    - 2 4
+                    - - 5
+                if false, triangular matrix is of the form
+                    0 1 2
+                    - 3 4
+                    - - 5
+    """
+    if hasattr(vec[0], '__iter__') and not isinstance(vec[0], str):
+        tmp = []
+        for v in vec:
+            tmp += v
+        vec = tmp
+    if n is None:
+        n = -1 + np.sqrt(1 + 8*len(vec))
+        n = int(n/2)
+    if n*(n + 1) / 2 != len(vec):
+        raise RuntimeError("Bad number of rows requested")
+
+    matrix = np.zeros((n, n))
+    if col_based:
+        i = 0  # vector index
+        j = 0  # for column counting
+        for c in range(n):
+            j += 1
+            for r in range(n):
+                matrix[r, c] = vec[i]
+                matrix[c, r] = vec[i]
+                i += 1
+                if r + 1 == j:
+                    break
+    else:
+        for r in range(n):
+            for c in range(r, n):
+                i = n*r + c - r*(1+r)/2
+                matrix[r, c] = vec[int(i)]
+                matrix[c, r] = vec[int(i)]
+
+    return matrix
+
+
+def float_vec(word):
+    """
+    Turns strings into floatin point vectors
+    :word: a comma-delimited string of numbers
+
+    if no comma or only one element:
+        returns just the floating point number
+    if elements in word are strings:
+        returns word unchanged
+    else:
+        returns a np.array() of floating point numbers
+    """
+    val = word
+    val = val.split(',')
+    try:
+        val = [float(v) for v in val]
+    except ValueError:
+        val = word
+    if len(val) == 1:
+        return val[0]
+    else:
+        return np.array(val)

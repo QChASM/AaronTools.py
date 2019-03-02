@@ -1,15 +1,14 @@
 #! /usr/bin/env python3
 import unittest
 import random
-import json
 import numpy as np
 
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.geometry import Geometry
-from AaronTools.test import prefix
+from AaronTools.test import prefix, TestWithTimer
 
 
-class TestBondOrder(unittest.TestCase):
+class TestBondOrder(TestWithTimer):
     small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
 
     def test_get(self):
@@ -34,7 +33,7 @@ class TestBondOrder(unittest.TestCase):
         return
 
 
-class TestAtoms(unittest.TestCase):
+class TestAtoms(TestWithTimer):
     # Test constants
     small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
 
@@ -158,29 +157,6 @@ class TestAtoms(unittest.TestCase):
             s += a.get_invariant() + " "
         ans = "3030061 2020062 2020062 3030061 2020062 2020062 2020062 2020062 1010081 1010063 1010072 1010072 "
         self.assertEqual(s, ans)
-
-    def test_json(self):
-        mol = Geometry(TestAtoms.small_mol)
-        ref_file = prefix + 'ref_files/json_atoms.txt'
-
-        test = []
-        for a in mol.atoms:
-            test += [a.to_json()]
-        with open(ref_file) as f:
-            self.assertEqual(json.dumps(test), f.read().strip())
-
-        with open(ref_file) as f:
-            for i, a in enumerate(json.load(f)):
-                a = Atom().from_json(a)
-                b = mol.atoms[i]
-                for key in ['element', 'coords', 'flag', 'name', 'tags']:
-                    if key == 'coords':
-                        self.assertTrue(np.linalg.norm(
-                            a.coords - b.coords) < 10**-12)
-                    elif key == 'tags':
-                        self.assertSetEqual(a.tags, b.tags)
-                    else:
-                        self.assertEqual(a.__dict__[key], b.__dict__[key])
 
     # measurement
 
