@@ -1,6 +1,5 @@
 """For parsing input/output files"""
 import re
-import json
 from io import StringIO
 from warnings import warn
 from copy import deepcopy
@@ -43,12 +42,13 @@ def is_num(test):
     return bool(rv)
 
 
-def write_file(geom, style='xyz'):
+def write_file(geom, style='xyz', append=False):
     if style.lower() not in write_types:
         raise NotImplementedError(file_type_err.format(style))
 
-    def write_xyz(geom):
-        with open(geom.name + ".xyz", 'w') as f:
+    def write_xyz(geom, append):
+        mode = 'a' if append else 'w'
+        with open(geom.name + ".xyz", mode) as f:
             f.write(str(len(geom.atoms)) + "\n")
             f.write(geom.comment + "\n")
             for a in geom.atoms:
@@ -57,7 +57,7 @@ def write_file(geom, style='xyz'):
         return
 
     if style.lower() == 'xyz':
-        write_xyz(geom)
+        write_xyz(geom, append)
 
 
 class FileReader:
@@ -84,6 +84,7 @@ class FileReader:
         self.atoms = []
         self.other = {}
         self.content = None
+        self.all_geom = None
 
         # get file name and extention
         if isinstance(fname, str):
@@ -98,14 +99,11 @@ class FileReader:
             raise NotImplementedError(file_type_err.format(self.file_type))
 
         # Fill in attributes with geometry information
-        all_geom = None
         if self.content is None:
             self.read_file(get_all, just_geom)
         elif self.file_type == 'log':
             f = StringIO(self.content)
-            all_geom = self.read_log(f, get_all, just_geom)
-        if all_geom:
-            self.other['all_geom'] = all_geom
+            self.read_log(f, get_all, just_geom)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -117,14 +115,11 @@ class FileReader:
         """
         with open(self.name + "." + self.file_type) as f:
             if self.file_type == 'xyz':
-                all_geom = self.read_xyz(f)
+                self.read_xyz(f, get_all)
             elif self.file_type == 'log':
-                all_geom = self.read_log(f, get_all, just_geom)
+                self.read_log(f, get_all, just_geom)
             elif self.file_type == 'com':
-                all_geom = self.read_com(f)
-
-            if all_geom is not None:
-                self.other['all_geom'] = all_geom
+                self.read_com(f)
         return
 
     def skip_lines(self, f, n):
@@ -133,7 +128,7 @@ class FileReader:
         return
 
     def read_xyz(self, f, get_all=False):
-        all_geom = []
+        self.all_geom = []
         # number of atoms
         f.readline()
         # comment
@@ -141,21 +136,23 @@ class FileReader:
         # atom info
         for line in f:
             line = line.strip()
-            if line == '\n':
-                if re.search('^\d+$', f.readline().strip()) is not None:
-                    if get_all:
-                        all_geom += [deepcopy(self.atoms)]
-                    self.comment = f.readline().strip()
-                    self.atoms = []
-                else:
-                    break
-            line = line.split()
-            self.atoms += [Atom(element=line[0], coords=line[1:])]
-            for i, a in enumerate(self.atoms):
-                a.name = str(i + 1)
+            if line == '':
+                continue
+            try:
+                int(line)
+                if get_all:
+                    self.all_geom += [(deepcopy(self.comment),
+                                       deepcopy(self.atoms))]
+                self.comment = f.readline().strip()
+                self.atoms = []
+            except ValueError:
+                line = line.split()
+                self.atoms += [Atom(element=line[0], coords=line[1:])]
+                for i, a in enumerate(self.atoms):
+                    a.name = str(i + 1)
         if get_all:
-            return all_geom
-        return
+            self.all_geom += [(deepcopy(self.comment),
+                               deepcopy(self.atoms))]
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -179,7 +176,7 @@ class FileReader:
                 n += 1
             return rv, n
 
-        all_geom = []
+        self.all_geom = []
         line = f.readline()
         self.other['archive'] = ''
         found_archive = False
@@ -198,7 +195,7 @@ class FileReader:
             # geometry
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
-                    all_geom += [deepcopy(self.atoms)]
+                    self.all_geom += [deepcopy(self.atoms)]
                 self.atoms, n = get_atoms(f, n)
             if just_geom:
                 line = f.readline()
@@ -312,8 +309,6 @@ class FileReader:
         if not self.other['finished'] and not self.other['error']:
             self.other['error'] = ERRORS['Unknown message']
             self.other['error_msg'] = 'Unknown message'
-        if get_all:
-            return all_geom
         return
 
     def read_com(self, f):

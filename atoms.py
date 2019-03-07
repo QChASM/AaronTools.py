@@ -2,11 +2,10 @@
 import json
 from os import path
 from warnings import warn
-from collections import deque
 
 import numpy as np
 from AaronTools.const import RADII, ELEMENTS, MASS, RIJ, EIJ
-from AaronTools.const import CONNECTIVITY, ELECTRONEGATIVITY
+from AaronTools.const import CONNECTIVITY
 
 
 warn_LJ = set([])
@@ -65,10 +64,10 @@ class BondOrder:
         # if abs(diff - closest[1]['stdev']) > 3*closest[1]['stdev']:
             # s = """
             # Bond order prediction outside of three standard deviations
-              # Atoms in question:
+                # Atoms in question:
                 # {}
                 # {}
-              # Predicted bond order: {}
+                # Predicted bond order: {}
             # """
             # warn(s.format(a1, a2, closest[1]['order']))
         return closest[1]['order']

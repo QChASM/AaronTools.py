@@ -3,8 +3,8 @@ import numpy as np
 
 def quat_matrix(pt1, pt2):
     """ build quaternion matrix from pt1 and pt2 """
-    pt1 = np.array(pt1)
-    pt2 = np.array(pt2)
+    pt1 = np.array(pt1, dtype=np.double)
+    pt2 = np.array(pt2, dtype=np.double)
     for pt in [pt1, pt2]:
         if len(pt.shape) != 1 or pt.shape[0] != 3:
             raise ValueError('Arguments should be 3-element vectors')
