@@ -1,5 +1,6 @@
 """For parsing input/output files"""
 import re
+import numpy as np
 from io import StringIO
 from warnings import warn
 from copy import deepcopy
@@ -7,9 +8,8 @@ from copy import deepcopy
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, UNIT, PHYSICAL
 
-
 read_types = ['xyz', 'log', 'com']
-write_types = ['xyz', 'log']
+write_types = ['xyz', 'com']
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
@@ -42,7 +42,17 @@ def is_num(test):
     return bool(rv)
 
 
-def write_file(geom, style='xyz', append=False):
+def write_file(geom, style='xyz', append=False, options=None,
+               *args, **kwargs):
+    """
+    Writes file from geometry in the specified style
+
+    :geom: the Geometry to use
+    :style: the file type style to generate
+        Currently supported options: xyz, com
+    :append: for *.xyz, append geometry to the same file
+    :options: for *.com files, the computational options
+    """
     if style.lower() not in write_types:
         raise NotImplementedError(file_type_err.format(style))
 
@@ -56,8 +66,30 @@ def write_file(geom, style='xyz', append=False):
                 f.write(s.format(a.element, *a.coords))
         return
 
+    def write_com(geom, options, *args, **kwargs):
+        if 'theory' not in kwargs:
+            theory = options.theory['']
+        else:
+            theory = options.theory[kwargs['theory']]
+        with open(geom.name + '.com', 'w') as f:
+            f.write("%chk={}.chk\n".format(geom.name))
+            f.write(theory.make_header(geom, options, *args, **kwargs))
+            for a in geom.atoms:
+                if a.flag:
+                    s = '{:<3s}  {:> 2d}' + ' {:> 12.6f}'*3 + '\n'
+                    s = s.format(a.element, -1, *a.coords)
+                else:
+                    s = '{:<3s}' + ' {:> 12.6f}'*3 + '\n'
+                    s = s.format(a.element, *a.coords)
+                f.write(s)
+            f.write('\n')
+            f.write(theory.make_footer(geom))
+        return
+
     if style.lower() == 'xyz':
         write_xyz(geom, append)
+    elif style.lower() == 'com':
+        write_com(geom, options, *args, **kwargs)
 
 
 class FileReader:
@@ -396,10 +428,10 @@ class Frequency:
         ATTRIBUTES
         :frequency: float
         :intensity: float
-        :vector: dict - normal mode vectors keyed by atom
+        :vector: (2D array) normal mode vectors
         """
 
-        def __init__(self, frequency, intensity=None, vector={}):
+        def __init__(self, frequency, intensity=None, vector=[]):
             self.frequency = frequency
             self.intensity = intensity
             self.vector = vector
@@ -441,6 +473,7 @@ class Frequency:
     def parse_lines(self, lines, hpmodes):
         num_head = 0
         idx = -1
+        modes = []
         for line in lines:
             if "Harmonic frequencies" in line:
                 num_head += 1
@@ -451,6 +484,7 @@ class Frequency:
             if "Frequencies" in line and "---" in line:
                 for i in float_num.findall(line):
                     self.data += [Frequency.Data(float(i))]
+                    modes += [[]]
                     idx += 1
                 continue
             if "IR Intensit" in line and "---" in line:
@@ -460,29 +494,35 @@ class Frequency:
 
             if hpmodes:
                 match = re.search(
-                    '^\s+\d+\s+\d+\s+\d+\s+([+-]?\d+\.\d+)+$', line)
+                    '^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$', line)
                 if match is None:
                     continue
                 values = float_num.findall(line)
                 coord = int(values[0]) - 1
                 atom = int(values[1]) - 1
-                moves = [float(i) for i in values[3:]]
-                for d, m in zip(self.data[-len(moves):], moves):
+                moves = values[3:]
+                for i, m in enumerate(moves):
+                    tmp = len(moves) - i
+                    mode = modes[-tmp]
                     try:
-                        d.vector[atom][coord] = m
+                        vector = mode[atom]
                     except IndexError:
-                        d.vector[atom] = [0, 0, 0]
-                        d.vector[atom][coord] = m
-
+                        vector = [0, 0, 0]
+                        modes[-tmp] += [[]]
+                    vector[coord] = m
+                    modes[-tmp][atom] = vector
             else:
-                match = re.search('^\s+\d+\s+\d+\s+([+-]?\d+\.\d+)+$', line)
+                match = re.search('^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$', line)
                 if match is None:
                     continue
                 atom = int(values[0]) - 1
-                moves = [float(i) for i in values[2:]]
+                moves = np.array(values[2:], dtype=np.float)
                 n_moves = len(moves) // 3
-                for d, m in zip(self.data[-n_moves:], range(n_moves)):
-                    d.vector[atom] = moves[m:m + 3]
+                for mode, m in zip(modes[-n_moves:], range(n_moves)):
+                    mode += [moves[m: m + 3]]
+
+        for mode, data in zip(modes, self.data):
+            data.vector = np.array(mode, dtype=np.float)
         return
 
     def sort_frequencies(self):

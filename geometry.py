@@ -148,7 +148,7 @@ class Geometry:
             s += a.__repr__() + '\n'
         return s
 
-    def write(self, name=None, style='xyz', append=False):
+    def write(self, name=None, style='xyz', *args, **kwargs):
         """
         write geometry to a file
         parameters:
@@ -158,7 +158,7 @@ class Geometry:
         """
         if name is not None:
             self.name = name
-        write_file(self, style, append)
+        write_file(self, style, *args, **kwargs)
 
     def copy(self, atoms=None, name=None, comment=None):
         """
@@ -748,23 +748,21 @@ class Geometry:
                 try:
                     pt2 = other[i].coords
                 except IndexError:
-                    ref = ref[:len(other)]
                     break
-                matrix += utils.quat_matrix(pt1, pt2)
+                matrix += utils.quat_matrix(pt2, pt1)
 
-            eigenval, eigenvec = np.linalg.eig(matrix)
-            val = None
-            vec = None
-            for i, v in enumerate(eigenval):
-                if val is None or v < val:
-                    val = v
-                    vec = eigenvec.T[i]
+            eigenval, eigenvec = np.linalg.eigh(matrix)
+            # eigh returns sorted eigenvalues
+            val = eigenval[0]
+            vec = eigenvec.T[0]
 
             if val > 0:
+                # val is the SD
                 rmsd = np.sqrt(val / len(ref))
             else:
+                # negative numbers that are basically zero, like -1e-16
                 rmsd = 0
-            return rmsd, vec[0], vec[1:]
+            return rmsd, vec
 
         def get_orders(obj, targets):
             """ get orders starting at different atoms """
@@ -773,10 +771,11 @@ class Geometry:
                 if t.element == 'H':
                     continue
                 orders += [obj.reorder(start=t,
-                                       targets=targets, canonical=False)[0]]
+                                       canonical=False)[0]]
             return orders
 
         # get target atoms
+        ref = ref.copy()
         tmp = targets
         if targets is not None:
             targets = self.find(targets)
@@ -796,37 +795,37 @@ class Geometry:
 
         # align center of mass to origin
         com = self.COM(targets=targets)
-        self.coord_shift(-com)
-
         ref_com = ref.COM(targets=ref_targets)
+
+        self.coord_shift(-com)
         ref.coord_shift(-ref_com)
 
         # sort targets if requested and perform rmsd calculation
         if sort:
             orders = get_orders(self, targets)
-            ref_targets = [a for a in ref.reorder(
-                targets)[0] if a in ref_targets]
+            ref_targets = [a for a in ref.reorder(canonical=False)[0]
+                           if a in ref_targets]
 
             # find min RMSD for each ordering
             min_rmsd = None
             for o in orders:
-                o = [a for a in o if o in targets]
-                tmp = _RMSD(o, ref_targets)
+                o = [a for a in o if a in targets]
+                tmp = _RMSD(ref_targets, o)
                 if min_rmsd is None or tmp[0] < min_rmsd[0]:
                     min_rmsd = tmp
-            rmsd, ang, vec = min_rmsd
+            rmsd, vec = min_rmsd
         else:
-            rmsd, ang, vec = _RMSD(targets, ref_targets)
+            rmsd, vec = _RMSD(ref_targets, targets)
 
         # return rmsd
         if not align:
             self.coord_shift(com)
             return rmsd
         # or update geometry and return rmsd
-        self.rotate(vec, ang)
+        if np.linalg.norm(vec) > 0:
+            self.rotate(vec)
         self.coord_shift(ref_com)
         return rmsd
-
 
     # geometry manipulation
     def get_fragment(self, start, stop, as_object=False):
@@ -969,11 +968,12 @@ class Geometry:
 
         return
 
-    def rotate(self, w, angle, targets=None, center=None):
+    def rotate(self, w, angle=None, targets=None, center=None):
         """
         rotates target atoms by an angle about an axis
         parameters:
             w (np.array) - the axis of rotation (doesnt need to be unit vector)
+                or a quaternion (angle not required then)
             angle (float) - the angle by which to rotate (in radians)
             targets (list) - the atoms to rotate (defaults to all)
             center (Atom or list) - if provided, the atom (or COM of a list)
@@ -998,10 +998,18 @@ class Geometry:
             self.coord_shift(-1*center)
 
         if not isinstance(w, np.ndarray):
-            w = np.array(w, dtype=np.float)
+            w = np.array(w, dtype=np.double)
 
-        w /= np.linalg.norm(w)
-        q = np.hstack(([np.cos(angle/2)], w * np.sin(angle/2)))
+        if angle is not None and len(w) == 3:
+            w /= np.linalg.norm(w)
+            q = np.hstack(([np.cos(angle/2)], w * np.sin(angle/2)))
+        elif len(w) != 4:
+            raise TypeError("""Vector `w` must be either a rotation vector (len 3)
+                or a quaternion (len 4). Angle parameter required if `w` is a
+                rotation vector""")
+        else:
+            q = w
+
         q /= np.linalg.norm(q)
         qs = q[0]
         qv = q[1:]

@@ -279,7 +279,7 @@ class TestGeometry(TestWithTimer):
 
         # RMSD of rotated copy should be 0
         other = ref.copy()
-        other.rotate([1, 2, 3], 0.8)
+        other.rotate([1, 2, 3], 2.8)
         other.write("tmp")
         self.assertTrue(ref.RMSD(other) < 10**-5)
 

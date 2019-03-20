@@ -226,3 +226,29 @@ class CompOutput:
                     else:
                         rv['gradient'] = float_vec(word)
         return rv
+
+    def follow(self, reverse=False, step=0.1):
+        """
+        Follow imaginary mode
+        """
+        # get geometry and frequency objects
+        geom = self.geometry.copy()
+        freq = self.frequency
+
+        # make sure geom is a TS and has computed frequencies available
+        if freq is None:
+            raise AttributeError("Frequencies for this geometry not found.")
+        if not freq.is_TS:
+            raise RuntimeError("Geometry not a transition state")
+
+        # get displacement vectors for imaginary frequency
+        img_mode = freq.imaginary_frequencies[0]
+        vector = freq.by_frequency[img_mode]['vector']
+
+        # apply transformation to geometry and return it
+        for i, a in enumerate(geom.atoms):
+            if reverse:
+                a.coords -= vector[i] * step
+            else:
+                a.coords += vector[i] * step
+        return geom
