@@ -30,7 +30,7 @@ class TestCatalyst(TestWithTimer):
                 return False
 
         rmsd = ref.RMSD(test, sort=True)
-        return rmsd < 10**-6
+        return rmsd < 10**-5
 
     def test_init(self):
         self.assertRaises(IOError, Catalyst, prefix +
@@ -64,10 +64,11 @@ class TestCatalyst(TestWithTimer):
         ref = {}
 
         ref['ligand'] = [[float(i) for i in range(35, 94)]]
-        ref['substrate'] = [[1.0, 2.0, 4.0, 5.0, 6.0,
-                             7.0, 10.0, 11.0, 12.0, 15.0, 16.0, 17.0]]
-        ref['substrate'] += [[3.0, 8.0, 9.0, 13.0, 14.0, 18.0, 19.0, 20.0, 21.0,
-                              22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0]]
+        ref['substrate'] = [[1.0, 2.0, 4.0, 5.0, 6.0, 7.0, 10.0, 11.0, 12.0,
+                             15.0, 16.0, 17.0]]
+        ref['substrate'] += [[3.0, 8.0, 9.0, 13.0, 14.0, 18.0, 19.0, 20.0,
+                              21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0,
+                              29.0, 30.0, 31.0, 32.0, 33.0]]
         args += [(deepcopy(ref), TestCatalyst.tm_simple)]
 
         ref['ligand'] = [[9.], [10.]]
@@ -90,25 +91,24 @@ class TestCatalyst(TestWithTimer):
 
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand(monodentate.copy(), ['35'])
-        tm_simple.write('tmp')
         self.assertTrue(self.validate(
-            tm_simple, Geometry("ref_files/lig_map_1.xyz")))
+            tm_simple, Geometry(prefix + "ref_files/lig_map_1.xyz")))
 
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand(
             [monodentate.copy(), monodentate.copy()], ['35', '36'])
         self.assertTrue(self.validate(
-            tm_simple, Geometry("ref_files/lig_map_2.xyz")))
+            tm_simple, Geometry(prefix + "ref_files/lig_map_2.xyz")))
 
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand(bidentate.copy(), ['35', '36'])
         self.assertTrue(self.validate(
-            tm_simple, Geometry("ref_files/lig_map_3.xyz")))
+            tm_simple, Geometry(prefix + "ref_files/lig_map_3.xyz")))
 
         org_tri = TestCatalyst.org_tri.copy()
         org_tri.map_ligand(tridentate.copy(), ['30', '28', '58'])
         self.assertTrue(self.validate(
-            org_tri, Geometry("ref_files/lig_map_4.xyz")))
+            org_tri, Geometry(prefix + "ref_files/lig_map_4.xyz")))
 
 
 if __name__ == "__main__":

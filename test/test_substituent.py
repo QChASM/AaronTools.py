@@ -26,7 +26,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, 'CF:2,180')
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(180))
-        rmsd = ref.RMSD(sub, sort=True)
+        rmsd = ref.RMSD(sub, longsort=True)
         self.assertTrue(rmsd < 10**-8)
         return
 
@@ -36,8 +36,8 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, "CF:2,120")
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(120))
-        rmsd = ref.RMSD(sub, sort=True)
-        self.assertTrue(rmsd < 10**-8)
+        rmsd = ref.RMSD(sub, sort=True, align=True)
+        self.assertTrue(rmsd < 0.1/len(ref.atoms))
         return
 
     def test_init(self):

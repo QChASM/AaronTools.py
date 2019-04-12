@@ -8,6 +8,7 @@ from glob import glob
 from copy import deepcopy
 from warnings import warn
 
+from AaronTools.const import QCHASM, AARONLIB
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader
 
@@ -21,8 +22,8 @@ class Substituent(Geometry):
         conf_num    number of conformers
         conf_angle  angle to rotate by to make next conformer
     """
-    AARON_LIBS = os.environ['HOME'] + "/Aaron_libs/Subs/*.xyz"
-    BUILTIN = os.path.dirname(__file__) + "/Substituents/*.xyz"
+    AARON_LIBS = AARONLIB + "Subs/*.xyz"
+    BUILTIN = QCHASM + "AaronTools/Substituents/*.xyz"
     CACHE_FILE = os.path.dirname(__file__) + "/cache/substituents"
 
     try:

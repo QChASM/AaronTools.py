@@ -2,7 +2,10 @@
 import os
 
 HOME = os.environ['HOME'].rstrip('/') + '/'
-AARONLIB = os.environ['AARONLIB'].rstrip('/') + '/'
+if os.environ['AARONLIB']:
+    AARONLIB = os.environ['AARONLIB'].rstrip('/') + '/'
+else:
+    AARONLIB = HOME + 'Aaron_libs/'
 
 QCHASM = os.path.dirname(os.path.abspath(__file__)).split('/')
 QCHASM = '/'.join(QCHASM[:-1]) + '/'

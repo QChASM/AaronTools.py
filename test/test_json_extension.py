@@ -11,6 +11,7 @@ from AaronTools.substituent import Substituent
 from AaronTools.component import Component
 from AaronTools.catalyst import Catalyst
 from AaronTools.comp_output import CompOutput
+from AaronTools.fileIO import Frequency
 
 
 class TestJSON(TestWithTimer):
@@ -20,9 +21,10 @@ class TestJSON(TestWithTimer):
     cat = prefix + 'test_files/catalysts/tm_multi-lig.xyz'
     log = prefix + 'test_files/normal.log'
 
-    def json_tester(self, obj, ref_json, equality_function, as_iter=False, **kwargs):
+    def json_tester(self, obj, ref_json, equality_function, as_iter=False,
+                    **kwargs):
         # test to json
-        test = json.dumps(obj, cls=JSONEncoder)
+        test = json.dumps(obj, cls=JSONEncoder, indent=2)
         with open(ref_json) as f:
             self.assertEqual(test, f.read())
         # test from json
@@ -96,6 +98,8 @@ class TestJSON(TestWithTimer):
             if key == 'geometry':
                 self.geom_equal(rval, tval)
             elif key == 'opts':
+                if rval is None:
+                    continue
                 for r, t in zip(rval, tval):
                     self.geom_equal(r, t)
             elif key == 'frequency':
@@ -111,12 +115,20 @@ class TestJSON(TestWithTimer):
         for r, t in zip(ref.data, test.data):
             self.assertEqual(r.frequency, t.frequency)
             self.assertEqual(r.intensity, t.intensity)
-            self.assertDictEqual(r.vector, t.vector)
+            self.assertTrue(np.linalg.norm(r.vector - t.vector) < 10**-12)
         self.assertListEqual(ref.imaginary_frequencies,
                              test.imaginary_frequencies)
         self.assertListEqual(ref.real_frequencies, test.real_frequencies)
-        self.assertDictEqual(ref.by_frequency, test.by_frequency)
         self.assertEqual(ref.is_TS, test.is_TS)
+        self.assertEqual(len(ref.by_frequency.keys()),
+                         len(test.by_frequency.keys()))
+        for key in ref.by_frequency.keys():
+            self.assertTrue(key in test.by_frequency)
+            rv = ref.by_frequency[key]
+            tv = test.by_frequency[key]
+            self.assertEqual(rv['intensity'], tv['intensity'])
+            self.assertTrue(np.linalg.norm(
+                rv['vector'] - tv['vector']) < 10**-12)
 
     def test_atom(self):
         mol = Geometry(TestJSON.small_mol)
@@ -150,6 +162,8 @@ class TestJSON(TestWithTimer):
 
     def test_comp_output(self):
         log = CompOutput(TestJSON.log)
+        with open('tmp.json', 'w') as f:
+            json.dump(log, f, cls=JSONEncoder, indent=2)
         ref_file = prefix + 'ref_files/log.json'
         self.json_tester(log, ref_file, self.comp_out_equal)
 

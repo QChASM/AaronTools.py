@@ -156,7 +156,7 @@ class Atom:
         while len(a) < len(b):
             a += ['0']
         while len(b) < len(a):
-            a += ['0']
+            b += ['0']
         for i, j in zip(a, b):
             if int(i) == int(j):
                 continue

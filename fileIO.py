@@ -42,21 +42,29 @@ def is_num(test):
     return bool(rv)
 
 
-def write_file(geom, style='xyz', append=False, options=None,
-               *args, **kwargs):
-    """
-    Writes file from geometry in the specified style
+class FileWriter:
+    @classmethod
+    def write_file(cls, geom, style='xyz', append=False, options=None,
+                   *args, **kwargs):
+        """
+        Writes file from geometry in the specified style
 
-    :geom: the Geometry to use
-    :style: the file type style to generate
-        Currently supported options: xyz, com
-    :append: for *.xyz, append geometry to the same file
-    :options: for *.com files, the computational options
-    """
-    if style.lower() not in write_types:
-        raise NotImplementedError(file_type_err.format(style))
+        :geom: the Geometry to use
+        :style: the file type style to generate
+            Currently supported options: xyz, com
+        :append: for *.xyz, append geometry to the same file
+        :options: for *.com files, the computational options
+        """
+        if style.lower() not in write_types:
+            raise NotImplementedError(file_type_err.format(style))
 
-    def write_xyz(geom, append):
+        if style.lower() == 'xyz':
+            cls.write_xyz(geom, append)
+        elif style.lower() == 'com':
+            cls.write_com(geom, options, *args, **kwargs)
+
+    @classmethod
+    def write_xyz(cls, geom, append):
         mode = 'a' if append else 'w'
         with open(geom.name + ".xyz", mode) as f:
             f.write(str(len(geom.atoms)) + "\n")
@@ -66,11 +74,9 @@ def write_file(geom, style='xyz', append=False, options=None,
                 f.write(s.format(a.element, *a.coords))
         return
 
-    def write_com(geom, options, *args, **kwargs):
-        if 'theory' not in kwargs:
-            theory = options.theory['']
-        else:
-            theory = options.theory[kwargs['theory']]
+    @classmethod
+    def write_com(cls, geom, options, *args, **kwargs):
+        theory = options.theory
         with open(geom.name + '.com', 'w') as f:
             f.write("%chk={}.chk\n".format(geom.name))
             f.write(theory.make_header(geom, options, *args, **kwargs))
@@ -85,11 +91,6 @@ def write_file(geom, style='xyz', append=False, options=None,
             f.write('\n')
             f.write(theory.make_footer(geom))
         return
-
-    if style.lower() == 'xyz':
-        write_xyz(geom, append)
-    elif style.lower() == 'com':
-        write_com(geom, options, *args, **kwargs)
 
 
 class FileReader:
@@ -112,6 +113,8 @@ class FileReader:
             frequencies, only what is needed to construct a Geometry() obj
         """
         # Initialization
+        self.name = ''
+        self.file_type = ''
         self.comment = ''
         self.atoms = []
         self.other = {}
@@ -434,7 +437,7 @@ class Frequency:
         def __init__(self, frequency, intensity=None, vector=[]):
             self.frequency = frequency
             self.intensity = intensity
-            self.vector = vector
+            self.vector = np.array(vector)
 
     def __init__(self, data, hpmodes=None):
         """

@@ -57,6 +57,65 @@ class Catalyst(Geometry):
             atoms += comp.atoms
         self.atoms = atoms
         self.refresh_connected()
+        self.fix_comment()
+
+    def fix_comment(self):
+        new_comment = ''
+
+        # center
+        if self.center:
+            new_comment += 'C:'
+            for c in self.center:
+                new_comment += "{},".format(self.atoms.index(c))
+            else:
+                new_comment = new_comment[:-1]
+
+        # ligand and key atoms
+        if self.components['ligand']:
+            ids = []
+            new_comment += ' K:'
+            for lig in self.components['ligand']:
+                lowest_id = None
+                for l in lig.atoms:
+                    ids += [self.atoms.index(l) + 1]
+                    if lowest_id is None or lowest_id > ids[-1]:
+                        lowest_id = ids[-1]
+                keys = []
+                for k in lig.key_atoms:
+                    keys += [self.atoms.index(k) + 1]
+                for k in sorted(keys):
+                    new_comment += '{},'.format(k - lowest_id + 1)
+                else:
+                    new_comment = new_comment[:-1] + ';'
+            new_comment = new_comment[:-1]
+
+            new_comment += ' L:'
+            last_i = None
+            for i in sorted(ids):
+                if last_i is None:
+                    new_comment += '{}-'.format(i)
+                elif last_i != i - 1:
+                    new_comment += '{},{}-'.format(last_i, i)
+                    if i == ids[-1]:
+                        new_comment = new_comment[:-1]
+                elif i == ids[-1]:
+                    new_comment += str(i)
+                last_i = i
+
+        # constrained bonds
+        constrained = set([])
+        for a in self.atoms:
+            if a.constraint:
+                for c in a.constraint:
+                    constrained.add(tuple(sorted([a, c])))
+        if constrained:
+            new_comment += ' F:'
+            for cons in constrained:
+                ids = [self.atoms.index(cons[0]) + 1]
+                ids += [self.atoms.index(cons[1]) + 1]
+                new_comment += '{}-{};'.format(*sorted(ids))
+            else:
+                new_comment = new_comment[:-1]
 
     def detect_components(self, debug=False):
         self.components = {}
@@ -106,6 +165,15 @@ class Catalyst(Geometry):
             print("lig", [a.name for a in lig])
             print("sub", [a.name for a in subst])
             print("center", [a.name for a in self.center])
+
+        # label key atoms:
+        for i, a in enumerate(lig):
+            if 'key_atoms' not in self.other:
+                break
+            if i in self.other['key_atoms']:
+                a.add_tag('key')
+        else:
+            del self.other['key_atoms']
 
         # get components
         if len(self.center) > 0:
@@ -175,6 +243,7 @@ class Catalyst(Geometry):
 
         def map_2_key(old_ligand, ligand, old_keys, new_keys):
             # align COM of key atoms
+            center = old_ligand.COM(targets=old_keys)
             shift = old_ligand.COM(targets=old_keys) - \
                 ligand.COM(targets=new_keys)
             ligand.coord_shift(shift)
@@ -183,18 +252,23 @@ class Catalyst(Geometry):
             old_axis = old_keys[0].bond(old_keys[1])
             new_axis = new_keys[0].bond(new_keys[1])
             w, angle = get_rotation(old_axis, new_axis)
-            ligand.rotate(w, angle, center=ligand.COM(new_keys))
+            ligand.rotate(w, angle, center=center)
 
             # bend around key axis
-            old_vec = old_ligand.COM(targets=old_ligand.backbone)
-            old_vec -= old_ligand.COM(targets=old_keys)
+            old_con = set([])
+            for k in old_keys:
+                for c in k.connected:
+                    old_con.add(c)
+            old_vec = old_ligand.COM(targets=old_con) - center
 
-            new_vec = ligand.COM(targets=ligand.backbone)
-            new_vec -= old_ligand.COM(targets=old_keys)
+            new_con = set([])
+            for k in new_keys:
+                for c in k.connected:
+                    new_con.add(c)
+            new_vec = ligand.COM(targets=new_con) - center
 
             w, angle = get_rotation(old_vec, new_vec)
-            ligand.rotate(w, angle, center=old_ligand.COM(old_keys))
-            return
+            ligand.rotate(old_axis, angle, center=center)
 
         def map_rot_frag(frag, a, b, ligand, old_key, new_key):
             old_vec = old_key.coords - b.coords
@@ -202,11 +276,23 @@ class Catalyst(Geometry):
             axis, angle = get_rotation(old_vec, new_vec)
             ligand.rotate(b.bond(a), -1*angle, targets=frag, center=b.coords)
 
+            for c in new_key.connected:
+                con_frag = ligand.get_fragment(new_key, c)
+                if len(con_frag) > len(frag):
+                    continue
+                old_vec = self.COM(targets=old_key.connected)
+                old_vec -= old_key.coords
+                new_vec = ligand.COM(targets=new_key.connected)
+                new_vec -= new_key.coords
+                axis, angle = get_rotation(old_vec, new_vec)
+                ligand.rotate(c.bond(new_key), -1*angle,
+                              targets=con_frag, center=new_key.coords)
+
         def map_more_key(self, old_ligand, ligand, old_keys, new_keys):
             # backbone fragments separated by rotatable bonds
             frag_list = ligand.get_frag_list(ligand.backbone, max_order=1)
 
-            # get key atoms on each side of rotatable bond
+            # get key atoms on each side of rotatable bonds
             key_count = {}
             for frag, a, b in frag_list:
                 tmp = []
@@ -214,12 +300,13 @@ class Catalyst(Geometry):
                     if i not in ligand.key_atoms:
                         continue
                     tmp += [i]
-                try:
-                    key_count[len(tmp)] += [(frag, a, b)]
-                except KeyError:
+                if len(tmp) not in key_count:
                     key_count[len(tmp)] = [(frag, a, b)]
+                else:
+                    key_count[len(tmp)] += [(frag, a, b)]
 
             partial_map = False
+            mapped_frags = []
             for k in sorted(key_count.keys(), reverse=True):
                 if k == 2 and not partial_map:
                     frag, a, b = key_count[k][0]
@@ -232,6 +319,7 @@ class Catalyst(Geometry):
                         nk += [n]
                     map_2_key(old_ligand, ligand, ok, nk)
                     partial_map = True
+                    mapped_frags += [frag]
                     continue
                 if k == 1 and not partial_map:
                     frag, a, b = key_count[k][0]
@@ -240,6 +328,7 @@ class Catalyst(Geometry):
                             continue
                         map_1_key(self, ligand, n, old_keys[i])
                         partial_map = True
+                        mapped_frags += [frag]
                         break
                     continue
                 if k == 1 and partial_map:
@@ -248,6 +337,7 @@ class Catalyst(Geometry):
                             if n not in frag:
                                 continue
                             map_rot_frag(frag, a, b, ligand, old_keys[i], n)
+                            mapped_frags += [frag]
                             break
             return
 
@@ -265,10 +355,10 @@ class Catalyst(Geometry):
         if len(old_keys) != len(new_keys):
             raise ValueError("Cannot map ligand. "
                              + "Differing number of key atoms. "
-                             + "Old keys: " +
-                             ",".join([i.name for i in old_keys]) + "; "
-                             + "New keys: " +
-                             ",".join([i.name for i in new_keys])
+                             + "Old keys: "
+                             + ",".join([i.name for i in old_keys]) + "; "
+                             + "New keys: "
+                             + ",".join([i.name for i in new_keys])
                              )
 
         old_ligands = []

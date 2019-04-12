@@ -178,19 +178,6 @@ class TestGeometry(TestWithTimer):
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 
-    def test_parse_comment(self):
-        geom = Geometry(TestGeometry.benz_NO2_Cl)
-        geom.parse_comment()
-
-        constrained = geom.find_exact('1', '12', '13', '4', '11')
-        valid = [[constrained[1]],
-                 [constrained[0], constrained[2]],
-                 [constrained[1]],
-                 [constrained[-1]],
-                 [constrained[-2]]]
-        for i, a in enumerate(constrained):
-            self.assertSequenceEqual(sorted(a.constraint), valid[i])
-
     def test_flag(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
 
@@ -225,17 +212,34 @@ class TestGeometry(TestWithTimer):
             else:
                 self.assertTrue(a.flag)
 
+    def test_update_geometry(self):
+        test = Geometry(TestGeometry.benz_NO2_Cl)
+
+        # using coordinate matrix to update
+        ref = test.copy()
+        ref.coord_shift([-10, 0, 0])
+        tmp = test._stack_coords()
+        for t in tmp:
+            tmp = tmp - np.array([-10, 0, 0])
+        test.update_geometry(tmp)
+        self.assertEqual(ref, test)
+
+        # using file
+        ref.coord_shift([10, 0, 0])
+        test.update_geometry(TestGeometry.benz_NO2_Cl)
+        self.assertEqual(ref, test)
+
     # geometry measurement
 
     def test_angle(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
         angle = mol.angle('13', '12', '14')
-        self.assertTrue(is_close(np.rad2deg(angle), 123.214, 10**-4))
+        self.assertTrue(is_close(np.rad2deg(angle), 124.752, 10**-2))
 
     def test_dihedral(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
         dihedral = mol.dihedral('13', '12', '1', '6')
-        self.assertTrue(is_close(np.rad2deg(dihedral), -0.00527685, 10**-8))
+        self.assertTrue(is_close(np.rad2deg(dihedral), 45.023740, 10**-5))
 
     def test_COM(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
@@ -243,21 +247,21 @@ class TestGeometry(TestWithTimer):
         # all atoms
         com = mol.COM(mass_weight=True)
         self.assertTrue(
-            is_close(com, [-1.40615602e+00, -1.33781200e+00, 9.18931943e-04]))
+            is_close(com, [-1.41347592e+00, -1.35049427e+00, 9.24797359e-04]))
 
         # only carbons
         com = mol.COM(targets='C')
         self.assertTrue(
-            is_close(com, [-1.27963433e+00, -1.11897483e+00, 8.53500000e-04]))
+            is_close(com, [-1.27963500e+00, -1.11897500e+00, 8.53333333e-04]))
         # mass weighting COM shouldn't change anythin if they are all C
         com = mol.COM(targets='C', mass_weight=True)
         self.assertTrue(
-            is_close(com, [-1.27963433e+00, -1.11897483e+00, 8.53500000e-04]))
+            is_close(com, [-1.27963500e+00, -1.11897500e+00, 8.53333333e-04]))
 
         # only heavy atoms
         com = mol.COM(heavy_only=True, mass_weight=True)
         self.assertTrue(
-            is_close(com, [-1.40948694e+00, -1.34357908e+00, 9.25472767e-04]))
+            is_close(com, [-1.41699980e+00, -1.35659562e+00, 9.31512531e-04]))
 
     def test_RMSD(self):
         ref = Geometry(TestGeometry.benz_NO2_Cl)
@@ -266,10 +270,7 @@ class TestGeometry(TestWithTimer):
         other = ref.copy()
         self.assertTrue(ref.RMSD(other) < 10**-12)
         # if they are out of order, sorting should help
-        random.shuffle(other.atoms)
-        for i, a in enumerate(other.atoms):
-            a.name = str(i)
-        res = ref.RMSD(other, sort=True)
+        res = ref.RMSD(other, longsort=True)
         self.assertTrue(res < 10**-12)
 
         # RMSD of shifted copy should be 0
@@ -290,8 +291,8 @@ class TestGeometry(TestWithTimer):
         # RMSD of similar molecule
         other = Geometry(TestGeometry.benzene)
         res = ref.RMSD(other, targets='C', ref_targets='C')
+        self.assertTrue(res < 10**-5)
         res = ref.RMSD(other, sort=True)
-        self.assertTrue(res < 10**-12)
 
     # geometry manipulation
     def test_get_fragment(self):

@@ -41,10 +41,12 @@ class Component(Geometry):
 
         self.other = self.parse_comment()
 
-        if 'key_atoms' in self.other:
-            self.key_atoms = self.other['key_atoms']
-            # other should only have info we don't have a place for yet
-            del self.other['key_atoms']
+        try:
+            self.key_atoms = self.find('key')
+        except LookupError:
+            if 'key_atoms' in self.other:
+                self.key_atoms = [self.atoms[i]
+                                  for i in self.other['key_atoms']]
 
         self.refresh_connected(rank=False)
         self.detect_backbone()
@@ -156,6 +158,7 @@ class Component(Geometry):
         find fragments connected by only one bond
         (both fragments contain no overlapping atoms)
         """
+        self.refresh_connected(rank=False)
         if targets is None:
             atoms = self.atoms
         else:
@@ -317,9 +320,14 @@ class Component(Geometry):
                 targets[len(sub.atoms)] = [sub]
 
         # minimize torsion for each substituent
-        # smallest to largest
-        for k in sorted(targets.keys()):
+        # largest to smallest
+        for k in sorted(targets.keys(), reverse=True):
             for sub in targets[k]:
                 axis = sub.atoms[0].bond(sub.end)
                 center = sub.end
                 self.minimize_torsion(sub.atoms, axis, center, geom)
+                for frag, a, b in self.get_frag_list(targets=sub.atoms,
+                                                     max_order=1):
+                    axis = a.bond(b)
+                    center = b.coords
+                    self.minimize_torsion(frag, axis, center, geom)

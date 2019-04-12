@@ -106,3 +106,18 @@ def float_vec(word):
         return val[0]
     else:
         return np.array(val)
+
+
+def is_alpha(test):
+    rv = re.search('^[a-zA-Z]+$', test)
+    return bool(rv)
+
+
+def is_int(test):
+    rv = re.search('^[+-]?\d+$', test)
+    return bool(rv)
+
+
+def is_num(test):
+    rv = re.search('^[+-]?\d+\.?\d*', test)
+    return bool(rv)

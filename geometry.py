@@ -1,17 +1,18 @@
 """For storing, manipulating, and measuring molecular structures"""
 import re
 import numpy as np
+import itertools
 from collections import deque
 from copy import deepcopy
 from warnings import warn
 
 import AaronTools.utils.utils as utils
 from AaronTools.const import ELEMENTS
-from AaronTools.fileIO import FileReader, write_file
+from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.atoms import Atom
 from AaronTools.utils.prime_numbers import Primes
 
-COORD_THRESHOLD = 0.001
+COORD_THRESHOLD = 0.2
 
 
 class Geometry:
@@ -71,9 +72,17 @@ class Geometry:
         return
 
     # attribute access
-    def _stack_coords(self, atoms):
-        """ generate N x 3 coordinate matrix for atoms """
-        atoms = self.find(atoms)
+    def _stack_coords(self, atoms=None):
+        """
+        Generates a N x 3 coordinate matrix for atoms
+        Note: the matrix rows are copies of, not references to, the
+            Atom.coords objects. Run Geometry.update_geometry(matrix) after
+            using this method to save changes.
+        """
+        if atoms is None:
+            atoms = self.atoms
+        else:
+            atoms = self.find(atoms)
         rv = np.zeros((len(atoms), 3), dtype=float)
         for i, a in enumerate(atoms):
             rv[i] = a.coords[:]
@@ -111,6 +120,8 @@ class Geometry:
             same number of atoms
             coordinates of atoms similar (now distance, soon RMSD)
         """
+        if id(self) == id(other):
+            return True
         if len(self.atoms) != len(other.atoms):
             return False
         rmsd = self.RMSD(other, align=False, sort=True)
@@ -154,11 +165,11 @@ class Geometry:
         parameters:
             name (str): defaults to self.name
             style (str): defaults to xyz
-        See fileIO.write_file() for more details
+        See fileIO.FileWriter for more details
         """
         if name is not None:
             self.name = name
-        write_file(self, style, *args, **kwargs)
+        FileWriter.write_file(self, style, *args, **kwargs)
 
     def copy(self, atoms=None, name=None, comment=None):
         """
@@ -183,18 +194,25 @@ class Geometry:
     def update_geometry(self, structure):
         """
         Replace current coords with those from :structure:
+
+        :structure: a file name, atom list, Geometry or np.array() of shape Nx3
         """
-        tmp = Geometry(structure)
-        if len(tmp.atoms) != len(self.atoms):
-            print(len(tmp.atoms), len(self.atoms))
+        if isinstance(structure, np.ndarray):
+            coords = structure
+            elements = None
+        else:
+            tmp = Geometry(structure)
+            elements = [a.element for a in tmp.atoms]
+            coords = tmp._stack_coords()
+        if coords.shape[0] != len(self.atoms):
             raise RuntimeError(
                 "Updated geometry has different number of atoms")
-        for i, a in enumerate(tmp.atoms):
-            if a.element != self.atoms[i].element:
+        for i, row in enumerate(coords):
+            if elements is not None and elements[i] != self.atoms[i].element:
                 raise RuntimeError(
                     "Updated coords atom order doesn't seem to match original "
                     + "atom order. Stopping...")
-            self.atoms[i].coords = a.coords
+            self.atoms[i].coords = row
         self.refresh_connected()
         return
 
@@ -434,62 +452,6 @@ class Geometry:
                 rv += [atoms[a]]
         return rv
 
-    def old_canonical_rank(self, heavy_only=False):
-        """
-        put atoms in canonical smiles rank
-        (follows algorithm described in 10.1021/ci00062a008)
-        """
-        primes = Primes.list(len(self.atoms))
-        invar = {}
-        rank = {}
-
-        # create invariant lookup dictionary (keyed by atom)
-        for a in self.atoms:
-            if heavy_only and a.element == 'H':
-                continue
-            invar[a] = a.get_invariant()
-        # create rank lookup dictionary (keyed by invariant)
-        rank_key = sorted(set(invar.values()))
-        for i in invar:
-            rank[i] = rank_key.index(invar[i])
-
-        # ranking using sum of neighbors
-        count = 0
-        while count < 5000:
-            new_rank = {}
-            count += 1
-            # sum of neighbors for new value
-            for r in rank:
-                new_val = primes[rank[r]]
-                for a in r.connected:
-                    if heavy_only and a.element == 'H':
-                        continue
-                    new_val *= primes[rank[a]]
-                new_rank[r] = new_val
-            # get rank for new value
-            rank_key = sorted(set(new_rank.values()))
-            for n in new_rank:
-                new_rank[n] = rank_key.index(new_rank[n])
-
-            # if no change, we're done
-            if new_rank == rank:
-                break
-            # if all atoms have unique rank, we're done
-            if len(new_rank.values()) == len(set(new_rank.values())):
-                break
-            rank = new_rank
-        else:
-            warn_str = "\nMax number of canonical ranking cycles exceeded: " \
-                + self.name
-            warn(warn_str)
-
-        # return rank
-        rv = []
-        for a in self.atoms:
-            if a in rank:
-                rv += [rank[a]]
-        return rv
-
     def reorder(self, start=None, targets=None, canonical=True,
                 heavy_only=False):
         """
@@ -518,6 +480,7 @@ class Geometry:
             targets = self.find(targets)
         if heavy_only:
             targets = [t for t in targets if t.element != 'H']
+
         non_targets = [a for a in self.atoms if a not in targets]
 
         # get starting atom
@@ -566,6 +529,7 @@ class Geometry:
                 if m == '':
                     continue
                 m = m.split('-')
+                m = [self.atoms[int(i) - 1] for i in m]
                 self.add_constraints(m)
                 rv['constraint'] += [m]
         # active centers
@@ -576,9 +540,10 @@ class Geometry:
             for m in match:
                 if m == '':
                     continue
-                a = self.find_exact(m)[0]
+                a = self.atoms[int(m) - 1]
                 a.add_tag('center')
                 rv['center'] += [a]
+
         # ligand
         match = re.search('L:([0-9-,]+)', self.comment)
         if match is not None:
@@ -588,10 +553,14 @@ class Geometry:
                 if m == '':
                     continue
                 m = m.split('-')
-                for i in range(int(m[0]), int(m[1]) + 1):
-                    a = self.find_exact(str(i))[0]
+                for i in range(int(m[0]) - 1, int(m[1])):
+                    try:
+                        a = self.atoms[i]
+                    except IndexError:
+                        continue
                     a.add_tag('ligand')
                     rv['ligand'] += [a]
+
         # key atoms
         match = re.search('K:([0-9,;]+)', self.comment)
         if match is not None:
@@ -604,9 +573,7 @@ class Geometry:
                 for i in m:
                     if i == '':
                         continue
-                    a = self.find_exact(i)[0]
-                    a.add_tag('key')
-                    rv['key_atoms'] += [a]
+                    rv['key_atoms'] += [int(i) - 1]
         return rv
 
     def _flag(self, flag, targets=None):
@@ -653,7 +620,10 @@ class Geometry:
                 except IndexError:
                     return energy
             else:
-                tmp = other.atoms
+                try:
+                    tmp = other.atoms
+                except AttributeError:
+                    tmp = other
 
             for b in tmp:
                 if a == b:
@@ -720,7 +690,7 @@ class Geometry:
         return center / len(targets)
 
     def RMSD(self, ref, align=False, heavy_only=False, targets=None,
-             ref_targets=None, sort=False):
+             ref_targets=None, sort=False, longsort=False):
         """
         calculates the RMSD between two geometries
         parameters:
@@ -731,6 +701,7 @@ class Geometry:
             targets (list) - the atoms in this geometry to use in calculation
             ref_targets (list) - the atoms in the reference geometry to use
             sort (bool) - sort atoms before comparing
+            longsort (bool) - use a more expensive but better sorting method (only use for small molecules!)
         returns:
             rmsd (float)
         """
@@ -752,7 +723,6 @@ class Geometry:
                 matrix += utils.quat_matrix(pt2, pt1)
 
             eigenval, eigenvec = np.linalg.eigh(matrix)
-            # eigh returns sorted eigenvalues
             val = eigenval[0]
             vec = eigenvec.T[0]
 
@@ -766,15 +736,51 @@ class Geometry:
 
         def get_orders(obj, targets):
             """ get orders starting at different atoms """
-            orders = [targets]
-            for t in targets:
-                if t.element == 'H':
-                    continue
-                orders += [obj.reorder(start=t,
-                                       canonical=False)[0]]
-            return orders
+            # try just regular canonical ordering
+            orders = [obj.reorder(targets=targets, canonical=False)[0]]
+            if not longsort:
+                # and other orderings starting with each start atom
+                for t in targets:
+                    if t.element == 'H':
+                        continue
+                    orders += [obj.reorder(start=t,
+                                           targets=targets,
+                                           canonical=False)[0]]
+                return orders
+            else:
+                # This way might be better, as there could be canonical ties,
+                # but it gets really costly really fast. Maybe there's a way to
+                # slim it down?
+
+                order = orders[-1]
+                swap = []
+                tmp = set([])
+                for i, o in enumerate(order):
+                    if i == 0:
+                        last_rank = order[0]._rank
+                        continue
+                    if o._rank == last_rank:
+                        tmp.add(i-1)
+                        tmp.add(i)
+                    elif tmp:
+                        swap += [tmp.copy()]
+                        tmp = set([])
+                    last_rank = o._rank
+                pairs = []
+                for n in range(1, len(swap) + 1):
+                    for to_swap in itertools.combinations(swap, n):
+                        for s in to_swap:
+                            for pair in itertools.combinations(list(s), 2):
+                                pairs += [pair]
+                for i, j in pairs:
+                    tmp = order.copy()
+                    tmp[i], tmp[j] = tmp[j], tmp[i]
+                    orders += [tmp]
+                return orders
 
         # get target atoms
+        if longsort:
+            sort = True
         ref = ref.copy()
         tmp = targets
         if targets is not None:
@@ -802,17 +808,27 @@ class Geometry:
 
         # sort targets if requested and perform rmsd calculation
         if sort:
-            orders = get_orders(self, targets)
+            # try current ordering
+            min_rmsd = _RMSD(ref_targets, targets)
+
+            # get other orderings
+            self.refresh_connected()
+            self.refresh_ranks()
+            ref.refresh_connected()
+            ref.refresh_ranks()
             ref_targets = [a for a in ref.reorder(canonical=False)[0]
                            if a in ref_targets]
 
+            ref_orders = get_orders(ref, ref_targets)
+            orders = get_orders(self, targets)
+
             # find min RMSD for each ordering
-            min_rmsd = None
-            for o in orders:
-                o = [a for a in o if a in targets]
-                tmp = _RMSD(ref_targets, o)
-                if min_rmsd is None or tmp[0] < min_rmsd[0]:
-                    min_rmsd = tmp
+            for r in ref_orders:
+                for o in orders:
+                    o = [a for a in o if a in targets]
+                    tmp = _RMSD(ref_targets, o)
+                    if min_rmsd is None or tmp[0] < min_rmsd[0]:
+                        min_rmsd = tmp
             rmsd, vec = min_rmsd
         else:
             rmsd, vec = _RMSD(ref_targets, targets)
@@ -860,33 +876,31 @@ class Geometry:
     def remove_fragment(self, start, avoid, add_H=True):
         """
         Removes a fragment of the geometry
-        Parameters:
-            start - the atom of the fragment to be removed that attaches to the
-                    rest of the geometry
-            avoid - the atoms `start` is attached to that should be avoided
-            add_H - default is to add H in place of `start`,
-                    but add_H=False overrides this behaviour
-            ret_frag - default is to return None, but ret_frag=True will return
-                       the removed fragment as a geometry object
+        Returns:
+            (list) :start: + the removed fragment
+
+        :start: the atom of the fragment to be removed that attaches to the
+            rest of the geometry
+        :avoid: the atoms :start: is attached to that should be avoided
+        :add_H: default is to change :start: to H and update bond lengths, but
+            add_H=False overrides this behaviour
+
         """
         start = self.find(start)
         avoid = self.find(avoid)
         frag = self.get_fragment(start, avoid)[len(start):]
-        keep = []
-        for a in self.atoms:
-            if a not in frag:
-                keep += [a]
-        self.atoms = keep
+        self -= frag
         self.refresh_connected()
 
         # replace start with H
+        rv = deepcopy(start) + frag
         for a in start:
             if not add_H:
                 break
             a.element = 'H'
-            self.change_distance(a, a.connected & set(keep), fix=2)
-
-        return start + frag
+            a._set_radii()
+            self.change_distance(a, a.connected - set(frag), fix=2)
+        return rv
 
     def coord_shift(self, vector, targets=None):
         """
@@ -1149,13 +1163,13 @@ class Geometry:
 
     def minimize_torsion(self, targets, axis, center, geom=None):
         """
-        Rotate `targets` to minimize the LJ potential
-        Parameters:
-            targets: the target atoms to rotate
-            axis: the axis by which to rotate
-            center: where to center before rotation
-            geom: calculate LJ potential between self and another geometry-like
-                object, instead of just within self
+        Rotate :targets` to minimize the LJ potential
+
+        :targets: the target atoms to rotate
+        :axis: the axis by which to rotate
+        :center: where to center before rotation
+        :geom: calculate LJ potential between self and another geometry-like
+            object, instead of just within self
         """
         targets = self.find(targets)
         if geom is None:

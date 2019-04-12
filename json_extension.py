@@ -1,4 +1,5 @@
 import json
+import numpy as np
 
 from AaronTools.atoms import Atom
 from AaronTools.geometry import Geometry
@@ -99,7 +100,15 @@ class JSONEncoder(json.JSONEncoder):
 
     def _encode_frequency(self, obj):
         rv = {'_type': obj.__class__.__name__}
-        rv['data'] = [d.__dict__ for d in obj.data]
+        data = []
+        for d in obj.data:
+            entry = {}
+            for k, v in d.__dict__.items():
+                if isinstance(v, np.ndarray):
+                    v = v.tolist()
+                entry[k] = v
+            data += [entry.copy()]
+        rv['data'] = data
         return rv
 
 

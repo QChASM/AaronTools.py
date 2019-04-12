@@ -94,7 +94,7 @@ class TestAtoms(TestWithTimer):
         for a in atoms_read:
             tmp = [str(a.element)]
             for c in a.coords:
-                tmp += ["{:7.6f}".format(c)]
+                tmp += ["{:7.5f}".format(c)]
             atom_matrix += [tmp]
         for a, b in zip(mol, atom_matrix):
             a = ' '.join(a)
@@ -199,7 +199,7 @@ class TestAtoms(TestWithTimer):
     def test_angle(self):
         mol = self.read_xyz(TestAtoms.small_mol)
         angle = mol[11].angle(mol[12], mol[13])
-        self.assertTrue(abs(np.rad2deg(angle) - 123.214) < 10**(-4))
+        self.assertTrue(abs(np.rad2deg(angle) - 124.753) < 10**(-3))
 
 
 if __name__ == "__main__":
