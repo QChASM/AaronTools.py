@@ -18,12 +18,14 @@ class Catalyst(Geometry):
         :center: [Atom] - the metal center or active center
         :components: {'ligand': [Component], 'substrate': [Component]}
         :conf_num: int - the conformer number
+        :conf_spec: {Substituent.end: int(rotation_number), list(skip_rots)}
     """
 
     def __init__(self, structure='', name='', comment='', conf_num=1):
         self.center = None
         self.components = None
         self.conf_num = conf_num
+        self.conf_spec = {}
 
         Geometry.__init__(self, structure, name, comment)
 
@@ -32,6 +34,42 @@ class Catalyst(Geometry):
 
         self.other = self.parse_comment()
         self.detect_components()
+        for sub in self.get_substituents():
+            # self.conf_spec[sub.end] holds:
+            # (current rotation number, [rotation numbers to skip] or 'all')
+            self.conf_spec[sub.end] = [1, []]
+
+    def find_substituent(self, end, for_confs=True):
+        """
+        Finds a substituent based on a given atom (matches end == sub.end)
+
+        :end: the atom the substituent is connected to
+        :for_confs: if true(default), only consider substituents that need to
+            be rotated to generate conformers
+        """
+        end = self.find(end)[0]
+        for sub in self.get_substituents(for_confs):
+            if sub.end == end:
+                return sub
+        else:
+            msg = "Could not find substituent connected to {}"
+            raise LookupError(msg.format(end.name))
+
+    def get_substituents(self, for_confs=True):
+        """
+        Returns list of all substituents found on all components
+
+        :for_confs: if true (default), returns only substituents that need to
+            be rotated to generate conformers
+        """
+        rv = []
+        for comp in it.chain(self.components['ligand'],
+                             self.components['substrate']):
+            for sub in comp.substituents:
+                if for_confs and (sub.conf_num is None or sub.conf_num <= 1):
+                    continue
+                rv += [sub]
+        return rv
 
     def copy(self, atoms=None, name=None, comment=None):
         if atoms is None:
@@ -189,6 +227,8 @@ class Catalyst(Geometry):
         for i, sub in enumerate(self.components['substrate']):
             name = self.name + '_sub-{}'.format(sub[0].name)
             self.components['substrate'][i] = Component(sub, name)
+
+        self.refresh_connected()
         return
 
     def detect_fragments(self, targets, avoid=None):
@@ -211,6 +251,9 @@ class Catalyst(Geometry):
             frag = self.get_fragment(a, avoid)
             for f in frag:
                 found.add(f)
+                for c in self.center:
+                    if f in c.connected:
+                        f.add_tag('key')
             rv += [frag]
         return rv
 
@@ -218,8 +261,8 @@ class Catalyst(Geometry):
         """
         Maps new ligand according to key_map
         Parameters:
-            ligand      the name of a ligand in the ligand library
-            old_keys    the key atoms of the old ligand to map to
+        :ligand:    the name of a ligand in the ligand library
+        :old_keys:  the key atoms of the old ligand to map to
         """
         def get_rotation(old_axis, new_axis):
             w = np.cross(old_axis, new_axis)
@@ -241,7 +284,7 @@ class Catalyst(Geometry):
             ligand.rotate(w, angle, center=new_key)
             return ligand
 
-        def map_2_key(old_ligand, ligand, old_keys, new_keys):
+        def map_2_key(old_ligand, ligand, old_keys, new_keys, rev_ang=False):
             # align COM of key atoms
             center = old_ligand.COM(targets=old_keys)
             shift = old_ligand.COM(targets=old_keys) - \
@@ -268,7 +311,9 @@ class Catalyst(Geometry):
             new_vec = ligand.COM(targets=new_con) - center
 
             w, angle = get_rotation(old_vec, new_vec)
-            ligand.rotate(old_axis, angle, center=center)
+            if rev_ang:
+                angle = -angle
+            ligand.rotate(old_axis, -angle, center=center)
 
         def map_rot_frag(frag, a, b, ligand, old_key, new_key):
             old_vec = old_key.coords - b.coords
@@ -317,7 +362,7 @@ class Catalyst(Geometry):
                             continue
                         ok += [old_keys[i]]
                         nk += [n]
-                    map_2_key(old_ligand, ligand, ok, nk)
+                    map_2_key(old_ligand, ligand, ok, nk, rev_ang=True)
                     partial_map = True
                     mapped_frags += [frag]
                     continue
@@ -374,8 +419,10 @@ class Catalyst(Geometry):
             if len(ligand.key_atoms) == 1:
                 map_1_key(self, ligand, old_keys[start], new_keys[start])
             elif len(ligand.key_atoms) == 2:
+                ligand.write('lig1')
                 map_2_key(old_ligands[start], ligand,
                           old_keys[start:end], new_keys[start:end])
+                ligand.write('lig2')
             else:
                 map_more_key(
                     self, old_ligands[start], ligand,
@@ -411,6 +458,26 @@ class Catalyst(Geometry):
             self.minimize_torsion(sub.atoms, self.bond(
                 sub.atoms[0], sub.end), sub.end)
             break
+
+    def next_conformer(self):
+        for end, (conf_num, skip) in sorted(self.conf_spec.items()):
+            sub = self.find_substituent(end)
+            if skip == 'all' or conf_num in skip:
+                if conf_num == sub.conf_num:
+                    self.conf_spec[end][0] = 1
+                else:
+                    self.conf_spec[end][0] += 1
+                sub.sub_rotate()
+                continue
+            if conf_num == sub.conf_num:
+                self.conf_spec[end][0] = 1
+                sub.sub_rotate()
+                continue
+            self.conf_spec[end][0] += 1
+            sub.sub_rotate()
+            return True
+        else:
+            return False
 
     def minimize(self):
         """

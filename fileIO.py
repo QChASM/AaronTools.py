@@ -42,6 +42,20 @@ def is_num(test):
     return bool(rv)
 
 
+def step2str(step):
+    if int(step) == step:
+        return str(int(step))
+    else:
+        return str(step).replace('.', '-')
+
+
+def str2step(step_str):
+    if '-' in step_str:
+        return float(step_str.replace('-', '.'))
+    else:
+        return float(step_str)
+
+
 class FileWriter:
     @classmethod
     def write_file(cls, geom, style='xyz', append=False, options=None,
@@ -75,11 +89,11 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, options, *args, **kwargs):
+    def write_com(cls, geom, step, options, *args, **kwargs):
         theory = options.theory
-        with open(geom.name + '.com', 'w') as f:
-            f.write("%chk={}.chk\n".format(geom.name))
-            f.write(theory.make_header(geom, options, *args, **kwargs))
+        fname = '{}.{}.com'.format(geom.name, step2str(step))
+        with open(fname, 'w') as f:
+            f.write(theory.make_header(geom, step, options, *args, **kwargs))
             for a in geom.atoms:
                 if a.flag:
                     s = '{:<3s}  {:> 2d}' + ' {:> 12.6f}'*3 + '\n'
@@ -88,8 +102,7 @@ class FileWriter:
                     s = '{:<3s}' + ' {:> 12.6f}'*3 + '\n'
                     s = s.format(a.element, *a.coords)
                 f.write(s)
-            f.write('\n')
-            f.write(theory.make_footer(geom))
+            f.write(theory.make_footer(geom, step))
         return
 
 

@@ -57,7 +57,7 @@ class Geometry:
             else:
                 # list of atoms supplied
                 self.atoms = structure
-                self.parse_comment()
+                self.other = self.parse_comment()
                 self.refresh_connected()
                 return
         else:
@@ -574,6 +574,7 @@ class Geometry:
                     if i == '':
                         continue
                     rv['key_atoms'] += [int(i) - 1]
+        self.other = rv
         return rv
 
     def _flag(self, flag, targets=None):
@@ -631,6 +632,14 @@ class Geometry:
                 energy += calc_LJ(a, b)
 
         return energy
+
+    def get_constraints(self):
+        rv = []
+        for i, a in enumerate(self.atoms):
+            for b in sorted(a.constraint):
+                j = self.atoms.index(b)
+                rv += [(i, j)]
+        return rv
 
     # geometry measurement
     def bond(self, a1, a2):

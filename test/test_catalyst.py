@@ -14,12 +14,13 @@ class TestCatalyst(TestWithTimer):
     tm_multi = Catalyst(prefix + "test_files/catalysts/tm_multi-lig.xyz")
     org_1 = Catalyst(prefix + "test_files/catalysts/org_1.xyz")
     org_tri = Catalyst(prefix + "test_files/catalysts/org_tri.xyz")
+    catalysts = [tm_simple, tm_multi, org_1, org_tri]
 
     monodentate = Component(prefix + "test_files/ligands/ACN.xyz")
     bidentate = Component(prefix + "test_files/ligands/S-tBu-BOX.xyz")
     tridentate = Component(prefix + "test_files/ligands/squaramide.xyz")
 
-    def validate(self, test, ref):
+    def validate(self, test, ref, thresh=10**-5):
         t_el = sorted([t.element for t in test.atoms])
         r_el = sorted([r.element for r in ref.atoms])
         if len(t_el) != len(r_el):
@@ -30,11 +31,11 @@ class TestCatalyst(TestWithTimer):
                 return False
 
         rmsd = ref.RMSD(test, sort=True)
-        return rmsd < 10**-5
+        return rmsd < thresh
 
     def test_init(self):
-        self.assertRaises(IOError, Catalyst, prefix +
-                          "test_files/R-Quinox-tBu3.xyz")
+        self.assertRaises(IOError, Catalyst,
+                          prefix + "test_files/R-Quinox-tBu3.xyz")
 
     def test_detect_components(self):
         def tester(ref, test):
@@ -110,6 +111,42 @@ class TestCatalyst(TestWithTimer):
         self.assertTrue(self.validate(
             org_tri, Geometry(prefix + "ref_files/lig_map_4.xyz")))
 
+    def test_conf_spec(self):
+        test_str = ''
+        for cat in TestCatalyst.catalysts:
+            for sub in sorted(cat.get_substituents()):
+                end = sub.end
+                conf_num = cat.conf_spec[end]
+                test_str += "{} {} {} {}\n".format(end.name,
+                                                   sub.name,
+                                                   sub.conf_num,
+                                                   conf_num)
+        with open(prefix + 'ref_files/conf_spec.txt') as f:
+            self.assertEqual(test_str, f.read())
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_next_conformer(self):
+        for cat in TestCatalyst.catalysts:
+            if cat == TestCatalyst.org_1:
+                continue
+            count = 1
+            orig_name = cat.name
+            while cat.next_conformer():
+                count += 1
+                name = orig_name + '.Cf' + str(count)
+                cat.write(name)
+                print(cat.name)
+            print(*[cat.find_substituent(c).name
+                    for c in cat.conf_spec.keys()])
+            print(count)
+
+
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(TestCatalyst('test_next_conformer'))
+    return suite
+
+
+if __name__ == '__main__':
+    runner = unittest.TextTestRunner()
+    runner.run(suite())
+    # unittest.main()

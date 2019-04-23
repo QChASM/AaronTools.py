@@ -22,9 +22,9 @@ class Substituent(Geometry):
         conf_num    number of conformers
         conf_angle  angle to rotate by to make next conformer
     """
-    AARON_LIBS = AARONLIB + "Subs/*.xyz"
-    BUILTIN = QCHASM + "AaronTools/Substituents/*.xyz"
-    CACHE_FILE = os.path.dirname(__file__) + "/cache/substituents"
+    AARON_LIBS = os.path.join(AARONLIB, "Subs/*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools/Substituents/*.xyz")
+    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/substituents")
 
     try:
         with open(CACHE_FILE) as f:
@@ -40,9 +40,19 @@ class Substituent(Geometry):
         """
         if isinstance(sub, (Geometry, list)):
             # we can create substituent object from fragment
-            self.name = name
-            self.conf_num = conf_num
-            self.conf_angle = conf_angle
+            if isinstance(sub, Substituent):
+                self.name = name if name else sub.name
+                self.conf_angle = conf_num if conf_num else sub.conf_angle
+                self.conf_angle = conf_angle if conf_angle else sub.conf_angle
+            elif isinstance(sub, Geometry):
+                self.name = name if name else sub.name
+                self.conf_angle = conf_num
+                self.conf_angle = conf_angle
+            else:
+                self.name = name
+                self.conf_num = conf_num
+                self.conf_angle = conf_angle
+
             # save atom info
             if targets is None:
                 try:
@@ -56,7 +66,8 @@ class Substituent(Geometry):
             # detect sub and conformer info
             if not conf_num or not conf_angle:
                 if not self.detect_sub():
-                    raise LookupError("Substituent not found in library")
+                    LookupError("Substituent not found in library: "
+                                + str(self.name))
         else:  # or we can create from file
             # find substituent xyz file
             fsub = None
@@ -92,7 +103,13 @@ class Substituent(Geometry):
         if not self.name:
             self.name = "sub"
         if self.name == "sub" and end is not None:
-            self.name += "-{}".format(end)
+            self.name += "-{}".format(end.name)
+
+    def __lt__(self, other):
+        if self.end != other.end:
+            return self.end < other.end
+        else:
+            return self.atoms[0] < other.atoms[0]
 
     def copy(self, atoms=None, name=None, targets=None, end=None):
         """

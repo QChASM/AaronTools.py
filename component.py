@@ -13,16 +13,17 @@ from AaronTools.substituent import Substituent
 class Component(Geometry):
     """
     Attributes:
-        :name: str
-        :comment: str
-        :atoms: list(Atom)
-        :other: dict
-        :substituents: list(Substituent)
-        :backbone: list(Atom)
-        :key_atoms: list(Atom) for ligand only
+    :name:          str
+    :comment:       str
+    :atoms:         list(Atom)
+    :other:         dict()
+    :substituents:  list(Substituent) substituents detected
+    :backbone:      list(Atom) the backbone atoms
+    :key_atoms:     list(Atom) the atoms used for mapping
     """
 
-    def __init__(self, structure, name='', comment='', tag=None):
+    def __init__(self, structure, name='', comment='',
+                 tag=None, to_center=None):
         """
         comp is either a file, a geometry, or an atom list
         """
@@ -40,7 +41,6 @@ class Component(Geometry):
                 a.add_tag(tag)
 
         self.other = self.parse_comment()
-
         try:
             self.key_atoms = self.find('key')
         except LookupError:
@@ -49,7 +49,7 @@ class Component(Geometry):
                                   for i in self.other['key_atoms']]
 
         self.refresh_connected(rank=False)
-        self.detect_backbone()
+        self.detect_backbone(to_center)
 
     def copy(self, atoms=None, name=None, comment=None):
         if atoms is None:
@@ -133,7 +133,11 @@ class Component(Geometry):
         if len(removed_sub) == 1 and removed_sub[0].element == 'H':
             pass
         else:
-            removed_sub = Substituent(removed_sub)
+            try:
+                removed_sub = Substituent(removed_sub)
+            except LookupError:
+                removed_sub = Substituent(
+                    removed_sub, conf_angle=0, conf_num=1)
             try:
                 self.substituents.remove(removed_sub)
             except ValueError:
@@ -159,10 +163,10 @@ class Component(Geometry):
         (both fragments contain no overlapping atoms)
         """
         self.refresh_connected(rank=False)
-        if targets is None:
-            atoms = self.atoms
-        else:
+        if targets:
             atoms = self.find(targets)
+        else:
+            atoms = self.atoms
         frag_list = []
         for i, a in enumerate(atoms[:-1]):
             for b in atoms[i+1:]:
@@ -191,8 +195,8 @@ class Component(Geometry):
         """
         Detects backbone and substituents attached to backbone
         Will tag atoms as 'backbone' or by substituent name
-        Parameters:
-            to_center   the atoms connected to the metal/active center
+
+        :to_center:   the atoms connected to the metal/active center
         """
         # handle the case in which we want to refresh the backbone
         # we must remove any tags already made
