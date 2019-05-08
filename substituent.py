@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-import re
-import os
 import json
-import numpy as np
-from glob import glob
+import os
+import re
 from copy import deepcopy
+from glob import glob
 from warnings import warn
 
-from AaronTools.const import QCHASM, AARONLIB
-from AaronTools.geometry import Geometry
+import numpy as np
+
+from AaronTools.const import AARONLIB, QCHASM
 from AaronTools.fileIO import FileReader
+from AaronTools.geometry import Geometry
 
 
 class Substituent(Geometry):
@@ -22,6 +23,7 @@ class Substituent(Geometry):
         conf_num    number of conformers
         conf_angle  angle to rotate by to make next conformer
     """
+
     AARON_LIBS = os.path.join(AARONLIB, "Subs/*.xyz")
     BUILTIN = os.path.join(QCHASM, "AaronTools/Substituents/*.xyz")
     CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/substituents")
@@ -31,10 +33,17 @@ class Substituent(Geometry):
             cache = json.load(f)
     except (FileNotFoundError, json.decoder.JSONDecodeError):
         cache = {}
-        cache['lengths'] = {}  # for storing number of atoms in each sub
+        cache["lengths"] = {}  # for storing number of atoms in each sub
 
-    def __init__(self, sub, name=None, targets=None, end=None,
-                 conf_num=None, conf_angle=None):
+    def __init__(
+        self,
+        sub,
+        name=None,
+        targets=None,
+        end=None,
+        conf_num=None,
+        conf_angle=None,
+    ):
         """
         sub is either a file sub, a geometry, or an atom list
         """
@@ -66,20 +75,21 @@ class Substituent(Geometry):
             # detect sub and conformer info
             if not conf_num or not conf_angle:
                 if not self.detect_sub():
-                    LookupError("Substituent not found in library: "
-                                + str(self.name))
+                    LookupError(
+                        "Substituent not found in library: " + str(self.name)
+                    )
         else:  # or we can create from file
             # find substituent xyz file
             fsub = None
             for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-                match = re.search('/'+sub+'.xyz', f)
+                match = re.search("/" + sub + ".xyz", f)
                 if match is not None:
                     fsub = f
                     break
             # or assume we were given a file name instead
-            if not fsub and '.xyz' in sub:
+            if not fsub and ".xyz" in sub:
                 fsub = sub
-                sub = sub.split('/')[-1].rstrip('.xyz')
+                sub = sub.split("/")[-1].rstrip(".xyz")
 
             # load in atom info
             from_file = FileReader(fsub)
@@ -91,12 +101,12 @@ class Substituent(Geometry):
             self.refresh_connected(rank=False)
 
             # set conformer info
-            conf_info = re.search('CF:(\d+),(\d+)', self.comment)
+            conf_info = re.search("CF:(\d+),(\d+)", self.comment)
             if conf_info is not None:
                 self.conf_num = int(conf_info.group(1))
                 self.conf_angle = np.deg2rad(float(conf_info.group(2)))
             else:
-                warn("Conformer info not loaded for"+f)
+                warn("Conformer info not loaded for" + f)
 
         # end is connection point
         self.end = end
@@ -106,7 +116,9 @@ class Substituent(Geometry):
             self.name += "-{}".format(end.name)
 
     def __lt__(self, other):
-        if self.end != other.end:
+        if len(self.atoms) != len(other.atoms):
+            return self.atoms < other.atoms
+        elif self.end != other.end:
             return self.end < other.end
         else:
             return self.atoms[0] < other.atoms[0]
@@ -131,12 +143,12 @@ class Substituent(Geometry):
         detects conformer information for a substituent by searching the
         substituent library
         """
-        sub_lengths = Substituent.cache['lengths']
+        sub_lengths = Substituent.cache["lengths"]
         found = False
         cache_changed = False
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-            match = re.search('/([^/]*).xyz', f)
+            match = re.search("/([^/]*).xyz", f)
             name = match.group(1)
             # test number of atoms against cache
             if name in sub_lengths and len(self.atoms) != sub_lengths[name]:
@@ -156,7 +168,7 @@ class Substituent(Geometry):
                 if i.element != j.element:
                     bad = True
                     break
-            # and correct connections
+                # and correct connections
                 if len(i.connected) != len(j.connected):
                     bad = True
                     break
@@ -178,8 +190,8 @@ class Substituent(Geometry):
 
         # update cache
         if cache_changed:
-            Substituent.cache['lengths'] = sub_lengths
-            with open(Substituent.CACHE_FILE, 'w') as f:
+            Substituent.cache["lengths"] = sub_lengths
+            with open(Substituent.CACHE_FILE, "w") as f:
                 json.dump(Substituent.cache, f)
         return found
 
@@ -188,7 +200,7 @@ class Substituent(Geometry):
         align substituent to a bond vector
         """
         bond /= np.linalg.norm(bond)
-        x_axis = np.array([1., 0., 0.])
+        x_axis = np.array([1.0, 0.0, 0.0])
         rot_axis = np.cross(x_axis, bond)
         rot_axis /= np.linalg.norm(rot_axis)
         angle = np.arccos(np.dot(bond, x_axis))
@@ -197,6 +209,7 @@ class Substituent(Geometry):
     def sub_rotate(self, angle=None):
         """
         rotates substituent about bond w/ rest of geometry
+        :angle: in radians
         """
         if angle is None:
             angle = self.conf_angle

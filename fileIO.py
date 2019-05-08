@@ -1,44 +1,46 @@
 """For parsing input/output files"""
 import re
-import numpy as np
+from copy import deepcopy
 from io import StringIO
 from warnings import warn
-from copy import deepcopy
+
+import numpy as np
 
 from AaronTools.atoms import Atom
-from AaronTools.const import ELEMENTS, UNIT, PHYSICAL
+from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
-read_types = ['xyz', 'log', 'com']
-write_types = ['xyz', 'com']
+read_types = ["xyz", "log", "com"]
+write_types = ["xyz", "com"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
 ERRORS = {
-    "NtrErr Called from FileIO": 'CHK',  # delete
-    "Wrong number of Negative eigenvalues": 'EIGEN',  # opt=noeigen
-    "Convergence failure -- run terminated.": 'CONV',  # scf=xqc
-    # check quota and alert user; REMOVE error from end of file!
-    "Erroneous write": 'QUOTA',
-    "Atoms too close": 'CLASH',  # flag as CLASH
-    # die and alert user to check catalyst structure or fix input file
-    "The combination of multiplicity": 'CHARGEMULT',
-    "Bend failed for angle": 'REDUND',  # Using opt=cartesian
-    "Unknown message": 'UNKNOWN',
+    "Convergence failure -- run terminated.": "CONV",
+    "Inaccurate quadrature in CalDSu": "CONV_CDS",
+    "Error termination request processed by link 9999": "CONV_LINK",
+    "FormBX had a problem": "FBX",
+    "NtrErr Called from FileIO": "CHK",
+    "Wrong number of Negative eigenvalues": "EIGEN",
+    "Erroneous write": "QUOTA",
+    "Atoms too close": "CLASH",
+    "The combination of multiplicity": "CHARGEMULT",
+    "Bend failed for angle": "REDUND",
+    "Unknown message": "UNKNOWN",
 }
 
 
 def is_alpha(test):
-    rv = re.search('^[a-zA-Z]+$', test)
+    rv = re.search("^[a-zA-Z]+$", test)
     return bool(rv)
 
 
 def is_int(test):
-    rv = re.search('^[+-]?\d+$', test)
+    rv = re.search("^[+-]?\d+$", test)
     return bool(rv)
 
 
 def is_num(test):
-    rv = re.search('^[+-]?\d+\.?\d*', test)
+    rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
 
 
@@ -46,20 +48,19 @@ def step2str(step):
     if int(step) == step:
         return str(int(step))
     else:
-        return str(step).replace('.', '-')
+        return str(step).replace(".", "-")
 
 
 def str2step(step_str):
-    if '-' in step_str:
-        return float(step_str.replace('-', '.'))
+    if "-" in step_str:
+        return float(step_str.replace("-", "."))
     else:
         return float(step_str)
 
 
 class FileWriter:
     @classmethod
-    def write_file(cls, geom, style='xyz', append=False, options=None,
-                   *args, **kwargs):
+    def write_file(cls, geom, style="xyz", append=False, *args, **kwargs):
         """
         Writes file from geometry in the specified style
 
@@ -72,14 +73,23 @@ class FileWriter:
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))
 
-        if style.lower() == 'xyz':
+        if style.lower() == "xyz":
             cls.write_xyz(geom, append)
-        elif style.lower() == 'com':
-            cls.write_com(geom, options, *args, **kwargs)
+        elif style.lower() == "com":
+            if "theory" in kwargs and "step" in kwargs:
+                step = kwargs["step"]
+                theory = kwargs["theory"]
+                del kwargs["step"]
+                del kwargs["theory"]
+                cls.write_com(geom, step, theory, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
+                )
 
     @classmethod
     def write_xyz(cls, geom, append):
-        mode = 'a' if append else 'w'
+        mode = "a" if append else "w"
         with open(geom.name + ".xyz", mode) as f:
             f.write(str(len(geom.atoms)) + "\n")
             f.write(geom.comment + "\n")
@@ -89,17 +99,16 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, step, options, *args, **kwargs):
-        theory = options.theory
-        fname = '{}.{}.com'.format(geom.name, step2str(step))
-        with open(fname, 'w') as f:
-            f.write(theory.make_header(geom, step, options, *args, **kwargs))
+    def write_com(cls, geom, step, theory, **kwargs):
+        fname = "{}.{}.com".format(geom.name, step2str(step))
+        with open(fname, "w") as f:
+            f.write(theory.make_header(geom, step, **kwargs))
             for a in geom.atoms:
                 if a.flag:
-                    s = '{:<3s}  {:> 2d}' + ' {:> 12.6f}'*3 + '\n'
+                    s = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
                     s = s.format(a.element, -1, *a.coords)
                 else:
-                    s = '{:<3s}' + ' {:> 12.6f}'*3 + '\n'
+                    s = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
                     s = s.format(a.element, *a.coords)
                 f.write(s)
             f.write(theory.make_footer(geom, step))
@@ -126,9 +135,9 @@ class FileReader:
             frequencies, only what is needed to construct a Geometry() obj
         """
         # Initialization
-        self.name = ''
-        self.file_type = ''
-        self.comment = ''
+        self.name = ""
+        self.file_type = ""
+        self.comment = ""
         self.atoms = []
         self.other = {}
         self.content = None
@@ -136,7 +145,7 @@ class FileReader:
 
         # get file name and extention
         if isinstance(fname, str):
-            fname = fname.rsplit('.', 1)
+            fname = fname.rsplit(".", 1)
             self.name = fname[0]
             self.file_type = fname[1].lower()
         elif isinstance(fname, (tuple, list)):
@@ -149,7 +158,7 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(get_all, just_geom)
-        elif self.file_type == 'log':
+        elif self.file_type == "log":
             f = StringIO(self.content)
             self.read_log(f, get_all, just_geom)
 
@@ -162,11 +171,11 @@ class FileReader:
                             of all others encountered
         """
         with open(self.name + "." + self.file_type) as f:
-            if self.file_type == 'xyz':
+            if self.file_type == "xyz":
                 self.read_xyz(f, get_all)
-            elif self.file_type == 'log':
+            elif self.file_type == "log":
                 self.read_log(f, get_all, just_geom)
-            elif self.file_type == 'com':
+            elif self.file_type == "com":
                 self.read_com(f)
         return
 
@@ -184,13 +193,14 @@ class FileReader:
         # atom info
         for line in f:
             line = line.strip()
-            if line == '':
+            if line == "":
                 continue
             try:
                 int(line)
                 if get_all:
-                    self.all_geom += [(deepcopy(self.comment),
-                                       deepcopy(self.atoms))]
+                    self.all_geom += [
+                        (deepcopy(self.comment), deepcopy(self.atoms))
+                    ]
                 self.comment = f.readline().strip()
                 self.atoms = []
             except ValueError:
@@ -199,8 +209,7 @@ class FileReader:
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
         if get_all:
-            self.all_geom += [(deepcopy(self.comment),
-                               deepcopy(self.atoms))]
+            self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -226,19 +235,19 @@ class FileReader:
 
         self.all_geom = []
         line = f.readline()
-        self.other['archive'] = ''
+        self.other["archive"] = ""
         found_archive = False
         n = 1
-        while line != '':
+        while line != "":
             # archive entry
-            if line.strip().startswith('1\\1\\'):
+            if line.strip().startswith("1\\1\\"):
                 found_archive = True
-                line = '@' + line.strip()[4:]
-            if found_archive and line.strip().endswith('@'):
-                self.other['archive'] = self.other['archive'][:-2] + '\\\\'
+                line = "@" + line.strip()[4:]
+            if found_archive and line.strip().endswith("@"):
+                self.other["archive"] = self.other["archive"][:-2] + "\\\\"
                 found_archive = False
             elif found_archive:
-                self.other['archive'] += line.strip()
+                self.other["archive"] += line.strip()
 
             # geometry
             if re.search("(Standard|Input) orientation:", line):
@@ -253,57 +262,62 @@ class FileReader:
                 line = f.readline()
                 n += 1
                 match = re.search(
-                    "Charge\s*=\s*(\d+)\s*Multiplicity\s*=\s*(\d+)",
-                    line
+                    "Charge\s*=\s*(\d+)\s*Multiplicity\s*=\s*(\d+)", line
                 )
                 if match is not None:
-                    self.other['charge'] = int(match.group(1))
-                    self.other['multiplicity'] = int(match.group(2))
+                    self.other["charge"] = int(match.group(1))
+                    self.other["multiplicity"] = int(match.group(2))
 
             # status
             if NORM_FINISH in line:
-                self.other['finished'] = True
+                self.other["finished"] = True
             if "SCF Done" in line:
-                self.other['energy'] = float(line.split()[4])
+                self.other["energy"] = float(line.split()[4])
             if "Molecular mass:" in line:
-                self.other['mass'] = float(float_num.search(line).group(0))
-                self.other['mass'] *= UNIT.AMU_TO_KG
+                self.other["mass"] = float(float_num.search(line).group(0))
+                self.other["mass"] *= UNIT.AMU_TO_KG
 
             # Frequencies
             if "hpmodes" in line:
-                self.other['hpmodes'] = True
+                self.other["hpmodes"] = True
             if "Harmonic frequencies" in line:
                 freq_str = line
                 while line != "\n":
                     line = f.readline()
                     n += 1
                     freq_str += line
-                if 'hpmodes' not in self.other:
-                    self.other['hpmodes'] = False
-                self.other['frequency'] = Frequency(
-                    freq_str, self.other['hpmodes'])
+                if "hpmodes" not in self.other:
+                    self.other["hpmodes"] = False
+                self.other["frequency"] = Frequency(
+                    freq_str, self.other["hpmodes"]
+                )
 
             # Thermo
             if "Temperature" in line:
-                self.other['temperature'] = float(
-                    float_num.search(line).group(0))
+                self.other["temperature"] = float(
+                    float_num.search(line).group(0)
+                )
             if "Rotational constants (GHZ):" in line:
                 rot = float_num.findall(line)
-                rot = [float(r) * PHYSICAL.PLANK * (10**9) / PHYSICAL.KB
-                       for r in rot]
-                self.other['rotational_temperature'] = rot
+                rot = [
+                    float(r) * PHYSICAL.PLANK * (10 ** 9) / PHYSICAL.KB
+                    for r in rot
+                ]
+                self.other["rotational_temperature"] = rot
             if "Sum of electronic and zero-point Energies=" in line:
-                self.other['E_ZPVE'] = float(float_num.search(line).group(0))
+                self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
-                self.other['enthalpy'] = float(float_num.search(line).group(0))
+                self.other["enthalpy"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Free Energies=" in line:
-                self.other['free_energy'] = float(
-                    float_num.search(line).group(0))
+                self.other["free_energy"] = float(
+                    float_num.search(line).group(0)
+                )
             if "Zero-point correction=" in line:
-                self.other['ZPVE'] = float(float_num.search(line).group(0))
+                self.other["ZPVE"] = float(float_num.search(line).group(0))
             if "Rotational symmetry number" in line:
-                self.other['rotational_symmetry_number'] \
-                    = int(re.search('\d+', line).group(0))
+                self.other["rotational_symmetry_number"] = int(
+                    re.search("\d+", line).group(0)
+                )
 
             # Gradient
             if re.search("Threshold\s+Converged", line) is not None:
@@ -314,35 +328,35 @@ class FileReader:
                 def add_grad(line, name, grad):
                     line = line.split()
                     grad[name] = {
-                        'value': line[2],
-                        'threshold': line[3],
-                        'converged': True if line[4] == 'YES' else False
+                        "value": line[2],
+                        "threshold": line[3],
+                        "converged": True if line[4] == "YES" else False,
                     }
                     return grad
 
-                while line != '':
+                while line != "":
                     if "Predicted change in Energy" in line:
                         break
-                    if re.search('Maximum\s+Force', line) is not None:
-                        grad = add_grad(line, 'Max Force', grad)
-                    if re.search('RMS\s+Force', line) is not None:
-                        grad = add_grad(line, 'RMS Force', grad)
-                    if re.search('Maximum\s+Displacement', line) is not None:
-                        grad = add_grad(line, 'Max Disp', grad)
-                    if re.search('RMS\s+Displacement', line) is not None:
-                        grad = add_grad(line, 'RMS Disp', grad)
+                    if re.search("Maximum\s+Force", line) is not None:
+                        grad = add_grad(line, "Max Force", grad)
+                    if re.search("RMS\s+Force", line) is not None:
+                        grad = add_grad(line, "RMS Force", grad)
+                    if re.search("Maximum\s+Displacement", line) is not None:
+                        grad = add_grad(line, "Max Disp", grad)
+                    if re.search("RMS\s+Displacement", line) is not None:
+                        grad = add_grad(line, "RMS Disp", grad)
                     line = f.readline()
                     n += 1
-                self.other['gradient'] = grad
+                self.other["gradient"] = grad
 
             # capture errors
             for err in ERRORS:
                 if err in line:
-                    self.other['error'] = ERRORS[err]
-                    self.other['error_msg'] = line.strip()
+                    self.other["error"] = ERRORS[err]
+                    self.other["error_msg"] = line.strip()
                     break
             else:
-                self.other['error'] = None
+                self.other["error"] = None
 
             line = f.readline()
             n += 1
@@ -350,13 +364,13 @@ class FileReader:
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
 
-        if 'finished' not in self.other:
-            self.other['finished'] = False
-        if 'error' not in self.other:
-            self.other['error'] = None
-        if not self.other['finished'] and not self.other['error']:
-            self.other['error'] = ERRORS['Unknown message']
-            self.other['error_msg'] = 'Unknown message'
+        if "finished" not in self.other:
+            self.other["finished"] = False
+        if "error" not in self.other:
+            self.other["error"] = None
+        if not self.other["finished"] and not self.other["error"]:
+            self.other["error"] = ERRORS["Unknown message"]
+            self.other["error_msg"] = "Unknown message"
         return
 
     def read_com(self, f):
@@ -366,49 +380,47 @@ class FileReader:
         other = {}
         for line in f:
             # header
-            if line.startswith('%'):
+            if line.startswith("%"):
                 continue
-            if line.startswith('#'):
-                other['method'] = re.search('^#(\S+)', line).group(1)
-                if 'temperature=' in line:
-                    other['temperature'] = re.search(
-                        'temperature=(\d+\.?\d*)', line
+            if line.startswith("#"):
+                other["method"] = re.search("^#(\S+)", line).group(1)
+                if "temperature=" in line:
+                    other["temperature"] = re.search(
+                        "temperature=(\d+\.?\d*)", line
                     ).group(1)
-                if 'solvent=' in line:
-                    other['solvent'] = re.search(
-                        'solvent=(\S+)\)', line
+                if "solvent=" in line:
+                    other["solvent"] = re.search(
+                        "solvent=(\S+)\)", line
                     ).group(1)
-                if 'scrf=' in line:
-                    other['solvent_model'] = re.search(
-                        'scrf=\((\S+),', line
+                if "scrf=" in line:
+                    other["solvent_model"] = re.search(
+                        "scrf=\((\S+),", line
                     ).group(1)
-                if 'EmpiricalDispersion=' in line:
-                    other['emp_dispersion'] = re.search(
-                        'EmpiricalDispersion=(\s+)', line
+                if "EmpiricalDispersion=" in line:
+                    other["emp_dispersion"] = re.search(
+                        "EmpiricalDispersion=(\s+)", line
                     ).group(1)
-                if 'int=(grid(' in line:
-                    other['grid'] = re.search(
-                        'int=\(grid(\S+)', line
-                    ).group(1)
+                if "int=(grid(" in line:
+                    other["grid"] = re.search("int=\(grid(\S+)", line).group(1)
                 for _ in range(4):
                     line = f.readline()
                 line = line.split()
-                other['charge'] = line[0]
-                other['mult'] = line[1]
+                other["charge"] = line[0]
+                other["mult"] = line[1]
                 found_atoms = True
                 continue
             # constraints
-            if found_atoms and line.startswith('B') and line.endswith('F'):
+            if found_atoms and line.startswith("B") and line.endswith("F"):
                 found_constraint = True
-                if 'constraint' not in other:
-                    other['constraint'] = []
-                other['constraint'] += [float_num.findall(line)]
+                if "constraint" not in other:
+                    other["constraint"] = []
+                other["constraint"] += [float_num.findall(line)]
                 continue
             # footer
             if found_constraint:
-                if 'footer' not in other:
-                    other['footer'] = ''
-                other['footer'] += line
+                if "footer" not in other:
+                    other["footer"] = ""
+                other["footer"] += line
                 continue
             # atom coords
             nums = float_num.findall(line)
@@ -439,6 +451,7 @@ class Frequency:
         {freq: {intensity: float, vector: np.array}}
     :is_TS: bool - true if len(imaginary_frequencies) == 1, else False
     """
+
     class Data:
         """
         ATTRIBUTES
@@ -472,9 +485,10 @@ class Frequency:
         else:
             if hpmodes is None:
                 raise TypeError(
-                    'hpmode argument required when data is a string')
+                    "hpmode argument required when data is a string"
+                )
 
-        lines = data.split('\n')
+        lines = data.split("\n")
         num_head = 0
         for line in lines:
             if "Harmonic frequencies" in line:
@@ -510,7 +524,8 @@ class Frequency:
 
             if hpmodes:
                 match = re.search(
-                    '^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$', line)
+                    "^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line
+                )
                 if match is None:
                     continue
                 values = float_num.findall(line)
@@ -528,7 +543,7 @@ class Frequency:
                     vector[coord] = m
                     modes[-tmp][atom] = vector
             else:
-                match = re.search('^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$', line)
+                match = re.search("^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
                 if match is None:
                     continue
                 atom = int(values[0]) - 1
@@ -551,8 +566,8 @@ class Frequency:
             elif freq > 0:
                 self.real_frequencies += [freq]
             self.by_frequency[freq] = {
-                'intensity': data.intensity,
-                'vector': data.vector
+                "intensity": data.intensity,
+                "vector": data.vector,
             }
         self.lowest_frequency = self.data[0].frequency
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False

@@ -4,9 +4,8 @@ from os import path
 from warnings import warn
 
 import numpy as np
-from AaronTools.const import RADII, ELEMENTS, MASS, RIJ, EIJ
-from AaronTools.const import CONNECTIVITY
 
+from AaronTools.const import CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 warn_LJ = set([])
 
@@ -14,10 +13,12 @@ warn_LJ = set([])
 class BondOrder:
     bonds = {}
     warn_atoms = set([])
-    warn_str = "\n" + \
-        "  Could not get bond order for: " + \
-        "    {} {}" + \
-        "    using bond order of 1"
+    warn_str = (
+        "\n"
+        + "  Could not get bond order for: "
+        + "    {} {}"
+        + "    using bond order of 1"
+    )
     # warn(s.format(a1.element, a2.element))
 
     def __init__(self):
@@ -25,7 +26,7 @@ class BondOrder:
             bond_data = json.load(f)
 
         for b in bond_data:
-            key = " ".join(sorted(b['atoms']))
+            key = " ".join(sorted(b["atoms"]))
             try:
                 BondOrder.bonds[key] += [b]
             except KeyError:
@@ -49,7 +50,7 @@ class BondOrder:
         try:
             bonds = cls.bonds[cls.key(a1, a2)]
         except KeyError:
-            if a1.element == 'H' or a2.element == 'H':
+            if a1.element == "H" or a2.element == "H":
                 return 1
             else:
                 BondOrder.warn_atoms.add((a1.element, a2.element))
@@ -57,20 +58,20 @@ class BondOrder:
         dist = a1.dist(a2)
         closest = None
         for b in bonds:
-            diff = abs(b['mean'] - dist)
+            diff = abs(b["mean"] - dist)
             if closest is None or diff < closest[0]:
                 closest = (diff, b)
 
         # if abs(diff - closest[1]['stdev']) > 3*closest[1]['stdev']:
-            # s = """
-            # Bond order prediction outside of three standard deviations
-                # Atoms in question:
-                # {}
-                # {}
-                # Predicted bond order: {}
-            # """
-            # warn(s.format(a1, a2, closest[1]['order']))
-        return closest[1]['order']
+        # s = """
+        # Bond order prediction outside of three standard deviations
+        # Atoms in question:
+        # {}
+        # {}
+        # Predicted bond order: {}
+        # """
+        # warn(s.format(a1, a2, closest[1]['order']))
+        return closest[1]["order"]
 
 
 class Atom:
@@ -87,11 +88,12 @@ class Atom:
         _radii          float           for calculating if bonded
         _connectivity   int             max connections without hypervalence
     """
+
     BondOrder()
 
-    def __init__(self, element='', coords=[], flag=False, name='', tags=[]):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[]):
         element = str(element).strip().capitalize()
-        if element == '':
+        if element == "":
             self.element = element
             self._radii = None
             self._connectivity = None
@@ -106,7 +108,7 @@ class Atom:
         self.flag = bool(flag)
         self.name = str(name).strip()
 
-        if hasattr(tags, '__iter__') and not isinstance(tags, str):
+        if hasattr(tags, "__iter__") and not isinstance(tags, str):
             self.tags = set(tags)
         else:
             self.tags = set([tags])
@@ -120,7 +122,7 @@ class Atom:
         """
         converts self.name from a string to a floating point number
         """
-        rv = self.name.split('.')
+        rv = self.name.split(".")
         if len(rv) == 0:
             return float(0)
         if len(rv) == 1:
@@ -129,7 +131,7 @@ class Atom:
         return float(rv)
 
     def __repr__(self):
-        s = ''
+        s = ""
         s += "{:>3s}  ".format(self.element)
         for c in self.coords:
             s += "{: 13.8f} ".format(c)
@@ -151,12 +153,12 @@ class Atom:
         if a != b:
             return a > b
 
-        a = self.name.split('.')
-        b = other.name.split('.')
+        a = self.name.split(".")
+        b = other.name.split(".")
         while len(a) < len(b):
-            a += ['0']
+            a += ["0"]
         while len(b) < len(a):
-            b += ['0']
+            b += ["0"]
         for i, j in zip(a, b):
             if int(i) == int(j):
                 continue
@@ -170,7 +172,8 @@ class Atom:
             self._radii = float(RADII[self.element])
         except KeyError:
             raise NotImplementedError(
-                "Radii not found for element:", self.element)
+                "Radii not found for element:", self.element
+            )
         return
 
     def _set_connectivity(self):
@@ -180,13 +183,12 @@ class Atom:
         try:
             self._connectivity = int(CONNECTIVITY[self.element])
         except KeyError:
-            warn(
-                "Connectivity not found for element: " + self.element)
+            warn("Connectivity not found for element: " + self.element)
         return
 
     def add_tag(self, *args):
         for a in args:
-            if hasattr(a, '__iter__') and not isinstance(a, str):
+            if hasattr(a, "__iter__") and not isinstance(a, str):
                 self.tags = self.tags.union(set(a))
             else:
                 self.tags.add(a)
@@ -201,11 +203,11 @@ class Atom:
         #(5) absolute charge (d)
         (6) number of attached hydrogens (d) - nH
         """
-        heavy = [x for x in self.connected if x.element != 'H']
+        heavy = [x for x in self.connected if x.element != "H"]
         # number of connected heavy atoms
         nconn = len(heavy)
         # number of connected hydrogens
-        nH = len([x for x in self.connected if x.element == 'H'])
+        nH = len([x for x in self.connected if x.element == "H"])
         # atomic number
         z = ELEMENTS.index(self.element)
         # number of bonds with heavy atoms
@@ -213,11 +215,16 @@ class Atom:
         for h in heavy:
             nB += BondOrder.get(h, self)
 
-        return "{:1d}{:03d}{:02d}{:1d}".format(int(nconn), int(nB*10), int(z), int(nH))
+        return "{:1d}{:03d}{:02d}{:1d}".format(
+            int(nconn), int(nB * 10), int(z), int(nH)
+        )
 
     # measurement
-    def is_connected(self, other, tolerance=0.2):
+    def is_connected(self, other, tolerance=None):
         """determines if distance between atoms is small enough to be bonded"""
+        if tolerance is None:
+            tolerance = 0.3
+
         if self._radii is None:
             self._set_radii()
         if other._radii is None:
@@ -251,7 +258,7 @@ class Atom:
             try:
                 rv = RIJ[other.element + self.element]
             except KeyError:
-                warn_LJ.add(''.join(sorted([self.element, other.element])))
+                warn_LJ.add("".join(sorted([self.element, other.element])))
                 return 0
         return rv
 
@@ -262,7 +269,7 @@ class Atom:
             try:
                 rv = EIJ[other.element + self.element]
             except KeyError:
-                warn_LJ.add(''.join(sorted([self.element, other.element])))
+                warn_LJ.add("".join(sorted([self.element, other.element])))
                 return 0
         return rv
 
