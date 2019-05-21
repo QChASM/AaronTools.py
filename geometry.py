@@ -2,6 +2,7 @@
 import itertools
 import re
 from collections import deque
+from copy import copy as shallow_copy
 from copy import deepcopy
 from warnings import warn
 
@@ -118,7 +119,7 @@ class Geometry:
             return True
         if len(self.atoms) != len(other.atoms):
             return False
-        rmsd = self.RMSD(other, align=False, sort=True)
+        rmsd = self.RMSD(other, name_sort=True)
         return rmsd < COORD_THRESHOLD
 
     def __add__(self, other):
@@ -136,6 +137,9 @@ class Geometry:
             other = other.atoms
         for o in other:
             self.atoms.remove(o)
+        for a in self.atoms:
+            if a.connected & set(other):
+                a.connected = a.connected - set(other)
         return self
 
     def __repr__(self):
@@ -166,30 +170,40 @@ class Geometry:
             atoms (list): defaults to all atoms
             name (str): defaults to NAME_copy
         """
-        if atoms is None:
-            atoms = deepcopy(self.atoms)
-        else:
-            atoms = deepcopy(self.find(atoms))
-
         if name is None:
             name = self.name
-
         if comment is None:
             comment = self.comment
+        atoms = self._fix_connectivity(atoms)
 
-        rv = Geometry(atoms, name, comment, refresh_connected=False)
-        for a, b in zip(self.atoms, rv.atoms):
-            b.connected = set([])
-            for c in a.connected:
-                for d in rv.atoms:
-                    if np.linalg.norm(c.coords - d.coords) < 10 ** -4:
-                        b.connected.add(d)
-            b.constraint = set([])
-            for c in a.constraint:
-                for d in rv.atoms:
-                    if c.name == d.name:
-                        b.constraint.add(d)
-        return rv
+        return Geometry(atoms, name, comment, refresh_connected=False)
+
+    def _fix_connectivity(self, atoms=None, copy=True):
+        """
+        for fixing the connectivity for a set of atoms when grabbing
+        a fragment or copying atoms, ensures atom references are sane
+
+        :atoms: the atoms to fix connectivity for; connections to atoms
+            outside of this list are severed in the resulting list
+        :copy: perform a deepcopy of the atom list
+        """
+        if atoms is None:
+            atoms = self.atoms
+        else:
+            atoms = self.find(atoms)
+
+        connectivity = []
+        for a in atoms:
+            connectivity += [
+                [atoms.index(i) for i in a.connected if i in atoms]
+            ]
+        if copy:
+            atoms = deepcopy(atoms)
+        for a, con in zip(atoms, connectivity):
+            a.connected = set([])
+            for c in con:
+                a.connected.add(atoms[c])
+        return atoms
 
     def update_geometry(self, structure):
         """
@@ -770,6 +784,17 @@ class Geometry:
             else:
                 # negative numbers that are basically zero, like -1e-16
                 rmsd = 0
+
+            # sometimes it freaks out if the coordinates are right on
+            # top of each other and gives overly large rmsd/rotation
+            tmp = np.linalg.norm(
+                np.array([a.coords for a, b in zip(ref, other)])
+                - np.array([b.coords for a, b in zip(ref, other)])
+            )
+            tmp = np.sqrt(tmp / len(ref))
+            if tmp < rmsd:
+                rmsd = tmp
+                vec = np.array([0, 0, 0])
             return rmsd, vec
 
         def get_orders(obj, targets):
@@ -781,7 +806,7 @@ class Geometry:
                 for t in targets:
                     if t.element == "H":
                         continue
-                    orders += [
+                    tmp = [
                         obj.reorder(start=t, targets=targets, canonical=False)[
                             0
                         ]
@@ -857,10 +882,6 @@ class Geometry:
             min_rmsd = _RMSD(ref_targets, targets)
 
             # get other orderings
-            self.refresh_connected()
-            self.refresh_ranks()
-            ref.refresh_connected()
-            ref.refresh_ranks()
             ref_targets = [
                 a for a in ref.reorder(canonical=False)[0] if a in ref_targets
             ]
@@ -891,17 +912,17 @@ class Geometry:
         return rmsd
 
     # geometry manipulation
-    def get_fragment(self, start, stop, as_object=False):
+    def get_fragment(self, start, stop, as_object=False, copy=False):
         """
-        Parameters:
-            start - the atoms to start on
-            stop - the atom(s) to avoid
-            as_object - return as list (default) or Geometry object
-            sort - sort atom list before returning,
-                   otherwise, they will be in connectivity order
         Returns:
             [Atoms()] if as_object == False
             Geometry() if as_object == True
+
+        :start: the atoms to start on
+        :stop: the atom(s) to avoid
+        :as_object: return as list (default) or Geometry object
+        :copy: whether or not to copy the atoms before returning the list;
+            copy will automatically fix connectivity information
         """
         # TODO: allow stop=None, default to smallest fragment,
         # with override option
@@ -918,6 +939,8 @@ class Geometry:
 
         if as_object:
             return self.copy(atoms=frag, comment="")
+        if copy:
+            return self._fix_connectivity(frag, copy=True)
         return frag
 
     def remove_fragment(self, start, avoid, add_H=True):
@@ -937,12 +960,9 @@ class Geometry:
         avoid = self.find(avoid)
         frag = self.get_fragment(start, avoid)[len(start):]
         self -= frag
-        for a in self.atoms:
-            if a.connected & set(frag):
-                a.connected = a.connected - set(frag)
 
         # replace start with H
-        rv = deepcopy(start) + frag
+        rv = start + frag
         for a in start:
             if not add_H:
                 break

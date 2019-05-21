@@ -57,16 +57,15 @@ class TestComponent(TestWithTimer):
         benz_Ph_Cl = TestComponent.benz_Ph_Cl.copy()
 
         mol.substitute(Substituent("Cl"), "11")
-        rmsd = mol.RMSD(benz_Cl)
+        rmsd = mol.RMSD(benz_Cl, sort=True)
         self.assertTrue(rmsd < 10 ** -4)
 
         mol.substitute(Substituent("NO2"), "12", "1")
-        rmsd = mol.RMSD(benz_NO2_Cl)
-        mol.write("tmp")
+        rmsd = mol.RMSD(benz_NO2_Cl, sort=True)
         self.assertTrue(rmsd < 10 ** -4)
 
         mol.substitute("OH", "NO2")
-        rmsd = mol.RMSD(benz_OH_Cl)
+        rmsd = mol.RMSD(benz_OH_Cl, sort=True)
         self.assertTrue(rmsd < 10 ** -4)
 
         mol.substitute("Ph", "12.*")
@@ -101,9 +100,18 @@ class TestComponent(TestWithTimer):
         geom.substitute("OH", "7")
 
         geom.minimize_sub_torsion()
-        rmsd = geom.RMSD(ref)
-        self.assertTrue(rmsd < 10 ** -4)
+        rmsd = geom.RMSD(ref, align=True)
+        self.assertTrue(rmsd < 1)
+
+
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(TestComponent("test_detect_backbone"))
+    suite.addTest(TestComponent("test_substitute"))
+    suite.addTest(TestComponent("test_minimize_torsion"))
+    return suite
 
 
 if __name__ == "__main__":
-    unittest.main()
+    runner = unittest.TextTestRunner()
+    runner.run(suite())

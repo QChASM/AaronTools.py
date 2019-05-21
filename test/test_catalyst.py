@@ -34,7 +34,7 @@ class TestCatalyst(TestWithTimer):
             if t != r:
                 return False
 
-        rmsd = ref.RMSD(test)
+        rmsd = ref.RMSD(test, align=True)
         return rmsd < thresh
 
     def test_init(self):
@@ -115,29 +115,10 @@ class TestCatalyst(TestWithTimer):
 
     def test_map_ligand(self):
         monodentate = TestCatalyst.monodentate
-        bidentate = TestCatalyst.bidentate
         tridentate = TestCatalyst.tridentate
 
-        org_tri = TestCatalyst.org_tri.copy()
-        org_tri.map_ligand(tridentate.copy(), ["30", "28", "58"])
-        self.assertTrue(
-            self.validate(
-                org_tri, Geometry(prefix + "ref_files/lig_map_4.xyz")
-            )
-        )
-
         tm_simple = TestCatalyst.tm_simple.copy()
-        tm_simple.map_ligand(monodentate.copy(), ["35"])
-        self.assertTrue(
-            self.validate(
-                tm_simple, Geometry(prefix + "ref_files/lig_map_1.xyz")
-            )
-        )
-
-        tm_simple = TestCatalyst.tm_simple.copy()
-        tm_simple.map_ligand(
-            [monodentate.copy(), monodentate.copy()], ["35", "36"]
-        )
+        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
         self.assertTrue(
             self.validate(
                 tm_simple, Geometry(prefix + "ref_files/lig_map_2.xyz")
@@ -145,10 +126,26 @@ class TestCatalyst(TestWithTimer):
         )
 
         tm_simple = TestCatalyst.tm_simple.copy()
-        tm_simple.map_ligand(bidentate.copy(), ["35", "36"])
+        tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
         self.assertTrue(
             self.validate(
                 tm_simple, Geometry(prefix + "ref_files/lig_map_3.xyz")
+            )
+        )
+
+        org_tri = TestCatalyst.org_tri.copy()
+        org_tri.map_ligand(tridentate, ["30", "28", "58"])
+        self.assertTrue(
+            self.validate(
+                org_tri, Geometry(prefix + "ref_files/lig_map_4.xyz")
+            )
+        )
+
+        tm_simple = TestCatalyst.tm_simple.copy()
+        tm_simple.map_ligand(monodentate, ["35"])
+        self.assertTrue(
+            self.validate(
+                tm_simple, Geometry(prefix + "ref_files/lig_map_1.xyz")
             )
         )
 

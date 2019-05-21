@@ -80,7 +80,7 @@ class TestJSON(TestWithTimer):
     def component_equal(self, ref, test):
         self.geom_equal(ref, test, skip=["name"])
         self.assertEqual(len(ref.substituents), len(test.substituents))
-        for r, t in zip(ref.substituents, test.substituents):
+        for r, t in zip(sorted(ref.substituents), sorted(test.substituents)):
             self.geom_equal(r, t, skip=["comment"])
         self.assertEqual(len(ref.backbone), len(test.backbone))
         for r, t in zip(ref.backbone, test.backbone):
@@ -185,7 +185,7 @@ class TestJSON(TestWithTimer):
         self.json_tester(mol, self.geom_equal)
 
     def test_substituent(self):
-        sub = Substituent(TestJSON.COCH3)
+        sub = Substituent("COCH3")
         self.json_tester(sub, self.sub_equal)
 
     def test_component(self):

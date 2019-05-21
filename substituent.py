@@ -47,15 +47,18 @@ class Substituent(Geometry):
         """
         sub is either a file sub, a geometry, or an atom list
         """
+        # end is connection point
+        self.end = end
+
         if isinstance(sub, (Geometry, list)):
             # we can create substituent object from fragment
             if isinstance(sub, Substituent):
                 self.name = name if name else sub.name
-                self.conf_angle = conf_num if conf_num else sub.conf_angle
+                self.conf_num = conf_num if conf_num else sub.conf_num
                 self.conf_angle = conf_angle if conf_angle else sub.conf_angle
             elif isinstance(sub, Geometry):
                 self.name = name if name else sub.name
-                self.conf_angle = conf_num
+                self.conf_num = conf_num
                 self.conf_angle = conf_angle
             else:
                 self.name = name
@@ -70,7 +73,6 @@ class Substituent(Geometry):
                     self.atoms = sub
             else:
                 self.atoms = sub.find(targets)
-            self.refresh_connected(rank=False)
 
             # detect sub and conformer info
             if not conf_num or not conf_angle:
@@ -108,8 +110,6 @@ class Substituent(Geometry):
             else:
                 warn("Conformer info not loaded for" + f)
 
-        # end is connection point
-        self.end = end
         if not self.name:
             self.name = "sub"
         if self.name == "sub" and end is not None:
@@ -147,6 +147,11 @@ class Substituent(Geometry):
         found = False
         cache_changed = False
 
+        # temporarily detach end from sub so the connectivity is same as
+        # for the library substituent by itself
+        if self.end:
+            self.atoms[0].connected.remove(self.end)
+
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
             match = re.search("/([^/]*).xyz", f)
             name = match.group(1)
@@ -162,37 +167,54 @@ class Substituent(Geometry):
             if len(self.atoms) != len(test_sub.atoms):
                 continue
 
-            bad = False
-            for i, j in zip(sorted(self.atoms), sorted(test_sub.atoms)):
-                # and correct elements
-                if i.element != j.element:
-                    bad = True
-                    break
-                # and correct connections
-                if len(i.connected) != len(j.connected):
-                    bad = True
-                    break
-                for ii, jj in zip(sorted(i.connected), sorted(j.connected)):
-                    if ii.element != jj.element:
-                        bad = True
+            for a in self.atoms:
+                b_found = False
+                not_found = set(test_sub.atoms)
+                for b in not_found:
+                    # and correct elements
+                    if a.element != b.element:
+                        continue
+                    # and correct connections
+                    if len(a.connected) != len(b.connected):
+                        continue
+                    # and correct connected elements
+                    for i, j in zip(
+                        sorted([aa.element for aa in a.connected]),
+                        sorted([bb.element for bb in b.connected]),
+                    ):
+                        if i != j:
+                            break
+                    else:
+                        b_found = True
                         break
-                if bad:
+                if b_found:
+                    not_found.discard(b)
+                else:
+                    # don't test this sub anymore, just go to next one
                     break
-            if bad:
-                continue
+            else:
+                found = True
+                # if found, save name and conf info
+                self.name = test_sub.name
+                self.comment = test_sub.comment
+                self.conf_angle = test_sub.conf_angle
+                self.conf_num = test_sub.conf_num
+                break
 
-            # if found, save name and conf info
-            self.name = test_sub.name
-            self.comment = test_sub.comment
-            self.conf_angle = test_sub.conf_angle
-            self.conf_num = test_sub.conf_num
-            found = True
+        # reattach end to sub
+        if self.end:
+            self.atoms[0].connected.add(self.end)
 
         # update cache
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
-            with open(Substituent.CACHE_FILE, "w") as f:
-                json.dump(Substituent.cache, f)
+            try:
+                with open(Substituent.CACHE_FILE, "w") as f:
+                    json.dump(Substituent.cache, f)
+            except FileNotFoundError:
+                os.makedirs(os.path.dirname(Substituent.CACHE_FILE))
+                with open(Substituent.CACHE_FILE, "w") as f:
+                    json.dump(Substituent.cache, f)
         return found
 
     def align_to_bond(self, bond):

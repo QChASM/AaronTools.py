@@ -53,10 +53,6 @@ class JSONEncoder(json.JSONEncoder):
         # for Geometry and all child classes
         rv["name"] = obj.name
         rv["atoms"] = obj.atoms
-        connectivity = []
-        for atom in obj.atoms:
-            connectivity += [list(obj.atoms.index(a) for a in atom.connected)]
-        rv["connectivity"] = connectivity
 
         # for Geometry and all child classes but Substituent
         if hasattr(obj, "comment"):
@@ -64,11 +60,13 @@ class JSONEncoder(json.JSONEncoder):
 
         # for Catalyst child classes
         if hasattr(obj, "conf_spec"):
+            # conf_spec
             tmp = {}
             for key, val in obj.conf_spec.items():
                 key = key.name
                 tmp[key] = val
             rv["conf_spec"] = tmp
+            # comment
             obj.fix_comment()
             rv["comment"] = obj.comment
 
@@ -80,6 +78,9 @@ class JSONEncoder(json.JSONEncoder):
         if hasattr(obj, "end"):
             rv["end"] = obj.end
 
+        # for Component child class
+        if hasattr(obj, "key_atoms"):
+            rv["key_atoms"] = obj.key_atoms
         return rv
 
     def _encode_comp_output(self, obj):
@@ -157,18 +158,15 @@ class JSONDecoder(json.JSONDecoder):
             kwargs[key] = obj[key]
         geom = Geometry(**kwargs)
 
-        for i, connected in enumerate(obj["connectivity"]):
-            for j in connected:
-                geom.atoms[i].connected.add(geom.atoms[j])
-
         if obj["_type"] == "Component":
-            return Component(geom)
+            key_atom_names = [a.name for a in obj["key_atoms"]]
+            return Component(geom, key_atoms=key_atom_names)
         elif obj["_type"] == "Catalyst":
             conf_spec = {}
             for key, val in obj["conf_spec"].items():
                 key = geom.find_exact(key)[0]
                 conf_spec[key] = val
-            kwargs = {"conf_spec": conf_spec, "refresh_connected": False}
+            kwargs = {"conf_spec": conf_spec}
             return Catalyst(geom, **kwargs)
         else:
             return geom
@@ -177,7 +175,11 @@ class JSONDecoder(json.JSONDecoder):
         kwargs = {}
         for key in ["name", "end", "conf_num", "conf_angle"]:
             kwargs[key] = obj[key]
-        return Substituent(obj["atoms"], **kwargs)
+        ranks = [a._rank for a in obj["atoms"]]
+        obj = self._decode_geometry(obj)
+        for a, r in zip(obj.atoms, ranks):
+            a._rank = r
+        return Substituent(obj, **kwargs)
 
     def _decode_frequency(self, obj):
         data = []

@@ -27,10 +27,11 @@ class Catalyst(Geometry):
         name="",
         comment="",
         conf_spec=None,
+        components=None,
         refresh_connected=True,
     ):
         self.center = None
-        self.components = None
+        self.components = components
         self.conf_spec = conf_spec
 
         Geometry.__init__(self, structure, name, comment, refresh_connected)
@@ -40,6 +41,7 @@ class Catalyst(Geometry):
 
         self.other = self.parse_comment()
         self.detect_components()
+
         if conf_spec is None:
             self.conf_spec = {}
             # self.conf_spec[sub.atoms[0]] holds:
@@ -244,11 +246,14 @@ class Catalyst(Geometry):
         # rename
         for i, lig in enumerate(self.components["ligand"]):
             name = self.name + "_lig-{}".format(lig[0].name)
-            self.components["ligand"][i] = Component(lig, name)
+            self.components["ligand"][i] = Component(
+                lig, name, refresh_connected=False
+            )
         for i, sub in enumerate(self.components["substrate"]):
             name = self.name + "_sub-{}".format(sub[0].name)
-            self.components["substrate"][i] = Component(sub, name)
-
+            self.components["substrate"][i] = Component(
+                sub, name, refresh_connected=False
+            )
         self.rebuild()
         return
 
@@ -291,6 +296,16 @@ class Catalyst(Geometry):
             angle = np.dot(old_axis, new_axis)
             angle /= np.linalg.norm(old_axis)
             angle /= np.linalg.norm(new_axis)
+            # occasionally there will be some round-off errors,
+            # so let's fix those before we take arccos
+            if angle > 1 + 10 ** -12 or angle < -1 - 10 ** -12:
+                # and check to make sure we aren't covering something
+                # more senister up...
+                raise ValueError("Bad angle value for arccos():", angle)
+            elif angle > 1:
+                angle = 1.0
+            elif angle < -1:
+                angle = -1.0
             angle = np.arccos(angle)
             return w, -1 * angle
 
@@ -419,9 +434,10 @@ class Catalyst(Geometry):
             ligands = [ligands]
 
         new_keys = []
-        for ligand in ligands:
+        for i, ligand in enumerate(ligands):
             if not isinstance(ligand, Component):
                 ligand = Component(ligand)
+                ligands[i] = ligand
             ligand.refresh_connected()
             new_keys += ligand.key_atoms
 
@@ -514,11 +530,11 @@ class Catalyst(Geometry):
                 # add new to conf_spec
                 if sub.conf_num is not None and sub.conf_num > 1:
                     self.conf_spec[sub.atoms[0]] = [1, []]
-                self.rebuild()
                 break
-
-            if minimize:
-                self.minimize()
+        self.rebuild()
+        self.detect_components()
+        if minimize:
+            self.minimize()
 
     def next_conformer(self):
         """
@@ -579,9 +595,9 @@ class Catalyst(Geometry):
             return bend_axis
 
         bad_subs = []  # substituents for which releif not found
-        bend_angles = [8, -16, 32, -48, 72, -96]
+        bend_angles = [8, -16, 32, -48, 68, -88]
         rot_angles = [8, -16, 32, -48]
-        bend_back = np.deg2rad(24)
+        bend_back = np.deg2rad(20)
         rot_back = np.deg2rad(16)
         scale = 0.75  # for scaling distance threshold
 
@@ -601,7 +617,7 @@ class Catalyst(Geometry):
         for sub in sub_list:
             b, r = 0, 0  # bend_angle, rot_angle index counters
             bend_axis = get_clash(sub, scale)
-            if get_clash(sub, scale) is False:
+            if bend_axis is False:
                 continue
             else:
                 # try just rotating first
@@ -622,7 +638,7 @@ class Catalyst(Geometry):
                     sub.rotate(bend_axis, bend_angles[b], center=sub.end)
                     b += 1
                 bend_axis = get_clash(sub, scale)
-                if get_clash(sub, scale) is False:
+                if bend_axis is False:
                     break
                 while r < len(rot_angles):
                     # try rotating
@@ -638,7 +654,7 @@ class Catalyst(Geometry):
                 # bend back to original if cannot automatically remove
                 # the clash, add to bad_sub list
                 bend_axis = get_clash(sub, scale)
-                if get_clash(sub, scale) is False:
+                if bend_axis is False:
                     break
                 sub.rotate(bend_axis, bend_back, center=sub.end)
                 bad_subs += [sub]
