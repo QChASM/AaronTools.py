@@ -38,7 +38,6 @@ class Geometry:
         self.name = name
         self.comment = comment
         self.atoms = []
-        self.constraint = set([])
 
         if isinstance(structure, Geometry):
             # new from geometry
@@ -47,8 +46,6 @@ class Geometry:
                 self.name = structure.name
             if not comment:
                 self.comment = structure.comment
-            if refresh_connected:
-                self.refresh_connected()
             return
         elif isinstance(structure, FileReader):
             # get info from FileReader object
@@ -765,7 +762,7 @@ class Geometry:
                 angle (float) angle to rotate by
                 vector (np.array(float)) the rotation axis
             """
-            matrix = np.zeros((4, 4), dtype=np.double)
+            matrix = np.zeros((4, 4), dtype=np.float64)
             for i, a in enumerate(ref):
                 pt1 = a.coords
                 try:
@@ -787,9 +784,13 @@ class Geometry:
 
             # sometimes it freaks out if the coordinates are right on
             # top of each other and gives overly large rmsd/rotation
-            tmp = np.linalg.norm(
-                np.array([a.coords for a, b in zip(ref, other)])
-                - np.array([b.coords for a, b in zip(ref, other)])
+            # I think this is a numpy precision problem, may want to
+            # try scipy.linalg to see if that helps?
+            tmp = sum(
+                [
+                    np.linalg.norm(a.coords - b.coords) ** 2
+                    for a, b in zip(ref, other)
+                ]
             )
             tmp = np.sqrt(tmp / len(ref))
             if tmp < rmsd:

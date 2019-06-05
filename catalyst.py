@@ -1,5 +1,6 @@
 import itertools as it
 from copy import deepcopy
+from warnings import warn
 
 import numpy as np
 
@@ -44,10 +45,16 @@ class Catalyst(Geometry):
 
         if conf_spec is None:
             self.conf_spec = {}
+            constraints = set(it.chain(*self.get_constraints()))
             # self.conf_spec[sub.atoms[0]] holds:
             # (current rotation number, [rotation numbers to skip] or 'all')
             for sub in self.get_substituents():
-                self.conf_spec[sub.atoms[0]] = [1, []]
+                for idx in constraints:
+                    atom = self.atoms[idx]
+                    if atom in sub.atoms:
+                        break
+                else:
+                    self.conf_spec[sub.atoms[0]] = [1, []]
 
     def find_substituent(self, start, for_confs=True):
         """
@@ -517,9 +524,11 @@ class Catalyst(Geometry):
                 try:
                     target = comp.find_exact(target)
                 except LookupError:
+                    # keep looking
                     continue
-                comp.substitute(sub, target, attached_to)
 
+                # found! do substitution and return
+                comp.substitute(sub, target, attached_to)
                 # update tags
                 for a in comp.atoms:
                     a.add_tag(key)
@@ -530,11 +539,11 @@ class Catalyst(Geometry):
                 # add new to conf_spec
                 if sub.conf_num is not None and sub.conf_num > 1:
                     self.conf_spec[sub.atoms[0]] = [1, []]
-                break
-        self.rebuild()
-        self.detect_components()
-        if minimize:
-            self.minimize()
+                self.rebuild()
+                self.detect_components()
+                if minimize:
+                    self.minimize()
+                return
 
     def next_conformer(self):
         """
@@ -555,19 +564,64 @@ class Catalyst(Geometry):
                 continue
             # reset conf if we hit max conf #
             if conf_num == sub.conf_num:
-                self.conf_spec[start][0] = 1
                 sub.sub_rotate()
+                self.conf_spec[start][0] = 1
                 continue
             # perform rotation
-            self.conf_spec[start][0] += 1
             sub.sub_rotate()
+            self.conf_spec[start][0] += 1
             self.remove_clash()
-            return True
+            # continue if the same as cf1
+            angle = int(
+                np.rad2deg((self.conf_spec[start][0] - 1) * sub.conf_angle)
+            )
+            if angle != 360 and angle != 0:
+                return True
+            else:
+                continue
         else:
             # we are done now, signal so in conf_spec
             for start in self.conf_spec:
                 self.conf_spec[start] = [0, "done"]
             return False
+
+    def make_conformer(self, conf_spec):
+        """
+        Returns: True if conformer generated (allowed by self.conf_spec),
+            false if not
+
+        :conf_spec: dictionary of the form {start_atom: conf_num}
+        """
+        original = self.catalyst.copy()
+        for start, conf_num in conf_spec.items():
+            current, skip = self.conf_spec[start]
+            # skip if flagged a repeat
+            if conf_num in skip or skip == "all":
+                self = original
+                return False
+            sub = self.find_substituent(start)
+            # validate conf_spec
+            if conf_num > sub.conf_num:
+                self = original
+                warn(
+                    "Bad conformer number given:",
+                    sub.name,
+                    conf_num,
+                    ">",
+                    sub.conf_num,
+                )
+                return False
+            if conf_num > current:
+                n_rot = conf_num - current - 1
+                for _ in range(n_rot):
+                    self.conf_spec[start][0] += 1
+                    sub.rotate()
+            elif conf_num < current:
+                n_rot = current - conf_num - 1
+                for _ in range(n_rot):
+                    self.conf_spec[start][0] -= 1
+                    sub.rotate(reverse=True)
+        return True
 
     def remove_clash(self, sub_list=None):
         def get_clash(sub, scale):
@@ -595,9 +649,11 @@ class Catalyst(Geometry):
             return bend_axis
 
         bad_subs = []  # substituents for which releif not found
-        bend_angles = [8, -16, 32, -48, 68, -88]
+        # bend_angles = [8, -16, 32, -48, 68, -88]
+        # bend_back = np.deg2rad(20)
+        bend_angles = [8, 8, 8, 5, 5, 5]
+        bend_back = []
         rot_angles = [8, -16, 32, -48]
-        bend_back = np.deg2rad(20)
         rot_back = np.deg2rad(16)
         scale = 0.75  # for scaling distance threshold
 
@@ -605,12 +661,12 @@ class Catalyst(Geometry):
             sub_list = sorted(self.get_substituents())
             try_twice = True
         else:
-            scale = 0.6
+            scale = 0.65
             sub_list = sorted(sub_list, reverse=True)
             try_twice = False
 
         for i, b in enumerate(bend_angles):
-            bend_angles[i] = np.deg2rad(b)
+            bend_angles[i] = -np.deg2rad(b)
         for i, r in enumerate(rot_angles):
             rot_angles[i] = np.deg2rad(r)
 
@@ -633,6 +689,7 @@ class Catalyst(Geometry):
                     r = 0
             bend_axis = get_clash(sub, scale)
             while b < len(bend_angles) and bend_axis is not False:
+                bend_back += [bend_axis]
                 # try bending
                 if b < len(bend_angles):
                     sub.rotate(bend_axis, bend_angles[b], center=sub.end)
@@ -656,7 +713,8 @@ class Catalyst(Geometry):
                 bend_axis = get_clash(sub, scale)
                 if bend_axis is False:
                     break
-                sub.rotate(bend_axis, bend_back, center=sub.end)
+                for bend_axis in bend_back:
+                    sub.rotate(bend_axis, -bend_angles[0], center=sub.end)
                 bad_subs += [sub]
 
         # try a second time just in case other subs moved out of the way enough

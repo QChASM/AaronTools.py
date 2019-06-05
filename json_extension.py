@@ -53,6 +53,9 @@ class JSONEncoder(json.JSONEncoder):
         # for Geometry and all child classes
         rv["name"] = obj.name
         rv["atoms"] = obj.atoms
+        rv["connectivity"] = []
+        for a in obj.atoms:
+            rv["connectivity"] += [[obj.atoms.index(b) for b in a.connected]]
 
         # for Geometry and all child classes but Substituent
         if hasattr(obj, "comment"):
@@ -156,18 +159,23 @@ class JSONDecoder(json.JSONDecoder):
         kwargs = {"structure": obj["atoms"]}
         for key in ["name", "comment"]:
             kwargs[key] = obj[key]
-        geom = Geometry(**kwargs)
+        geom = Geometry(**kwargs, refresh_connected=False)
+        for i, connected in enumerate(obj["connectivity"]):
+            for c in connected:
+                geom.atoms[i].connected.add(geom.atoms[c])
 
         if obj["_type"] == "Component":
             key_atom_names = [a.name for a in obj["key_atoms"]]
-            return Component(geom, key_atoms=key_atom_names)
+            return Component(
+                geom, key_atoms=key_atom_names, refresh_connected=False
+            )
         elif obj["_type"] == "Catalyst":
             conf_spec = {}
             for key, val in obj["conf_spec"].items():
                 key = geom.find_exact(key)[0]
                 conf_spec[key] = val
             kwargs = {"conf_spec": conf_spec}
-            return Catalyst(geom, **kwargs)
+            return Catalyst(geom, **kwargs, refresh_connected=False)
         else:
             return geom
 

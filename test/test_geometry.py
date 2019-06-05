@@ -377,7 +377,7 @@ class TestGeometry(TestWithTimer):
         a4_before = copy(a4)
         dist_before = np.linalg.norm(a1.coords - a2.coords)
         mol.change_distance(a1, a2, dist=2.00)
-        , ist = np.linalg.norm(a1.coords - a2.coords)
+        dist = np.linalg.norm(a1.coords - a2.coords)
         self.assertTrue(is_close(dist, 2.00, threshold))
         self.assertTrue(validate_distance(a3_before, a3, dist - dist_before))
         self.assertTrue(validate_distance(a4_before, a4, dist - dist_before))

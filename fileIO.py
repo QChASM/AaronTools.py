@@ -100,13 +100,18 @@ class FileWriter:
 
     @classmethod
     def write_com(cls, geom, step, theory, **kwargs):
+        has_frozen = False
+        for atom in geom.atoms:
+            if atom.flag:
+                has_frozen = True
+                break
         fname = "{}.{}.com".format(geom.name, step2str(step))
         with open(fname, "w") as f:
             f.write(theory.make_header(geom, step, **kwargs))
             for a in geom.atoms:
-                if a.flag:
+                if has_frozen:
                     s = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
-                    s = s.format(a.element, -1, *a.coords)
+                    s = s.format(a.element, -a.flag, *a.coords)
                 else:
                     s = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
                     s = s.format(a.element, *a.coords)

@@ -7,7 +7,9 @@ def progress_bar(this, max_num, name=None, width=50):
     else:
         s = "{}: ".format(name)
     s += "Progress {:3.0f}% ".format(100 * this / max_num)
-    s += "|{:<{width}s}|".format("#" * (width * this // max_num), width=width)
+    s += "|{:<{width}s}|".format(
+        "#" * int(width * this / max_num), width=width
+    )
     print(s, end="\r")
 
 
@@ -17,8 +19,8 @@ def clean_progress_bar(width=50):
 
 def quat_matrix(pt1, pt2):
     """ build quaternion matrix from pt1 and pt2 """
-    pt1 = np.array(pt1, dtype=np.double)
-    pt2 = np.array(pt2, dtype=np.double)
+    pt1 = np.array(pt1, dtype=np.longdouble)
+    pt2 = np.array(pt2, dtype=np.longdouble)
     for pt in [pt1, pt2]:
         if len(pt.shape) != 1 or pt.shape[0] != 3:
             raise ValueError("Arguments should be 3-element vectors")
@@ -54,7 +56,7 @@ def quat_matrix(pt1, pt2):
             ],
         ]
     )
-    return matrix
+    return matrix.astype(np.double)
 
 
 def uptri2sym(vec, n=None, col_based=False):
@@ -142,3 +144,14 @@ def is_int(test):
 def is_num(test):
     rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
+
+
+def add_dict(this, other, skip=[]):
+    for key, val in other.items():
+        if key in skip:
+            continue
+        if key in this and isinstance(val, dict):
+            add_dict(this[key], val)
+        else:
+            this[key] = val
+    return this

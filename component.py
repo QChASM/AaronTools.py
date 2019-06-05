@@ -162,8 +162,8 @@ class Component(Geometry):
             s.name = sub_attach.name + "." + s.name
 
         # remove old substituent
-        removed_sub = self.remove_fragment(target, attached_to, add_H=False)
-        self -= removed_sub
+        self.remove_fragment(target, attached_to, add_H=False)
+        self -= target
         attached_to.connected.discard(sub_attach)
 
         # fix connections

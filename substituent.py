@@ -228,12 +228,14 @@ class Substituent(Geometry):
         angle = np.arccos(np.dot(bond, x_axis))
         self.rotate(rot_axis, angle)
 
-    def sub_rotate(self, angle=None):
+    def sub_rotate(self, angle=None, reverse=False):
         """
         rotates substituent about bond w/ rest of geometry
         :angle: in radians
         """
         if angle is None:
             angle = self.conf_angle
+        if reverse:
+            angle *= -1
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
