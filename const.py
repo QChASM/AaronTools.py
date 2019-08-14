@@ -2,7 +2,7 @@
 import os
 
 HOME = os.environ["HOME"].rstrip("/") + "/"
-if os.environ["AARONLIB"]:
+if "AARONLIB" in os.environ:
     AARONLIB = os.environ["AARONLIB"].rstrip("/") + "/"
 else:
     AARONLIB = HOME + "Aaron_libs/"

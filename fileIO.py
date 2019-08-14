@@ -516,13 +516,13 @@ class Frequency:
                     # if hpmodes, want just the first set of freqs
                     break
                 continue
-            if "Frequencies" in line and "---" in line:
+            if "Frequencies" in line and ((hpmodes and "---" in line) or ("--" in line and not hpmodes)):
                 for i in float_num.findall(line):
                     self.data += [Frequency.Data(float(i))]
                     modes += [[]]
                     idx += 1
                 continue
-            if "IR Intensit" in line and "---" in line:
+            if "IR Inten" in line and ((hpmodes and "---" in line) or (not hpmodes and "--" in line)):
                 for i in float_num.findall(line):
                     self.data[idx].intensity = float(i)
                 continue
@@ -551,11 +551,12 @@ class Frequency:
                 match = re.search("^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
                 if match is None:
                     continue
+                values = float_num.findall(line)
                 atom = int(values[0]) - 1
                 moves = np.array(values[2:], dtype=np.float)
                 n_moves = len(moves) // 3
-                for mode, m in zip(modes[-n_moves:], range(n_moves)):
-                    mode += [moves[m: m + 3]]
+                for i in range(-n_moves, 0):
+                    modes[i].append(moves[3*n_moves+3*i:4*n_moves+3*i])
 
         for mode, data in zip(modes, self.data):
             data.vector = np.array(mode, dtype=np.float)
