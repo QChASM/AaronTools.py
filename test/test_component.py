@@ -71,7 +71,7 @@ class TestComponent(TestWithTimer):
         mol.substitute("Ph", "12.*")
         rmsd = mol.RMSD(benz_Ph_Cl)
         self.assertTrue(rmsd < 10 ** -4)
-
+        
     def test_detect_backbone(self):
         geom = TestComponent.RQ_tBu.copy()
         geom.detect_backbone()
@@ -94,7 +94,7 @@ class TestComponent(TestWithTimer):
     def test_minimize_torsion(self):
         geom = TestComponent.benz.copy()
         ref = Component("ref_files/minimize_torsion.xyz")
-
+        
         geom.substitute("tBu", "12")
         geom.substitute("Ph", "10")
         geom.substitute("OH", "7")

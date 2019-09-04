@@ -8,6 +8,7 @@ from warnings import warn
 
 import numpy as np
 
+import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS
@@ -1291,3 +1292,87 @@ class Geometry:
         )
 
         return
+
+    def substitute(self, sub, target, attached_to=None):
+        """
+        substitutes fragment containing `target` with substituent `sub`
+        if end provided, this is the atom where the substituent is attached
+        if end==None, replace the smallest fragment containing `target`
+        """
+        # set up substituent object
+        if not isinstance(sub, AaronTools.substituent.Substituent):
+            sub = AaronTools.substituent.Substituent(sub)
+        sub.refresh_connected()
+
+        # determine target and atoms defining connection bond
+        target = self.find(target)
+
+        # attached_to is provided or is the atom giving the
+        # smallest target fragment
+        if attached_to is not None:
+            attached_to = self.find_exact(attached_to)
+        else:
+            smallest_frag = None
+            smallest_attached_to = None
+            # get all possible connection points
+            attached_to = set()
+            for t in target:
+                attached_to = attached_to | (t.connected - set(target))
+            # find smallest fragment
+            for e in attached_to:
+                frag = self.get_fragment(target, e)
+                if smallest_frag is None or len(frag) < len(smallest_frag):
+                    smallest_frag = frag
+                    smallest_attached_to = e
+            attached_to = [smallest_attached_to]
+        if len(attached_to) != 1:
+            raise NotImplementedError(
+                "Can only replace substituents with one point of attachment"
+            )
+        attached_to = attached_to[0]
+        sub.end = attached_to
+
+        # determine which atom of target fragment is connected to attached_to
+        sub_attach = attached_to.connected & set(target)
+        if len(sub_attach) > 1:
+            raise NotImplementedError(
+                "Can only replace substituents with one point of attachment"
+            )
+        if len(sub_attach) < 1:
+            raise LookupError("attached_to atom not connected to targets")
+        sub_attach = sub_attach.pop()
+
+        # manipulate substituent geometry; want sub.atoms[0] -> sub_attach
+        #   attached_to == sub.end
+        #   sub_attach will eventually be sub.atoms[0]
+        # move attached_to to the origin
+        shift = attached_to.coords.copy()
+        self.coord_shift(-1 * shift)
+        # align substituent to current bond
+        bond = self.bond(attached_to, sub_attach)
+        sub.align_to_bond(bond)
+        # shift geometry back and shift substituent to appropriate place
+        self.coord_shift(shift)
+        sub.coord_shift(shift)
+
+        # tag and update name for sub atoms
+        for s in sub.atoms:
+            s.add_tag(sub.name)
+            s.name = sub_attach.name + "." + s.name
+
+        #add first atom of new substituent where the target atom was
+        self.atoms.insert(self.atoms.index(target[0]), sub.atoms[0])
+        # remove old substituent
+        self.remove_fragment(target, attached_to, add_H=False)
+        self -= target
+        attached_to.connected.discard(sub_attach)
+
+        # fix connections
+        attached_to.connected.add(sub.atoms[0])
+        sub.atoms[0].connected.add(attached_to)
+
+        # add the rest of the new substituent at the end
+        self += sub.atoms[1:]
+        # fix bond distance
+        self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
+
