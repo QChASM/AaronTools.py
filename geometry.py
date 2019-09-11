@@ -369,7 +369,7 @@ class Geometry:
     def refresh_connected(self, threshold=None, rank=True):
         """
         reset connected atoms
-        atoms are connected if they're distance from each other is less than
+        atoms are connected if their distance from each other is less than
             the sum of their covalent radii plus a threshold
         """
         # clear current connectivity
