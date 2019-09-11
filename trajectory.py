@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+"""for handling the change in structure of a series of geometries"""
 import numpy as np
 from scipy import integrate
 from scipy.linalg import null_space
@@ -16,6 +15,7 @@ class Pathway:
                                                     matrix representation of basis used to interpolate between geometries
         Bi                  list(np.array(float))   inverse of B
         region_length       list(float)             length of each subregion
+        Geom_func(t)        function(x=float)       returns interpolated Geometry ({t | 0 <= t <= 1})
         coord_func(t)       function(x=float)       returns interpolated basis vector coefficients ({t | 0 <= t <= 1})
         dcoord_func_dt(t)   function(x=float)       derivative of coord_func(t)
         E_func(t)           function(x=float)       returns interpolated energies
@@ -128,7 +128,7 @@ class Pathway:
         M = Pathway.get_splines_mat(self.nG)
         #B is a matrix with basis rep. coefficients, or zeros for derivative rows in M
         B = np.zeros( (4*(self.nG-1), N_Cart) )
-        if all(["energy" in G.other for G in self.G]):
+        if all([hasattr(G, 'other') for G in self.G]) and all(["energy" in G.other for G in self.G]):
             E = Pathway.get_splines_vector( [G.other['energy'] for G in self.G] )
         else:
             E = Pathway.get_splines_vector( [0 for G in self.G] )

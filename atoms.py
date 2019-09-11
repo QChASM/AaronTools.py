@@ -171,8 +171,8 @@ class Atom:
         try:
             self._radii = float(RADII[self.element])
         except KeyError:
-            raise NotImplementedError(
-                "Radii not found for element:", self.element
+            warn( 
+                "Radii not found for element: %s" % self.element
             )
         return
 

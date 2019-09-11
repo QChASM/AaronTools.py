@@ -6,6 +6,7 @@ from copy import copy
 import numpy as np
 
 from AaronTools.atoms import Atom
+from AaronTools.substituent import Substituent
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix
@@ -459,6 +460,17 @@ class TestGeometry(TestWithTimer):
         mol.change_dihedral("12", "1", -30, radians=False, adjust=True)
         self.assertTrue(is_close(mol.dihedral(*atom_args), np.deg2rad(30)))
 
+
+    def test_substitute(self):
+        ref = Geometry(TestGeometry.benz_NO2_Cl)
+        mol = Geometry(TestGeometry.benzene)
+        mol.comment='hi'
+
+        mol.substitute("NO2", "12")
+        mol.substitute("Cl", "11")
+
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < 1e-4)
 
 if __name__ == "__main__":
     unittest.main()

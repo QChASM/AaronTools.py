@@ -32,8 +32,10 @@ def parse_mode_str(s, t):
 
     return out_modes
 
-freqbild_parser = argparse.ArgumentParser(description='print Chimera bild file with vectors for the specified normal modes to std out')
-freqbild_parser.add_argument('infile', metavar='input_file', \
+freqbild_parser = argparse.ArgumentParser( \
+    description='print Chimera bild file with vectors for the specified normal modes to std out',\
+    formatter_class=argparse.RawTextHelpFormatter)
+freqbild_parser.add_argument('infile', metavar='input file', \
                             type=str, \
                             nargs=1, \
                             default=[], \
@@ -44,11 +46,12 @@ freqbild_parser.add_argument('-m', '--mode', \
                             nargs=1, \
                             default=None, \
                             required=False, \
+                            metavar='1,2+3,4', \
                             dest='mode_str', \
-                            help="""mode(s) to print (1-index)
-                            default is to print all imaginary modes seperately;
-                            comma (,) delimited modes will be printed seperately;
-                            plus (+) delimited modes will be combined""")
+                            help="mode(s) to print (1-indexed)\n" + \
+                            "Default is to print all imaginary modes separately\n" + 
+                            "- comma (,) delimited modes will be printed separately\n" +
+                            "- plus (+) delimited modes will be combined")
 
 freqbild_parser.add_argument('-s', '--scale', \
                             type=str, \
@@ -56,9 +59,9 @@ freqbild_parser.add_argument('-s', '--scale', \
                             default=None, \
                             required=False, \
                             dest='scale', \
-                            help='scale the longest vector to be this many Angstroms long\
-                            ; default is 1.5\
-                            ; may be delimited in accordance with the --mode option')
+                            metavar='max displacement', \
+                            help="scale the longest vector to be this many Angstroms long\n" + \
+                            "default is 1.5\n may be delimited in accordance with the --mode option")
 
 freqbild_parser.add_argument('-r', '--remove-mass', \
                             action='store_const', \
@@ -74,6 +77,7 @@ freqbild_parser.add_argument('-c', '--color', \
                             default=['green'], \
                             required=False, \
                             dest='color', \
+                            metavar=('BILD 1 color', 'BILD 2 color'), \
                             help='color of vectors')
 
 args = freqbild_parser.parse_args()
@@ -108,7 +112,7 @@ for i, mode in enumerate(modes):
     dX = np.zeros((len(G.atoms), 3))
     #figure out how much we'll have to scale each mode
     for j, combo in enumerate(mode):
-        output+= "%f" % G_AAron_file.other['frequency'].data[combo].frequency
+        output+= "%f cm^-1" % G_AAron_file.other['frequency'].data[combo].frequency
         max_norm = 0
         for k, v in enumerate(G_AAron_file.other['frequency'].data[combo].vector):
             if args.mass_weight:
