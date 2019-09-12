@@ -261,7 +261,7 @@ class FileReader:
                 self.atoms = []
             except ValueError:
                 line = line.split()
-                self.atoms += [Atom(element=line[0], coords=line[1:])]
+                self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
         if get_all:
