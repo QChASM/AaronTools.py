@@ -476,7 +476,7 @@ class FileReader:
                     ).group(1)
                 if "EmpiricalDispersion=" in line:
                     other["emp_dispersion"] = re.search(
-                        "EmpiricalDispersion=(\s+)", line
+                        "EmpiricalDispersion=(\S+)", line
                     ).group(1)
                 if "int=(grid(" in line:
                     other["grid"] = re.search("int=\(grid(\S+)", line).group(1)

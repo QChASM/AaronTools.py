@@ -268,7 +268,10 @@ class Geometry:
                             rv += _find_between(i)
                         else:
                             rv += _find(i)
-
+            
+            elif isinstance(arg, str) and len(arg.split('-')) > 1:
+                rv += _find_between(arg)
+            
             elif isinstance(arg, str) and arg in ELEMENTS:
                 # this is an element
                 for a in self.atoms:
