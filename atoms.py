@@ -46,7 +46,7 @@ class BondOrder:
 
     @classmethod
     def get(cls, a1, a2):
-        """determines bond order between two atoms based on bond lenght"""
+        """determines bond order between two atoms based on bond length"""
         try:
             bonds = cls.bonds[cls.key(a1, a2)]
         except KeyError:
