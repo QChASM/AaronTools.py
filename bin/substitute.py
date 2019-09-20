@@ -96,8 +96,8 @@ for infile in args.infile:
             geom.substitute(sub, target)
         else:
             #replace old atom with new atom
+            geom.atoms.insert(ndx_target, new_atom) 
             geom -= target
-            geom += new_atom
             geom.refresh_connected()
             #try to remove H's from new atom to keep the molecule's change the same
             if hasattr(new_atom, '_connectivity') and \
@@ -110,9 +110,6 @@ for infile in args.infile:
 
             geom.refresh_connected()
 
-    #if args.mini:
-    #    comp.minimize_sub_torsion()
-    
     if args.outfile:
         FileWriter.write_xyz(geom, append=False, outfile=args.outfile[0])
     else:

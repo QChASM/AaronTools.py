@@ -73,6 +73,14 @@ follow_parser.add_argument('-a', '--animate', \
                             metavar='frames', \
                             help='print specified number of structures to make an animation')
 
+follow_parser.add_argument('-rt', '--roundtrip', \
+                            action='store_const', \
+                            const=True, \
+                            default=False, \
+                            required=False, \
+                            dest='roundtrip', \
+                            help='make animation roundtrip')
+
 follow_parser.add_argument('-s', '--scale', \
                             type=str, \
                             nargs=1, \
@@ -127,8 +135,9 @@ else:
     scale = parse_mode_str(args.scale[0], float)
 
 for i, mode in enumerate(modes):
-    if '&i' not in outfiles[i]:
-        append = True
+    if outfiles[i]:
+        if '&i' not in outfiles[i]:
+            append = True
     else:
         append = False
     dX = np.zeros((len(G.atoms), 3))
@@ -149,42 +158,63 @@ for i, mode in enumerate(modes):
 
             #scale this mode by 0.35 (or whatever the user asked for)/max_norm
             x_factor = scale[i][j]/max_norm
-        
+
         if args.reverse:
             x_factor *= -1
 
         dX += x_factor*G_AAron_file.other['frequency'].data[combo].vector
 
     if args.animate is not None:
-        #animate by setting up 3 geometries: -1, 0, and +1
+        #animate by setting up 3 geometries: -, 0, and +
         #then create a Pathway to interpolate between these
+        #if roundtrip, - -> 0 -> + -> 0 -> -
+        #if not roundtrip, - -> 0 -> +
         w = width(args.animate[0])
         fmt = "%0" + "%i" % w + "i"
-   
+
         Gf = G.copy()
         Gf.update_geometry(G.coords() + dX)
         Gr = G.copy()
         Gr.update_geometry(G.coords() - dX)
 
-        S = Pathway([Gf, G, Gr])
+        #make a scales(t) function so we can see the animation progress in the XYZ file comment
+        if args.roundtrip:
+            S = Pathway([Gf, G, Gr, G, Gf])
+            ev = [Pathway.get_splines_vector([-x, 0, x, 0, -x]) for x in scale[i]]
+            m = Pathway.get_splines_mat(5)
 
+        else:
+            S = Pathway([Gf, G, Gr])
+            ev = [Pathway.get_splines_vector([-x, 0, x]) for x in scale[i]]
+            m = Pathway.get_splines_mat(3)
+
+        mi = np.linalg.inv(m)
+        ev = np.transpose(ev)
+        c = np.dot(mi, ev)
+        scaling, df = Pathway.get_E_func(c, S.region_length)
+
+        #print animation frames
         for k, t in enumerate(np.linspace(0, 1, num=args.animate[0])):
             if outfiles[i] is not False:
                 outfile = outfiles[i].replace("&i", fmt % k)
             else:
                 outfile = outfiles[i]
+
             Gt = S.Geom_func(t)
-            Gt.comment = "animating mode %s scaled to displace at most %s" % (repr(mode), repr([x*(2*(t-.5)) for x in scale[i]]))
-            FileWriter.write_xyz(Gt, append, outfile=outfile)
+            Gt.comment = "animating mode %s scaled to displace at most %s" % (repr(mode), scaling(t))
+            s = FileWriter.write_xyz(Gt, append, outfile=outfile)
+            if not outfile:
+                print(s)
 
     else:
         w = width(len(modes))
         fmt = "%0" + "%i" % w + "i"
-       
+
         Gm = G.copy()
         Gm.update_geometry(G.coords() + dX)
         Gm.comment = "following mode %s scaled to displace at most %s" % (repr(mode), repr(scale[i]))
 
         outfile = outfiles[i]
-        FileWriter.write_xyz(Gm, append, outfile=outfile)
-
+        s = FileWriter.write_xyz(Gm, append, outfile=outfile)
+        if not outfile:
+            print(s)

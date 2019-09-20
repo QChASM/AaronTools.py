@@ -113,12 +113,12 @@ for f in args.infile:
     if args.in_target is None:
         t = None
     else:
-        t = [geom.atoms[i] for i in range2int(args.in_target)]
+        t = geom.find(args.in_target)
 
     if args.ref_target is None:
         r = None
     else:
-        r = [ref_geom.atoms[i] for i in range2int(args.ref_target)]
+        r = ref_geom.find(args.ref_target)
 
     #align
     rmsd = geom.RMSD(ref_geom, align=True, targets=t, ref_targets=r)
