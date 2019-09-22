@@ -196,6 +196,7 @@ if args.specific_ts:
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
         else:
             G = S.Geom_func(t)
+            E = S.E_func(t)
             comment = "E(%f) = %f" % (t, E)
             G.comment = comment
             write_geoms.append(G.copy())
