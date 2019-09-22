@@ -8,7 +8,7 @@ from AaronTools.catalyst import Catalyst
 from AaronTools.component import Component
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 from AaronTools.utils import utils
 
 
@@ -24,7 +24,9 @@ class TestCatalyst(TestWithTimer):
     bidentate = Component(prefix + "test_files/ligands/S-tBu-BOX.xyz")
     tridentate = Component(prefix + "test_files/ligands/squaramide.xyz")
 
-    def validate(self, test, ref, thresh=10 ** -5):
+    def validate(self, test, ref, thresh=None):
+        if thresh is None:
+            thresh = rmsd_tol(ref)
         t_el = sorted([t.element for t in test.atoms])
         r_el = sorted([r.element for r in ref.atoms])
         if len(t_el) != len(r_el):
@@ -35,6 +37,7 @@ class TestCatalyst(TestWithTimer):
                 return False
 
         rmsd = ref.RMSD(test, align=True)
+        print(rmsd, thresh)
         return rmsd < thresh
 
     def test_init(self):

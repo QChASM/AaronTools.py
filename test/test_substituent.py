@@ -6,7 +6,7 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
 
 def check_atom_list(ref, comp):
@@ -28,7 +28,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(180))
         rmsd = ref.RMSD(sub, longsort=True)
-        self.assertTrue(rmsd < 10 ** -8)
+        self.assertTrue(rmsd < rmsd_tol(ref))
         return
 
     def is_NO2(self, sub):
@@ -38,7 +38,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(120))
         rmsd = ref.RMSD(sub, sort=True, align=True)
-        self.assertTrue(rmsd < 0.1 / len(ref.atoms))
+        self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
         return
 
     def test_init(self):
@@ -77,7 +77,6 @@ class TestSubstituent(TestWithTimer):
         test_bond = sub.find("N")[0].coords - np.array([0.0, 0.0, 0.0])
         test_bond /= np.linalg.norm(test_bond)
         self.assertTrue(np.linalg.norm(bond - test_bond) < 10 ** -8)
-
 
 if __name__ == "__main__":
     unittest.main()
