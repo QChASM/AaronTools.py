@@ -5,6 +5,8 @@ from collections import deque
 from copy import copy as shallow_copy
 from copy import deepcopy
 from warnings import warn
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 import numpy as np
 
@@ -66,6 +68,7 @@ class Geometry:
                 return
         else:
             return
+
 
         # only get here if we were given a file reader object or a file name
         self.name = from_file.name
@@ -1378,4 +1381,177 @@ class Geometry:
         self += sub.atoms[1:]
         # fix bond distance
         self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
+
+    def short_walk(self, atom1, atom2):
+        """try to find the shortest path between atom1 and atom2"""
+        a1 = self.find(atom1)[0]
+        a2 = self.find(atom2)[0]
+        l = [a1]
+        start = a1
+        max_iter = len(self.atoms)
+        i = 0
+        while start != a2:
+            i += 1
+            if i > max_iter:
+                raise LookupError("could not determine best path between %s and %s" % (str(atom1), str(atom2)))
+            v1 = start.bond(a2)
+            max_overlap = None
+            for atom in start.connected:
+                v2 = start.bond(atom)
+                overlap = np.dot(v1, v2)
+                if max_overlap is None or overlap > max_overlap:
+                    new_start = atom
+                    max_overlap = overlap
+
+            l.append(new_start)
+            start = new_start
+       
+        return l
+        
+    def from_string(name, form='smiles'):
+        """get structure from string
+        form=iupac -> iupac to smiles from opsin API
+                        -> form=smiles
+        form=smiles -> structure from cactvs API"""
+        
+        accepted_forms = ['iupac', 'smiles']
+        
+        if form not in accepted_forms:
+            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
+            
+
+        if form == 'smiles':
+            smiles = name
+        elif form == 'iupac':
+            #opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode('utf8')
+            except HTTPError:
+               raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
+
+        url_sd = "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf" % smiles
+        s_sd = urlopen(url_sd).read().decode('utf8')
+        f = FileReader((name, "sd", s_sd))
+        return Geometry(f)
+
+    def ring_substitute(self, targets, ring_fragment):
+        """take ring, reorient it, put it on self"""
+
+        def attach_short(self, walk, ring_fragment):
+            """for when walk < end, rmsd and remove end[1:-1]"""
+            ring_fragment.RMSD(self, align=True, targets=ring_fragment.end, ref_targets=walk)
+
+            for atom in ring_fragment.end[1:-1]:
+                for t in atom.connected:
+                    if t not in ring_fragment.end:
+                        ring_fragment -= t
+
+                ring_fragment -= atom
+
+            ring_fragment.end = walk[1:-1]
+
+            r = self.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
+            self -= [walk[0], walk[-1]]
+
+            self.atoms.extend(ring_fragment.atoms)
+            self.refresh_connected()
+
+        def attach_approx(self, walk, ring_fragment):
+            """for when only 2 atoms of walk remain - rmsd might not work well"""
+            #move self to the center of walk before rotating
+            recenter = walk[1].coords.copy()
+            self.coord_shift(-walk[1].coords)
+            ring_fragment.coord_shift(-ring_fragment.end[0].coords)
+
+            v = ring_fragment.end[0].bond(walk[1])
+
+            v1 = walk[-2].coords
+            v2 = ring_fragment.end[-1].coords
+    
+            angle = walk[1].angle(ring_fragment.end[-1], walk[-2])
+        
+            nv = np.cross(v1, v2)
+
+            ring_fragment.rotate(nv, -angle)
+
+
+            #add the new atoms
+            self.atoms.extend(ring_fragment.atoms)
+        
+            #shift to rotate about the backbone centroid
+            walk_center = self.COM(walk[1:-1])
+            self.coord_shift(-walk_center)
+            recenter += walk_center
+        
+            #we'll make the ring centroid vector parallel to target centroid vector
+            target_center = self.COM(targets)
+
+            #cut out the end of the ring
+            for end in ring_fragment.end:
+                for atom in end.connected:
+                    if atom.element == 'H' and atom not in ring_fragment.end:
+                        ring_fragment -= atom
+                        self -= atom
+
+                ring_fragment -= end
+                self -= end
+
+            center_shift = ring_fragment.COM()
+
+            ring_fragment.end = walk
+
+            rv = np.cross(center_shift, target_center)
+            dot = np.dot(center_shift, target_center)
+            angle = np.arccos(dot / (np.linalg.norm(center_shift) * np.linalg.norm(target_center)))
+            ring_fragment.rotate(rv, angle)
+    
+            #remove the targets
+            r = self.remove_fragment(targets, walk[1:-1], add_H=False)
+            self -= targets
+
+            self.coord_shift(recenter)
+            self.refresh_connected()
+        
+        def attach_rmsd(self, walk, ring_fragment):
+            """for when walk =~ end - align rmsd"""
+            """for when walk < end, rmsd and remove end[1:-1]"""
+            ring_fragment.RMSD(self, align=True, targets=ring_fragment.end, ref_targets=walk[1:-1])
+
+            for atom in ring_fragment.end:
+                for t in atom.connected:
+                    if t.element == 'H' and t not in ring_fragment.end:
+                        ring_fragment -= t
+
+                ring_fragment -= atom
+
+            ring_fragment.end = walk[1:-1]
+
+            r = self.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
+            self -= [walk[0], walk[-1]]
+
+            self.atoms.extend(ring_fragment.atoms)
+            self.refresh_connected()
+
+        if not isinstance(ring_fragment, AaronTools.substituent.RingFragment):
+            ring_fragment = AaronTools.substituent.RingFragment(ring_fragment)
+
+        targets = self.find(targets)
+
+        #find a path between the targets
+        walk = self.short_walk(*targets)
+        
+        if len(walk) == len(ring_fragment.end) and len(walk) != 2:
+            attach_short(self, walk, ring_fragment)
+
+        elif len(walk[1:-1]) == len(ring_fragment.end) and len(walk[1:-1]) == 2:
+            attach_approx(self, walk, ring_fragment)
+        
+        elif len(walk[1:-1]) == len(ring_fragment.end):
+            attach_rmsd(self, walk, ring_fragment)
+        else:
+            raise ValueError("this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i or %i" % \
+                    (targets[0], targets[1], ring_fragment.name, len(ring_fragment.end), len(walk), len(walk[1:-1])))
+
 
