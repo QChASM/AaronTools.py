@@ -5,17 +5,17 @@ from sys import stdin, argv, exit
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, FileWriter, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.substituent import Substituent
+from AaronTools.ringfragment import RingFragment
 
-substitute_parser = argparse.ArgumentParser(description='replace an atom or substituent with another', \
+ring_parser = argparse.ArgumentParser(description='close rings on a geometry', \
     formatter_class=argparse.RawTextHelpFormatter)
-substitute_parser.add_argument('infile', metavar='input file', \
+ring_parser.add_argument('infile', metavar='input file', \
                             type=str, \
                             nargs='*', \
                             default=[stdin], \
                             help='a coordinate file')
 
-substitute_parser.add_argument('-if', '--input-format', \
+ring_parser.add_argument('-if', '--input-format', \
                                 type=str, \
                                 nargs=1, \
                                 default=None, \
@@ -23,34 +23,26 @@ substitute_parser.add_argument('-if', '--input-format', \
                                 dest='input_format', \
                                 help="file format of input, required if input is stdin")
 
-substitute_parser.add_argument('-s', '--substitute', metavar='n=new substituent', \
+ring_parser.add_argument('-r', '--ring', metavar='atom1 atom2 ring', \
                             type=str, \
-                            nargs='*', \
+                            nargs=3, \
+                            action='append', \
                             default=None, \
-                            required=False, \
+                            required=True, \
                             dest='substitutions', \
                             help="substitution instructions \n" + \
-                            "n is the 1-indexed position of the starting position of the\n" + \
-                            "substituent you are replacing")
+                            "atom1 and atom2 specify the position to add the new ring")
 
-substitute_parser.add_argument('-f', '--format', \
+ring_parser.add_argument('-f', '--format', \
                             type=str, \
                             nargs=1, \
-                            choices=['from_library', 'iupac', 'smiles'], \
+                            choices=['from_library', 'iupac', 'smiles', 'element'], \
                             default=['from_library'], \
                             required=False, \
                             dest='form', \
                             help='how to get substituents given their names \nDefault: from_library')
 
-substitute_parser.add_argument('-m', '--minimize', \
-                            action='store_const', \
-                            const=True, \
-                            default=False, \
-                            required=False, \
-                            dest='mini', \
-                            help='minimize LJ potential for added substituents')
-
-substitute_parser.add_argument('-o', '--output', \
+ring_parser.add_argument('-o', '--output', \
                             nargs=1, \
                             type=str, \
                             default=False, \
@@ -59,7 +51,7 @@ substitute_parser.add_argument('-o', '--output', \
                             dest='outfile', \
                             help='output destination\nDefault: stdout')
 
-args = substitute_parser.parse_args()
+args = ring_parser.parse_args()
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -71,30 +63,33 @@ for infile in args.infile:
         if args.input_format is not None:
             f = FileReader(('from stdin', args.input_format[0], stdin))
         else:
-            substitute_parser.print_help()
+            ring_parser.print_help()
             raise TypeError("when no input file is given, stdin is read and a format must be specified")
 
     geom = Geometry(f)
    
-    target_list = []
-    for sub in args.substitutions:
-        ndx_targets = sub.split('=')[0]
-        target_list.append(geom.find(ndx_targets))
+    targets = {}
 
-    for i, sub in enumerate(args.substitutions):
-        ndx_target = target_list[i]
-        sub_name = '='.join(sub.split('=')[1:])
-   
-        for target in ndx_target:
-            if args.form[0] == 'from_library':
-                sub = Substituent(sub_name)
-            elif args.form[0] in ['iupac', 'smiles']:
-                sub = Substituent.from_string(sub_name, args.form[0])
+    for sub_info in args.substitutions:
+        atom1 = geom.atoms[int(sub_info[0])-1]
+        atom2 = geom.atoms[int(sub_info[1])-1]
+        ring = sub_info[2]
 
-            #replace old substituent with new substituent
-            geom.substitute(sub, target)
+        if args.form[0] == 'from_library':
+            ring_geom = RingFragment(ring)
+        else:
+            path_length = len(geom.short_walk(atom1, atom2))-2
+            ring_geom = RingFragment.from_string(ring, end=path_length)
 
-            geom.refresh_connected()
+        key = (atom1, atom2)
+        if key in targets:
+            targets[key].append(ring_geom)
+        else:
+            targets[key] = [ring_geom]
+
+    for key in targets:
+        for ring_geom in targets[key]:
+            geom.ring_substitute(list(key), ring_geom)     
 
     if args.outfile:
         FileWriter.write_xyz(geom, append=False, outfile=args.outfile[0])

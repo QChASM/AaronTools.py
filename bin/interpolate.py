@@ -229,9 +229,11 @@ else:
             G.comment = comment
             write_geoms.append(G.copy())
 
-w = width(len(write_geoms))
-fmt = "%0" + "%i" % w + "i"
-for G in write_geoms:
+if len(write_geoms) > 0:
+    w = width(len(write_geoms))
+    fmt = "%0" + "%i" % w + "i"
+
+for i, G in enumerate(write_geoms):
     my_outfile = outfile.replace("&i", fmt % i)
     if my_outfile == outfile:
         #if there's no &i, we are writing all the structures to the same file
