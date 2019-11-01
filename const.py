@@ -1,14 +1,14 @@
 """Holds constants"""
 import os
 
-HOME = os.environ["HOME"].rstrip("/") + "/"
+HOME = os.environ["HOME"]
 if "AARONLIB" in os.environ:
-    AARONLIB = os.environ["AARONLIB"].rstrip("/") + "/"
+    AARONLIB = os.path.abspath(os.environ["AARONLIB"])
 else:
-    AARONLIB = HOME + "Aaron_libs/"
+    AARONLIB = os.path.join(HOME, "Aaron_libs")
 
-QCHASM = os.path.dirname(os.path.abspath(__file__)).split("/")
-QCHASM = "/".join(QCHASM[:-1]) + "/"
+QCHASM = os.path.dirname(os.path.abspath(__file__))
+QCHASM = os.path.dirname(QCHASM)
 
 CONNECTIVITY_THRESHOLD = 0.5
 

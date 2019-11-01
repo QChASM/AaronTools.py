@@ -37,7 +37,6 @@ class TestCatalyst(TestWithTimer):
                 return False
 
         rmsd = ref.RMSD(test, align=True)
-        print(rmsd, thresh)
         return rmsd < thresh
 
     def test_init(self):

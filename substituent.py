@@ -26,9 +26,9 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Subs/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/Substituents/*.xyz")
-    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/substituents")
+    AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
+    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache", "substituents")
 
     try:
         with open(CACHE_FILE) as f:
@@ -86,14 +86,14 @@ class Substituent(Geometry):
             # find substituent xyz file
             fsub = None
             for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-                match = re.search("/" + sub + ".xyz", f)
-                if match is not None:
+                match = sub + ".xyz" == os.path.basename(f)
+                if match:
                     fsub = f
                     break
             # or assume we were given a file name instead
             if not fsub and ".xyz" in sub:
                 fsub = sub
-                sub = sub.split("/")[-1].rstrip(".xyz")
+                sub = os.path.basename(sub).rstrip(".xyz")
 
             if fsub is None:
                 raise RuntimeError("substituent name not recognized: %s" % fsub)
@@ -158,7 +158,8 @@ class Substituent(Geometry):
             self.atoms[0].connected.remove(self.end)
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-            match = re.search("/([^/]*).xyz", f)
+            filename = os.path.basename(f)
+            match = re.search("^([\s\S]+).xyz", filename)
             name = match.group(1)
             # test number of atoms against cache
             if name in sub_lengths and len(self.atoms) != sub_lengths[name]:
@@ -245,6 +246,7 @@ class Substituent(Geometry):
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
 
+    @classmethod
     def from_string(name, form='smiles'):
         """
         creates a substituent from a string
@@ -297,8 +299,7 @@ class Substituent(Geometry):
         previous_atoms = elements.findall(smiles[:pos1])
         added_H_ndx = len(previous_atoms)+1
         if '+' not in my_rad and '-' not in my_rad:
-            #mod_smiles = smiles[:pos1] + my_rad[1:-1].rstrip('H') + '(H)' + smiles[pos2:]
-            mod_smiles = smiles[:pos1] + my_rad.rstrip('H') + '(H)' + smiles[pos2:]
+            mod_smiles = smiles[:pos1] + re.sub(r'H\d+', '', my_rad[1:-1]) + smiles[pos2:]
         else:
             mod_smiles = smiles[:pos1] + my_rad[:-1].rstrip('H') + ']' + '(H)' + smiles[pos2:]
         
@@ -330,77 +331,4 @@ class Substituent(Geometry):
             geom.rotate(rot_axis, -angle)
 
         return Substituent([atom for atom in geom.atoms if atom != added_H])
-
-class RingFragment(Geometry):
-    """
-    Attributes:
-        name
-        atoms
-        end
-    """
-
-    AARON_LIBS = os.path.join(AARONLIB, "RingFrags/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/RingFragments/*.xyz")
-    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/ringFragments")
-
-    try:
-        with open(CACHE_FILE) as f:
-            cache = json.load(f)
-    except (FileNotFoundError, json.decoder.JSONDecodeError):
-        cache = {}
-        cache["lengths"] = {}  # for storing number of atoms in each sub
-
-    def __init__(
-        self,
-        frag,
-        name=None,
-        end=None
-    ):
-        """
-        frag is either a file sub, a geometry, or an atom list
-        """
-
-        if isinstance(frag, (Geometry, list)):
-            # we can create substituent object from fragment
-            if isinstance(frag, RingFragment):
-                self.name = name if name else frag.name
-                self.end = end if end else frag.end 
-            elif isinstance(frag, Geometry):
-                self.name = name if name else frag.name
-                self.end = end if end else frag.end 
-            else:
-                self.name = name
-
-            try:
-                self.atoms = frag.atoms
-            except AttributeError:
-                self.atoms = frag
-        
-        else:  # or we can create from file
-            # find substituent xyz file
-            fsub = None
-            for f in glob(RingFragment.AARON_LIBS) + glob(RingFragment.BUILTIN):
-                match = re.search("/" + frag + ".xyz", f)
-                if match is not None:
-                    fsub = f
-                    break
-            # or assume we were given a file name instead
-            if not fsub and ".xyz" in frag:
-                fsub = frag
-                frag = frag.split("/")[-1].rstrip(".xyz")
-
-            if fsub is None:
-                raise RuntimeError("substituent name not recognized: %s" % fsub)
-
-            # load in atom info
-            from_file = FileReader(fsub)
-            self.name = frag
-            self.comment = from_file.comment
-            self.atoms = from_file.atoms
-            self.refresh_connected(rank=False)
-
-            end_info = re.search("E:(\d+)", self.comment)
-            if end_info is not None:
-                self.end = [self.find(end)[0] for end in re.findall('\d+', self.comment)]
-
 

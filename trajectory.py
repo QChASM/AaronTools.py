@@ -184,7 +184,8 @@ class Pathway:
 
         return coord, dcoorddt
 
-    def get_E_func(cE, region_length):
+    @classmethod
+    def get_E_func(cls, cE, region_length):
         """just like get_coord_func, but for energies"""
         def E_func(t):
             s, r = Pathway.t_to_s(t, region_length)
@@ -201,15 +202,17 @@ class Pathway:
             return dE
 
         return E_func, dEdt_func
-
-    def dXYZ_to_Q(dXYZ, Bi):
+    
+    @classmethod
+    def dXYZ_to_Q(cls, dXYZ, Bi):
         """converts Cartesian changes to whatever basis set Bi is (normal mode displacements/Cartesian)
         returns a vector containing the coefficients of each basis matrix"""
         q = np.reshape(dXYZ, 3*len(dXYZ))
         a = np.dot(Bi, q)
         return a
 
-    def q_to_xyz(Gi, modes, current_q):
+    @classmethod
+    def q_to_xyz(cls, Gi, modes, current_q):
         """takes current_q weights for modes (basis matrices), and a Geometry
         returns Geometry that has coordinates modified"""
         G = Gi.copy()
@@ -221,7 +224,8 @@ class Pathway:
 
         return G
 
-    def get_splines_mat(n_nodes):
+    @classmethod
+    def get_splines_mat(cls, n_nodes):
         """generate matrix for fitting cubic splines to data
         matrix is 4*n_regions x 4*n_regions (n_regions = n_nodes-1)
         additional contraints (that might not be valid) as that
@@ -258,7 +262,8 @@ class Pathway:
 
         return M
 
-    def get_splines_vector(data):
+    @classmethod
+    def get_splines_vector(cls, data):
         """organize data into a vector that can be used with cubic splines matrix"""
         n_regions = len(data) - 1
 
@@ -269,8 +274,9 @@ class Pathway:
             v[2*i+1] = data[i+1]
 
         return v
-
-    def t_to_s(t, region_length):
+    
+    @classmethod
+    def t_to_s(cls, t, region_length):
         """maps t ([0, 1]) to s (changes linearly with displacement coordinates
         need to map b/c cubic splines polynomials generated for interpolation subregions
         should be given an input between 0 and 1, no matter where they are on the whole interpolation
@@ -292,7 +298,8 @@ class Pathway:
         s = r+(u-region_start[r])/region_length[r]
         return s, r
 
-    def s_to_t(s, region_length):
+    @classmethod
+    def s_to_t(cls, s, region_length):
         """map s (changes linearly with displacement coordinate) to t (ranges from 0 to 1)
         s               float           point on interpolation arc
         region_length   list(float)     arc length of each region
@@ -308,7 +315,8 @@ class Pathway:
         t = u/path_length
         return t
 
-    def get_arc_length(C):
+    @classmethod
+    def get_arc_length(cls, C):
         """returns a function that can be integrated to determine the arc length of interpolation Pathway subregions
         C       array-like(float, shape = (4*n_subregions, N_Cart))     matrix of cubic polynomial coefficients
 

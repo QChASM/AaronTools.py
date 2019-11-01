@@ -64,11 +64,11 @@ class TestComponent(TestWithTimer):
         rmsd = mol.RMSD(benz_NO2_Cl, sort=True)
         self.assertTrue(rmsd < rmsd_tol(benz_NO2_Cl))
 
-        mol.substitute("OH", "NO2")
+        mol.substitute(Substituent("OH"), "NO2")
         rmsd = mol.RMSD(benz_OH_Cl, sort=True)
         self.assertTrue(rmsd < rmsd_tol(benz_OH_Cl))
 
-        mol.substitute("Ph", "12.*")
+        mol.substitute(Substituent("Ph"), "12.*")
         rmsd = mol.RMSD(benz_Ph_Cl)
         self.assertTrue(rmsd < rmsd_tol(benz_Ph_Cl))
         
@@ -95,9 +95,9 @@ class TestComponent(TestWithTimer):
         geom = TestComponent.benz.copy()
         ref = Component("ref_files/minimize_torsion.xyz")
         
-        geom.substitute("tBu", "12")
-        geom.substitute("Ph", "10")
-        geom.substitute("OH", "7")
+        geom.substitute(Substituent("tBu"), "12")
+        geom.substitute(Substituent("Ph"), "10")
+        geom.substitute(Substituent("OH"), "7")
 
         geom.minimize_sub_torsion()
         rmsd = geom.RMSD(ref, align=True)

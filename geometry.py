@@ -271,10 +271,10 @@ class Geometry:
                             rv += _find_between(i)
                         else:
                             rv += _find(i)
-            
+
             elif isinstance(arg, str) and len(arg.split('-')) > 1:
                 rv += _find_between(arg)
-            
+
             elif isinstance(arg, str) and arg in ELEMENTS:
                 # this is an element
                 for a in self.atoms:
@@ -334,7 +334,7 @@ class Geometry:
         # error if no atoms found (no error if AND filters out all found atoms)
         if len(rv) == 1:
             if len(rv[0]) == 0:
-                raise LookupError("Could not find atom: " + str(args))
+                raise LookupError("Could not find atom: %s on\n%s\n%s" % (str(args), self.name, str(self)))
             return rv[0]
 
         # exclude atoms not fulfilling AND requirement
@@ -1306,8 +1306,6 @@ class Geometry:
         if end==None, replace the smallest fragment containing `target`
         """
         # set up substituent object
-        if not isinstance(sub, AaronTools.substituent.Substituent):
-            sub = AaronTools.substituent.Substituent(sub)
         sub.refresh_connected()
 
         # determine target and atoms defining connection bond
@@ -1397,28 +1395,30 @@ class Geometry:
             v1 = start.bond(a2)
             max_overlap = None
             for atom in start.connected:
-                v2 = start.bond(atom)
-                overlap = np.dot(v1, v2)
-                if max_overlap is None or overlap > max_overlap:
-                    new_start = atom
-                    max_overlap = overlap
+                if atom not in l:
+                    v2 = start.bond(atom)
+                    overlap = np.dot(v1, v2)
+                    if max_overlap is None or overlap > max_overlap:
+                        new_start = atom
+                        max_overlap = overlap
 
             l.append(new_start)
             start = new_start
-       
+
         return l
-        
-    def from_string(name, form='smiles'):
+
+    @classmethod
+    def from_string(cls, name, form='smiles'):
         """get structure from string
         form=iupac -> iupac to smiles from opsin API
-                        -> form=smiles
+                       --> form=smiles
         form=smiles -> structure from cactvs API"""
-        
+
         accepted_forms = ['iupac', 'smiles']
-        
+
         if form not in accepted_forms:
             raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
-            
+
 
         if form == 'smiles':
             smiles = name
@@ -1469,9 +1469,9 @@ class Geometry:
 
             v1 = walk[-2].coords
             v2 = ring_fragment.end[-1].coords
-    
+
             angle = walk[1].angle(ring_fragment.end[-1], walk[-2])
-        
+
             nv = np.cross(v1, v2)
 
             ring_fragment.rotate(nv, -angle)
@@ -1479,12 +1479,12 @@ class Geometry:
 
             #add the new atoms
             self.atoms.extend(ring_fragment.atoms)
-        
+
             #shift to rotate about the backbone centroid
             walk_center = self.COM(walk[1:-1])
             self.coord_shift(-walk_center)
             recenter += walk_center
-        
+
             #we'll make the ring centroid vector parallel to target centroid vector
             target_center = self.COM(targets)
 
@@ -1506,14 +1506,14 @@ class Geometry:
             dot = np.dot(center_shift, target_center)
             angle = np.arccos(dot / (np.linalg.norm(center_shift) * np.linalg.norm(target_center)))
             ring_fragment.rotate(rv, angle)
-    
+
             #remove the targets
             r = self.remove_fragment(targets, walk[1:-1], add_H=False)
             self -= targets
 
             self.coord_shift(recenter)
             self.refresh_connected()
-        
+
         def attach_rmsd(self, walk, ring_fragment):
             """for when walk =~ end - align rmsd"""
             """for when walk < end, rmsd and remove end[1:-1]"""
@@ -1534,24 +1534,25 @@ class Geometry:
             self.atoms.extend(ring_fragment.atoms)
             self.refresh_connected()
 
-        if not isinstance(ring_fragment, AaronTools.substituent.RingFragment):
-            ring_fragment = AaronTools.substituent.RingFragment(ring_fragment)
-
         targets = self.find(targets)
 
         #find a path between the targets
         walk = self.short_walk(*targets)
-        
+
         if len(walk) == len(ring_fragment.end) and len(walk) != 2:
             attach_short(self, walk, ring_fragment)
 
         elif len(walk[1:-1]) == len(ring_fragment.end) and len(walk[1:-1]) == 2:
             attach_approx(self, walk, ring_fragment)
-        
+
         elif len(walk[1:-1]) == len(ring_fragment.end):
             attach_rmsd(self, walk, ring_fragment)
+
+        elif len(walk[1:-1]) == 0:
+            raise ValueError("insufficient information to close ring; there is no distance between selected atoms: %s" % \
+                    (" ".join(targets)))
+
         else:
             raise ValueError("this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i or %i" % \
                     (targets[0], targets[1], ring_fragment.name, len(ring_fragment.end), len(walk), len(walk[1:-1])))
-
 

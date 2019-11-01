@@ -97,15 +97,13 @@ class FileWriter:
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
-        s = s.rstrip()
-
         if outfile is None:
             #if no output file is specified, use the name of the geometry
             with open(geom.name + ".xyz", mode) as f:
                 f.write(s)
         elif outfile is False:
             #if no output file is desired, just return the file contents
-            return s
+            return s.strip()
         else:
             #write output to the requested destination
             with open(outfile, mode) as f:
