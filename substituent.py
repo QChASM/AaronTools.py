@@ -215,7 +215,7 @@ class Substituent(Geometry):
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
             if not os.path.exists(os.path.dirname(Substituent.CACHE_FILE)):
-                os.makedirs(os.dirname(Substituent.CACHE_FILE))
+                os.makedirs(os.path.dirname(Substituent.CACHE_FILE))
 
             with open(Substituent.CACHE_FILE, "w") as f:
                 json.dump(Substituent.cache, f)
