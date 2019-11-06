@@ -214,13 +214,12 @@ class Substituent(Geometry):
         # update cache
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
-            try:
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
-            except FileNotFoundError:
-                os.makedirs(os.path.dirname(Substituent.CACHE_FILE))
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
+            if not os.path.exists(os.path.dirname(Substituent.CACHE_FILE)):
+                os.makedirs(os.dirname(Substituent.CACHE_FILE))
+
+            with open(Substituent.CACHE_FILE, "w") as f:
+                json.dump(Substituent.cache, f)
+        
         return found
 
     def align_to_bond(self, bond):
