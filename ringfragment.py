@@ -31,6 +31,8 @@ class RingFragment(Geometry):
     ):
         """
         frag is either a file sub, a geometry, or an atom list
+        name is a name
+        end is a list of atoms that defines which part of the ring is not part of the fragment
         """
 
         if isinstance(frag, (Geometry, list)):
@@ -40,7 +42,7 @@ class RingFragment(Geometry):
                 self.end = end if end else frag.end 
             elif isinstance(frag, Geometry):
                 self.name = name if name else frag.name
-                self.end = end if end else frag.end 
+                self.end = end if end else None
             else:
                 self.name = name
 
@@ -77,10 +79,10 @@ class RingFragment(Geometry):
                 self.end = [self.find(end)[0] for end in re.findall('\d+', self.comment)]
             else:
                 self.end = None
-
+    
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""
-        
+       
         def linearly_connected(atom_list):
             """returns true if every atom in atom_list is connected to another atom in 
             the list without backtracking"""
@@ -128,7 +130,7 @@ class RingFragment(Geometry):
         for path in itertools.permutations(usable_atoms, path_length - len(start_atoms)):
             full_path = start_atoms + list(path)
             if linearly_connected(full_path):
-                self.end = list(path)
+                self.end = list(full_path)
                 break
 
         if self.end is None:
@@ -141,8 +143,9 @@ class RingFragment(Geometry):
         ring = Geometry.from_string(name, form)
         if end is not None:
             if isinstance(end, int):
-                end = RingFragment.find_end(ring, end)
-                return RingFragment(ring, name=name)
+                ring = RingFragment(ring)
+                ring.find_end(end)
+                return ring
             elif isinstance(end, list):
                 return RingFragment(ring, end=end, name=name)
             else:

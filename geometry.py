@@ -1476,7 +1476,6 @@ class Geometry:
 
             ring_fragment.rotate(nv, -angle)
 
-
             #add the new atoms
             self.atoms.extend(ring_fragment.atoms)
 
@@ -1538,6 +1537,8 @@ class Geometry:
 
         #find a path between the targets
         walk = self.short_walk(*targets)
+        if len(ring_fragment.end) != len(walk):
+            ring_fragment.find_end(len(walk), start=ring_fragment.end)
 
         if len(walk) == len(ring_fragment.end) and len(walk) != 2:
             attach_short(self, walk, ring_fragment)
@@ -1549,7 +1550,7 @@ class Geometry:
             attach_rmsd(self, walk, ring_fragment)
 
         elif len(walk[1:-1]) == 0:
-            raise ValueError("insufficient information to close ring; there is no distance between selected atoms: %s" % \
+            raise ValueError("insufficient information to close ring - selected atoms are bonded to each other: %s" % \
                     (" ".join(targets)))
 
         else:

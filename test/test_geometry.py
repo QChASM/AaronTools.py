@@ -8,7 +8,7 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.substituent import Substituent
 from AaronTools.ringfragment import RingFragment
-from AaronTools.fileIO import FileReader
+from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
@@ -480,13 +480,13 @@ class TestGeometry(TestWithTimer):
         
         ref1 = Geometry(TestGeometry.naphthalene)
         mol1 = mol.copy()
-        mol1.ring_substitute(['7', '8'], RingFragment('6.4.benzene'))
+        mol1.ring_substitute(['7', '8'], RingFragment('benzene'))
         rmsd = mol1.RMSD(ref1, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref1))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
-        mol2.ring_substitute(['7', '8'], RingFragment('6.4.cyclohexane.1'))
+        mol2.ring_substitute(['7', '8'], RingFragment('cyclohexane-chair.1'))
         rmsd = mol2.RMSD(ref2, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref2))
 
@@ -494,9 +494,9 @@ class TestGeometry(TestWithTimer):
         mol = Geometry(TestGeometry.naphthalene)
         ref = Geometry(TestGeometry.pyrene)
         targets1 = mol.find(['9', '15'])
-        targets2 = mol.find(['10', '18'])
-        mol.ring_substitute(targets1, RingFragment('6.3.benzene'))
-        mol.ring_substitute(targets2, RingFragment('6.3.benzene'))
+        targets2 = mol.find(['10', '16'])
+        mol.ring_substitute(targets1, RingFragment('benzene'))
+        mol.ring_substitute(targets2, RingFragment('benzene'))
         rmsd = mol.RMSD(ref, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref))
 

@@ -1,7 +1,6 @@
 """for handling the change in structure of a series of geometries"""
 import numpy as np
-from scipy import integrate
-from scipy.linalg import null_space
+from AaronTools.utils.utils import integrate
 
 class Pathway:
     """
@@ -92,11 +91,7 @@ class Pathway:
         #we need N_Cart basis vectors
         if len(B) < N_Cart:
             if len(B) > 0:
-                #if we already have some vectors, get the rest from the null space
-                #of the current set
-                B = np.array(B)
-                ns = np.transpose(null_space(B))
-                B = np.concatenate((B, ns))
+                raise RuntimeError("number of basis vectors (%i) is less than 3N (%i)" % (len(B), N_Cart))
             else:
                 #if we don't have any, this is equivalent to using each atom's
                 #x, y, and z coordinates as our basis
@@ -146,7 +141,7 @@ class Pathway:
         arc_length = Pathway.get_arc_length(C)
 
         #region_length = [simpson(arc_length, m, m+1) for m in range(0, self.nG-1)]
-        region_length = [integrate.quad(arc_length, m, m+1)[0] for m in range(0, self.nG-1)]
+        region_length = [integrate(arc_length, m, m+1)[0] for m in range(0, self.nG-1)]
         self.region_length = region_length
 
         #set self's coordinate function (coordinates are coefficients for cartesean displacement representation)
@@ -331,9 +326,7 @@ class Pathway:
             for i in range(0, N_Cart):
                 f += (3*C[4*r][i]*(s-r)**2+2*C[4*r+1][i]*(s-r)+C[4*r+2][i])**2
 
-            f = np.sqrt(f)
-
-            return f
+            return np.sqrt(f)
 
         return unnormalized_func
 
