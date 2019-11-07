@@ -246,7 +246,7 @@ class Substituent(Geometry):
         self.rotate(axis, angle, center=self.end)
 
     @classmethod
-    def from_string(name, form='smiles'):
+    def from_string(cls, name, form='smiles'):
         """
         creates a substituent from a string
         name    str     identifier for substituent
