@@ -2,7 +2,6 @@
 import itertools
 import re
 from collections import deque
-from copy import copy as shallow_copy
 from copy import deepcopy
 from warnings import warn
 
@@ -10,7 +9,7 @@ import numpy as np
 
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
-from AaronTools.const import ELEMENTS
+from AaronTools.const import D_CUTOFF, ELEMENTS
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.utils.prime_numbers import Primes
 
@@ -24,6 +23,7 @@ class Geometry:
         comment
         atoms
         other
+        _iter_idx
     """
 
     Primes()
@@ -38,6 +38,8 @@ class Geometry:
         self.name = name
         self.comment = comment
         self.atoms = []
+        self.other = {}
+        self._iter_idx = None
 
         if isinstance(structure, Geometry):
             # new from geometry
@@ -106,6 +108,13 @@ class Geometry:
         return self._stack_coords(atoms)
 
     # utilities
+    def __repr__(self):
+        """ string representation """
+        s = ""
+        for a in self:
+            s += a.__repr__() + "\n"
+        return s
+
     def __eq__(self, other):
         """
         two geometries equal if:
@@ -139,26 +148,26 @@ class Geometry:
                 a.connected = a.connected - set(other)
         return self
 
-    def __repr__(self):
-        """ string representation """
-        s = ""
-        for a in self.atoms:
-            s += a.__repr__() + "\n"
-        return s
+    def __iter__(self):
+        self._iter_idx = -1
+        return self
 
-    def write(self, name=None, style="xyz", *args, **kwargs):
-        """
-        write geometry to a file
-        parameters:
-            name (str): defaults to self.name
-            style (str): defaults to xyz
-        See fileIO.FileWriter for more details
-        """
-        tmp = self.name
-        if name is not None:
-            self.name = name
-        FileWriter.write_file(self, style, *args, **kwargs)
-        self.name = tmp
+    def __next__(self):
+        if self._iter_idx + 1 < len(self.atoms):
+            self._iter_idx += 1
+            return self.atoms[self._iter_idx]
+        raise StopIteration
+
+    def __len__(self):
+        return len(self.atoms)
+
+    def tag(self, tag, targets=None):
+        if targets is None:
+            targets = self.atoms
+        else:
+            targets = self.find(targets)
+        for atom in targets:
+            atom.tags.add(tag)
 
     def copy(self, atoms=None, name=None, comment=None):
         """
@@ -175,59 +184,143 @@ class Geometry:
 
         return Geometry(atoms, name, comment, refresh_connected=False)
 
-    def _fix_connectivity(self, atoms=None, copy=True):
+    def write(self, name=None, style="xyz", *args, **kwargs):
         """
-        for fixing the connectivity for a set of atoms when grabbing
-        a fragment or copying atoms, ensures atom references are sane
+        Write geometry to a file
 
-        :atoms: the atoms to fix connectivity for; connections to atoms
-            outside of this list are severed in the resulting list
-        :copy: perform a deepcopy of the atom list
+        :name: defaults to self.name
+        :style: defaults to xyz
+
+        *args and **kwargs for styles:
+            xyz
+                :append: True/False
+            com
+                :step:
+                :theory: the Theory specification object
+                :**kwargs: Additional route arguments in key=val format
         """
-        if atoms is None:
-            atoms = self.atoms
+        tmp = self.name
+        if name is not None:
+            self.name = name
+        FileWriter.write_file(self, style, *args, **kwargs)
+        self.name = tmp
+
+    def parse_comment(self):
+        """
+        Saves auxillary data found in comment line
+        """
+        if not self.comment:
+            return {}
+        rv = {}
+        # constraints
+        match = re.search("F:([0-9;-]+)", self.comment)
+        if match is not None:
+            rv["constraint"] = []
+            for a in self.atoms:
+                a.constraint = set([])
+            match = match.group(1).split(";")
+            for m in match:
+                if m == "":
+                    continue
+                m = m.split("-")
+                m = [int(i) - 1 for i in m]
+                for i, j in zip(m[:-1], m[1:]):
+                    a = self.atoms[i]
+                    b = self.atoms[j]
+                    a.constraint.add((b, a.dist(b)))
+                    b.constraint.add((a, b.dist(a)))
+                rv["constraint"] += [m]
+        # active centers
+        match = re.search("C:([0-9,]+)", self.comment)
+        if match is not None:
+            rv["center"] = []
+            match = match.group(1).split(",")
+            for m in match:
+                if m == "":
+                    continue
+                a = self.atoms[int(m) - 1]
+                a.add_tag("center")
+                rv["center"] += [a]
+
+        # ligand
+        match = re.search("L:([0-9-,]+)", self.comment)
+        if match is not None:
+            rv["ligand"] = []
+            match = match.group(1).split(",")
+            for m in match:
+                if m == "":
+                    continue
+                m = m.split("-")
+                for i in range(int(m[0]) - 1, int(m[1])):
+                    try:
+                        a = self.atoms[i]
+                    except IndexError:
+                        continue
+                    a.add_tag("ligand")
+                    rv["ligand"] += [a]
+
+        # key atoms
+        match = re.search("K:([0-9,;]+)", self.comment)
+        if match is not None:
+            rv["key_atoms"] = []
+            match = match.group(1).split(";")
+            for m in match:
+                if m == "":
+                    continue
+                m = m.split(",")
+                for i in m:
+                    if i == "":
+                        continue
+                    rv["key_atoms"] += [int(i) - 1]
+        self.other = rv
+        return rv
+
+    def _flag(self, flag, targets=None):
+        """
+        freezes targets if <flag> is True,
+        relaxes targets if <flag> is False
+        """
+        if targets is not None:
+            targets = self.find(targets)
         else:
-            atoms = self.find(atoms)
+            targets = self.atoms
 
-        connectivity = []
-        for a in atoms:
-            connectivity += [
-                [atoms.index(i) for i in a.connected if i in atoms]
-            ]
-        if copy:
-            atoms = deepcopy(atoms)
-        for a, con in zip(atoms, connectivity):
-            a.connected = set([])
-            for c in con:
-                a.connected.add(atoms[c])
-        return atoms
-
-    def update_geometry(self, structure):
-        """
-        Replace current coords with those from :structure:
-
-        :structure: a file name, atom list, Geometry or np.array() of shape Nx3
-        """
-        if isinstance(structure, np.ndarray):
-            coords = structure
-            elements = None
-        else:
-            tmp = Geometry(structure)
-            elements = [a.element for a in tmp.atoms]
-            coords = tmp._stack_coords()
-        if coords.shape[0] != len(self.atoms):
-            raise RuntimeError(
-                "Updated geometry has different number of atoms"
-            )
-        for i, row in enumerate(coords):
-            if elements is not None and elements[i] != self.atoms[i].element:
-                raise RuntimeError(
-                    "Updated coords atom order doesn't seem to match original "
-                    + "atom order. Stopping..."
-                )
-            self.atoms[i].coords = row
-        self.refresh_connected()
+        for a in targets:
+            a.flag = flag
         return
+
+    def freeze(self, targets=None):
+        """
+        freezes atoms in the geometry
+        """
+        self._flag(True, targets)
+
+    def relax(self, targets=None):
+        """
+        relaxes atoms in the geometry
+        """
+        self._flag(False, targets)
+
+    def get_constraints(self, as_index=True):
+        rv = set([])
+        for i, a in enumerate(self.atoms[:-1]):
+            if not a.constraint:
+                continue
+            for j, b in enumerate(self.atoms[i:]):
+                for atom, dist in a.constraint:
+                    if b == atom:
+                        if as_index:
+                            rv.add((i, i + j, dist))
+                        else:
+                            rv.add((a, b, dist))
+                        break
+        return sorted(rv)
+
+    def get_connectivity(self):
+        rv = []
+        for atom in self.atoms:
+            rv += [atom.connected]
+        return rv
 
     def find(self, *args, debug=False):
         """
@@ -366,6 +459,33 @@ class Geometry:
             raise LookupError(err)
         return tuple(rv)
 
+    def _fix_connectivity(self, atoms=None, copy=True):
+        """
+        for fixing the connectivity for a set of atoms when grabbing
+        a fragment or copying atoms, ensures atom references are sane
+
+        :atoms: the atoms to fix connectivity for; connections to atoms
+            outside of this list are severed in the resulting list
+        :copy: perform a deepcopy of the atom list
+        """
+        if atoms is None:
+            atoms = self.atoms
+        else:
+            atoms = self.find(atoms)
+
+        connectivity = []
+        for a in atoms:
+            connectivity += [
+                [atoms.index(i) for i in a.connected if i in atoms]
+            ]
+        if copy:
+            atoms = deepcopy(atoms)
+        for a, con in zip(atoms, connectivity):
+            a.connected = set([])
+            for c in con:
+                a.connected.add(atoms[c])
+        return atoms
+
     def refresh_connected(self, threshold=None, rank=True):
         """
         reset connected atoms
@@ -381,7 +501,7 @@ class Geometry:
         # determine connectivity
         refresh_ranks = False
         for i, a in enumerate(self.atoms):
-            for b in self.atoms[i + 1:]:
+            for b in self.atoms[i + 1 :]:
                 if a.is_connected(b, threshold):
                     a.connected.add(b)
                     b.connected.add(a)
@@ -436,7 +556,7 @@ class Geometry:
 
         # use neighbors to break ties
         count = 0
-        while count < 50:
+        while count < 500:
             count += 1
             new_atoms = {}
             for a in atoms:
@@ -526,119 +646,6 @@ class Geometry:
 
         return order, non_targets
 
-    def get_constraints(self):
-        rv = set([])
-        for i, a in enumerate(self.atoms[:-1]):
-            if not a.constraint:
-                continue
-            for j, b in enumerate(self.atoms[i:]):
-                if b not in a.constraint:
-                    continue
-                rv.add((i, i + j))
-        return sorted(rv)
-
-    def get_connectivity(self):
-        rv = []
-        for atom in self.atoms:
-            rv += [atom.connected]
-        return rv
-
-    def parse_comment(self):
-        """
-        Saves auxillary data found in comment line
-        """
-        if not self.comment:
-            return {}
-        rv = {}
-        # constraints
-        match = re.search("F:([0-9;-]+)", self.comment)
-        if match is not None:
-            rv["constraint"] = []
-            for a in self.atoms:
-                a.constraint = set([])
-            match = match.group(1).split(";")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split("-")
-                m = [int(i) - 1 for i in m]
-                for i, j in zip(m[:-1], m[1:]):
-                    a = self.atoms[i]
-                    b = self.atoms[j]
-                    a.constraint.add(b)
-                    b.constraint.add(a)
-                rv["constraint"] += [m]
-        # active centers
-        match = re.search("C:([0-9,]+)", self.comment)
-        if match is not None:
-            rv["center"] = []
-            match = match.group(1).split(",")
-            for m in match:
-                if m == "":
-                    continue
-                a = self.atoms[int(m) - 1]
-                a.add_tag("center")
-                rv["center"] += [a]
-
-        # ligand
-        match = re.search("L:([0-9-,]+)", self.comment)
-        if match is not None:
-            rv["ligand"] = []
-            match = match.group(1).split(",")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split("-")
-                for i in range(int(m[0]) - 1, int(m[1])):
-                    try:
-                        a = self.atoms[i]
-                    except IndexError:
-                        continue
-                    a.add_tag("ligand")
-                    rv["ligand"] += [a]
-
-        # key atoms
-        match = re.search("K:([0-9,;]+)", self.comment)
-        if match is not None:
-            rv["key_atoms"] = []
-            match = match.group(1).split(";")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split(",")
-                for i in m:
-                    if i == "":
-                        continue
-                    rv["key_atoms"] += [int(i) - 1]
-        self.other = rv
-        return rv
-
-    def _flag(self, flag, targets=None):
-        """
-        freezes targets if <flag> is True,
-        relaxes targets if <flag> is False
-        """
-        if targets is not None:
-            targets = self.find(targets)
-        else:
-            targets = self.atoms
-
-        for a in targets:
-            a.flag = flag
-        return
-
-    def freeze(self, targets=None):
-        """
-        freezes atoms in the geometry
-        """
-        self._flag(True, targets)
-
-    def relax(self, targets=None):
-        """
-        relaxes atoms in the geometry
-        """
-        self._flag(False, targets)
-
     def LJ_energy(self, other=None):
         """
         computes LJ energy using autodock parameters
@@ -654,7 +661,7 @@ class Geometry:
         for i, a in enumerate(self.atoms):
             if other is None:
                 try:
-                    tmp = self.atoms[i + 1:]
+                    tmp = self.atoms[i + 1 :]
                 except IndexError:
                     return energy
             else:
@@ -669,6 +676,74 @@ class Geometry:
                 energy += calc_LJ(a, b)
 
         return energy
+
+    def examine_constraints(self, thresh=None):
+        """
+        Determines if constrained atoms are too close/ too far apart
+        Returns: (atom1, atom2, flag) where flag is 1 if atoms too close,
+            -1 if atoms to far apart (so one can multiply a distance to change
+            by the flag and it will adjust in the correct direction)
+        """
+        rv = []
+        if thresh is None:
+            thresh = D_CUTOFF
+        constraints = self.get_constraints()
+        # con of form (atom_name_1, atom_name_2, original_distance)
+        for con in constraints:
+            dist = self.atoms[con[0]].dist(self.atoms[con[1]])
+            if dist - con[2] > thresh:
+                # current > constraint: atoms too far apart
+                # want to move closer together
+                rv += [(con[0], con[1], -1)]
+            elif con[2] - dist > thresh:
+                # constraint > current: atoms too close together
+                # want to move farther apart
+                rv += [(con[0], con[1], 1)]
+        return rv
+
+    def compare_connectivity(self, ref, thresh=None, by_name=True):
+        """
+        Compares connectivity of self relative to ref
+        Returns: broken, formed
+            :broken: set of atom name pairs for which a bond broke
+            :formed: set of atom name pairs for which a bond formed
+
+        :ref: the structure to compare to (str(path), FileReader, or Geometry)
+            ref.atoms should be in the same order as self.atoms
+        :thresh: allow for connectivity changes as long as the difference
+            between bond distances is below a threshold
+        :by_name: if True (default) lookup atoms by name, otherwise compare
+            based on index in atom list
+        """
+        broken = set([])
+        formed = set([])
+        if not isinstance(ref, Geometry):
+            ref = Geometry(ref)
+
+        not_found = set(self.atoms)
+        for i, r in enumerate(ref.atoms):
+            if by_name:
+                s = self.find(r.name)[0]
+            else:
+                s = self.atoms[i]
+            not_found.remove(s)
+
+            conn = set(self.find(i.name)[0] for i in r.connected)
+            if not conn ^ s.connected:
+                continue
+            for c in conn - s.connected:
+                if thresh is not None:
+                    dist = r.dist(ref.find(c.name)) - s.dist(c)
+                    if abs(dist) <= thresh:
+                        continue
+                broken.add(tuple(sorted([s.name, c.name])))
+            for c in s.connected - conn:
+                if thresh is not None:
+                    dist = r.dist(ref.find(c.name)) - s.dist(c)
+                    if abs(dist) <= thresh:
+                        continue
+                formed.add(tuple(sorted([s.name, c.name])))
+        return broken, formed
 
     # geometry measurement
     def bond(self, a1, a2):
@@ -912,7 +987,123 @@ class Geometry:
         self.coord_shift(ref_com)
         return rmsd
 
+    def get_near(self, ref, dist, by_bond=False, include_ref=False):
+        """
+        Returns: list of atoms within a distance or number of bonds of a
+            reference point, line, plane, atom, or list of atoms
+
+        :ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
+            (eg: ['*', '*', 0]), atom, or list of atoms
+        :dist: the distance threshold or number of bonds away threshold, is an
+            inclusive upper bound (uses `this <= dist`)
+        :by_bond: if true, `dist` is interpreted as the number of bonds away
+            instead of distance in angstroms
+            NOTE: by_bond=True means that ref must be an atom or list of atoms
+        :include_ref: if Atom or list(Atom) given as ref, include these in the
+            returned list, (default=False, do not include ref in returned list)
+        """
+        if dist < 0:
+            raise ValueError(
+                "Distance or number of bonds threshold must be positive"
+            )
+        if not hasattr(ref, "iter") and isinstance(ref, Atom):
+            ref = [ref]
+        rv = []
+
+        # find atoms within number of bonds away
+        if by_bond:
+            dist_err = "by_bond=True only applicable for integer bonds away"
+            ref_err = (
+                "by_bond=True only applicable for ref of type Atom() or "
+                "list(Atom())"
+            )
+            if int(dist) != dist:
+                raise ValueError(dist_err)
+            for r in ref:
+                if not isinstance(r, Atom):
+                    raise TypeError(ref_err)
+            stack = set(ref)
+            rv = set([])
+            while dist > 0:
+                dist -= 1
+                new_stack = set([])
+                for s in stack:
+                    rv = rv.union(s.connected)
+                    new_stack = new_stack.union(s.connected)
+                stack = new_stack
+            if not include_ref:
+                rv = rv - set(ref)
+            return sorted(rv)
+
+        # find atoms within distance
+        if isinstance(ref, Atom):
+            ref = [ref.coords]
+        elif isinstance(ref, list):
+            new_ref = []
+            just_nums = []
+            for r in ref:
+                if isinstance(r, Atom):
+                    new_ref += [r.coords]
+                elif isinstance(r, list):
+                    new_ref += [r]
+                else:
+                    just_nums += [r]
+            if len(just_nums) % 3 != 0:
+                raise ValueError(
+                    "coordinates (or wildcards) must be passed in sets of "
+                    "three: [x, y, z]"
+                )
+            else:
+                while len(just_nums) > 0:
+                    new_ref += [just_nums[-3:]]
+                    just_nums = just_nums[:-3]
+        mask = [False, False, False]
+        for r in new_ref:
+            for i, x in enumerate(r):
+                if x == "*":
+                    mask[i] = True
+                    r[i] = 0
+            for a in self.atoms:
+                coords = a.coords.copy()
+                for i, x in enumerate(mask):
+                    if x:
+                        coords[i] = 0
+                if np.linalg.norm(np.array(r, dtype=float) - coords) <= dist:
+                    rv += [a]
+        if not include_ref:
+            for r in ref:
+                if isinstance(r, Atom) and r in rv:
+                    rv.remove(r)
+        return rv
+
     # geometry manipulation
+    def update_geometry(self, structure):
+        """
+        Replace current coords with those from :structure:
+
+        :structure: a file name, atom list, Geometry or np.array() of shape Nx3
+        """
+        if isinstance(structure, np.ndarray):
+            coords = structure
+            elements = None
+        else:
+            tmp = Geometry(structure)
+            elements = [a.element for a in tmp.atoms]
+            coords = tmp._stack_coords()
+        if coords.shape[0] != len(self.atoms):
+            raise RuntimeError(
+                "Updated geometry has different number of atoms"
+            )
+        for i, row in enumerate(coords):
+            if elements is not None and elements[i] != self.atoms[i].element:
+                raise RuntimeError(
+                    "Updated coords atom order doesn't seem to match original "
+                    "atom order. Stopping..."
+                )
+            self.atoms[i].coords = row
+        self.refresh_connected()
+        return
+
     def get_fragment(self, start, stop, as_object=False, copy=False):
         """
         Returns:
@@ -959,7 +1150,7 @@ class Geometry:
         """
         start = self.find(start)
         avoid = self.find(avoid)
-        frag = self.get_fragment(start, avoid)[len(start):]
+        frag = self.get_fragment(start, avoid)[len(start) :]
         self -= frag
 
         # replace start with H

@@ -1,19 +1,20 @@
 #! /usr/bin/env python3
+import os
 import unittest
 from copy import copy
 
 from AaronTools.comp_output import CompOutput
-from AaronTools.test import prefix, TestWithTimer
+from AaronTools.test import TestWithTimer, prefix
 
 
 class TestCompOutput(TestWithTimer):
     # with frequencies
-    normal = CompOutput(prefix + "test_files/normal.log")
-    died = CompOutput(prefix + "test_files/died.log")
-    error = CompOutput(prefix + "test_files/error.log")
+    normal = CompOutput(os.path.join(prefix, "test_files/normal.log"))
+    died = CompOutput(os.path.join(prefix, "test_files/died.log"))
+    error = CompOutput(os.path.join(prefix, "test_files/error.log"))
     # optimization
-    opt_run = CompOutput(prefix + "test_files/opt_running.log")
-    opt_norm = CompOutput(prefix + "test_files/opt_normal.log")
+    opt_run = CompOutput(os.path.join(prefix, "test_files/opt_running.log"))
+    opt_norm = CompOutput(os.path.join(prefix, "test_files/opt_normal.log"))
 
     def test_get_progress(self):
         test = [TestCompOutput.died.get_progress()]
@@ -22,47 +23,50 @@ class TestCompOutput(TestWithTimer):
         test += [TestCompOutput.opt_run.get_progress()]
 
         ref = ["Progress not found"]
-        ref += ["Max Force:0.003790/NO  RMS Force:0.000887/NO   Max Disp:1.095802/NO   RMS Disp:0.158612/NO"]
-        ref += ["Max Force:0.000016/YES RMS Force:0.000006/YES  Max Disp:0.011148/NO   RMS Disp:0.003723/NO"]
-        ref += ["Max Force:3.606006/NO  RMS Force:0.254588/NO   Max Disp:1.656082/NO   RMS Disp:0.279091/NO"]
+        ref += [
+            "Max Force:0.003790/NO  RMS Force:0.000887/NO   Max Disp:1.095802/NO   RMS Disp:0.158612/NO"
+        ]
+        ref += [
+            "Max Force:0.000016/YES RMS Force:0.000006/YES  Max Disp:0.011148/NO   RMS Disp:0.003723/NO"
+        ]
+        ref += [
+            "Max Force:3.606006/NO  RMS Force:0.254588/NO   Max Disp:1.656082/NO   RMS Disp:0.279091/NO"
+        ]
 
         for t, r in zip(test, ref):
             self.assertTrue(t == r)
 
     def test_grab_thermo(self):
-        logs = [TestCompOutput.normal,
-                TestCompOutput.error,
-                TestCompOutput.opt_norm]
+        logs = [
+            TestCompOutput.normal,
+            TestCompOutput.error,
+            TestCompOutput.opt_norm,
+        ]
 
         tmp = logs[0]
-        test = [[copy(tmp.energy),
-                 copy(tmp.enthalpy),
-                 copy(tmp.free_energy),
-                 copy(tmp.calc_Grimme_G())]]
-        ref = [[-1856.01865834,
-                -1855.440611,
-                -1855.538011,
-                -1855.5328046892625]]
+        test = [
+            [
+                copy(tmp.energy),
+                copy(tmp.enthalpy),
+                copy(tmp.free_energy),
+                copy(tmp.calc_Grimme_G()),
+            ]
+        ]
+        ref = [
+            [-1856.01865834, -1855.440611, -1855.538011, -1855.5328046892625]
+        ]
 
         tmp = logs[1]
-        test += [[copy(tmp.energy),
-                  copy(tmp.enthalpy),
-                  copy(tmp.free_energy),
-                  None]]
-        ref += [[1.00054354503,
-                 None,
-                 None,
-                 None]]
+        test += [
+            [copy(tmp.energy), copy(tmp.enthalpy), copy(tmp.free_energy), None]
+        ]
+        ref += [[1.00054354503, None, None, None]]
 
         tmp = logs[2]
-        test += [[copy(tmp.energy),
-                  copy(tmp.enthalpy),
-                  copy(tmp.free_energy),
-                  None]]
-        ref += [[-3511.5160178,
-                 None,
-                 None,
-                 None]]
+        test += [
+            [copy(tmp.energy), copy(tmp.enthalpy), copy(tmp.free_energy), None]
+        ]
+        ref += [[-3511.5160178, None, None, None]]
 
         for i, r in enumerate(ref):
             if r[3] is None:

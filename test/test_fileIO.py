@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
+import os
 import unittest
+
 import numpy as np
 
 from AaronTools.fileIO import FileReader
-from AaronTools.test import prefix, TestWithTimer
+from AaronTools.test import TestWithTimer, prefix
 
 
 class TestFileReader(TestWithTimer):
-    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
+    small_mol = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -25,13 +27,13 @@ class TestFileReader(TestWithTimer):
         for r, t in zip(ref.atoms, test.atoms):
             if r.element != t.element:
                 return False
-            if np.linalg.norm(r.coords - t.coords) > 10**-6:
+            if np.linalg.norm(r.coords - t.coords) > 10 ** -6:
                 return False
-            if 'name' not in skip and r.name != t.name:
+            if "name" not in skip and r.name != t.name:
                 return False
-            if 'flag' not in skip and r.flag != t.flag:
+            if "flag" not in skip and r.flag != t.flag:
                 return False
-            if 'tags' not in skip:
+            if "tags" not in skip:
                 if len(r.tags - t.tags) > 0:
                     return False
             return True
@@ -54,24 +56,24 @@ class TestFileReader(TestWithTimer):
             self.assertEqual(a.element, line[0])
             dist = a.coords - np.array(line[1:], dtype=float)
             dist = np.linalg.norm(dist)
-            self.assertTrue(dist < 10**(-8))
+            self.assertTrue(dist < 10 ** (-8))
             # check name and tags
-            self.assertEqual(str(n+1), a.name)
+            self.assertEqual(str(n + 1), a.name)
             self.assertTrue(len(a.tags) == 0)
 
     def test_read_log_structure(self):
         ref = FileReader("ref_files/file_io_normal.xyz")
-        test = FileReader(prefix + "test_files/normal.log")
+        test = FileReader(os.path.join(prefix, "test_files/normal.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_error.xyz")
-        test = FileReader(prefix + "test_files/error.log")
+        test = FileReader(os.path.join(prefix, "test_files/error.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_died.xyz")
-        test = FileReader(prefix + "test_files/died.log")
+        test = FileReader(os.path.join(prefix, "test_files/died.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

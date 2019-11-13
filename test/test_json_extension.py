@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-
 import json
+import os
 import unittest
 
 import numpy as np
@@ -10,23 +10,23 @@ from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
 from AaronTools.geometry import Geometry
-from AaronTools.json_extension import JSONDecoder, JSONEncoder
+from AaronTools.json_extension import ATDecoder, ATEncoder
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix
 
 
 class TestJSON(TestWithTimer):
-    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
-    COCH3 = prefix + "test_files/COCH3.xyz"
-    lig = prefix + "test_files/ligands/R-Quinox-tBu3.xyz"
-    cat = prefix + "test_files/catalysts/tm_multi-lig.xyz"
-    log = prefix + "test_files/normal.log"
+    small_mol = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    COCH3 = os.path.join(prefix, "test_files/COCH3.xyz")
+    lig = os.path.join(prefix, "test_files/ligands/R-Quinox-tBu3.xyz")
+    cat = os.path.join(prefix, "test_files/catalysts/tm_multi-lig.xyz")
+    log = os.path.join(prefix, "test_files/normal.log")
 
     def json_tester(self, ref, equality_function, as_iter=False, **kwargs):
         # test to json
-        test = json.dumps(ref, cls=JSONEncoder)
+        test = json.dumps(ref, cls=ATEncoder)
         # test from json
-        test = json.loads(test, cls=JSONDecoder)
+        test = json.loads(test, cls=ATDecoder)
         if as_iter:
             for r, t in zip(ref, test):
                 equality_function(r, t, **kwargs)

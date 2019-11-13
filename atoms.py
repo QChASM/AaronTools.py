@@ -1,6 +1,6 @@
 """For parsing and storing atom information"""
 import json
-from os import path
+import os
 from warnings import warn
 
 import numpy as np
@@ -22,16 +22,14 @@ class BondOrder:
     # warn(s.format(a1.element, a2.element))
 
     def __init__(self):
-        with open(path.dirname(__file__) + "/bond_data.json") as f:
-            bond_data = json.load(f)
-
-        for b in bond_data:
-            key = " ".join(sorted(b["atoms"]))
-            try:
-                BondOrder.bonds[key] += [b]
-            except KeyError:
-                BondOrder.bonds[key] = [b]
-        return
+        if BondOrder.bonds:
+            return
+        with open(
+            os.path.join(
+                os.path.dirname(__file__), "calculated_bond_lengths.json"
+            )
+        ) as f:
+            BondOrder.bonds = json.load(f)
 
     @classmethod
     def key(cls, a1, a2):
@@ -40,13 +38,11 @@ class BondOrder:
         if isinstance(a2, Atom):
             a2 = a2.element
 
-        if a1 == a2:
-            return a1
         return " ".join(sorted([a1, a2]))
 
     @classmethod
     def get(cls, a1, a2):
-        """determines bond order between two atoms based on bond lenght"""
+        """determines bond order between two atoms based on bond length"""
         try:
             bonds = cls.bonds[cls.key(a1, a2)]
         except KeyError:
@@ -56,22 +52,12 @@ class BondOrder:
                 BondOrder.warn_atoms.add((a1.element, a2.element))
                 return 1
         dist = a1.dist(a2)
-        closest = None
-        for b in bonds:
-            diff = abs(b["mean"] - dist)
-            if closest is None or diff < closest[0]:
-                closest = (diff, b)
-
-        # if abs(diff - closest[1]['stdev']) > 3*closest[1]['stdev']:
-        # s = """
-        # Bond order prediction outside of three standard deviations
-        # Atoms in question:
-        # {}
-        # {}
-        # Predicted bond order: {}
-        # """
-        # warn(s.format(a1, a2, closest[1]['order']))
-        return closest[1]["order"]
+        closest = 0, None  # (bond order, length diff)
+        for order, length in bonds.items():
+            diff = abs(length - dist)
+            if closest[1] is None or diff < closest[1]:
+                closest = order, diff
+        return float(closest[0])
 
 
 class Atom:
@@ -130,15 +116,6 @@ class Atom:
         rv = "{}.{}".format(rv[0], rv[1])
         return float(rv)
 
-    def __repr__(self):
-        s = ""
-        s += "{:>3s}  ".format(self.element)
-        for c in self.coords:
-            s += "{: 13.8f} ".format(c)
-        s += " {: 2d}  ".format(-1 if self.flag else 0)
-        s += "{}".format(self.name)
-        return s
-
     def __lt__(self, other):
         """
         sorts by canonical smiles invariant, then by name
@@ -148,6 +125,12 @@ class Atom:
             then, higher number of attached hydrogens first
             then, lower sorting name first
         """
+        if (
+            self._rank is not None
+            and other._rank is not None
+            and self._rank != other._rank
+        ):
+            return self._rank > other._rank
         a = self.get_invariant()
         b = other.get_invariant()
         if a != b:
@@ -160,20 +143,26 @@ class Atom:
         while len(b) < len(a):
             b += ["0"]
         for i, j in zip(a, b):
-            if int(i) == int(j):
-                continue
-            return int(i) < int(j)
+            if int(i) != int(j):
+                return int(i) < int(j)
         else:
             return True
+
+    def __repr__(self):
+        s = ""
+        s += "{:>3s}  ".format(self.element)
+        for c in self.coords:
+            s += "{: 13.8f} ".format(c)
+        s += " {: 2d}  ".format(-1 if self.flag else 0)
+        s += "{}".format(self.name)
+        return s
 
     def _set_radii(self):
         """Sets atomic radii"""
         try:
             self._radii = float(RADII[self.element])
         except KeyError:
-            raise NotImplementedError(
-                "Radii not found for element:", self.element
-            )
+            raise ValueError("Radii not found for element:", self.element)
         return
 
     def _set_connectivity(self):
@@ -196,26 +185,26 @@ class Atom:
 
     def get_invariant(self):
         """gets initial invariant
-        (1) number of connections (d) - nconn
-        (2) number of non-hydrogen bonds (dd) - nB
-        (3) atomic number (dd) - z
-        #(4) sign of charge (d)
-        #(5) absolute charge (d)
-        (6) number of attached hydrogens (d) - nH
+        (1) number of non-hydrogen connections (\d{1}): nconn
+        (2) sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
+        (3) atomic number (\d{3}): z
+        #(4) sign of charge (\d{1})
+        #(5) absolute charge (\d{1})
+        (6) number of attached hydrogens (\d{1}): nH
         """
-        heavy = [x for x in self.connected if x.element != "H"]
-        # number of connected heavy atoms
+        heavy = set([x for x in self.connected if x.element != "H"])
+        # number of non-hydrogen connections:
         nconn = len(heavy)
-        # number of connected hydrogens
-        nH = len([x for x in self.connected if x.element == "H"])
-        # atomic number
-        z = ELEMENTS.index(self.element)
         # number of bonds with heavy atoms
         nB = 0
         for h in heavy:
             nB += BondOrder.get(h, self)
+        # number of connected hydrogens
+        nH = len(self.connected - heavy)
+        # atomic number
+        z = ELEMENTS.index(self.element)
 
-        return "{:1d}{:03d}{:02d}{:1d}".format(
+        return "{:01d}{:03d}{:03d}{:01d}".format(
             int(nconn), int(nB * 10), int(z), int(nH)
         )
 

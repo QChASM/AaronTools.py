@@ -11,6 +11,8 @@ QCHASM = os.path.dirname(os.path.abspath(__file__)).split("/")
 QCHASM = "/".join(QCHASM[:-1]) + "/"
 
 CONNECTIVITY_THRESHOLD = 0.5
+D_CUTOFF = 0.35
+RMSD_CUTOFF = 0.15
 
 ELEMENTS = [
     "Bq",

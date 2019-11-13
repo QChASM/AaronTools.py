@@ -11,7 +11,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 
 
-class JSONEncoder(json.JSONEncoder):
+class ATEncoder(json.JSONEncoder):
     def default(self, obj):
         """
         Calls appropriate encoding method for supported AaronTools types.
@@ -129,7 +129,9 @@ class JSONEncoder(json.JSONEncoder):
         return rv
 
 
-class JSONDecoder(json.JSONDecoder):
+class ATDecoder(json.JSONDecoder):
+    with_progress = False
+
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(
             self, object_hook=self.object_hook, *args, **kwargs
@@ -156,6 +158,8 @@ class JSONDecoder(json.JSONDecoder):
         return rv
 
     def _decode_geometry(self, obj):
+        if ATDecoder.with_progress:
+            print("Loading structure", obj["name"], " " * 50, end="\r")
         kwargs = {"structure": obj["atoms"]}
         for key in ["name", "comment"]:
             kwargs[key] = obj[key]

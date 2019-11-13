@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import random
+import os
 import unittest
 from copy import copy
 
 import numpy as np
 
 from AaronTools.atoms import Atom
+from AaronTools.const import QCHASM
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix
@@ -13,7 +14,11 @@ from AaronTools.test import TestWithTimer, prefix
 
 def is_close(a, b, tol=10 ** -8, debug=False):
     n = None
-    if isinstance(a, np.ndarray) and isinstance(a, np.ndarray):
+    if isinstance(a, list):
+        a = np.array(a)
+    if isinstance(b, list):
+        b = np.array(b)
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
         n = np.linalg.norm(a - b)
     elif isinstance(a, np.ndarray):
         n = np.linalg.norm(a) - b
@@ -34,7 +39,7 @@ def check_atom_list(ref, comp):
 
 
 class TestGeometry(TestWithTimer):
-    benz_NO2_Cl = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
+    benz_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
     benz_NO2_Cl_conn = [
         "2,6,12",
         "1,3,7",
@@ -52,12 +57,13 @@ class TestGeometry(TestWithTimer):
         "12",
     ]
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
-    benzene = prefix + "test_files/benzene.xyz"
-    benz_Cl = prefix + "test_files/benzene_4-Cl.xyz"
-    benz_OH_Cl = prefix + "test_files/benzene_1-OH_4-Cl.xyz"
-    benz_Ph_Cl = prefix + "test_files/benzene_1-Ph_4-Cl.xyz"
-    Et_NO2 = prefix + "test_files/Et_1-NO2.xyz"
-    pent = prefix + "test_files/pentane.xyz"
+    benzene = os.path.join(prefix, "test_files/benzene.xyz")
+    pentane = os.path.join(prefix, "test_files/pentane.xyz")
+    benz_Cl = os.path.join(prefix, "test_files/benzene_4-Cl.xyz")
+    benz_OH_Cl = os.path.join(prefix, "test_files/benzene_1-OH_4-Cl.xyz")
+    benz_Ph_Cl = os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
+    Et_NO2 = os.path.join(prefix, "test_files/Et_1-NO2.xyz")
+    cat = os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
 
     def test_init(self):
         ref = FileReader(TestGeometry.benz_NO2_Cl)
@@ -102,6 +108,19 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(blank.comment, "")
         self.assertEqual(blank.atoms, [])
 
+    def test_attribute_access(self):
+        mol = Geometry(TestGeometry.benzene)
+        # stack coords
+        coords = mol._stack_coords()
+        self.assertEqual(coords.shape, (12, 3))
+        # elements
+        elements = mol.elements()
+        self.assertEqual(len(elements), 12)
+        self.assertEqual(elements[0], "C")
+        # coords
+        coords = mol.coords()
+        self.assertEqual(coords.shape, (12, 3))
+
     # utilities
     def test_equality(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
@@ -112,6 +131,26 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(mol, mol.copy())
         # different molecules should be unequal
         self.assertNotEqual(mol, benz)
+
+    def test_add_sub_iter_len(self):
+        ref = Geometry(TestGeometry.benz_OH_Cl)
+        mol = Geometry(TestGeometry.benzene)
+        OH = ref.find(["12", "13"])
+        Cl = ref.find(["11"])
+        mol -= mol.find(["11", "12"])
+        mol += OH
+        mol += Cl
+        mol.refresh_connected()
+        self.assertEqual(len(mol), len(ref))
+        for a, b in zip(sorted(mol), sorted(ref)):
+            self.assertTrue(a.element == b.element)
+        self.assertTrue(
+            is_close(
+                np.stack([a.coords for a in sorted(mol)]),
+                np.stack([a.coords for a in sorted(ref)]),
+                tol=10 ** -2,
+            )
+        )
 
     def test_find_atom(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
@@ -175,11 +214,15 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(len(old) - len(mol.atoms[0].connected) == 1)
 
     def test_canonical_rank(self):
-        pentane = Geometry(TestGeometry.pent)
+        pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
         pentane_rank = [0, 1, 2, 1, 0]
-
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
+
+        mol = Geometry(os.path.join(prefix, "test_files/6a2e5am1hex.xyz"))
+        mol_rank = [8, 6, 7, 9, 4, 4, 3, 5, 2, 0, 1, 1]
+        test_rank = mol.canonical_rank(heavy_only=True)
+        self.assertSequenceEqual(test_rank, mol_rank)
 
     def test_flag(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
@@ -232,8 +275,101 @@ class TestGeometry(TestWithTimer):
         test.update_geometry(TestGeometry.benz_NO2_Cl)
         self.assertEqual(ref, test)
 
-    # geometry measurement
+    def test_near(self):
+        def compare(test, ref):
+            self.assertTrue(len(test) == len(set(test)))
+            test = set(test)
+            for a in ref:
+                self.assertTrue(a in test)
+                test.discard(a)
+            self.assertTrue(len(test) == 0)
 
+        geom = Geometry(self.benz_NO2_Cl)
+
+        # atoms within 3A of origin
+        test = geom.get_near([0, 0, 0], 3)
+        ref = geom.find(["2", "3", "4", "5", "6", "8", "9", "11"])
+        compare(test, ref)
+        # atoms within 1A of x-axis
+        test = geom.get_near(["*", 0, 0], 1)
+        ref = geom.find(["3", "4"])
+        compare(test, ref)
+        # atoms within 0.5A of xy-plane
+        test = geom.get_near(["*", "*", 0], 0.5)
+        ref = geom.find(["1", "4", "11", "12", "13", "14"])
+        compare(test, ref)
+
+        # atoms within 2A of atom 1
+        test = geom.get_near(geom.atoms[0], 2)
+        ref = geom.find(["2", "6", "12"])
+        compare(test, ref)
+        # ...including atom 1
+        test = geom.get_near(geom.atoms[0], 2, include_ref=True)
+        ref = geom.find(["1", "2", "6", "12"])
+        compare(test, ref)
+        # atoms within 2 bonds of atom 1
+        test = geom.get_near(geom.atoms[0], 2, by_bond=True)
+        ref = geom.find(["2", "6", "12", "3", "7", "5", "10", "13", "14"])
+        compare(test, ref)
+        # atoms within 1 bond of atoms 1 and 2
+        test = geom.get_near(geom.atoms[:2], 1, by_bond=True)
+        ref = geom.find(["6", "12", "3", "7"])
+        compare(test, ref)
+        # ...including starting atoms
+        test = geom.get_near(geom.atoms[:2], 1, by_bond=True, include_ref=True)
+        ref = geom.find(["6", "12", "3", "7", "2", "1"])
+        compare(test, ref)
+
+    def test_compare_connectivity(self):
+        geom = Geometry(TestGeometry.cat)
+        ref = Geometry(TestGeometry.cat)
+
+        # no formed/broken
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 0)
+        self.assertTrue(len(formed) == 0)
+        # broken
+        geom.change_distance("10", "15", dist=1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 1)
+        self.assertTrue(len(formed) == 0)
+        self.assertSetEqual(broken, set([("10", "15")]))
+        # formed
+        ref = geom.copy()
+        geom.change_distance("10", "15", dist=-1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 0)
+        self.assertTrue(len(formed) == 1)
+        self.assertSetEqual(formed, set([("10", "15")]))
+        # broken and formed
+        geom.change_distance("20", "29", dist=1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 1)
+        self.assertTrue(len(formed) == 1)
+        self.assertSetEqual(broken, set([("20", "29")]))
+        self.assertSetEqual(formed, set([("10", "15")]))
+
+    def test_examine_constraints(self):
+        cat = Geometry(TestGeometry.cat)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [])
+
+        cat.change_distance(cat.atoms[0], cat.atoms[1], dist=0.5, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, -1)])
+
+        cat.change_distance(cat.atoms[0], cat.atoms[1], dist=-1.0, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, 1)])
+
+        cat.change_distance(cat.atoms[1], cat.atoms[2], dist=0.5, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, 1), (1, 2, -1)])
+
+    # geometry measurement
     def test_angle(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
         angle = mol.angle("13", "12", "14")
@@ -292,7 +428,7 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(ref.RMSD(other) < 10 ** -5)
 
         # RMSD of two different structures should not be 0
-        other = Geometry(TestGeometry.pent)
+        other = Geometry(TestGeometry.pentane)
         self.assertTrue(ref.RMSD(other) > 10 ** -2)
 
         # RMSD of similar molecule
@@ -448,7 +584,8 @@ class TestGeometry(TestWithTimer):
             )
         )
         self.assertEqual(
-            mol, Geometry(prefix + "test_files/change_dihedral_0.xyz")
+            mol,
+            Geometry(os.path.join(prefix, "test_files/change_dihedral_0.xyz")),
         )
 
         # set dihedral to 60 deg
@@ -460,5 +597,16 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(is_close(mol.dihedral(*atom_args), np.deg2rad(30)))
 
 
-if __name__ == "__main__":
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(TestGeometry("test_add_subtract_iterable"))
+    return suite
+
+
+ONLYSOME = False
+
+if __name__ == "__main__" and ONLYSOME:
+    runner = unittest.TextTestRunner()
+    runner.run(suite())
+elif __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 """For parsing input/output files"""
+import os
 import re
 from copy import deepcopy
 from io import StringIO
@@ -15,7 +16,7 @@ file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
 ERRORS = {
-    "Convergence failure -- run terminated.": "CONV",
+    "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
     "Error termination request processed by link 9999": "CONV_LINK",
     "FormBX had a problem": "FBX",
@@ -25,6 +26,11 @@ ERRORS = {
     "Atoms too close": "CLASH",
     "The combination of multiplicity": "CHARGEMULT",
     "Bend failed for angle": "REDUND",
+    "galloc: could not allocate memory": "GALLOC",
+    "Error imposing constraints": "CONSTR",
+    "End of file reading basis center.": "BASIS",
+    "Unrecognized atomic symbol": "ATOM",
+    "malloc failed.": "MEM",
     "Unknown message": "UNKNOWN",
 }
 
@@ -73,6 +79,10 @@ class FileWriter:
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))
 
+        if os.path.dirname(geom.name) and not os.access(
+            os.path.dirname(geom.name), os.W_OK
+        ):
+            os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
             cls.write_xyz(geom, append)
         elif style.lower() == "com":
@@ -355,13 +365,13 @@ class FileReader:
                 self.other["gradient"] = grad
 
             # capture errors
-            for err in ERRORS:
-                if err in line:
-                    self.other["error"] = ERRORS[err]
-                    self.other["error_msg"] = line.strip()
-                    break
-            else:
-                self.other["error"] = None
+            # only keep first error, want to fix one at a time
+            if "error" not in self.other:
+                for err in ERRORS:
+                    if err in line:
+                        self.other["error"] = ERRORS[err]
+                        self.other["error_msg"] = line.strip()
+                        break
 
             line = f.readline()
             n += 1
@@ -409,7 +419,10 @@ class FileReader:
                     other["grid"] = re.search("int=\(grid(\S+)", line).group(1)
                 for _ in range(4):
                     line = f.readline()
-                line = line.split()
+                if len(line.split()) > 1:
+                    line = line.split()
+                else:
+                    line = line.split(",")
                 other["charge"] = line[0]
                 other["mult"] = line[1]
                 found_atoms = True
@@ -440,6 +453,8 @@ class FileReader:
                 atoms += [a]
             else:
                 continue
+        for i, a in enumerate(atoms):
+            a.name = str(i + 1)
         self.atoms = atoms
         self.other = other
         return

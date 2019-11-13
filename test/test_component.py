@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import unittest
 
 from AaronTools.component import Component
@@ -8,19 +9,25 @@ from AaronTools.test import TestWithTimer, prefix
 
 class TestComponent(TestWithTimer):
     # simple geometries
-    benz = Component(prefix + "test_files/benzene.xyz")
-    benz_Cl = Component(prefix + "test_files/benzene_4-Cl.xyz")
-    benz_NO2_Cl = Component(prefix + "test_files/benzene_1-NO2_4-Cl.xyz")
-    benz_OH_Cl = Component(prefix + "test_files/benzene_1-OH_4-Cl.xyz")
-    benz_Ph_Cl = Component(prefix + "test_files/benzene_1-Ph_4-Cl.xyz")
-    Et_NO2 = Component(prefix + "test_files/Et_1-NO2.xyz")
-    pent = Component(prefix + "test_files/pentane.xyz")
+    benz = Component(os.path.join(prefix, "test_files/benzene.xyz"))
+    benz_Cl = Component(os.path.join(prefix, "test_files/benzene_4-Cl.xyz"))
+    benz_NO2_Cl = Component(
+        os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    )
+    benz_OH_Cl = Component(
+        os.path.join(prefix, "test_files/benzene_1-OH_4-Cl.xyz")
+    )
+    benz_Ph_Cl = Component(
+        os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
+    )
+    Et_NO2 = Component(os.path.join(prefix, "test_files/Et_1-NO2.xyz"))
+    pent = Component(os.path.join(prefix, "test_files/pentane.xyz"))
 
     # ligands
-    RQ_tBu = Component(prefix + "test_files/R-Quinox-tBu3.xyz")
+    RQ_tBu = Component(os.path.join(prefix, "test_files/R-Quinox-tBu3.xyz"))
     for a in RQ_tBu.find("P"):
         a.add_tag("key")
-    tri = Component(prefix + "test_files/ligands/squaramide.xyz")
+    tri = Component(os.path.join(prefix, "test_files/ligands/squaramide.xyz"))
 
     def is_member(self, valid, test):
         for a in valid:

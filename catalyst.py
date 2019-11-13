@@ -27,13 +27,11 @@ class Catalyst(Geometry):
         structure="",
         name="",
         comment="",
-        conf_spec=None,
         components=None,
         refresh_connected=True,
     ):
         self.center = None
         self.components = components
-        self.conf_spec = conf_spec
 
         Geometry.__init__(self, structure, name, comment, refresh_connected)
 
@@ -42,19 +40,6 @@ class Catalyst(Geometry):
 
         self.other = self.parse_comment()
         self.detect_components()
-
-        if conf_spec is None:
-            self.conf_spec = {}
-            constraints = set(it.chain(*self.get_constraints()))
-            # self.conf_spec[sub.atoms[0]] holds:
-            # (current rotation number, [rotation numbers to skip] or 'all')
-            for sub in self.get_substituents():
-                for idx in constraints:
-                    atom = self.atoms[idx]
-                    if atom in sub.atoms:
-                        break
-                else:
-                    self.conf_spec[sub.atoms[0]] = [1, []]
 
     def find_substituent(self, start, for_confs=True):
         """
@@ -96,9 +81,7 @@ class Catalyst(Geometry):
     def copy(self, atoms=None, name=None, comment=None):
         self.fix_comment()
         rv = super().copy()
-        rv = Catalyst(
-            rv, refresh_connected=False, conf_spec=deepcopy(self.conf_spec)
-        )
+        rv = Catalyst(rv, refresh_connected=False)
         return rv
 
     def rebuild(self):
@@ -497,9 +480,6 @@ class Catalyst(Geometry):
                 self.components["ligand"].remove(ol)
             except ValueError:
                 continue
-            for atom in ol.atoms:
-                if atom in self.conf_spec:
-                    del self.conf_spec[atom]
             for atom in self.atoms:
                 if atom.connected & set(ol.atoms):
                     atom.connected = atom.connected - set(ol.atoms)
@@ -510,7 +490,6 @@ class Catalyst(Geometry):
             for sub in ligand.substituents:
                 if sub.conf_num is None or sub.conf_num <= 1:
                     continue
-                self.conf_spec[sub.atoms[0]] = [1, []]
         self.rebuild()
         self.remove_clash()
         if minimize:
@@ -532,73 +511,69 @@ class Catalyst(Geometry):
                 # update tags
                 for a in comp.atoms:
                     a.add_tag(key)
-                # remove old from conf_spec
-                for t in target:
-                    if t in self.conf_spec:
-                        del self.conf_spec[t]
-                # add new to conf_spec
-                if sub.conf_num is not None and sub.conf_num > 1:
-                    self.conf_spec[sub.atoms[0]] = [1, []]
                 self.rebuild()
                 self.detect_components()
                 if minimize:
                     self.minimize()
-                return
+                return sub
 
-    def next_conformer(self):
+    def next_conformer(self, conf_spec, skip_spec={}):
         """
-        Generates the next conformer according to conf_spec
+        Generates the next possible conformer
+
+        :conf_spec: {sub_start_number: conf_number}
+        :skip_spec: {sub_start_number: [skip_numbers]}
+
 
         Returns:
-            True if there are still more conformers
-            False if we are done
+            conf_spec if there are still more conformers
+            {} if there are no more conformers to generate
         """
-        for start, (conf_num, skip) in sorted(self.conf_spec.items()):
+        for start, conf_num in sorted(conf_spec.items()):
             sub = self.find_substituent(start)
             # skip conformer if signalled it's a repeat
-            if skip == "all" or conf_num in skip:
+            skip = skip_spec.get(start, [])
+            if skip == "all" or conf_num == 0 or conf_num in skip:
                 if conf_num == sub.conf_num:
-                    self.conf_spec[start][0] = 1
+                    conf_spec[start] = 1
                 else:
-                    self.conf_spec[start][0] += 1
+                    conf_spec[start] += 1
                 continue
             # reset conf if we hit max conf #
             if conf_num == sub.conf_num:
                 sub.sub_rotate()
-                self.conf_spec[start][0] = 1
+                conf_spec[start] = 1
                 continue
             # perform rotation
             sub.sub_rotate()
-            self.conf_spec[start][0] += 1
+            conf_spec[start] += 1
             self.remove_clash()
             # continue if the same as cf1
-            angle = int(
-                np.rad2deg((self.conf_spec[start][0] - 1) * sub.conf_angle)
-            )
+            angle = int(np.rad2deg((conf_spec[start] - 1) * sub.conf_angle))
             if angle != 360 and angle != 0:
-                return True
+                return conf_spec
             else:
                 continue
         else:
-            # we are done now, signal so in conf_spec
-            for start in self.conf_spec:
-                self.conf_spec[start] = [0, "done"]
-            return False
+            # we are done now
+            return {}
 
     def make_conformer(self, conf_spec):
         """
-        Returns: True if conformer generated (allowed by self.conf_spec),
-            false if not
+        Returns:
+            conf_spec, True if conformer generated (allowed by conf_spec),
+            conf_spec, False if not allowed or invalid
 
-        :conf_spec: dictionary of the form {start_atom: conf_num}
+        :conf_spec: dictionary of the form
+            {sub_start_number: (conf_number, [skip_numbers])}
         """
-        original = self.catalyst.copy()
+        original = self.copy()
         for start, conf_num in conf_spec.items():
-            current, skip = self.conf_spec[start]
+            current, skip = conf_spec[start]
             # skip if flagged a repeat
             if conf_num in skip or skip == "all":
                 self = original
-                return False
+                return conf_spec, False
             sub = self.find_substituent(start)
             # validate conf_spec
             if conf_num > sub.conf_num:
@@ -610,18 +585,18 @@ class Catalyst(Geometry):
                     ">",
                     sub.conf_num,
                 )
-                return False
+                return conf_spec, False
             if conf_num > current:
                 n_rot = conf_num - current - 1
                 for _ in range(n_rot):
-                    self.conf_spec[start][0] += 1
+                    conf_spec[start][0] += 1
                     sub.rotate()
             elif conf_num < current:
                 n_rot = current - conf_num - 1
                 for _ in range(n_rot):
-                    self.conf_spec[start][0] -= 1
+                    conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
-        return True
+        return conf_spec, True
 
     def remove_clash(self, sub_list=None):
         def get_clash(sub, scale):

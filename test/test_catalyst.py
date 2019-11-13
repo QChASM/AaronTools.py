@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import os
 import unittest
 from copy import deepcopy
 
@@ -14,15 +15,25 @@ from AaronTools.utils import utils
 
 class TestCatalyst(TestWithTimer):
     # C:34 L:35-93 K:1,2 F:1-34;1-2;2-34;2-3;3-34
-    tm_simple = Catalyst(prefix + "test_files/catalysts/tm_single-lig.xyz")
-    tm_multi = Catalyst(prefix + "test_files/catalysts/tm_multi-lig.xyz")
-    org_1 = Catalyst(prefix + "test_files/catalysts/org_1.xyz")
-    org_tri = Catalyst(prefix + "test_files/catalysts/org_tri.xyz")
+    tm_simple = Catalyst(
+        os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
+    )
+    tm_multi = Catalyst(
+        os.path.join(prefix, "test_files/catalysts/tm_multi-lig.xyz")
+    )
+    org_1 = Catalyst(os.path.join(prefix, "test_files/catalysts/org_1.xyz"))
+    org_tri = Catalyst(
+        os.path.join(prefix, "test_files/catalysts/org_tri.xyz")
+    )
     catalysts = [tm_simple, tm_multi, org_1, org_tri]
 
-    monodentate = Component(prefix + "test_files/ligands/ACN.xyz")
-    bidentate = Component(prefix + "test_files/ligands/S-tBu-BOX.xyz")
-    tridentate = Component(prefix + "test_files/ligands/squaramide.xyz")
+    monodentate = Component(os.path.join(prefix, "test_files/ligands/ACN.xyz"))
+    bidentate = Component(
+        os.path.join(prefix, "test_files/ligands/S-tBu-BOX.xyz")
+    )
+    tridentate = Component(
+        os.path.join(prefix, "test_files/ligands/squaramide.xyz")
+    )
 
     def validate(self, test, ref, thresh=10 ** -5):
         t_el = sorted([t.element for t in test.atoms])
@@ -39,7 +50,9 @@ class TestCatalyst(TestWithTimer):
 
     def test_init(self):
         self.assertRaises(
-            IOError, Catalyst, prefix + "test_files/R-Quinox-tBu3.xyz"
+            IOError,
+            Catalyst,
+            os.path.join(prefix, "test_files/R-Quinox-tBu3.xyz"),
         )
 
     def test_detect_components(self):
@@ -121,7 +134,8 @@ class TestCatalyst(TestWithTimer):
         tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
         self.assertTrue(
             self.validate(
-                tm_simple, Geometry(prefix + "ref_files/lig_map_2.xyz")
+                tm_simple,
+                Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz")),
             )
         )
 
@@ -129,7 +143,8 @@ class TestCatalyst(TestWithTimer):
         tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
         self.assertTrue(
             self.validate(
-                tm_simple, Geometry(prefix + "ref_files/lig_map_3.xyz")
+                tm_simple,
+                Geometry(os.path.join(prefix, "ref_files/lig_map_3.xyz")),
             )
         )
 
@@ -137,7 +152,8 @@ class TestCatalyst(TestWithTimer):
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
         self.assertTrue(
             self.validate(
-                org_tri, Geometry(prefix + "ref_files/lig_map_4.xyz")
+                org_tri,
+                Geometry(os.path.join(prefix, "ref_files/lig_map_4.xyz")),
             )
         )
 
@@ -145,24 +161,10 @@ class TestCatalyst(TestWithTimer):
         tm_simple.map_ligand(monodentate, ["35"])
         self.assertTrue(
             self.validate(
-                tm_simple, Geometry(prefix + "ref_files/lig_map_1.xyz")
+                tm_simple,
+                Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz")),
             )
         )
-
-    def test_conf_spec(self):
-        test_str = ""
-        count = 0
-        for cat in TestCatalyst.catalysts:
-            count += 1
-            for sub in sorted(cat.get_substituents()):
-                start = sub.atoms[0]
-                conf_num = cat.conf_spec[start]
-                test_str += "{} {} {} {}\n".format(
-                    start.name, sub.name, sub.conf_num, conf_num
-                )
-            test_str += "\n"
-        with open(prefix + "ref_files/conf_spec.txt") as f:
-            self.assertEqual(test_str, f.read())
 
     def test_fix_comment(self):
         cat = TestCatalyst.tm_simple.copy()
@@ -180,6 +182,9 @@ class TestCatalyst(TestWithTimer):
         big_count = 0
         count = 0
         for cat in TestCatalyst.catalysts:
+            conf_spec = {}
+            for sub in cat.get_substituents():
+                conf_spec[sub.atoms[0].name] = 1
             if cat == TestCatalyst.org_1:
                 continue
             if count:
@@ -187,12 +192,12 @@ class TestCatalyst(TestWithTimer):
             count = 1
             cat.remove_clash()
             while True:
-                if not cat.next_conformer():
+                if not cat.next_conformer(conf_spec):
                     break
                 count += 1
                 utils.progress_bar(big_count + count, total)
             subs = sorted(
-                [cat.find_substituent(c).name for c in cat.conf_spec.keys()]
+                [cat.find_substituent(c).name for c in conf_spec.keys()]
             )
             if cat == TestCatalyst.tm_simple:
                 self.assertListEqual(subs, sorted(["tBu", "tBu", "tBu", "Et"]))
@@ -214,9 +219,8 @@ def suite():
     suite.addTest(TestCatalyst("test_init"))
     suite.addTest(TestCatalyst("test_detect_components"))
     suite.addTest(TestCatalyst("test_map_ligand"))
-    suite.addTest(TestCatalyst("test_conf_spec"))
     suite.addTest(TestCatalyst("test_fix_comment"))
-    suite.addTest(TestCatalyst("test_next_conformer"))
+    # suite.addTest(TestCatalyst("test_next_conformer"))
     return suite
 
 
