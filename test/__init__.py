@@ -2,7 +2,30 @@ import time
 import unittest
 from os.path import dirname
 
+import numpy as np
+
 prefix = dirname(__file__)
+
+
+def rmsd_tol(geom, superTight=False, superLoose=False):
+    """automatically determine a reasonable rmsd tolerance for the input
+    geometry based on its size and number of atoms"""
+    tolerance = len(geom.atoms) ** (
+        2 - int(superTight) + int(superLoose)
+    ) * np.sqrt(np.finfo(float).eps)
+
+    com = geom.COM()
+    max_d = None
+    for atom in geom.atoms:
+        d = np.linalg.norm(atom.coords - com)
+        if max_d is None or d > max_d:
+            max_d = d
+
+    tolerance *= max_d * (2 + int(superLoose))
+
+    tolerance = tolerance ** (2 / (2 - int(superTight) + int(superLoose)))
+
+    return tolerance
 
 
 class TestWithTimer(unittest.TestCase):

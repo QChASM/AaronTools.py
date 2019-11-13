@@ -20,8 +20,8 @@ class Component(Geometry):
     :key_atoms:     list(Atom) the atoms used for mapping
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Ligands/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/Ligands/*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Ligands", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Ligands", "*.xyz")
 
     def __init__(
         self,
@@ -47,8 +47,8 @@ class Component(Geometry):
             if structure.endswith(".xyz"):
                 structure = structure[:-4]
             for f in glob(Component.AARON_LIBS) + glob(Component.BUILTIN):
-                match = re.search("/" + structure + ".xyz", f)
-                if match is not None:
+                match = structure + ".xyz" == os.path.basename(f)
+                if match:
                     structure = f
                     break
             else:
@@ -100,80 +100,10 @@ class Component(Geometry):
         if end provided, this is the atom where the substituent is attached
         if end==None, replace the smallest fragment containing `target`
         """
-        # set up substituent object
         if not isinstance(sub, Substituent):
             sub = Substituent(sub)
-        sub.refresh_connected()
 
-        # determine target and atoms defining connection bond
-        target = self.find(target)
-
-        # attached_to is provided or is the atom giving the
-        # smallest target fragment
-        if attached_to is not None:
-            attached_to = self.find_exact(attached_to)
-        else:
-            smallest_frag = None
-            smallest_attached_to = None
-            # get all possible connection points
-            attached_to = set()
-            for t in target:
-                attached_to = attached_to | (t.connected - set(target))
-            # find smallest fragment
-            for e in attached_to:
-                frag = self.get_fragment(target, e)
-                if smallest_frag is None or len(frag) < len(smallest_frag):
-                    smallest_frag = frag
-                    smallest_attached_to = e
-            attached_to = [smallest_attached_to]
-        if len(attached_to) != 1:
-            raise NotImplementedError(
-                "Can only replace substituents with one point of attachment"
-            )
-        attached_to = attached_to[0]
-        sub.end = attached_to
-
-        # determine which atom of target fragment is connected to attached_to
-        sub_attach = attached_to.connected & set(target)
-        if len(sub_attach) > 1:
-            raise NotImplementedError(
-                "Can only replace substituents with one point of attachment"
-            )
-        if len(sub_attach) < 1:
-            raise LookupError("attached_to atom not connected to targets")
-        sub_attach = sub_attach.pop()
-
-        # manipulate substituent geometry; want sub.atoms[0] -> sub_attach
-        #   attached_to == sub.end
-        #   sub_attach will eventually be sub.atoms[0]
-        # move attached_to to the origin
-        shift = attached_to.coords.copy()
-        self.coord_shift(-1 * shift)
-        # align substituent to current bond
-        bond = self.bond(attached_to, sub_attach)
-        sub.align_to_bond(bond)
-        # shift geometry back and shift substituent to appropriate place
-        self.coord_shift(shift)
-        sub.coord_shift(shift)
-
-        # tag and update name for sub atoms
-        for s in sub.atoms:
-            s.add_tag(sub.name)
-            s.name = sub_attach.name + "." + s.name
-
-        # remove old substituent
-        self.remove_fragment(target, attached_to, add_H=False)
-        self -= target
-        attached_to.connected.discard(sub_attach)
-
-        # fix connections
-        attached_to.connected.add(sub.atoms[0])
-        sub.atoms[0].connected.add(attached_to)
-
-        # add new substituent
-        self += sub.atoms
-        # fix bond distance
-        self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
+        Geometry.substitute(self, sub, target, attached_to)
         self.detect_backbone()
 
     def get_frag_list(self, targets=None, max_order=None):
@@ -367,3 +297,4 @@ class Component(Geometry):
                         axis = a.bond(b)
                         center = b.coords
                         self.minimize_torsion(frag, axis, center, geom)
+

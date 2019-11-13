@@ -1,8 +1,9 @@
 """For parsing input/output files"""
 import os
 import re
+import os
 from copy import deepcopy
-from io import StringIO
+from io import StringIO, IOBase
 from warnings import warn
 
 import numpy as np
@@ -10,7 +11,7 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
-read_types = ["xyz", "log", "com"]
+read_types = ["xyz", "log", "com", "sd"]
 write_types = ["xyz", "com"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -66,7 +67,7 @@ def str2step(step_str):
 
 class FileWriter:
     @classmethod
-    def write_file(cls, geom, style="xyz", append=False, *args, **kwargs):
+    def write_file(cls, geom, style="xyz", append=False, outfile=None, *args, **kwargs):
         """
         Writes file from geometry in the specified style
 
@@ -84,49 +85,72 @@ class FileWriter:
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
-            cls.write_xyz(geom, append)
+            cls.write_xyz(geom, append, outfile)
         elif style.lower() == "com":
             if "theory" in kwargs and "step" in kwargs:
                 step = kwargs["step"]
                 theory = kwargs["theory"]
                 del kwargs["step"]
                 del kwargs["theory"]
-                cls.write_com(geom, step, theory, **kwargs)
+                cls.write_com(geom, step, theory, outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
                 )
 
     @classmethod
-    def write_xyz(cls, geom, append):
+    def write_xyz(cls, geom, append, outfile=None):
         mode = "a" if append else "w"
-        with open(geom.name + ".xyz", mode) as f:
-            f.write(str(len(geom.atoms)) + "\n")
-            f.write(geom.comment + "\n")
-            for a in geom.atoms:
-                s = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
-                f.write(s.format(a.element, *a.coords))
+        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
+        s = "%i\n" % len(geom.atoms)
+        s += "%s\n" % geom.comment
+        for atom in geom.atoms:
+            s += fmt.format(atom.element, *atom.coords)
+
+        if outfile is None:
+            #if no output file is specified, use the name of the geometry
+            with open(geom.name + ".xyz", mode) as f:
+                f.write(s)
+        elif outfile is False:
+            #if no output file is desired, just return the file contents
+            return s.strip()
+        else:
+            #write output to the requested destination
+            with open(outfile, mode) as f:
+                f.write(s)
+
         return
 
     @classmethod
-    def write_com(cls, geom, step, theory, **kwargs):
+    def write_com(cls, geom, step, theory, outfile=None, **kwargs):
         has_frozen = False
+        fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
         for atom in geom.atoms:
             if atom.flag:
+                fmt = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
                 has_frozen = True
                 break
-        fname = "{}.{}.com".format(geom.name, step2str(step))
-        with open(fname, "w") as f:
-            f.write(theory.make_header(geom, step, **kwargs))
-            for a in geom.atoms:
+
+            s = theory.make_header(geom, step, **kwargs)
+            for atom in geom.atoms:
                 if has_frozen:
-                    s = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
-                    s = s.format(a.element, -a.flag, *a.coords)
+                    s += fmt.format(a.element, -a.flag, *a.coords)
                 else:
-                    s = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
-                    s = s.format(a.element, *a.coords)
+                    s += fmt.format(a.element, *a.coords)
+
+            s += theory.make_footer(geom, step)
+
+        if outfile is None:
+            #if outfile is not specified, name file in Aaron format
+            fname = "{}.{}.com".format(geom.name, step2str(step))
+            with open(fname, "w") as f:
                 f.write(s)
-            f.write(theory.make_footer(geom, step))
+        elif outfile is False:
+            return s
+        else:
+            with open(outfile, 'w') as f:
+                f.write(s)
+
         return
 
 
@@ -173,9 +197,20 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(get_all, just_geom)
-        elif self.file_type == "log":
+        elif isinstance(self.content, str):
             f = StringIO(self.content)
-            self.read_log(f, get_all, just_geom)
+        elif isinstance(self.content, IOBase):
+            f = self.content
+
+        if self.content is not None:
+            if self.file_type == "log":
+                self.read_log(f, get_all, just_geom)
+            elif self.file_type == "sd":
+                self.read_sd(f)
+            elif self.file_type == "xyz":
+                self.read_xyz(f)
+            elif self.file_type == "com":
+                self.read_com(f)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -185,13 +220,27 @@ class FileReader:
                         If true, self is last geom, but return list
                             of all others encountered
         """
-        with open(self.name + "." + self.file_type) as f:
-            if self.file_type == "xyz":
-                self.read_xyz(f, get_all)
-            elif self.file_type == "log":
-                self.read_log(f, get_all, just_geom)
-            elif self.file_type == "com":
-                self.read_com(f)
+        if os.path.isfile(self.name):
+            f = open(self.name)
+        else:
+            fname = '.'.join([self.name, self.file_type])
+            if os.path.isfile(fname):
+                f = open(fname)
+            else:
+                raise FileNotFoundError("Error while looking for %s: could not find %s or %s in %s" % \
+                        (self.name, fname, self.name, os.getcwd()))
+
+        if self.file_type == "xyz":
+            self.read_xyz(f, get_all)
+        elif self.file_type == "log":
+            self.read_log(f, get_all, just_geom)
+        elif self.file_type == "com":
+            self.read_com(f)
+        elif self.file_type == "sd":
+            self.read_sd(f)
+
+        f.close()
+
         return
 
     def skip_lines(self, f, n):
@@ -220,11 +269,26 @@ class FileReader:
                 self.atoms = []
             except ValueError:
                 line = line.split()
-                self.atoms += [Atom(element=line[0], coords=line[1:])]
+                self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
         if get_all:
             self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
+
+    def read_sd(self, f, get_all=False):
+        self.all_geom = []
+        lines = f.readlines()
+        self.comment = lines[0]
+        counts = lines[3].split()
+        natoms = int(counts[0])
+        nbonds = int(counts[1])
+        self.atoms = []
+        for line in lines[4:4+natoms]:
+            atom_info = line.split()
+            self.atoms += [Atom(element=atom_info[3], coords = atom_info[0:3])]
+
+        for i, a in enumerate(self.atoms):
+            a.name = str(i + 1)
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -398,7 +462,14 @@ class FileReader:
             if line.startswith("%"):
                 continue
             if line.startswith("#"):
-                other["method"] = re.search("^#(\S+)", line).group(1)
+                method = re.search("^#([NnPpTt]\s+?)(\S+)|^#\s*?(\S+)", line)
+                #route can be #n functional/basis ...
+                #or #functional/basis ...
+                #or # functional/basis ...
+                if method.group(3):
+                    other['method'] = method.group(3)
+                else:
+                    other['method'] = method.group(2)
                 if "temperature=" in line:
                     other["temperature"] = re.search(
                         "temperature=(\d+\.?\d*)", line
@@ -413,7 +484,7 @@ class FileReader:
                     ).group(1)
                 if "EmpiricalDispersion=" in line:
                     other["emp_dispersion"] = re.search(
-                        "EmpiricalDispersion=(\s+)", line
+                        "EmpiricalDispersion=(\S+)", line
                     ).group(1)
                 if "int=(grid(" in line:
                     other["grid"] = re.search("int=\(grid(\S+)", line).group(1)
@@ -480,10 +551,11 @@ class Frequency:
         :vector: (2D array) normal mode vectors
         """
 
-        def __init__(self, frequency, intensity=None, vector=[]):
+        def __init__(self, frequency, intensity=None, vector=[], forcek=[]):
             self.frequency = frequency
             self.intensity = intensity
             self.vector = np.array(vector)
+            self.forcek = np.array(forcek)
 
     def __init__(self, data, hpmodes=None):
         """
@@ -531,13 +603,23 @@ class Frequency:
                     # if hpmodes, want just the first set of freqs
                     break
                 continue
-            if "Frequencies" in line and "---" in line:
+            if "Frequencies" in line and ((hpmodes and "---" in line) or \
+                ("--" in line and not hpmodes)):
                 for i in float_num.findall(line):
                     self.data += [Frequency.Data(float(i))]
                     modes += [[]]
                     idx += 1
                 continue
-            if "IR Intensit" in line and "---" in line:
+
+            if ("Force constants" in line and "---" in line and hpmodes) or \
+                ("Frc consts" in line and "--" in line and not hpmodes):
+                force_constants = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].forcek = float(force_constants[i])
+                continue
+
+            if "IR Inten" in line and ((hpmodes and "---" in line) or \
+                (not hpmodes and "--" in line)):
                 for i in float_num.findall(line):
                     self.data[idx].intensity = float(i)
                 continue
@@ -566,11 +648,12 @@ class Frequency:
                 match = re.search("^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
                 if match is None:
                     continue
+                values = float_num.findall(line)
                 atom = int(values[0]) - 1
                 moves = np.array(values[2:], dtype=np.float)
                 n_moves = len(moves) // 3
-                for mode, m in zip(modes[-n_moves:], range(n_moves)):
-                    mode += [moves[m: m + 3]]
+                for i in range(-n_moves, 0):
+                    modes[i].append(moves[3*n_moves+3*i:4*n_moves+3*i])
 
         for mode, data in zip(modes, self.data):
             data.vector = np.array(mode, dtype=np.float)

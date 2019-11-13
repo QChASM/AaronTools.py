@@ -155,3 +155,38 @@ def add_dict(this, other, skip=[]):
         else:
             this[key] = val
     return this
+
+def integrate(fun, a, b, n=101):
+     """numerical integration using Simpson's method
+     fun - function to integrate
+     a - integration starts at point a
+     b - integration stops at point b
+     n - number of points used for integration"""
+     import numpy as np
+
+     dx = float(b-a)/(n-1)
+     x_set = np.linspace(a, b, num=n)
+     s = -(fun(a) + fun(b))
+     i = 1
+     max_4th_deriv = 0
+     while i < n:
+         if i % 2 == 0:
+             s += 2*fun(x_set[i])
+         else:
+             s += 4*fun(x_set[i])
+
+         if i < n-4 and i >= 3:
+             sg_4th_deriv = 6*fun(x_set[i-3]) + 1*fun(x_set[i-2]) - 7*fun(x_set[i-1]) - 3*fun(x_set[i]) - 7*fun(x_set[i+1]) + fun(x_set[i+2]) + 6*fun(x_set[i+3])
+             sg_4th_deriv /= 11*dx**4
+
+             if abs(sg_4th_deriv) > max_4th_deriv:
+                 max_4th_deriv = abs(sg_4th_deriv)
+
+         i += 1
+
+     s = s * dx/3.
+
+     #close enough error estimate
+     e = (abs(b-a)**5)*max_4th_deriv/(180*n**4)
+
+     return (s, e)

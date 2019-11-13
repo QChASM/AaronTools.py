@@ -6,10 +6,11 @@ from copy import copy
 import numpy as np
 
 from AaronTools.atoms import Atom
-from AaronTools.const import QCHASM
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.test import TestWithTimer, prefix
+from AaronTools.ringfragment import RingFragment
+from AaronTools.substituent import Substituent
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
 
 def is_close(a, b, tol=10 ** -8, debug=False):
@@ -59,6 +60,11 @@ class TestGeometry(TestWithTimer):
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
     benzene = os.path.join(prefix, "test_files/benzene.xyz")
     pentane = os.path.join(prefix, "test_files/pentane.xyz")
+    naphthalene = os.path.join(prefix, "ref_files/naphthalene.xyz")
+    tetrahydronaphthalene = os.path.join(
+        prefix, "ref_files/tetrahydronaphthalene.xyz"
+    )
+    pyrene = os.path.join(prefix, "ref_files/pyrene.xyz")
     benz_Cl = os.path.join(prefix, "test_files/benzene_4-Cl.xyz")
     benz_OH_Cl = os.path.join(prefix, "test_files/benzene_1-OH_4-Cl.xyz")
     benz_Ph_Cl = os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
@@ -411,21 +417,21 @@ class TestGeometry(TestWithTimer):
 
         # RMSD of copied object should be 0
         other = ref.copy()
-        self.assertTrue(ref.RMSD(other) < 10 ** -12)
+        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
         # if they are out of order, sorting should help
         res = ref.RMSD(other, longsort=True)
-        self.assertTrue(res < 10 ** -12)
+        self.assertTrue(res < rmsd_tol(other, superTight=True))
 
         # RMSD of shifted copy should be 0
         other = ref.copy()
         other.coord_shift([1, 2, 3])
-        self.assertTrue(ref.RMSD(other) < 10 ** -12)
+        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
 
         # RMSD of rotated copy should be 0
         other = ref.copy()
         other.rotate([1, 2, 3], 2.8)
         other.write("tmp")
-        self.assertTrue(ref.RMSD(other) < 10 ** -5)
+        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref))
 
         # RMSD of two different structures should not be 0
         other = Geometry(TestGeometry.pentane)
@@ -434,7 +440,7 @@ class TestGeometry(TestWithTimer):
         # RMSD of similar molecule
         other = Geometry(TestGeometry.benzene)
         res = ref.RMSD(other, targets="C", ref_targets="C")
-        self.assertTrue(res < 10 ** -5)
+        self.assertTrue(res < rmsd_tol(ref))
         res = ref.RMSD(other, sort=True)
 
     # geometry manipulation
@@ -595,6 +601,41 @@ class TestGeometry(TestWithTimer):
         # adjust using just two atoms
         mol.change_dihedral("12", "1", -30, radians=False, adjust=True)
         self.assertTrue(is_close(mol.dihedral(*atom_args), np.deg2rad(30)))
+
+    def test_substitute(self):
+        ref = Geometry(TestGeometry.benz_NO2_Cl)
+        mol = Geometry(TestGeometry.benzene)
+
+        mol.substitute(Substituent("NO2"), "12")
+        mol.substitute(Substituent("Cl"), "11")
+
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
+
+    def test_close_ring_approx(self):
+        mol = Geometry(TestGeometry.benzene)
+
+        ref1 = Geometry(TestGeometry.naphthalene)
+        mol1 = mol.copy()
+        mol1.ring_substitute(["7", "8"], RingFragment("benzene"))
+        rmsd = mol1.RMSD(ref1, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref1))
+
+        ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
+        mol2 = mol.copy()
+        mol2.ring_substitute(["7", "8"], RingFragment("cyclohexane-chair.1"))
+        rmsd = mol2.RMSD(ref2, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref2))
+
+    def test_close_ring_rmsd(self):
+        mol = Geometry(TestGeometry.naphthalene)
+        ref = Geometry(TestGeometry.pyrene)
+        targets1 = mol.find(["9", "15"])
+        targets2 = mol.find(["10", "16"])
+        mol.ring_substitute(targets1, RingFragment("benzene"))
+        mol.ring_substitute(targets2, RingFragment("benzene"))
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
 
 
 def suite():

@@ -6,6 +6,8 @@ import re
 from copy import deepcopy
 from glob import glob
 from warnings import warn
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 import numpy as np
 
@@ -24,9 +26,9 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Subs/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/Substituents/*.xyz")
-    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/substituents")
+    AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
+    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache", "substituents")
 
     try:
         with open(CACHE_FILE) as f:
@@ -84,14 +86,17 @@ class Substituent(Geometry):
             # find substituent xyz file
             fsub = None
             for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-                match = re.search("/" + sub + ".xyz", f)
-                if match is not None:
+                match = sub + ".xyz" == os.path.basename(f)
+                if match:
                     fsub = f
                     break
             # or assume we were given a file name instead
             if not fsub and ".xyz" in sub:
                 fsub = sub
-                sub = sub.split("/")[-1].rstrip(".xyz")
+                sub = os.path.basename(sub).rstrip(".xyz")
+
+            if fsub is None:
+                raise RuntimeError("substituent name not recognized: %s" % fsub)
 
             # load in atom info
             from_file = FileReader(fsub)
@@ -153,7 +158,8 @@ class Substituent(Geometry):
             self.atoms[0].connected.remove(self.end)
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-            match = re.search("/([^/]*).xyz", f)
+            filename = os.path.basename(f)
+            match = re.search("^([\s\S]+).xyz", filename)
             name = match.group(1)
             # test number of atoms against cache
             if name in sub_lengths and len(self.atoms) != sub_lengths[name]:
@@ -208,13 +214,12 @@ class Substituent(Geometry):
         # update cache
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
-            try:
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
-            except FileNotFoundError:
+            if not os.path.exists(os.path.dirname(Substituent.CACHE_FILE)):
                 os.makedirs(os.path.dirname(Substituent.CACHE_FILE))
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
+
+            with open(Substituent.CACHE_FILE, "w") as f:
+                json.dump(Substituent.cache, f)
+        
         return found
 
     def align_to_bond(self, bond):
@@ -239,3 +244,90 @@ class Substituent(Geometry):
             angle *= -1
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
+
+    @classmethod
+    def from_string(cls, name, form='smiles'):
+        """
+        creates a substituent from a string
+        name    str     identifier for substituent
+        form    str     type of identifier
+        """
+        #convert whatever format we're given to smiles
+        #then grab the structure from cactus site
+
+        accepted_forms = ['iupac', 'smiles']
+
+        if form not in accepted_forms:
+            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
+
+        rad = re.compile('\[\S+?\]')
+        elements = re.compile('[A-Z][a-z]?')
+
+        if form == 'smiles':
+            smiles = name
+        elif form == 'iupac':
+            #opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode('utf8')
+            except HTTPError:
+               raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
+
+        #radical atom is the first atom in []
+        #charged atoms are also in []
+        my_rad = None
+        radicals = rad.findall(smiles)
+        if radicals:
+            for rad in radicals:
+                if '+' not in rad and '-' not in rad:
+                    my_rad = rad
+                    break
+
+        if my_rad is None:
+            if radicals:
+                warn("radical atom may be ambiguous, be sure to check output: %s" % smiles)
+                my_rad = radicals[0]
+            else:
+                raise RuntimeError("could not determine radical site on %s; radical site is expected to be in []" % smiles)
+
+        #construct a modified smiles string with (H) right after the radical center
+        #keep track of the position of this added H
+        pos1 = smiles.index(my_rad)
+        pos2 = smiles.index(my_rad)+len(my_rad)
+        previous_atoms = elements.findall(smiles[:pos1])
+        added_H_ndx = len(previous_atoms)+1
+        if '+' not in my_rad and '-' not in my_rad:
+            mod_smiles = smiles[:pos1] + re.sub(r'H\d+', '', my_rad[1:-1]) + smiles[pos2:]
+        else:
+            mod_smiles = smiles[:pos1] + my_rad[:-1].rstrip('H') + ']' + '(H)' + smiles[pos2:]
+        
+        #fix triple bond url
+        mod_smiles = mod_smiles.replace('#', '%23')
+
+        #grab structure from cactus
+        geom = Geometry.from_string(mod_smiles, form='smiles')
+
+        #the H we added is in the same position in the structure as in the smiles string
+        added_H = geom.atoms[added_H_ndx]
+
+        #move the added H to the origin
+        geom.coord_shift(-added_H.coords)
+
+        #get the atom bonded to this H
+        #also move the atom on H to the front of the atoms list to have the expected connectivity
+        bonded_atom = next(iter(added_H.connected))
+        geom.atoms = [bonded_atom] + [atom for atom in geom.atoms if atom != bonded_atom]
+
+        #align the H-atom bond with the x-axis to have the expected orientation
+        bond = deepcopy(bonded_atom.coords)
+        bond /= np.linalg.norm(bond)
+        x_axis = np.array([1.0, 0.0, 0.0])
+        rot_axis = np.cross(x_axis, bond)
+        if np.linalg.norm(rot_axis) > np.finfo(float).eps:
+            rot_axis /= np.linalg.norm(rot_axis)
+            angle = np.arccos(np.dot(bond, x_axis))
+            geom.rotate(rot_axis, -angle)
+
+        return Substituent([atom for atom in geom.atoms if atom != added_H])
+
