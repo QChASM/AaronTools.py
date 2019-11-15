@@ -62,13 +62,7 @@ class ATEncoder(json.JSONEncoder):
             rv["comment"] = obj.comment
 
         # for Catalyst child classes
-        if hasattr(obj, "conf_spec"):
-            # conf_spec
-            tmp = {}
-            for key, val in obj.conf_spec.items():
-                key = key.name
-                tmp[key] = val
-            rv["conf_spec"] = tmp
+        if isinstance(obj, Catalyst):
             # comment
             obj.fix_comment()
             rv["comment"] = obj.comment
@@ -148,6 +142,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_geometry(obj)
         if obj["_type"] == "Frequency":
             return self._decode_frequency(obj)
+        if obj["_type"] == "CompOutput":
+            return self._decode_comp_output(obj)
 
     def _decode_atom(self, obj):
         kwargs = {}
@@ -174,12 +170,7 @@ class ATDecoder(json.JSONDecoder):
                 geom, key_atoms=key_atom_names, refresh_connected=False
             )
         elif obj["_type"] == "Catalyst":
-            conf_spec = {}
-            for key, val in obj["conf_spec"].items():
-                key = geom.find_exact(key)[0]
-                conf_spec[key] = val
-            kwargs = {"conf_spec": conf_spec}
-            return Catalyst(geom, **kwargs, refresh_connected=False)
+            return Catalyst(geom, refresh_connected=False)
         else:
             return geom
 
@@ -200,3 +191,32 @@ class ATDecoder(json.JSONDecoder):
                 Frequency.Data(d["frequency"], d["intensity"], d["vector"])
             ]
         return Frequency(data)
+
+    def _decode_comp_output(self, obj):
+        keys = [
+            "geometry",
+            "opts",
+            "frequency",
+            "archive",
+            "energy",
+            "enthalpy",
+            "free_energy",
+            "grimme_g",
+            "gradient",
+            "frequency",
+            "E_ZPVE",
+            "ZPVE",
+            "mass",
+            "temperature",
+            "multiplicity",
+            "charge",
+            "rotational_temperature",
+            "rotational_symmetry_number",
+            "error",
+            "error_msg",
+            "finished",
+        ]
+        rv = CompOutput()
+        for key in keys:
+            rv.__dict__[key] = obj[key]
+        return rv

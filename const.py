@@ -229,6 +229,7 @@ CONNECTIVITY = {
     "Cu": 6,
     "Ru": 6,
     "Pd": 6,
+    "Ir": 6,
     "P": 4,
     "S": 4,
     "Cl": 1,
@@ -1309,6 +1310,7 @@ ATOM_TYPES = [
     "OE",
     "OT",
 ]
+
 
 class PHYSICAL:
     # Physical constants

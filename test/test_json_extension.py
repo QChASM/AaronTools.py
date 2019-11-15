@@ -51,6 +51,10 @@ class TestJSON(TestWithTimer):
                     for a, b in zip(
                         sorted(ref.__dict__[key]), sorted(test.__dict__[key])
                     ):
+                        if key == "constraint":
+                            self.assertEqual(a[1], b[1])
+                            a = a[0]
+                            b = b[0]
                         self.atom_equal(a, b, skip=["connected", "constraint"])
                 else:
                     self.assertEqual(ref.__dict__[key], test.__dict__[key])
@@ -66,7 +70,7 @@ class TestJSON(TestWithTimer):
             skip.remove("name")
         if "comment" not in skip:
             self.assertEqual(ref.comment, test.comment)
-        for a, b in zip(ref.atoms, test.atoms):
+        for a, b in zip(ref, test):
             self.atom_equal(a, b, skip)
 
     def sub_equal(self, ref, test):
@@ -96,14 +100,6 @@ class TestJSON(TestWithTimer):
         for key in ref.components:
             for r, t in zip(ref.components[key], test.components[key]):
                 self.component_equal(r, t)
-        self.assertEqual(len(ref.conf_spec), len(test.conf_spec))
-        try:
-            for key, val in ref.conf_spec.items():
-                test_key = test.find_exact(key.name)[0]
-                self.assertTrue(test_key in test.conf_spec)
-                self.assertListEqual(val, test.conf_spec[test_key])
-        except AssertionError as err:
-            raise AssertionError("(key={}) {}", key, err)
 
     def comp_out_equal(self, ref, test):
         keys = [
@@ -130,7 +126,7 @@ class TestJSON(TestWithTimer):
         ]
         for key in keys:
             rval = ref.__dict__[key]
-            tval = ref.__dict__[key]
+            tval = test.__dict__[key]
             if key == "geometry":
                 self.geom_equal(rval, tval)
             elif key == "opts":

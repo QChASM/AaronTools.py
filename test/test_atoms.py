@@ -152,7 +152,7 @@ class TestAtoms(TestWithTimer):
             atom = Atom("NotAnElement", [0, 0, 0])
         atom = Atom()
         atom.element = "NotAnElement"
-        with self.assertRaises(ValueError):
+        with self.assertWarns(UserWarning):
             atom._set_radii()
 
     def test_set_connectivity(self):

@@ -8,8 +8,10 @@ prefix = dirname(__file__)
 
 
 def rmsd_tol(geom, superTight=False, superLoose=False):
-    """automatically determine a reasonable rmsd tolerance for the input
-    geometry based on its size and number of atoms"""
+    """
+    Automatically determine a reasonable rmsd tolerance for the input
+    geometry based on its size and number of atoms
+    """
     tolerance = len(geom.atoms) ** (
         2 - int(superTight) + int(superLoose)
     ) * np.sqrt(np.finfo(float).eps)
@@ -26,6 +28,66 @@ def rmsd_tol(geom, superTight=False, superLoose=False):
     tolerance = tolerance ** (2 / (2 - int(superTight) + int(superLoose)))
 
     return tolerance
+
+
+def check_atom_list(ref, comp):
+    rv = True
+    for i, j in zip(ref, comp):
+        rv &= i.__repr__() == j.__repr__()
+    return rv
+
+
+def validate(
+    test, ref, thresh=None, heavy_only=False, sort=False, debug=False
+):
+    """
+    Validates `test` geometry against `ref` geometry
+    Returns: True if validation passed, False if failed
+
+    :test: the geometry to validate
+    :ref: the reference geometry
+    :thresh: the RMSD threshold
+        if thresh is a number: use that as threshold
+        if thresh is None: use rmsd_tol() to determine
+        if thresh is "tight": use rmsd_tol(superTight=True)
+        if thresh is "loose": use rmsd_tol(superLoose=True)
+    :sort: do canonical sorting of atoms first
+    :debug: print info useful for debugging
+    """
+    if thresh is None:
+        thresh = rmsd_tol(ref)
+    try:
+        thresh = float(thresh)
+    except ValueError:
+        if thresh.lower() == "tight":
+            thresh = rmsd_tol(ref, superTight=True)
+        elif thresh.lower() == "loose":
+            thresh = rmsd_tol(ref, superLoose=True)
+        else:
+            raise ValueError("Bad threshold provided")
+
+    # elements should all be the same
+    t_el = sorted([t.element for t in test.atoms])
+    r_el = sorted([r.element for r in ref.atoms])
+    if len(t_el) != len(r_el):
+        return False
+
+    for t, r in zip(t_el, r_el):
+        if t != r:
+            return False
+    # and RMSD should be below a threshold
+    if debug:
+        rmsd, ref, test = ref.RMSD(
+            test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+        )
+        print("RMSD:", rmsd, "\tTHRESH:", thresh)
+        ref.write("ref")
+        test.write("test")
+    else:
+        rmsd = ref.RMSD(
+            test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+        )
+    return rmsd < thresh
 
 
 class TestWithTimer(unittest.TestCase):

@@ -420,7 +420,7 @@ class Catalyst(Geometry):
 
         old_keys = self.find(old_keys)
 
-        if not hasattr(ligands, "__iter__") or isinstance(ligands, str):
+        if isinstance(ligands, (str, Geometry)):
             ligands = [ligands]
 
         new_keys = []
@@ -513,6 +513,7 @@ class Catalyst(Geometry):
                     a.add_tag(key)
                 self.rebuild()
                 self.detect_components()
+                self.refresh_ranks()
                 if minimize:
                     self.minimize()
                 return sub
@@ -720,4 +721,3 @@ class Catalyst(Geometry):
                 axis = sub.atoms[0].bond(sub.end)
                 center = sub.end
                 self.minimize_torsion(sub.atoms, axis, center)
-

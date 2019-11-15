@@ -3,13 +3,10 @@ import os
 import unittest
 from copy import deepcopy
 
-import numpy as np
-
 from AaronTools.catalyst import Catalyst
 from AaronTools.component import Component
 from AaronTools.geometry import Geometry
-from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 from AaronTools.utils import utils
 
 
@@ -34,21 +31,6 @@ class TestCatalyst(TestWithTimer):
     tridentate = Component(
         os.path.join(prefix, "test_files/ligands/squaramide.xyz")
     )
-
-    def validate(self, test, ref, thresh=None):
-        if thresh is None:
-            thresh = rmsd_tol(ref)
-        t_el = sorted([t.element for t in test.atoms])
-        r_el = sorted([r.element for r in ref.atoms])
-        if len(t_el) != len(r_el):
-            return False
-
-        for t, r in zip(t_el, r_el):
-            if t != r:
-                return False
-
-        rmsd = ref.RMSD(test, align=True)
-        return rmsd < thresh
 
     def test_init(self):
         self.assertRaises(
@@ -135,7 +117,7 @@ class TestCatalyst(TestWithTimer):
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
         self.assertTrue(
-            self.validate(
+            validate(
                 tm_simple,
                 Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz")),
             )
@@ -144,7 +126,7 @@ class TestCatalyst(TestWithTimer):
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
         self.assertTrue(
-            self.validate(
+            validate(
                 tm_simple,
                 Geometry(os.path.join(prefix, "ref_files/lig_map_3.xyz")),
             )
@@ -153,7 +135,7 @@ class TestCatalyst(TestWithTimer):
         org_tri = TestCatalyst.org_tri.copy()
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
         self.assertTrue(
-            self.validate(
+            validate(
                 org_tri,
                 Geometry(os.path.join(prefix, "ref_files/lig_map_4.xyz")),
             )
@@ -162,7 +144,7 @@ class TestCatalyst(TestWithTimer):
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand(monodentate, ["35"])
         self.assertTrue(
-            self.validate(
+            validate(
                 tm_simple,
                 Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz")),
             )

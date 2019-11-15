@@ -103,8 +103,9 @@ class Component(Geometry):
         if not isinstance(sub, Substituent):
             sub = Substituent(sub)
 
-        Geometry.substitute(self, sub, target, attached_to)
+        super().substitute(sub, target, attached_to, refresh_ranks=False)
         self.detect_backbone()
+        self.rebuild()
 
     def get_frag_list(self, targets=None, max_order=None):
         """
@@ -117,7 +118,7 @@ class Component(Geometry):
             atoms = self.atoms
         frag_list = []
         for i, a in enumerate(atoms[:-1]):
-            for b in atoms[i + 1:]:
+            for b in atoms[i + 1 :]:
                 if b not in a.connected:
                     continue
 
@@ -188,7 +189,7 @@ class Component(Geometry):
                 frag = (
                     [start]
                     + frag[: frag.index(start)]
-                    + frag[frag.index(start) + 1:]
+                    + frag[frag.index(start) + 1 :]
                 )
             # if frag contains atoms from to_center, it's part of backbone
             if to_center:
@@ -298,3 +299,14 @@ class Component(Geometry):
                         center = b.coords
                         self.minimize_torsion(frag, axis, center, geom)
 
+    def sub_rotate(self, start, angle=None):
+        start = self.find_exact(start)[0]
+        for sub in self.substituents:
+            if sub.atoms[0] == start:
+                break
+        end = sub.end
+        if angle is None:
+            angle = sub.conf_angle
+        self.change_dihedral(
+            start, end, angle, fix=4, adjust=True, as_group=True
+        )

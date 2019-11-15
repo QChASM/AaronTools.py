@@ -4,7 +4,7 @@ import unittest
 
 from AaronTools.component import Component
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 class TestComponent(TestWithTimer):
@@ -40,22 +40,6 @@ class TestComponent(TestWithTimer):
         else:
             return False
 
-    def is_same(self, valid, test):
-        # same number of atoms
-        if len(valid.atoms) != len(test.atoms):
-            return False
-        # of same elements
-        tmp = [a.element for a in test.atoms]
-        for e in [a.element for a in valid.atoms]:
-            try:
-                tmp.remove(e)
-            except ValueError:
-                return False
-        # with reasonable rmsd
-        if valid.RMSD(test, sort=True) > 10 ** -4:
-            return False
-        return True
-
     def test_substitute(self):
         mol = TestComponent.benz.copy()
         benz_Cl = TestComponent.benz_Cl.copy()
@@ -64,21 +48,21 @@ class TestComponent(TestWithTimer):
         benz_Ph_Cl = TestComponent.benz_Ph_Cl.copy()
 
         mol.substitute(Substituent("Cl"), "11")
-        rmsd = mol.RMSD(benz_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_Cl))
+        res = validate(mol, benz_Cl)
+        self.assertTrue(res)
 
         mol.substitute(Substituent("NO2"), "12", "1")
-        rmsd = mol.RMSD(benz_NO2_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_NO2_Cl))
+        res = validate(mol, benz_NO2_Cl, sort=True)
+        self.assertTrue(res)
 
         mol.substitute(Substituent("OH"), "NO2")
-        rmsd = mol.RMSD(benz_OH_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_OH_Cl))
+        res = validate(mol, benz_OH_Cl, sort=True)
+        self.assertTrue(res)
 
-        mol.substitute(Substituent("Ph"), "12.*")
-        rmsd = mol.RMSD(benz_Ph_Cl)
-        self.assertTrue(rmsd < rmsd_tol(benz_Ph_Cl))
-        
+        mol.substitute(Substituent("Ph"), ["12", "12.*"])
+        res = validate(mol, benz_Ph_Cl, thresh="loose", sort=True)
+        self.assertTrue(res)
+
     def test_detect_backbone(self):
         geom = TestComponent.RQ_tBu.copy()
         geom.detect_backbone()
@@ -99,16 +83,38 @@ class TestComponent(TestWithTimer):
         self.assertTrue(self.is_member(backbone, test_backbone))
 
     def test_minimize_torsion(self):
-        geom = TestComponent.benz.copy()
         ref = Component("ref_files/minimize_torsion.xyz")
-        
+        ref.refresh_ranks()
+
+        geom = TestComponent.benz.copy()
         geom.substitute(Substituent("tBu"), "12")
         geom.substitute(Substituent("Ph"), "10")
         geom.substitute(Substituent("OH"), "7")
-
         geom.minimize_sub_torsion()
-        rmsd = geom.RMSD(ref, align=True)
-        self.assertTrue(rmsd < 1)
+        geom.refresh_ranks()
+
+        for i in range(2):
+            if i != 0:
+                geom.sub_rotate("10", 180)
+            for j in range(3):
+                if j != 0:
+                    geom.sub_rotate("12", 120)
+                res = validate(geom, ref, heavy_only=True, sort=True, thresh=1)
+                if res:
+                    self.assertTrue(res)
+                    return
+        self.assertTrue(res)
+
+    def test_sub_rotate(self):
+        geom = TestComponent.RQ_tBu.copy()
+        geom.sub_rotate("4", angle=60)
+        geom.sub_rotate("6", angle=60)
+        geom.sub_rotate("5", angle=60)
+        ref = Component(os.path.join(prefix, "ref_files/sub_rotate.xyz"))
+        self.assertTrue(validate(geom, ref, heavy_only=True))
+
+
+ONLYSOME = False
 
 
 def suite():
@@ -119,6 +125,8 @@ def suite():
     return suite
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()
     runner.run(suite())
+elif __name__ == "__main__":
+    unittest.main()

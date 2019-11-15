@@ -10,13 +10,6 @@ from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
 
-def check_atom_list(ref, comp):
-    rv = True
-    for i, j in zip(ref, comp):
-        rv &= i.__repr__() == j.__repr__()
-    return rv
-
-
 class TestSubstituent(TestWithTimer):
     COCH3 = Geometry(os.path.join(prefix, "test_files/COCH3.xyz"))
     NO2 = Geometry(os.path.join(prefix, "test_files/NO2.xyz"))
@@ -80,6 +73,7 @@ class TestSubstituent(TestWithTimer):
         test_bond = sub.find("N")[0].coords - np.array([0.0, 0.0, 0.0])
         test_bond /= np.linalg.norm(test_bond)
         self.assertTrue(np.linalg.norm(bond - test_bond) < 10 ** -8)
+
 
 if __name__ == "__main__":
     unittest.main()

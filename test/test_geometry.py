@@ -32,13 +32,6 @@ def is_close(a, b, tol=10 ** -8, debug=False):
     return abs(n) < tol
 
 
-def check_atom_list(ref, comp):
-    rv = True
-    for i, j in zip(ref, comp):
-        rv &= i.__repr__() == j.__repr__()
-    return rv
-
-
 class TestGeometry(TestWithTimer):
     benz_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
     benz_NO2_Cl_conn = [
