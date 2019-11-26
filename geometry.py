@@ -614,7 +614,7 @@ class Geometry:
                     continue
                 m = m.split(",")
                 for i in m:
-                    if i == "":
+                    if i.strip() == "":
                         continue
                     rv["key_atoms"] += [int(i) - 1]
         self.other = rv
