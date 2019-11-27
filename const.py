@@ -1,7 +1,7 @@
 """Holds constants"""
 import os
 
-HOME = os.environ["HOME"]
+HOME = os.path.expanduser('~')
 if "AARONLIB" in os.environ:
     AARONLIB = os.path.abspath(os.environ["AARONLIB"])
 else:
