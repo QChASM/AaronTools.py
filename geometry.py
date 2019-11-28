@@ -1439,9 +1439,11 @@ class Geometry:
     def ring_substitute(self, targets, ring_fragment):
         """take ring, reorient it, put it on self"""
 
-        def attach_short(self, walk, ring_fragment):
+        def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
-            ring_fragment.RMSD(self, align=True, targets=ring_fragment.end, ref_targets=walk)
+            ring_fragment.RMSD(geom, align=True, targets=ring_fragment.end, ref_targets=walk)
+
+            ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
 
             for atom in ring_fragment.end[1:-1]:
                 for t in atom.connected:
@@ -1452,17 +1454,17 @@ class Geometry:
 
             ring_fragment.end = walk[1:-1]
 
-            r = self.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
-            self -= [walk[0], walk[-1]]
+            r = geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
+            geom -= [walk[0], walk[-1]]
 
-            self.atoms.extend(ring_fragment.atoms)
-            self.refresh_connected()
+            geom.atoms.extend(ring_fragment.atoms)
+            geom.refresh_connected()
 
-        def attach_approx(self, walk, ring_fragment):
+        def attach_approx(geom, walk, ring_fragment):
             """for when only 2 atoms of walk remain - rmsd might not work well"""
-            #move self to the center of walk before rotating
+            #move geom to the center of walk before rotating
             recenter = walk[1].coords.copy()
-            self.coord_shift(-walk[1].coords)
+            geom.coord_shift(-walk[1].coords)
             ring_fragment.coord_shift(-ring_fragment.end[0].coords)
 
             v = ring_fragment.end[0].bond(walk[1])
@@ -1477,25 +1479,27 @@ class Geometry:
             ring_fragment.rotate(nv, -angle)
 
             #add the new atoms
-            self.atoms.extend(ring_fragment.atoms)
+            geom.atoms.extend(ring_fragment.atoms)
 
             #shift to rotate about the backbone centroid
-            walk_center = self.COM(walk[1:-1])
-            self.coord_shift(-walk_center)
+            walk_center = geom.COM(walk[1:-1])
+            geom.coord_shift(-walk_center)
             recenter += walk_center
 
             #we'll make the ring centroid vector parallel to target centroid vector
-            target_center = self.COM(targets)
+            target_center = geom.COM(targets)
+            
+            ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
 
             #cut out the end of the ring
             for end in ring_fragment.end:
                 for atom in end.connected:
                     if atom.element == 'H' and atom not in ring_fragment.end:
                         ring_fragment -= atom
-                        self -= atom
+                        geom -= atom
 
                 ring_fragment -= end
-                self -= end
+                geom -= end
 
             center_shift = ring_fragment.COM()
 
@@ -1507,16 +1511,18 @@ class Geometry:
             ring_fragment.rotate(rv, angle)
 
             #remove the targets
-            r = self.remove_fragment(targets, walk[1:-1], add_H=False)
-            self -= targets
+            r = geom.remove_fragment(targets, walk[1:-1], add_H=False)
+            geom -= targets
 
-            self.coord_shift(recenter)
-            self.refresh_connected()
+            geom.coord_shift(recenter)
+            geom.refresh_connected()
 
-        def attach_rmsd(self, walk, ring_fragment):
+        def attach_rmsd(geom, walk, ring_fragment):
             """for when walk =~ end - align rmsd"""
             """for when walk < end, rmsd and remove end[1:-1]"""
-            ring_fragment.RMSD(self, align=True, targets=ring_fragment.end, ref_targets=walk[1:-1])
+            ring_fragment.RMSD(geom, align=True, targets=ring_fragment.end, ref_targets=walk[1:-1])
+            
+            ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
 
             for atom in ring_fragment.end:
                 for t in atom.connected:
@@ -1527,11 +1533,70 @@ class Geometry:
 
             ring_fragment.end = walk[1:-1]
 
-            r = self.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
-            self -= [walk[0], walk[-1]]
+            r = geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
+            geom -= [walk[0], walk[-1]]
 
-            self.atoms.extend(ring_fragment.atoms)
-            self.refresh_connected()
+            geom.atoms.extend(ring_fragment.atoms)
+            geom.refresh_connected()
+
+        def ring_waddle(geom, targets, walk_end, ring):
+            """adjusted the new bond lengths by moving the ring in a 'waddling' motion"""
+            d0 = walk_end[0].dist(targets[0])
+            
+            if hasattr(targets[0], "_radii") and hasattr(walk_end[0], "_radii"):
+                d0_exp = targets[0]._radii + walk_end[0]._radii
+            else:
+                d0_exp = d0
+
+            if hasattr(ring.end[0], "_radii") and hasattr(walk_end[0], "_radii"):
+                d1_exp = ring.end[0]._radii + walk_end[0]._radii
+            else:
+                d1_exp = ring.end[0].dist(walk_end[0])
+
+            d1 = (d0/d0_exp) * d1_exp
+
+            v1 = ring.end[-1].bond(walk_end[0])
+            v2 = ring.end[-1].bond(ring.end[0])
+
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
+
+            target_angle = np.arccos((d1**2 - v1_n**2 - v2_n**2) / (-2. * v1_n * v2_n))
+            current_angle = ring.end[-1].angle(ring.end[0], walk_end[0])
+            ra = target_angle - current_angle
+
+            rv = np.cross(v1, v2)
+
+            ring.rotate(rv, ra, center=ring.end[-1])
+
+
+            d0 = walk_end[-1].dist(targets[-1])
+            
+            if hasattr(targets[-1], "_radii") and hasattr(walk_end[-1], "_radii"):
+                d0_exp = targets[-1]._radii + walk_end[-1]._radii
+            else:
+                d0_exp = d0
+
+            if hasattr(ring.end[-1], "_radii") and hasattr(walk_end[-1], "_radii"):
+                d1_exp = ring.end[-1]._radii + walk_end[-1]._radii
+            else:
+                d1_exp = ring.end[-1].dist(walk_end[-1])
+
+            d1 = (d0/d0_exp) * d1_exp
+
+            v1 = ring.end[0].bond(walk_end[-1])
+            v2 = ring.end[0].bond(ring.end[-1])
+
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
+
+            target_angle = np.arccos((d1**2 - v1_n**2 - v2_n**2) / (-2. * v1_n * v2_n))
+            current_angle = ring.end[0].angle(ring.end[-1], walk_end[-1])
+            ra = target_angle - current_angle
+
+            rv = np.cross(v1, v2)
+
+            ring.rotate(rv, ra, center=ring.end[0])
 
         targets = self.find(targets)
 
@@ -1551,7 +1616,7 @@ class Geometry:
 
         elif len(walk[1:-1]) == 0:
             raise ValueError("insufficient information to close ring - selected atoms are bonded to each other: %s" % \
-                    (" ".join(targets)))
+                    (" ".join(str(a) for a in targets)))
 
         else:
             raise ValueError("this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i or %i" % \

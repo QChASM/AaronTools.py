@@ -102,10 +102,12 @@ class RingFragment(Geometry):
             elif any([sum([atom1 in atom2.connected for atom2 in atom_list]) != 2 for atom1 in atom_list[1:-1]]):
                 return False
 
-            #first two atoms should only be connected to one atom
+            #first two atoms should only be connected to one atom unless they are connected to each other
             elif sum([sum([atom_list[0] in atom.connected]) + \
                       sum([atom_list[-1] in atom.connected]) for atom in atom_list]) \
-                        > 2:
+                        > 2 and \
+                    atom_list[0] not in atom_list[-1].connected:
+                
                 return False
 
             else:
@@ -129,7 +131,7 @@ class RingFragment(Geometry):
 
         for path in itertools.permutations(usable_atoms, path_length - len(start_atoms)):
             full_path = start_atoms + list(path)
-            if linearly_connected(full_path):
+            if linearly_connected(full_path) or path_length == 1:
                 self.end = list(full_path)
                 break
 

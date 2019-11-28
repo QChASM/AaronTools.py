@@ -475,7 +475,7 @@ class TestGeometry(TestWithTimer):
         rmsd = mol.RMSD(ref, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref))
     
-    def test_close_ring_approx(self):
+    def test_close_ring(self):
         mol = Geometry(TestGeometry.benzene)
         
         ref1 = Geometry(TestGeometry.naphthalene)
@@ -490,15 +490,14 @@ class TestGeometry(TestWithTimer):
         rmsd = mol2.RMSD(ref2, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref2))
 
-    def test_close_ring_rmsd(self):
-        mol = Geometry(TestGeometry.naphthalene)
-        ref = Geometry(TestGeometry.pyrene)
-        targets1 = mol.find(['9', '15'])
-        targets2 = mol.find(['10', '16'])
-        mol.ring_substitute(targets1, RingFragment('benzene'))
-        mol.ring_substitute(targets2, RingFragment('benzene'))
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        mol3 = Geometry(TestGeometry.naphthalene)
+        ref3 = Geometry(TestGeometry.pyrene)
+        targets1 = mol3.find(['9', '15'])
+        targets2 = mol3.find(['10', '16'])
+        mol3.ring_substitute(targets1, RingFragment('benzene'))
+        mol3.ring_substitute(targets2, RingFragment('benzene'))
+        rmsd = mol3.RMSD(ref3, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
 if __name__ == "__main__":
     unittest.main()
