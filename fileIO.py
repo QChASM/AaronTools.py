@@ -75,18 +75,20 @@ class FileWriter:
             raise NotImplementedError(file_type_err.format(style))
 
         if style.lower() == "xyz":
-            cls.write_xyz(geom, append, outfile)
+            out = cls.write_xyz(geom, append, outfile)
         elif style.lower() == "com":
             if "theory" in kwargs and "step" in kwargs:
                 step = kwargs["step"]
                 theory = kwargs["theory"]
                 del kwargs["step"]
                 del kwargs["theory"]
-                cls.write_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_com(geom, step, theory, outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
                 )
+
+        return out
 
     @classmethod
     def write_xyz(cls, geom, append, outfile=None):

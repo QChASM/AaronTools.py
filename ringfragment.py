@@ -4,8 +4,6 @@ import itertools
 import os
 import re
 from glob import glob
-from urllib.request import urlopen
-from urllib.error import HTTPError
 
 from AaronTools.const import AARONLIB, QCHASM
 from AaronTools.fileIO import FileReader
