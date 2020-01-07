@@ -46,7 +46,7 @@ class TestBondOrder(TestWithTimer):
         return
 
 
-class TestAtoms(TestWithTimer):
+class TestOniomAtoms(TestWithTimer):
     # Test constants
     small_mol = prefix + "test_files/malonate-3_waters.xyz"
 
@@ -71,10 +71,10 @@ class TestAtoms(TestWithTimer):
 
     # test cases
     def test_store_atoms(self):
-        atoms_read = self.read_xyz(TestAtoms.small_mol)
+        atoms_read = self.read_xyz(TestOniomAtoms.small_mol)
         atoms_manual = []
         mol = []
-        with open(TestAtoms.small_mol) as f:
+        with open(TestOniomAtoms.small_mol) as f:
             # split xyz file into info matrix
             tmp = f.read()
             tmp = tmp.split("\n")
@@ -134,14 +134,14 @@ class TestAtoms(TestWithTimer):
             self.assertTrue(float(atom) == ref)
 
     def test_less_than(self):
-        atoms = Geometry(TestAtoms.small_mol)
+        atoms = Geometry(TestOniomAtoms.small_mol)
         atoms = atoms.atoms
         self.assertTrue(atoms[2] < atoms[3])
         self.assertTrue(atoms[4] < atoms[2])
         self.assertTrue(atoms[5] < atoms[3])
 
     def test_add_tag(self):
-        mol = self.read_xyz(TestAtoms.small_mol)
+        mol = self.read_xyz(TestOniomAtoms.small_mol)
         for atom in mol:
             new_tags = [random.random() for i in range(10)]
             old_tags = atom.tags
@@ -173,7 +173,7 @@ class TestAtoms(TestWithTimer):
     # measurement
 
     def test_is_connected(self):
-        atoms = self.read_xyz(TestAtoms.small_mol)
+        atoms = self.read_xyz(TestOniomAtoms.small_mol)
         conn_valid = ['2,3,4',
                       '1',
                       '1,5,8,9',
@@ -214,13 +214,13 @@ class TestAtoms(TestWithTimer):
         self.assertTrue(a1.dist(a2) == 1)
 
     def test_angle(self):
-        mol = self.read_xyz(TestAtoms.small_mol)
+        mol = self.read_xyz(TestOniomAtoms.small_mol)
         angle = mol[17].angle(mol[16], mol[18])
         self.assertTrue(abs(np.rad2deg(angle) - 101.1) < 10**(-1))
 
 class TestOniomSanity(TestWithTimer):
-    a = TestAtoms()
-    atomlist = a.read_xyz(TestAtoms.small_mol)
+    a = TestOniomAtoms()
+    atomlist = a.read_xyz(TestOniomAtoms.small_mol)
  
     def test_check_charges(self):
         self.assertTrue(OniomSanity.check_charges(self.atomlist[:],-1))

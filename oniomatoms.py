@@ -62,8 +62,18 @@ class OniomAtom(Atom):
         s += " {: 2d}  ".format(-1 if self.flag else 0)
         s += "{}".format(self.name)
         s += "   {}".format(self.layer)
-        s += "   {}".format(self.atomtype)
-        s += "   {}".format(self.charge)
+        try:
+            s += "   {}".format(self.atomtype)
+        except AttributeError:
+            pass
+        try:
+            s += "   {}".format(self.charge)
+        except AttributeError:
+            pass
+        try:
+            s += "   {}".format(self.tags)
+        except AttributeError:
+            pass
         return s
 
     def get_layer(self):
@@ -88,6 +98,16 @@ class OniomAtom(Atom):
  
     def change_charge(self, newcharge):
         self.charge[0] = float(newcharge)
+
+    def __gt__(self, other):
+        if not isinstance(other, OniomAtom):
+            raise TypeError("cannot compare atoms of different type")
+        if self.layer == "H" and self.layer != other.layer:
+            return True
+        elif self.layer == "M" and other.layer == "L":
+            return True
+        else:
+            return False
 
 class ChargeSum:
     def __init__(self):
