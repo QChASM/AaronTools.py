@@ -20,8 +20,8 @@ class Component(Geometry):
     :key_atoms:     list(Atom) the atoms used for mapping
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Ligands/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/Ligands/*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Ligands", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Ligands", "*.xyz")
 
     def __init__(
         self,
@@ -47,8 +47,8 @@ class Component(Geometry):
             if structure.endswith(".xyz"):
                 structure = structure[:-4]
             for f in glob(Component.AARON_LIBS) + glob(Component.BUILTIN):
-                match = re.search("/" + structure + ".xyz", f)
-                if match is not None:
+                match = structure + ".xyz" == os.path.basename(f)
+                if match:
                     structure = f
                     break
             else:
@@ -100,6 +100,9 @@ class Component(Geometry):
         if end provided, this is the atom where the substituent is attached
         if end==None, replace the smallest fragment containing `target`
         """
+        if not isinstance(sub, Substituent):
+            sub = Substituent(sub)
+
         Geometry.substitute(self, sub, target, attached_to)
         self.detect_backbone()
 
@@ -294,3 +297,4 @@ class Component(Geometry):
                         axis = a.bond(b)
                         center = b.coords
                         self.minimize_torsion(frag, axis, center, geom)
+

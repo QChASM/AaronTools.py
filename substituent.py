@@ -26,9 +26,9 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Subs/*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools/Substituents/*.xyz")
-    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache/substituents")
+    AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
+    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache", "substituents")
 
     try:
         with open(CACHE_FILE) as f:
@@ -86,14 +86,14 @@ class Substituent(Geometry):
             # find substituent xyz file
             fsub = None
             for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-                match = re.search("/" + sub + ".xyz", f)
-                if match is not None:
+                match = sub + ".xyz" == os.path.basename(f)
+                if match:
                     fsub = f
                     break
             # or assume we were given a file name instead
             if not fsub and ".xyz" in sub:
                 fsub = sub
-                sub = sub.split("/")[-1].rstrip(".xyz")
+                sub = os.path.basename(sub).rstrip(".xyz")
 
             if fsub is None:
                 raise RuntimeError("substituent name not recognized: %s" % fsub)
@@ -158,7 +158,8 @@ class Substituent(Geometry):
             self.atoms[0].connected.remove(self.end)
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-            match = re.search("/([^/]*).xyz", f)
+            filename = os.path.basename(f)
+            match = re.search("^([\s\S]+).xyz", filename)
             name = match.group(1)
             # test number of atoms against cache
             if name in sub_lengths and len(self.atoms) != sub_lengths[name]:
@@ -213,13 +214,12 @@ class Substituent(Geometry):
         # update cache
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
-            try:
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
-            except FileNotFoundError:
+            if not os.path.exists(os.path.dirname(Substituent.CACHE_FILE)):
                 os.makedirs(os.path.dirname(Substituent.CACHE_FILE))
-                with open(Substituent.CACHE_FILE, "w") as f:
-                    json.dump(Substituent.cache, f)
+
+            with open(Substituent.CACHE_FILE, "w") as f:
+                json.dump(Substituent.cache, f)
+        
         return found
 
     def align_to_bond(self, bond):
@@ -245,7 +245,8 @@ class Substituent(Geometry):
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
 
-    def from_string(name, form='smiles'):
+    @classmethod
+    def from_string(cls, name, form='smiles'):
         """
         creates a substituent from a string
         name    str     identifier for substituent
@@ -296,15 +297,16 @@ class Substituent(Geometry):
         pos2 = smiles.index(my_rad)+len(my_rad)
         previous_atoms = elements.findall(smiles[:pos1])
         added_H_ndx = len(previous_atoms)+1
-        mod_smiles = smiles[:pos1] + my_rad + '(H)' + smiles[pos2:]
+        if '+' not in my_rad and '-' not in my_rad:
+            mod_smiles = smiles[:pos1] + re.sub(r'H\d+', '', my_rad[1:-1]) + smiles[pos2:]
+        else:
+            mod_smiles = smiles[:pos1] + my_rad[:-1].rstrip('H') + ']' + '(H)' + smiles[pos2:]
+        
         #fix triple bond url
         mod_smiles = mod_smiles.replace('#', '%23')
 
         #grab structure from cactus
-        url_sd = "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf" % mod_smiles
-        s_sd = urlopen(url_sd).read().decode('utf8')
-        f = FileReader((name, "sd", s_sd))
-        geom = Geometry(f)
+        geom = Geometry.from_string(mod_smiles, form='smiles')
 
         #the H we added is in the same position in the structure as in the smiles string
         added_H = geom.atoms[added_H_ndx]

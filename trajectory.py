@@ -1,7 +1,6 @@
 """for handling the change in structure of a series of geometries"""
 import numpy as np
-from scipy import integrate
-from scipy.linalg import null_space
+from AaronTools.utils.utils import integrate
 
 class Pathway:
     """
@@ -92,11 +91,7 @@ class Pathway:
         #we need N_Cart basis vectors
         if len(B) < N_Cart:
             if len(B) > 0:
-                #if we already have some vectors, get the rest from the null space
-                #of the current set
-                B = np.array(B)
-                ns = np.transpose(null_space(B))
-                B = np.concatenate((B, ns))
+                raise RuntimeError("number of basis vectors (%i) is less than 3N (%i)" % (len(B), N_Cart))
             else:
                 #if we don't have any, this is equivalent to using each atom's
                 #x, y, and z coordinates as our basis
@@ -146,7 +141,7 @@ class Pathway:
         arc_length = Pathway.get_arc_length(C)
 
         #region_length = [simpson(arc_length, m, m+1) for m in range(0, self.nG-1)]
-        region_length = [integrate.quad(arc_length, m, m+1)[0] for m in range(0, self.nG-1)]
+        region_length = [integrate(arc_length, m, m+1)[0] for m in range(0, self.nG-1)]
         self.region_length = region_length
 
         #set self's coordinate function (coordinates are coefficients for cartesean displacement representation)
@@ -184,6 +179,7 @@ class Pathway:
 
         return coord, dcoorddt
 
+    @staticmethod
     def get_E_func(cE, region_length):
         """just like get_coord_func, but for energies"""
         def E_func(t):
@@ -201,7 +197,8 @@ class Pathway:
             return dE
 
         return E_func, dEdt_func
-
+    
+    @staticmethod
     def dXYZ_to_Q(dXYZ, Bi):
         """converts Cartesian changes to whatever basis set Bi is (normal mode displacements/Cartesian)
         returns a vector containing the coefficients of each basis matrix"""
@@ -209,6 +206,7 @@ class Pathway:
         a = np.dot(Bi, q)
         return a
 
+    @staticmethod
     def q_to_xyz(Gi, modes, current_q):
         """takes current_q weights for modes (basis matrices), and a Geometry
         returns Geometry that has coordinates modified"""
@@ -221,6 +219,7 @@ class Pathway:
 
         return G
 
+    @staticmethod
     def get_splines_mat(n_nodes):
         """generate matrix for fitting cubic splines to data
         matrix is 4*n_regions x 4*n_regions (n_regions = n_nodes-1)
@@ -258,6 +257,7 @@ class Pathway:
 
         return M
 
+    @staticmethod
     def get_splines_vector(data):
         """organize data into a vector that can be used with cubic splines matrix"""
         n_regions = len(data) - 1
@@ -269,7 +269,8 @@ class Pathway:
             v[2*i+1] = data[i+1]
 
         return v
-
+    
+    @staticmethod
     def t_to_s(t, region_length):
         """maps t ([0, 1]) to s (changes linearly with displacement coordinates
         need to map b/c cubic splines polynomials generated for interpolation subregions
@@ -292,6 +293,7 @@ class Pathway:
         s = r+(u-region_start[r])/region_length[r]
         return s, r
 
+    @staticmethod
     def s_to_t(s, region_length):
         """map s (changes linearly with displacement coordinate) to t (ranges from 0 to 1)
         s               float           point on interpolation arc
@@ -308,6 +310,7 @@ class Pathway:
         t = u/path_length
         return t
 
+    @staticmethod
     def get_arc_length(C):
         """returns a function that can be integrated to determine the arc length of interpolation Pathway subregions
         C       array-like(float, shape = (4*n_subregions, N_Cart))     matrix of cubic polynomial coefficients
@@ -323,9 +326,7 @@ class Pathway:
             for i in range(0, N_Cart):
                 f += (3*C[4*r][i]*(s-r)**2+2*C[4*r+1][i]*(s-r)+C[4*r+2][i])**2
 
-            f = np.sqrt(f)
-
-            return f
+            return np.sqrt(f)
 
         return unnormalized_func
 

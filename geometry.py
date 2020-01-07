@@ -5,6 +5,8 @@ from collections import deque
 from copy import copy as shallow_copy
 from copy import deepcopy
 from warnings import warn
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 import numpy as np
 
@@ -66,6 +68,7 @@ class Geometry:
                 return
         else:
             return
+
 
         # only get here if we were given a file reader object or a file name
         self.name = from_file.name
@@ -158,8 +161,11 @@ class Geometry:
         tmp = self.name
         if name is not None:
             self.name = name
-        FileWriter.write_file(self, style, *args, **kwargs)
+        out = FileWriter.write_file(self, style, *args, **kwargs)
         self.name = tmp
+
+        if out is not None:
+            return out
 
     def copy(self, atoms=None, name=None, comment=None):
         """
@@ -269,6 +275,9 @@ class Geometry:
                         else:
                             rv += _find(i)
 
+            elif isinstance(arg, str) and len(arg.split('-')) > 1:
+                rv += _find_between(arg)
+
             elif isinstance(arg, str) and arg in ELEMENTS:
                 # this is an element
                 for a in self.atoms:
@@ -328,7 +337,7 @@ class Geometry:
         # error if no atoms found (no error if AND filters out all found atoms)
         if len(rv) == 1:
             if len(rv[0]) == 0:
-                raise LookupError("Could not find atom: " + str(args))
+                raise LookupError("Could not find atom: %s on\n%s\n%s" % (str(args), self.name, str(self)))
             return rv[0]
 
         # exclude atoms not fulfilling AND requirement
@@ -608,7 +617,7 @@ class Geometry:
                     continue
                 m = m.split(",")
                 for i in m:
-                    if i == "":
+                    if i.strip() == "":
                         continue
                     rv["key_atoms"] += [int(i) - 1]
         self.other = rv
@@ -1300,8 +1309,6 @@ class Geometry:
         if end==None, replace the smallest fragment containing `target`
         """
         # set up substituent object
-        if not isinstance(sub, AaronTools.substituent.Substituent):
-            sub = AaronTools.substituent.Substituent(sub)
         sub.refresh_connected()
 
         # determine target and atoms defining connection bond
@@ -1375,4 +1382,161 @@ class Geometry:
         self += sub.atoms[1:]
         # fix bond distance
         self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
+
+    def ring_substitute(self, targets, ring_fragment):
+        """take ring, reorient it, put it on self"""
+
+        def attach_short(geom, walk, ring_fragment):
+            """for when walk < end, rmsd and remove end[1:-1]"""
+            ring_fragment.RMSD(geom, align=True, targets=ring_fragment.end, ref_targets=walk)
+
+            ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
+
+            for atom in ring_fragment.end[1:-1]:
+                for t in atom.connected:
+                    if t not in ring_fragment.end:
+                        ring_fragment -= t
+
+                ring_fragment -= atom
+
+            ring_fragment.end = walk[1:-1]
+
+            r = geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
+            geom -= [walk[0], walk[-1]]
+
+            geom.atoms.extend(ring_fragment.atoms)
+            geom.refresh_connected()
+
+        def ring_waddle(geom, targets, walk_end, ring):
+            """adjusted the new bond lengths by moving the ring in a 'waddling' motion"""
+            d0 = walk_end[0].dist(targets[0])
+            
+            if hasattr(targets[0], "_radii") and hasattr(walk_end[0], "_radii"):
+                d0_exp = targets[0]._radii + walk_end[0]._radii
+            else:
+                d0_exp = d0
+
+            if hasattr(ring.end[0], "_radii") and hasattr(walk_end[0], "_radii"):
+                d1_exp = ring.end[0]._radii + walk_end[0]._radii
+            else:
+                d1_exp = ring.end[0].dist(walk_end[0])
+
+            d1 = (d0/d0_exp) * d1_exp
+
+            v1 = ring.end[-1].bond(walk_end[0])
+            v2 = ring.end[-1].bond(ring.end[0])
+
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
+
+            target_angle = np.arccos((d1**2 - v1_n**2 - v2_n**2) / (-2. * v1_n * v2_n))
+            current_angle = ring.end[-1].angle(ring.end[0], walk_end[0])
+            ra = target_angle - current_angle
+
+            rv = np.cross(v1, v2)
+
+            ring.rotate(rv, ra, center=ring.end[-1])
+
+
+            d0 = walk_end[-1].dist(targets[-1])
+            
+            if hasattr(targets[-1], "_radii") and hasattr(walk_end[-1], "_radii"):
+                d0_exp = targets[-1]._radii + walk_end[-1]._radii
+            else:
+                d0_exp = d0
+
+            if hasattr(ring.end[-1], "_radii") and hasattr(walk_end[-1], "_radii"):
+                d1_exp = ring.end[-1]._radii + walk_end[-1]._radii
+            else:
+                d1_exp = ring.end[-1].dist(walk_end[-1])
+
+            d1 = (d0/d0_exp) * d1_exp
+
+            v1 = ring.end[0].bond(walk_end[-1])
+            v2 = ring.end[0].bond(ring.end[-1])
+
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
+
+            target_angle = np.arccos((d1**2 - v1_n**2 - v2_n**2) / (-2. * v1_n * v2_n))
+            current_angle = ring.end[0].angle(ring.end[-1], walk_end[-1])
+            ra = target_angle - current_angle
+
+            rv = np.cross(v1, v2)
+
+            ring.rotate(rv, ra, center=ring.end[0])
+
+        targets = self.find(targets)
+
+        #find a path between the targets
+        walk = self.short_walk(*targets)
+        if len(ring_fragment.end) != len(walk):
+            ring_fragment.find_end(len(walk), start=ring_fragment.end)
+
+        if len(walk) == len(ring_fragment.end) and len(walk) != 2:
+            attach_short(self, walk, ring_fragment)
+
+        elif len(walk[1:-1]) == 0:
+            raise ValueError("insufficient information to close ring - selected atoms are bonded to each other: %s" % \
+                    (" ".join(str(a) for a in targets)))
+
+        else:
+            raise ValueError("this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i" % \
+                    (targets[0], targets[1], ring_fragment.name, len(ring_fragment.end), len(walk)))
+
+    def short_walk(self, atom1, atom2):
+        """try to find the shortest path between atom1 and atom2"""
+        a1 = self.find(atom1)[0]
+        a2 = self.find(atom2)[0]
+        l = [a1]
+        start = a1
+        max_iter = len(self.atoms)
+        i = 0
+        while start != a2:
+            i += 1
+            if i > max_iter:
+                raise LookupError("could not determine best path between %s and %s" % (str(atom1), str(atom2)))
+            v1 = start.bond(a2)
+            max_overlap = None
+            for atom in start.connected:
+                if atom not in l:
+                    v2 = start.bond(atom)
+                    overlap = np.dot(v1, v2)
+                    if max_overlap is None or overlap > max_overlap:
+                        new_start = atom
+                        max_overlap = overlap
+
+            l.append(new_start)
+            start = new_start
+
+        return l
+
+    @classmethod
+    def from_string(cls, name, form='smiles'):
+        """get structure from string
+        form=iupac -> iupac to smiles from opsin API
+                       --> form=smiles
+        form=smiles -> structure from cactvs API"""
+
+        accepted_forms = ['iupac', 'smiles']
+
+        if form not in accepted_forms:
+            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
+
+
+        if form == 'smiles':
+            smiles = name
+        elif form == 'iupac':
+            #opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode('utf8')
+            except HTTPError:
+               raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
+
+        url_sd = "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf" % smiles
+        s_sd = urlopen(url_sd).read().decode('utf8')
+        f = FileReader((name, "sd", s_sd))
+        return Geometry(f)
 

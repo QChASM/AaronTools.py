@@ -3,7 +3,7 @@ import unittest
 
 from AaronTools.trajectory import Pathway
 from AaronTools.geometry import Geometry
-from AaronTools.test import TestWithTimer, prefix
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 from numpy.linalg import inv
 from numpy import dot, finfo
 
@@ -17,7 +17,7 @@ class TestPathway(TestWithTimer):
         S = Pathway([self.t60, self.t90])
         geom = S.Geom_func(0.4)
         rmsd = geom.RMSD(ref, align=True)
-        self.assertTrue(rmsd < 0.15)
+        self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
 
 
     def test_splines_values(self):

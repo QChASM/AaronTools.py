@@ -75,18 +75,20 @@ class FileWriter:
             raise NotImplementedError(file_type_err.format(style))
 
         if style.lower() == "xyz":
-            cls.write_xyz(geom, append, outfile)
+            out = cls.write_xyz(geom, append, outfile)
         elif style.lower() == "com":
             if "theory" in kwargs and "step" in kwargs:
                 step = kwargs["step"]
                 theory = kwargs["theory"]
                 del kwargs["step"]
                 del kwargs["theory"]
-                cls.write_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_com(geom, step, theory, outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
                 )
+
+        return out
 
     @classmethod
     def write_xyz(cls, geom, append, outfile=None):
@@ -97,15 +99,13 @@ class FileWriter:
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
-        s = s.rstrip()
-
         if outfile is None:
             #if no output file is specified, use the name of the geometry
             with open(geom.name + ".xyz", mode) as f:
                 f.write(s)
         elif outfile is False:
             #if no output file is desired, just return the file contents
-            return s
+            return s.strip()
         else:
             #write output to the requested destination
             with open(outfile, mode) as f:
@@ -200,7 +200,7 @@ class FileReader:
             elif self.file_type == "sd":
                 self.read_sd(f)
             elif self.file_type == "xyz":
-                self.read_xyz(f)
+                self.read_xyz(f, get_all)
             elif self.file_type == "com":
                 self.read_com(f)
 
@@ -476,7 +476,7 @@ class FileReader:
                     ).group(1)
                 if "EmpiricalDispersion=" in line:
                     other["emp_dispersion"] = re.search(
-                        "EmpiricalDispersion=(\s+)", line
+                        "EmpiricalDispersion=(\S+)", line
                     ).group(1)
                 if "int=(grid(" in line:
                     other["grid"] = re.search("int=\(grid(\S+)", line).group(1)

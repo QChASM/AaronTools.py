@@ -745,3 +745,4 @@ class Catalyst(Geometry):
                 axis = sub.atoms[0].bond(sub.end)
                 center = sub.end
                 self.minimize_torsion(sub.atoms, axis, center)
+

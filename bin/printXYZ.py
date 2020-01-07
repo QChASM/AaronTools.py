@@ -57,7 +57,10 @@ for f in args.infile:
                 raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
 
     geom = Geometry(infile)
-    geom.comment = args.comment[0]
+    if args.comment[0]:
+        geom.comment = args.comment[0]
+    else:
+        geom.comment=f
 
     s = FileWriter.write_xyz(geom, append=True, outfile=args.outfile[0])
     if not args.outfile[0]:

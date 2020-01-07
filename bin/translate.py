@@ -8,30 +8,6 @@ import argparse
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileWriter, FileReader
 
-def range2int(s):
-    """split on ',' and turn '-' into a range
-    range2int(['1,3-5,7']) returns [0, 2, 3, 4, 6]
-    returns None if input is None"""
-    if s is None:
-        return s
-
-    if isinstance(s, list):
-        range_str = ','.join(s)
-    elif isinstance(s, str):
-        range_str = s
-
-    out = []
-    c = range_str.split(',')
-    for v in c:
-        n = v.split('-')
-        if len(n) == 2:
-            out.extend([i for i in range(int(n[0])-1, int(n[1]))])
-        else:
-            for i in n:
-                out.append(int(i)-1)
-
-    return out
-
 translate_parser = argparse.ArgumentParser(description="translate a fragment or molecule's coordinates", \
     formatter_class=argparse.RawTextHelpFormatter)
 translate_parser.add_argument('infile', metavar='input file', \
@@ -138,13 +114,13 @@ for f in args.infile:
 
     #targets = None means whole geometry is used
     if args.targets is not None:
-        targets = [geom.atoms[i] for i in range2int(args.targets[0])]
+        targets = geom.find(args.targets[0])
     else:
         targets = None
 
     #fragment = None means whole geometry is moved
     if args.fragment is not None:
-        fragment = [geom.atoms[i] for i in range2int(args.fragment[0])]
+        fragment = geom.find(args.fragment)
     else:
         fragment = None
 

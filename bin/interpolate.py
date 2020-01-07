@@ -86,6 +86,10 @@ interpolate_parser.add_argument('-t', '--print-ts', \
                             dest='specific_ts', \
                             help='space-separated list of t values at which to print structures \n{t| 0 <= t <= 1}')
 
+"""
+we used scipy.linalg.null_space to use normal modes to get to 3N coordinates
+but we don't want scipy to be a requirement for just one tiny thing
+
 interpolate_parser.add_argument('-q', '--use-normal-modes', \
                             type=str, \
                             nargs=1, \
@@ -94,6 +98,7 @@ interpolate_parser.add_argument('-q', '--use-normal-modes', \
                             metavar='frequency_job.log', \
                             dest='freq_file', \
                             help='use normal mode displacements from specified file for \ninterpolation coordinates')
+"""
 
 args = interpolate_parser.parse_args()
 
@@ -134,6 +139,7 @@ if len(Gs) <= 1:
     warn('use the -u option to include structures without an associated energy')
     sys.exit(0)
 
+"""
 #if a frequency job is supplied, the normal mode displacements will be used as 
 #the interpolation coordinates
 if args.freq_file:
@@ -147,6 +153,9 @@ if args.freq_file:
 else:
     ref_G = Gs[0]
     Q = None
+"""
+ref_G = Gs[0]
+Q = None
 
 #align all input geometries to the reference
 for G in Gs:
@@ -196,6 +205,7 @@ if args.specific_ts:
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
         else:
             G = S.Geom_func(t)
+            E = S.E_func(t)
             comment = "E(%f) = %f" % (t, E)
             G.comment = comment
             write_geoms.append(G.copy())
@@ -228,9 +238,11 @@ else:
             G.comment = comment
             write_geoms.append(G.copy())
 
-w = width(len(write_geoms))
-fmt = "%0" + "%i" % w + "i"
-for G in write_geoms:
+if len(write_geoms) > 0:
+    w = width(len(write_geoms))
+    fmt = "%0" + "%i" % w + "i"
+
+for i, G in enumerate(write_geoms):
     my_outfile = outfile.replace("&i", fmt % i)
     if my_outfile == outfile:
         #if there's no &i, we are writing all the structures to the same file
