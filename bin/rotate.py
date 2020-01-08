@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileWriter, FileReader
+from AaronTools.fileIO import FileReader, read_types
 
 rotate_parser = argparse.ArgumentParser(description="rotate a fragment or molecule's coordinates", \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -20,6 +20,7 @@ rotate_parser.add_argument('-if', '--input-format', \
                         type=str, \
                         nargs=1, \
                         default=None, \
+                        choices=read_types, \
                         dest='input_format', \
                         help="file format of input - required if input is stdin")
 
@@ -184,6 +185,6 @@ for f in args.infile:
         else:
             outfile = args.outfile[0]
         
-        s = FileWriter.write_xyz(geom, append=True, outfile=outfile)
+        s = geom.write(append=True, outfile=outfile)
         if not outfile:
             print(s)

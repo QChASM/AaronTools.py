@@ -7,7 +7,7 @@ import argparse
 
 #from AaronTools.const import UNIT
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.fileIO import FileReader
 from AaronTools.trajectory import Pathway
 
 from warnings import warn
@@ -202,7 +202,7 @@ for i, mode in enumerate(modes):
 
             Gt = S.Geom_func(t)
             Gt.comment = "animating mode %s scaled to displace at most %s" % (repr(mode), scaling(t))
-            s = FileWriter.write_xyz(Gt, append, outfile=outfile)
+            s = Gt.write(append, outfile=outfile)
             if not outfile:
                 print(s)
 
@@ -215,6 +215,6 @@ for i, mode in enumerate(modes):
         Gm.comment = "following mode %s scaled to displace at most %s" % (repr(mode), repr(scale[i]))
 
         outfile = outfiles[i]
-        s = FileWriter.write_xyz(Gm, append, outfile=outfile)
+        s = Gm.write(append, outfile=outfile)
         if not outfile:
             print(s)

@@ -3,7 +3,7 @@
 import argparse
 from sys import stdin, argv, exit
 from AaronTools.atoms import Atom
-from AaronTools.fileIO import FileReader, FileWriter, read_types
+from AaronTools.fileIO import FileReader, read_types
 from AaronTools.catalyst import Catalyst
 from AaronTools.component import Component
 
@@ -42,7 +42,7 @@ maplig_parser.add_argument('-k', '--key-atoms', metavar='index', \
 maplig_parser.add_argument('-o', '--output', \
                             nargs=1, \
                             type=str, \
-                            default=False, \
+                            default=[False], \
                             required=False, \
                             metavar='output destination', \
                             dest='outfile', \
@@ -70,9 +70,6 @@ for infile in args.infile:
     else:
         cat.map_ligand(lig, cat.components['ligand'][0].key_atoms)
 
-    if args.outfile:
-        FileWriter.write_xyz(cat, append=False, outfile=args.outfile[0])
-    else:
-        s = FileWriter.write_xyz(cat, append=False, outfile=False) 
+    s = cat.write(append=False, outfile=args.outfile[0])
+    if not args.outfile[0]:
         print(s)
-

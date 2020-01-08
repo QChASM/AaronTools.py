@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileWriter, FileReader
+from AaronTools.fileIO import FileReader, read_types
 
 translate_parser = argparse.ArgumentParser(description="translate a fragment or molecule's coordinates", \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -19,6 +19,7 @@ translate_parser.add_argument('infile', metavar='input file', \
 translate_parser.add_argument('-if', '--input-format', \
                         type=str, \
                         nargs=1, \
+                        choices=read_types, \
                         default=None, \
                         dest='input_format', \
                         help="file format of input - required if input is stdin")
@@ -154,6 +155,6 @@ for f in args.infile:
     
     geom.coord_shift(translate_vector, targets=fragment)
 
-    s = FileWriter.write_xyz(geom, append=True, outfile=args.outfile[0])
+    s = geom.write(append=True, outfile=args.outfile[0])
     if not args.outfile[0]:
         print(s)

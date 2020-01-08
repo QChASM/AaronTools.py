@@ -7,6 +7,7 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.const import RADII
 
 libaddsub_parser = argparse.ArgumentParser(description='add a substituent to your personal library', \
                     formatter_class=argparse.RawTextHelpFormatter)
@@ -73,6 +74,12 @@ theta = np.arccos((d**2 - 2) / -2)
 vx = np.cross(vb, x_axis)
 
 sub.rotate(vx, theta)
+
+if target.element in RADII:
+    goal_dist = RADII['C'] + RADII[target.element]
+    sub.coord_shift(goal_dist - target.coords[0])
+else:
+    raise RuntimeWarning("No bond radius for %s, distance will not be adjusted" % target.element)
 
 sub.comment = "CF:%i,%i" % (n_confs, angle)
 

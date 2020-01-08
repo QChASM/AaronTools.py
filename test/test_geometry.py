@@ -482,13 +482,13 @@ class TestGeometry(TestWithTimer):
         mol1 = mol.copy()
         mol1.ring_substitute(['7', '8'], RingFragment('benzene'))
         rmsd = mol1.RMSD(ref1, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref1))
+        self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
         mol2.ring_substitute(['7', '8'], RingFragment('cyclohexane-chair.1'))
         rmsd = mol2.RMSD(ref2, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref2))
+        self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 
         mol3 = Geometry(TestGeometry.naphthalene)
         ref3 = Geometry(TestGeometry.pyrene)

@@ -137,6 +137,7 @@ for i, mode in enumerate(modes):
 
         v_len = np.linalg.norm(dX[n])
 
+        #we also scale the cone part of the arrow
         info = tuple(t for s in [ \
             [x for x in G.atoms[n].coords], \
             [x for x in G.atoms[n].coords+dX[n]], \
@@ -148,4 +149,3 @@ for i, mode in enumerate(modes):
             output += ".arrow %10.6f %10.6f %10.6f   %10.6f %10.6f %10.6f   0.02 0.05 %5.3f #%s\n" % info
 
 print(output.rstrip())
-
