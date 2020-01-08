@@ -200,7 +200,7 @@ class FileReader:
             elif self.file_type == "sd":
                 self.read_sd(f)
             elif self.file_type == "xyz":
-                self.read_xyz(f)
+                self.read_xyz(f, get_all)
             elif self.file_type == "com":
                 self.read_com(f)
 
