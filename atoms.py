@@ -2,10 +2,11 @@
 import json
 from os import path
 from warnings import warn
+from copy import deepcopy
 
 import numpy as np
 
-from AaronTools.const import CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
+from AaronTools.const import CONNECTIVITY, SATURATION, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 warn_LJ = set([])
 
@@ -87,6 +88,7 @@ class Atom:
         _rank
         _radii          float           for calculating if bonded
         _connectivity   int             max connections without hypervalence
+        _saturation     int             max connections without hypervalence or charges
     """
 
     BondOrder()
@@ -101,6 +103,7 @@ class Atom:
             self.element = element
             self._set_radii()
             self._set_connectivity()
+            self._set_saturation()
         else:
             raise ValueError("Unknown element detected:", element)
 
@@ -184,6 +187,16 @@ class Atom:
             self._connectivity = int(CONNECTIVITY[self.element])
         except KeyError:
             warn("Connectivity not found for element: " + self.element)
+        return
+
+    def _set_saturation(self):
+        """Sets theoretical maximum connectivity without the atom having a formal charge.
+        If # connections > self._saturation, then atom is hyper-valent or has a non-zero formal charge
+        """
+        try:
+            self._saturation = int(SATURATION[self.element])
+        except KeyError:
+            warn("Saturation not found for element: " + self.element)
         return
 
     def add_tag(self, *args):
@@ -275,3 +288,254 @@ class Atom:
 
     def bond_order(self, other):
         return BondOrder.get(self, other)
+
+    @classmethod
+    def get_shape(cls, shape_name):
+        """returns dummy atoms in an idealized vsepr geometry
+        shape_name can be:
+        linear 1
+        linear 2
+        bent 2a (tetrahedral electron geometry w/ 2 bonds)
+        bent 2b (trigonal planar electron geometry)
+        trigonal planar
+        bent 3 (tetrahedral electron geometry w/ 3 bonds)
+        t shaped
+        sawhorse
+        square planar
+        trigonal bipyramid
+        square pyramid
+        octahedral
+        """
+        if shape_name == 'linear 1':
+            return cls.linear_shape()[0:2]
+        elif shape_name == 'linear 2':
+            return cls.linear_shape()
+        elif shape_name == 'bent 2a':
+            return cls.tetrahedral_shape()[0:3]
+        elif shape_name == 'bent 2b':
+            return cls.trigonal_planar_shape()[0:3]
+        elif shape_name == 'trigonal planar':
+            return cls.trigonal_planar_shape()
+        elif shape_name == 'bent 3':
+            return cls.tetrahedral_shape()[0:4]
+        elif shape_name == 't shaped':
+            return cls.octahedral_shape()[0:4]
+        elif shape_name == 'tetrahedral':
+            return cls.tetrahedral_shape()
+        elif shape_name == 'sawhorse':
+            return cls.trigonal_bipyramidal_shape()[0:5]
+        elif shape_name == 'square planar':
+            return cls.octahedral_shape()[0:5]
+        elif shape_name == 'trigonal bipyramid':
+            return cls.trigonal_bipyramid_shape()
+        elif shape_name == 'square pyramid':
+            return cls.octahedral_shape()[0:6]
+        elif shape_name == 'octahedral':
+            return cls.octahedral_shape()
+        else:
+            raise RuntimeError("no shape method is defined for %s" % shape_name)
+
+    @classmethod
+    def linear_shape(cls):
+        center = Atom('X', np.zeros(3), name='0')
+        pos1 = Atom('X', np.array([1., 0., 0.]), name='1')
+        pos2 = Atom('X', np.array([-1., 0., 0.]), name='2')
+
+        return [center, pos1, pos2]
+
+    @classmethod
+    def trigonal_planar_shape(cls):
+        positions = cls.trigonal_bipyramidal_shape()
+        return positions[:-2]
+
+    @classmethod
+    def tetrahedral_shape(cls):
+        center = Atom('X', np.zeros(3), name='0')
+        angle = np.deg2rad(109.471/2)
+        pos1 = Atom('X', np.array([np.cos(angle), -np.sin(angle), 0.]), name='1')
+        pos2 = Atom('X', np.array([np.cos(angle), np.sin(angle), 0.]), name='2')
+        pos3 = Atom('X', np.array([-np.cos(angle), 0., np.sin(angle)]), name='3')
+        pos4 = Atom('X', np.array([-np.cos(angle), 0., -np.sin(angle)]), name='4')
+
+        return [center, pos1, pos2, pos3, pos4]
+    
+    @classmethod
+    def trigonal_bipyramidal_shape(cls):
+        center = Atom('X', np.zeros(3), name='0')
+        angle = np.deg2rad(120)
+        pos1 = Atom('X', np.array([1., 0., 0.]), name='1')
+        pos2 = Atom('X', np.array([np.cos(angle), np.sin(angle), 0.]), name='2')
+        pos3 = Atom('X', np.array([np.cos(angle), -np.sin(angle), 0.]), name='3')
+        pos4 = Atom('X', np.array([0. ,0., 1.]), name='4')
+        pos5 = Atom('X', np.array([0. ,0., -1.]), name='5')
+
+        return [center, pos1, pos2, pos3, pos4, pos5]
+
+    @classmethod
+    def octahedral_shape(cls):
+        center = Atom('X', np.zeros(3), name='0')
+        pos1 = Atom('X', np.array([1., 0., 0.]), name='1')
+        pos2 = Atom('X', np.array([-1., 0., 0.]), name='2')
+        pos3 = Atom('X', np.array([0., 1., 0.]), name='3')
+        pos4 = Atom('X', np.array([0., -1., 0.]), name='4')
+        pos5 = Atom('X', np.array([0., 0., 1.]), name='5')
+        pos6 = Atom('X', np.array([0., 0., -1.]), name='6')
+
+        return [center, pos1, pos2, pos3, pos4, pos5, pos6]
+    
+    @staticmethod
+    def new_shape(old_shape, new_connectivity, bond_change):
+        """EXPERIMENTAL
+        returns the name of the expected vsepr geometry when the number of bonds
+        changes by +/- 1
+        
+        old_shape - :str: vsepr geometry name
+        new_connectivity - :int: connectivity (see Atom._connectivity)
+        bond_change - :int: +1 or -1, indicating that the number of bonds is changing by 1"""
+        if old_shape == 'linear 1':
+            if bond_change == 1:
+                return 'linear 2'
+            elif bond_change == -1:
+                return None
+
+        elif old_shape == 'linear 2':
+            if bond_change == 1:
+                if new_connectivity is not None and new_connectivity > 4:
+                    return 't shaped'
+                else:
+                    return 'trigonal planar'
+            elif bond_change == -1:
+                return 'linear 1'
+        
+        elif old_shape == 'bent 2a':
+            if bond_change == 1:
+                return 'bent 3'
+            elif bond_change == -1:
+                return 'linear 1'
+
+        elif old_shape == 'bent 2b':
+            if bond_change == 1:
+                return 'trigonal planar'
+            elif bond_change == -1:
+                return 'linear 1'
+
+        elif old_shape == 'trigonal planar':
+            if bond_change == 1:
+                return 'tetrahedral'
+            elif bond_change == -1:
+                if new_connectivity == 4:
+                    return 'bent 2a'
+                else:
+                    return 'bent 2b'
+
+        elif old_shape == 'bent 3':
+            if bond_change == 1:
+                return 'tetrahedral'
+            elif bond_change == -1:
+                return 'bent 2a'
+
+        elif old_shape == 't shaped':
+            if bond_change == 1:
+                if new_connectivity == 6:
+                    return 'square planar'
+                else:
+                    return 'sawhorse'
+            elif bond_change == -1:
+                return 'linear 2'
+
+        elif old_shape == 'tetrahedral':
+            if bond_change == 1:
+                return 'trigonal bipyramid'
+            elif bond_change == -1:
+                return 'bent 3'
+
+        elif old_shape == 'square planar':
+            if bond_change == 1:
+                return 'trigonal bipyramid'
+            elif bond_change == -1:
+                return 't shaped'
+        
+        elif old_shape == 'trigonal bipyramid':
+            if bond_change == 1:
+                return 'octahedral'
+            elif bond_change == -1:
+                return 'sawhorse'
+
+        elif old_shape == 'octahedral':
+            if bond_change == -1:
+                return 'trigonal bipryamid'
+
+        else:
+            raise RuntimeError("no shape method is defined for %s" % shape_name)
+
+    @classmethod
+    def linear_shape(cls):
+        center = Atom('X', np.zeros(3), name='0')
+        pos1 = Atom('X', np.array([1., 0., 0.]), name='1')
+        pos2 = Atom('X', np.array([-1., 0., 0.]), name='2')
+
+        return [center, pos1, pos2]
+    
+    def get_vsepr(self):
+        """determine vsepr geometry around an atom 
+        e.g. tetrahedral, sawhorse, etc.
+        returns geometry name as a string and the score assigned to that geometry
+        scores > 0.5 are generally questionable"""
+
+        #determine what geometries to try based on the number of bonded atoms
+        try_shapes = {}
+        if len(self.connected) == 1:
+            try_shapes['linear 1'] =  Atom.get_shape('linear 1')
+            
+        elif len(self.connected) == 2:
+            try_shapes['linear 2'] = Atom.get_shape('linear 2')
+            try_shapes['bent 2a'] = Atom.get_shape('bent 2a')
+            try_shapes['bent 2b'] = Atom.get_shape('bent 2b')
+            
+        elif len(self.connected) == 3:
+            try_shapes['trigonal planar'] = Atom.get_shape('trigonal planar')
+            try_shapes['bent 3'] = Atom.get_shape('bent 3')
+            try_shapes['t shaped'] = Atom.get_shape('t shaped')
+
+        elif len(self.connected) == 4:
+            try_shapes['tetrahedral'] = Atom.get_shape('tetrahedral')
+            try_shapes['sawhorse'] = Atom.get_shape('sawhorse')
+            try_shapes['square planar'] = Atom.get_shape('square planar')
+            
+        elif len(self.connected) == 5:
+            try_shapes['trigonal bipyramid'] = Atom.get_shape('trigonal bipyramid')
+            try_shapes['square pyramid'] = Atom.get_shape('square pyramid')
+
+        elif len(self.connected) == 6:
+            try_shapes['octahedral'] = Atom.get_shape('octahedral')
+
+        else:
+            return None
+
+        #make a copy of the atom and the atoms bonded to it
+        #set each bond length to 1 to more easily compare to the 
+        #idealized shapes from Atom
+        adjusted_shape = [deepcopy(atom) for atom in [self, *self.connected]]
+        for atom in adjusted_shape:
+            atom.coords -= self.coords
+
+        for atom in adjusted_shape[1:]:
+            atom.coords /= atom.dist(adjusted_shape[0])
+            
+        Y = np.array([position.coords for position in adjusted_shape])
+        r1 = np.matmul(np.transpose(Y), Y)
+        u, s1, vh = np.linalg.svd(r1)
+
+        best_score = None
+        best_shape = None
+        for shape in try_shapes:
+            X = np.array([position.coords for position in try_shapes[shape]])
+            r2 = np.matmul(np.transpose(X), X)
+            u, s2, vh = np.linalg.svd(r2)
+
+            score = sum([abs(x1 - x2) for x1, x2 in zip(s1, s2)])
+            if best_score is None or score < best_score:
+                best_score = score
+                best_shape = shape
+
+        return best_shape, best_score
