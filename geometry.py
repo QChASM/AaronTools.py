@@ -1396,6 +1396,7 @@ class Geometry:
             for atom in ring_fragment.end[1:-1]:
                 for t in atom.connected:
                     if t not in ring_fragment.end:
+                        ring_fragment.remove_fragment(t, atom, add_H=False)
                         ring_fragment -= t
 
                 ring_fragment -= atom

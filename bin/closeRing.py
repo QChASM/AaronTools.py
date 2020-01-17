@@ -5,7 +5,7 @@ from sys import stdin, argv, exit
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.ringfragment import RingFragment
+from AaronTools.ring import Ring
 
 ring_parser = argparse.ArgumentParser(description='close rings on a geometry', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -76,10 +76,10 @@ for infile in args.infile:
         ring = sub_info[2]
 
         if args.form[0] == 'from_library':
-            ring_geom = RingFragment(ring)
+            ring_geom = Ring(ring)
         else:
             path_length = len(geom.short_walk(atom1, atom2))-2
-            ring_geom = RingFragment.from_string(ring, end=path_length)
+            ring_geom = Ring.from_string(ring, end=path_length)
 
         key = (atom1, atom2)
         if key in targets:

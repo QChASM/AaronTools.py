@@ -10,7 +10,7 @@ from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
 
-class RingFragment(Geometry):
+class Ring(Geometry):
     """
     Attributes:
         name
@@ -18,8 +18,8 @@ class RingFragment(Geometry):
         end
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "RingFrags", "*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools", "RingFragments", "*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Rings", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Rings", "*.xyz")
 
     def __init__(
         self,
@@ -34,8 +34,8 @@ class RingFragment(Geometry):
         """
 
         if isinstance(frag, (Geometry, list)):
-            # we can create substituent object from fragment
-            if isinstance(frag, RingFragment):
+            # we can create ring object from a geometry
+            if isinstance(frag, Ring):
                 self.name = name if name else frag.name
                 self.end = end if end else frag.end 
             elif isinstance(frag, Geometry):
@@ -50,9 +50,9 @@ class RingFragment(Geometry):
                 self.atoms = frag
         
         else:  # or we can create from file
-            # find substituent xyz file
+            # find ring xyz file
             fsub = None
-            for f in glob(RingFragment.AARON_LIBS) + glob(RingFragment.BUILTIN):
+            for f in glob(Ring.AARON_LIBS) + glob(Ring.BUILTIN):
                 match = frag + ".xyz" == os.path.basename(f)
                 if match:
                     fsub = f
@@ -63,7 +63,7 @@ class RingFragment(Geometry):
                 frag = os.path.basename(frag).rstrip(".xyz")
 
             if fsub is None:
-                raise RuntimeError("substituent name not recognized: %s" % fsub)
+                raise RuntimeError("ring name not recognized: %s" % frag)
 
             # load in atom info
             from_file = FileReader(fsub)
@@ -143,13 +143,13 @@ class RingFragment(Geometry):
         ring = Geometry.from_string(name, form)
         if end is not None:
             if isinstance(end, int):
-                ring = RingFragment(ring)
+                ring = cls(ring)
                 ring.find_end(end)
                 return ring
             elif isinstance(end, list):
-                return RingFragment(ring, end=end, name=name)
+                return cls(ring, end=end, name=name)
             else:
                 raise ValueError("expected int or list for 'end' in 'from_string', got %s", str(end))
         else:
-            return RingFragment(ring, name=name)
+            return cls(ring, name=name)
 
