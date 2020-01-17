@@ -24,19 +24,6 @@ translate_parser.add_argument('-if', '--input-format', \
                         dest='input_format', \
                         help="file format of input - required if input is stdin")
 
-translate_parser.add_argument('-t', '--targets',\
-                        type=str, \
-                        nargs=1, \
-                        default=None, \
-                        required=False, \
-                        dest='targets', \
-                        metavar='targets', \
-                        help='target atoms on input (1-indexed)\n' + \
-                        'comma (,) and/or hyphen (-) separated list\n' + \
-                        'hyphens denote a range of atoms\n' + \
-                        'commas separate individual atoms or ranges\n' + \
-                        'Default: whole structure')
-
 translate_parser.add_argument('-f', '--fragment',\
                         type=str, \
                         nargs=1, \
@@ -45,6 +32,19 @@ translate_parser.add_argument('-f', '--fragment',\
                         dest='fragment', \
                         metavar='targets', \
                         help='fragment to move (default: whole structure)')
+
+translate_parser.add_argument('-t', '--targets',\
+                        type=str, \
+                        nargs=1, \
+                        default=None, \
+                        required=False, \
+                        dest='targets', \
+                        metavar='targets', \
+                        help='target atoms for -com or -cent arguments\n' + \
+                        'comma (,) and/or hyphen (-) separated list\n' + \
+                        'hyphens denote a range of atoms\n' + \
+                        'commas separate individual atoms or ranges\n' + \
+                        'Default: whole structure')
 
 translate_parser.add_argument('-v', '--vector',\
                         type=float, \
@@ -115,7 +115,7 @@ for f in args.infile:
 
     #targets = None means whole geometry is used
     if args.targets is not None:
-        targets = geom.find(args.targets[0])
+        targets = geom.find(args.targets)
     else:
         targets = None
 
@@ -142,11 +142,11 @@ for f in args.infile:
         #direction was specified
         if args.distance is not None:
             #magnitute was specified
-            v = np.array(vector)
+            v = np.array(args.vector)
             v /= np.linalg.norm(v)
             destination = start + args.distance[0]*v
         else:
-            destination = start + np.array(vector)
+            destination = start + np.array(args.vector)
     else:
         #nothing was specified - move to origin
         destination = np.zeros(3)

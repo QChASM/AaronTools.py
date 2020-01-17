@@ -1,6 +1,6 @@
 """for handling the change in structure of a series of geometries"""
 import numpy as np
-from AaronTools.utils.utils import integrate
+from scipy.integrate import quad as integrate
 
 class Pathway:
     """
