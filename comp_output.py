@@ -78,7 +78,7 @@ class CompOutput:
                 'YES' if grad[name]['converged'] else 'NO'
             )
 
-        return rv[:-2]
+        return rv.rstrip()
 
     def calc_Grimme_G(self, temperature=None):
         v0 = 100

@@ -123,7 +123,7 @@ class Catalyst(Geometry):
         :style: (str) defaults to xyz
         """
         self.rebuild()
-        super().write(name, style, *args, **kwargs)
+        return super().write(name, style, *args, **kwargs)
 
     def fix_comment(self):
         new_comment = ""
@@ -329,36 +329,43 @@ class Catalyst(Geometry):
             return ligand
 
         def map_2_key(old_ligand, ligand, old_keys, new_keys, rev_ang=False):
+
             # align COM of key atoms
             center = old_ligand.COM(targets=old_keys)
-            shift = old_ligand.COM(targets=old_keys) - ligand.COM(
-                targets=new_keys
-            )
+            shift = center - ligand.COM(targets=new_keys)
             ligand.coord_shift(shift)
+
+            # bend around key axis
+            old_walk = old_ligand.short_walk(*old_keys)
+            if len(old_walk) == 2:
+                old_con = set([])
+                for k in old_keys:
+                    for c in k.connected:
+                        old_con.add(c)
+                old_vec = old_ligand.COM(targets=old_con) - center
+            else:
+                old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
+
+            new_walk = ligand.short_walk(*new_keys)
+            if len(new_walk) == 2:
+                new_con = set([])
+                for k in new_keys:
+                    for c in k.connected:
+                        new_con.add(c)
+                new_vec = ligand.COM(targets=new_con) - center
+            else:
+                new_vec = ligand.COM(targets=new_walk[1:-1]) - center
+
+            w, angle = get_rotation(old_vec, new_vec)
+            if rev_ang:
+                angle = -angle
+            ligand.rotate(w, -angle, center=center)
 
             # rotate for best overlap
             old_axis = old_keys[0].bond(old_keys[1])
             new_axis = new_keys[0].bond(new_keys[1])
             w, angle = get_rotation(old_axis, new_axis)
             ligand.rotate(w, angle, center=center)
-
-            # bend around key axis
-            old_con = set([])
-            for k in old_keys:
-                for c in k.connected:
-                    old_con.add(c)
-            old_vec = old_ligand.COM(targets=old_con) - center
-
-            new_con = set([])
-            for k in new_keys:
-                for c in k.connected:
-                    new_con.add(c)
-            new_vec = ligand.COM(targets=new_con) - center
-
-            w, angle = get_rotation(old_vec, new_vec)
-            if rev_ang:
-                angle = -angle
-            ligand.rotate(old_axis, -angle, center=center)
 
         def map_rot_frag(frag, a, b, ligand, old_key, new_key):
             old_vec = old_key.coords - b.coords

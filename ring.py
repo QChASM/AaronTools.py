@@ -78,6 +78,15 @@ class Ring(Geometry):
             else:
                 self.end = None
     
+    @classmethod
+    def list(cls):
+        names = []
+        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
+            name = os.path.splitext(os.path.basename(f))[0]
+            names.append(name)
+
+        return names
+
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""
        
@@ -135,21 +144,4 @@ class Ring(Geometry):
 
         if self.end is None:
             raise LookupError("unable to find %i long path starting with %s around %s" % (path_length, start, self.name))
-
-    @classmethod
-    def from_string(cls, name, end=None, form='smiles'):
-        """create ring fragment from string"""
-
-        ring = Geometry.from_string(name, form)
-        if end is not None:
-            if isinstance(end, int):
-                ring = cls(ring)
-                ring.find_end(end)
-                return ring
-            elif isinstance(end, list):
-                return cls(ring, end=end, name=name)
-            else:
-                raise ValueError("expected int or list for 'end' in 'from_string', got %s", str(end))
-        else:
-            return cls(ring, name=name)
 

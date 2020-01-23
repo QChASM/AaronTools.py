@@ -15,6 +15,14 @@ maplig_parser.add_argument('infile', metavar='input file', \
                             default=[stdin], \
                             help='a coordinate file')
 
+maplig_parser.add_argument('-ls', '--list', \
+                                action="store_const", \
+                                const=True, \
+                                default=False, \
+                                required=False, \
+                                dest='list_avail', \
+                                help='list available ligands')
+
 maplig_parser.add_argument('-if', '--input-format', \
                                 type=str, \
                                 nargs=1, \
@@ -49,6 +57,17 @@ maplig_parser.add_argument('-o', '--output', \
                             help='output destination\nDefault: stdout')
 
 args = maplig_parser.parse_args()
+
+if args.list_avail:
+    s = ""
+    for i, name in enumerate(sorted(Component.list())):
+        s += "%-35s" % name
+        if (i + 1) % 3 == 0:
+        #if (i + 1) % 1 == 0:
+            s += '\n'
+
+    print(s.strip())
+    exit(0)
 
 for infile in args.infile:
     if isinstance(infile, str):
