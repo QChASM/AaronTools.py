@@ -359,7 +359,7 @@ class Catalyst(Geometry):
             w, angle = get_rotation(old_vec, new_vec)
             if rev_ang:
                 angle = -angle
-            ligand.rotate(w, -angle, center=center)
+            ligand.rotate(w, angle, center=center)
 
             # rotate for best overlap
             old_axis = old_keys[0].bond(old_keys[1])
