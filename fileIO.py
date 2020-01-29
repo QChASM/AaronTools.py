@@ -270,7 +270,7 @@ class FileReader:
     def read_sd(self, f, get_all=False):
         self.all_geom = []
         lines = f.readlines()
-        self.comment = lines[0]
+        self.comment = lines[0].strip()
         counts = lines[3].split()
         natoms = int(counts[0])
         nbonds = int(counts[1])

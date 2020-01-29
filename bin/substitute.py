@@ -6,7 +6,6 @@ from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils import fetch
 
 substitute_parser = argparse.ArgumentParser(description='replace an atom or substituent with another', \
     formatter_class=argparse.RawTextHelpFormatter)

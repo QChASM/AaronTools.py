@@ -1,7 +1,12 @@
+import re
+import numpy as np
+
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
+
+from copy import deepcopy
 
 from urllib.request import urlopen
 from urllib.error import HTTPError
@@ -83,7 +88,7 @@ def substituent_from_string(name, form='smiles'):
     pos1 = smiles.index(my_rad)
     pos2 = smiles.index(my_rad)+len(my_rad)
     previous_atoms = elements.findall(smiles[:pos1])
-    added_H_ndx = len(previous_atoms)+1
+    rad_pos = len(previous_atoms)
     if '+' not in my_rad and '-' not in my_rad:
         mod_smiles = smiles[:pos1] + re.sub(r'H\d+', '', my_rad[1:-1]) + smiles[pos2:]
     else:
@@ -93,10 +98,11 @@ def substituent_from_string(name, form='smiles'):
     mod_smiles = mod_smiles.replace('#', '%23')
 
     #grab structure from cactus
-    geom = Geometry.from_string(mod_smiles, form='smiles')
+    geom = from_string(mod_smiles, form='smiles')
 
     #the H we added is in the same position in the structure as in the smiles string
-    added_H = geom.atoms[added_H_ndx]
+    rad = geom.atoms[rad_pos]
+    added_H = [atom for atom in rad.connected if atom.element == 'H'][0]
 
     #move the added H to the origin
     geom.coord_shift(-added_H.coords)
@@ -125,7 +131,7 @@ def ring_from_string(name, end=None, form='smiles'):
     form    str         type of identifier (smiles, iupac)
     """
 
-    ring = Geometry.from_string(name, form)
+    ring = from_string(name, form)
     if end is not None:
         if isinstance(end, int):
             ring = Ring(ring)
