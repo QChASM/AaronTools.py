@@ -49,6 +49,8 @@ class CompOutput:
             from_file = FileReader(fname, get_all, just_geom=False)
         elif isinstance(fname, tuple) and 'log' == fname[1]:
             from_file = FileReader(fname, get_all, just_geom=False)
+        elif isinstance(fname, FileReader):
+            from_file = fname
         else:
             return
 
@@ -80,14 +82,15 @@ class CompOutput:
 
         return rv.rstrip()
 
-    def calc_Grimme_G(self, temperature=None):
-        v0 = 100
+    def therm_corr(self, temperature=None, v0=100):
+        """returns thermal correction to energy, enthalpy correction to energy, and 
+        entropy for the specified cutoff frequency and temperature in that order (Hartrees)"""
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
             msg += "cannot calculate Grimme free energy."
             raise AttributeError(msg)
 
-        rot = self.rotational_temperature
+        rot = [temp for temp in self.rotational_temperature if temp != 0]
         T = temperature if temperature is not None else self.temperature
         mass = self.mass
         sigmar = self.rotational_symmetry_number
@@ -110,11 +113,24 @@ class CompOutput:
         # Electronic
         Se = PHYSICAL.GAS_CONSTANT * (np.log(mult))
 
+
         # Rotational
-        qr = (np.sqrt(np.pi) / sigmar)
-        qr *= (T**(3 / 2) / np.sqrt(rot[0] * rot[1] * rot[2]))
-        Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 3 / 2)
-        Er = 3 * PHYSICAL.GAS_CONSTANT * T / 2
+        if len(rot) == 3:
+            #non linear molecules
+            qr = (np.sqrt(np.pi) / sigmar)
+            qr *= (T**(3 / 2) / np.sqrt(rot[0] * rot[1] * rot[2]))
+            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 3 / 2)
+        elif len(rot) == 2:
+            #linear molecules
+            qr = (1 / sigmar) * (T / np.sqrt(rot[0] * rot[1]))
+            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 1)
+        else:
+            #atoms
+            qr = 1
+            Sr = 0
+
+        Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
+
 
         # Vibrational
         Ev = 0
@@ -135,11 +151,24 @@ class CompOutput:
         Ev *= PHYSICAL.GAS_CONSTANT
         Sv_qRRHO *= PHYSICAL.GAS_CONSTANT
 
-        Hcorr = Et + Er + Ev + PHYSICAL.GAS_CONSTANT * T
-        Stot_qRRHO = St + Sr + Sv_qRRHO + Se
-        Gcorr_qRRHO = (Hcorr - T * Stot_qRRHO) / (UNIT.HART_TO_KCAL * 1000)
+        Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
+        Hcorr = Ecorr + (PHYSICAL.GAS_CONSTANT * T / (UNIT.HART_TO_KCAL * 1000))
+        Stot_qRRHO = (St + Sr + Sv_qRRHO + Se) / (UNIT.HART_TO_KCAL * 1000)
 
-        return self.energy + Gcorr_qRRHO
+        return Ecorr, Hcorr, Stot_qRRHO
+
+    def calc_Grimme_G_corr(self, temperature=None, v0=100):
+        """returns quasi rrho free energy correction (Eh)"""
+        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0)
+        T = temperature if temperature is not None else self.temperature
+        Gcorr_qRRHO = (Hcorr - T * Stot) 
+
+        return Gcorr_qRRHO
+
+    def calc_Grimme_G(self, temperature=None, v0=100):
+        """returns quasi rrho free energy (Eh)"""
+        Gcorr_qRRHO = self.calc_Grimme_G_corr(temperature=temperature, v0=v0)
+        return Gcorr_qRRHO + self.energy
 
     def bond_change(self, atom1, atom2, threshold=0.25):
         """
