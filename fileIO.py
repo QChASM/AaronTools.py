@@ -333,7 +333,7 @@ class FileReader:
                 line = f.readline()
                 n += 1
                 match = re.search(
-                    "Charge\s*=\s*(\d+)\s*Multiplicity\s*=\s*(\d+)", line
+                    "Charge\s*=\s*(-?\d+)\s*Multiplicity\s*=\s*(\d+)", line
                 )
                 if match is not None:
                     self.other["charge"] = int(match.group(1))
