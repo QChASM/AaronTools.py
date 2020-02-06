@@ -78,14 +78,14 @@ def validate(
     # and RMSD should be below a threshold
     if debug:
         rmsd, ref, test = ref.RMSD(
-            test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+            test, align=debug, heavy_only=heavy_only, sort=sort, debug=True
         )
         print("RMSD:", rmsd, "\tTHRESH:", thresh)
         ref.write("ref")
         test.write("test")
     else:
         rmsd = ref.RMSD(
-            test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+            test, align=debug, heavy_only=heavy_only, sort=sort, debug=False
         )
     return rmsd < thresh
 

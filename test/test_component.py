@@ -119,9 +119,9 @@ ONLYSOME = False
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestComponent("test_detect_backbone"))
+    # suite.addTest(TestComponent("test_detect_backbone"))
     suite.addTest(TestComponent("test_substitute"))
-    suite.addTest(TestComponent("test_minimize_torsion"))
+    # suite.addTest(TestComponent("test_minimize_torsion"))
     return suite
 
 

@@ -959,9 +959,9 @@ class Geometry:
         if name_sort:
             ref_targets = sorted(ref_targets, key=lambda atom: float(atom))
             targets = sorted(targets, key=lambda atom: float(atom))
-            tmp = _RMSD(ref_targets, targets)
-            if tmp[0] < min_rmsd[0]:
-                min_rmsd = tmp
+            res = _RMSD(ref_targets, targets)
+            if res[0] < min_rmsd[0]:
+                min_rmsd = res
                 best_orders = ref_targets, targets
         if sort:
             # get other orderings
@@ -971,9 +971,9 @@ class Geometry:
             # find min RMSD for each ordering
             for r in ref_orders:
                 for o in orders:
-                    tmp = _RMSD(r, o)
-                    if tmp[0] < min_rmsd[0]:
-                        min_rmsd = tmp
+                    res = _RMSD(r, o)
+                    if res[0] < min_rmsd[0]:
+                        min_rmsd = res
                         best_orders = r, o
             rmsd, vec = min_rmsd
         else:
