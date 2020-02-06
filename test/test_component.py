@@ -4,7 +4,7 @@ import unittest
 
 from AaronTools.component import Component
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
+from AaronTools.test import TestWithTimer, prefix, validate
 
 
 class TestComponent(TestWithTimer):
@@ -60,7 +60,7 @@ class TestComponent(TestWithTimer):
         self.assertTrue(res)
 
         mol.substitute(Substituent("Ph"), ["12", "12.*"])
-        res = validate(mol, benz_Ph_Cl, thresh="loose", sort=True)
+        res = validate(mol, benz_Ph_Cl, sort=True, thresh="loose")
         self.assertTrue(res)
 
     def test_detect_backbone(self):

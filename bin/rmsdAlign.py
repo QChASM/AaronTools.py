@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 from warnings import warn
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileWriter, FileReader, read_types
+from AaronTools.fileIO import FileReader, read_types
 
 def range2int(s):
     """split on ',' and turn '-' into a range
@@ -114,6 +114,6 @@ for f in args.infile:
 
     geom.comment = "rmsd = %f" % rmsd
 
-    s = FileWriter.write_xyz(geom, append=True, outfile=args.outfile[0])
+    s = geom.write(append=True, outfile=args.outfile[0])
     if not args.outfile[0]:
         print(s)

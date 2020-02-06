@@ -85,18 +85,20 @@ class FileWriter:
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
-            cls.write_xyz(geom, append, outfile)
+            out = cls.write_xyz(geom, append, outfile)
         elif style.lower() == "com":
             if "theory" in kwargs and "step" in kwargs:
                 step = kwargs["step"]
                 theory = kwargs["theory"]
                 del kwargs["step"]
                 del kwargs["theory"]
-                cls.write_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_com(geom, step, theory, outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
                 )
+
+        return out
 
     @classmethod
     def write_xyz(cls, geom, append, outfile=None):
@@ -208,7 +210,7 @@ class FileReader:
             elif self.file_type == "sd":
                 self.read_sd(f)
             elif self.file_type == "xyz":
-                self.read_xyz(f)
+                self.read_xyz(f, get_all)
             elif self.file_type == "com":
                 self.read_com(f)
 
@@ -278,7 +280,7 @@ class FileReader:
     def read_sd(self, f, get_all=False):
         self.all_geom = []
         lines = f.readlines()
-        self.comment = lines[0]
+        self.comment = lines[0].strip()
         counts = lines[3].split()
         natoms = int(counts[0])
         nbonds = int(counts[1])

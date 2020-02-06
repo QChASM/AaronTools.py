@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileWriter, FileReader, read_types
+from AaronTools.fileIO import FileReader, read_types
 
 xyz_parser = argparse.ArgumentParser(description='print structure in xyz format', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -62,6 +62,6 @@ for f in args.infile:
     else:
         geom.comment=f
 
-    s = FileWriter.write_xyz(geom, append=True, outfile=args.outfile[0])
+    s = geom.write(append=True, outfile=args.outfile[0])
     if not args.outfile[0]:
         print(s)

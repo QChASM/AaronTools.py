@@ -3,9 +3,9 @@
 import argparse
 from sys import stdin, argv, exit
 from AaronTools.atoms import Atom
-from AaronTools.fileIO import FileReader, FileWriter, read_types
+from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.ringfragment import RingFragment
+from AaronTools.ring import Ring
 
 ring_parser = argparse.ArgumentParser(description='close rings on a geometry', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -14,6 +14,14 @@ ring_parser.add_argument('infile', metavar='input file', \
                             nargs='*', \
                             default=[stdin], \
                             help='a coordinate file')
+
+ring_parser.add_argument('-ls', '--list', \
+                                action='store_const', \
+                                const=True, \
+                                default=False, \
+                                required=False, \
+                                dest='list_avail', \
+                                help='list available rings')
 
 ring_parser.add_argument('-if', '--input-format', \
                                 type=str, \
@@ -28,30 +36,32 @@ ring_parser.add_argument('-r', '--ring', metavar='atom1 atom2 ring', \
                             nargs=3, \
                             action='append', \
                             default=None, \
-                            required=True, \
+                            required=False, \
                             dest='substitutions', \
                             help="substitution instructions \n" + \
                             "atom1 and atom2 specify the position to add the new ring")
 
-ring_parser.add_argument('-f', '--format', \
-                            type=str, \
-                            nargs=1, \
-                            choices=['from_library', 'iupac', 'smiles', 'element'], \
-                            default=['from_library'], \
-                            required=False, \
-                            dest='form', \
-                            help='how to get substituents given their names \nDefault: from_library')
-
 ring_parser.add_argument('-o', '--output', \
                             nargs=1, \
                             type=str, \
-                            default=False, \
+                            default=[False], \
                             required=False, \
                             metavar='output destination', \
                             dest='outfile', \
                             help='output destination\nDefault: stdout')
 
 args = ring_parser.parse_args()
+
+if args.list_avail:
+    s = ""
+    for i, name in enumerate(sorted(Ring.list())):
+        s += "%-20s" % name
+        #if (i + 1) % 3 == 0:
+        if (i + 1) % 1 == 0:
+            s += '\n'
+
+    print(s.strip())
+    exit(0)
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -75,11 +85,7 @@ for infile in args.infile:
         atom2 = geom.atoms[int(sub_info[1])-1]
         ring = sub_info[2]
 
-        if args.form[0] == 'from_library':
-            ring_geom = RingFragment(ring)
-        else:
-            path_length = len(geom.short_walk(atom1, atom2))-2
-            ring_geom = RingFragment.from_string(ring, end=path_length)
+        ring_geom = Ring(ring)
 
         key = (atom1, atom2)
         if key in targets:
@@ -91,9 +97,7 @@ for infile in args.infile:
         for ring_geom in targets[key]:
             geom.ring_substitute(list(key), ring_geom)     
 
-    if args.outfile:
-        FileWriter.write_xyz(geom, append=False, outfile=args.outfile[0])
-    else:
-        s = FileWriter.write_xyz(geom, append=False, outfile=False) 
+    s = geom.write(append=False, outfile=args.outfile[0]) 
+    if not args.outfile[0]:
         print(s)
 

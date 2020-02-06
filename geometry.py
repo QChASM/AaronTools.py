@@ -172,21 +172,6 @@ class Geometry:
         for atom in targets:
             atom.tags.add(tag)
 
-    def copy(self, atoms=None, name=None, comment=None):
-        """
-        creates a new copy of the geometry
-        parameters:
-            atoms (list): defaults to all atoms
-            name (str): defaults to NAME_copy
-        """
-        if name is None:
-            name = self.name
-        if comment is None:
-            comment = self.comment
-        atoms = self._fix_connectivity(atoms)
-
-        return Geometry(atoms, name, comment, refresh_connected=False)
-
     def write(self, name=None, style="xyz", *args, **kwargs):
         """
         Write geometry to a file
@@ -205,8 +190,25 @@ class Geometry:
         tmp = self.name
         if name is not None:
             self.name = name
-        FileWriter.write_file(self, style, *args, **kwargs)
+        out = FileWriter.write_file(self, style, *args, **kwargs)
         self.name = tmp
+        if out is not None:
+            return out
+
+    def copy(self, atoms=None, name=None, comment=None):
+        """
+        creates a new copy of the geometry
+        parameters:
+            atoms (list): defaults to all atoms
+            name (str): defaults to NAME_copy
+        """
+        if name is None:
+            name = self.name
+        if comment is None:
+            comment = self.comment
+        atoms = self._fix_connectivity(atoms)
+
+        return Geometry(atoms, name, comment, refresh_connected=False)
 
     def parse_comment(self):
         """
@@ -1618,7 +1620,6 @@ class Geometry:
 
             l.append(new_start)
             start = new_start
-
         return l
 
     @classmethod
@@ -1659,118 +1660,82 @@ class Geometry:
         return Geometry(f)
 
     def ring_substitute(self, targets, ring_fragment):
-        """take ring, reorient it, put it on self"""
+        """take ring, reorient it, put it on self and replace targets with atoms
+        on the ring fragment"""
 
-        def attach_short(self, walk, ring_fragment):
+        def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
             ring_fragment.RMSD(
-                self, align=True, targets=ring_fragment.end, ref_targets=walk
+                geom, align=True, targets=ring_fragment.end, ref_targets=walk
             )
+
+            ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
 
             for atom in ring_fragment.end[1:-1]:
                 for t in atom.connected:
                     if t not in ring_fragment.end:
+                        ring_fragment.remove_fragment(t, atom, add_H=False)
                         ring_fragment -= t
 
                 ring_fragment -= atom
 
             ring_fragment.end = walk[1:-1]
 
-            r = self.remove_fragment(
+            r = geom.remove_fragment(
                 [walk[0], walk[-1]], walk[1:-1], add_H=False
             )
-            self -= [walk[0], walk[-1]]
+            geom -= [walk[0], walk[-1]]
 
-            self.atoms.extend(ring_fragment.atoms)
-            self.refresh_connected()
+            geom.atoms.extend(ring_fragment.atoms)
+            geom.refresh_connected()
 
-        def attach_approx(self, walk, ring_fragment):
-            """for when only 2 atoms of walk remain - rmsd might not work well"""
-            # move self to the center of walk before rotating
-            recenter = walk[1].coords.copy()
-            self.coord_shift(-walk[1].coords)
-            ring_fragment.coord_shift(-ring_fragment.end[0].coords)
+        def ring_waddle(geom, targets, walk_end, ring):
+            """adjusted the new bond lengths by moving the ring in a 'waddling' motion"""
+            if hasattr(ring.end[0], "_radii") and hasattr(
+                walk_end[0], "_radii"
+            ):
+                d1 = ring.end[0]._radii + walk_end[0]._radii
+            else:
+                d1 = ring.end[0].dist(walk_end[0])
 
-            v = ring_fragment.end[0].bond(walk[1])
+            v1 = ring.end[-1].bond(walk_end[0])
+            v2 = ring.end[-1].bond(ring.end[0])
 
-            v1 = walk[-2].coords
-            v2 = ring_fragment.end[-1].coords
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
 
-            angle = walk[1].angle(ring_fragment.end[-1], walk[-2])
-
-            nv = np.cross(v1, v2)
-
-            ring_fragment.rotate(nv, -angle)
-
-            # add the new atoms
-            self.atoms.extend(ring_fragment.atoms)
-
-            # shift to rotate about the backbone centroid
-            walk_center = self.COM(walk[1:-1])
-            self.coord_shift(-walk_center)
-            recenter += walk_center
-
-            # we'll make the ring centroid vector parallel to target centroid vector
-            target_center = self.COM(targets)
-
-            # cut out the end of the ring
-            for end in ring_fragment.end:
-                for atom in end.connected:
-                    if atom.element == "H" and atom not in ring_fragment.end:
-                        ring_fragment -= atom
-                        self -= atom
-
-                ring_fragment -= end
-                self -= end
-
-            center_shift = ring_fragment.COM()
-
-            ring_fragment.end = walk
-
-            rv = np.cross(center_shift, target_center)
-            dot = np.dot(center_shift, target_center)
-            angle = np.arccos(
-                dot
-                / (
-                    np.linalg.norm(center_shift)
-                    * np.linalg.norm(target_center)
-                )
+            target_angle = np.arccos(
+                (d1 ** 2 - v1_n ** 2 - v2_n ** 2) / (-2.0 * v1_n * v2_n)
             )
-            ring_fragment.rotate(rv, angle)
+            current_angle = ring.end[-1].angle(ring.end[0], walk_end[0])
+            ra = target_angle - current_angle
 
-            # remove the targets
-            r = self.remove_fragment(targets, walk[1:-1], add_H=False)
-            self -= targets
+            rv = np.cross(v1, v2)
 
-            self.coord_shift(recenter)
-            self.refresh_connected()
+            ring.rotate(rv, ra, center=ring.end[-1])
 
-        def attach_rmsd(self, walk, ring_fragment):
-            """for when walk =~ end - align rmsd"""
-            """for when walk < end, rmsd and remove end[1:-1]"""
-            ring_fragment.RMSD(
-                self,
-                align=True,
-                targets=ring_fragment.end,
-                ref_targets=walk[1:-1],
+            if hasattr(ring.end[-1], "_radii") and hasattr(
+                walk_end[-1], "_radii"
+            ):
+                d1 = ring.end[-1]._radii + walk_end[-1]._radii
+            else:
+                d1 = ring.end[-1].dist(walk_end[-1])
+
+            v1 = ring.end[0].bond(walk_end[-1])
+            v2 = ring.end[0].bond(ring.end[-1])
+
+            v1_n = np.linalg.norm(v1)
+            v2_n = np.linalg.norm(v2)
+
+            target_angle = np.arccos(
+                (d1 ** 2 - v1_n ** 2 - v2_n ** 2) / (-2.0 * v1_n * v2_n)
             )
+            current_angle = ring.end[0].angle(ring.end[-1], walk_end[-1])
+            ra = target_angle - current_angle
 
-            for atom in ring_fragment.end:
-                for t in atom.connected:
-                    if t.element == "H" and t not in ring_fragment.end:
-                        ring_fragment -= t
+            rv = np.cross(v1, v2)
 
-                ring_fragment -= atom
-
-            ring_fragment.end = walk[1:-1]
-
-            r = self.remove_fragment(
-                [walk[0], walk[-1]], walk[1:-1], add_H=False
-            )
-            self -= [walk[0], walk[-1]]
-
-            self.atoms.extend(ring_fragment.atoms)
-            self.refresh_connected()
+            ring.rotate(rv, ra, center=ring.end[0])
 
         targets = self.find(targets)
 
@@ -1782,29 +1747,316 @@ class Geometry:
         if len(walk) == len(ring_fragment.end) and len(walk) != 2:
             attach_short(self, walk, ring_fragment)
 
-        elif (
-            len(walk[1:-1]) == len(ring_fragment.end) and len(walk[1:-1]) == 2
-        ):
-            attach_approx(self, walk, ring_fragment)
-
-        elif len(walk[1:-1]) == len(ring_fragment.end):
-            attach_rmsd(self, walk, ring_fragment)
-
         elif len(walk[1:-1]) == 0:
             raise ValueError(
                 "insufficient information to close ring - selected atoms are bonded to each other: %s"
-                % (" ".join(targets))
+                % (" ".join(str(a) for a in targets))
             )
 
         else:
             raise ValueError(
-                "this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i or %i"
+                "this ring is not appropriate to connect\n%s\nand\n%s:\n%s\nspacing is %i; expected %i"
                 % (
                     targets[0],
                     targets[1],
                     ring_fragment.name,
                     len(ring_fragment.end),
                     len(walk),
-                    len(walk[1:-1]),
                 )
             )
+
+    def short_walk(self, atom1, atom2, avoid=None):
+        """try to find the shortest path between atom1 and atom2"""
+        a1 = self.find(atom1)[0]
+        a2 = self.find(atom2)[0]
+        if avoid is None:
+            avoid = []
+        else:
+            avoid = self.find(avoid)
+        l = [a1]
+        start = a1
+        max_iter = len(self.atoms)
+        i = 0
+        while start != a2:
+            i += 1
+            if i > max_iter:
+                raise LookupError(
+                    "could not determine best path between %s and %s"
+                    % (str(atom1), str(atom2))
+                )
+            v1 = start.bond(a2)
+            max_overlap = None
+            new_start = None
+            for atom in start.connected:
+                if atom not in l and atom not in avoid and atom in self.atoms:
+                    v2 = start.bond(atom)
+                    overlap = np.dot(v1, v2)
+                    if max_overlap is None or overlap > max_overlap:
+                        new_start = atom
+                        max_overlap = overlap
+
+            if new_start is None:
+                l.remove(start)
+                avoid.append(start)
+                if len(l) > 1:
+                    start = l[-1]
+                else:
+                    raise RuntimeError(
+                        "could not determine bet path between %s and %s"
+                        % (str(atom1), str(atom2))
+                    )
+            else:
+                l.append(new_start)
+                start = new_start
+
+        return l
+
+    def change_element(
+        self, target, new_element, adjust_bonds=False, adjust_hydrogens=False
+    ):
+        """change the element of an atom on self
+        target              - target atom
+        new_element         - str, element of new atom
+        adjust_bonds        - bool, adjust distance to bonded atoms
+        adjust_hydrogens    - bool/tuple(int, str), try to add or remove hydrogens and guess how many
+                                    hydrogens to add or remove/remove specified number of hydrogens and
+                                    set the geometry to the specified shape (see Atom.get_shape for a list of shapes)
+        """
+
+        target = self.find(target)
+        if len(target) > 1:
+            raise RuntimeError(
+                "only one atom's element can be changed at a time: %s"
+                % ", ".join(target)
+            )
+        else:
+            target = target[0]
+
+        new_atom = Atom(
+            element=new_element, name=target.name, coords=target.coords
+        )
+
+        # fix bond lengths if requested
+        if adjust_bonds:
+            for atom in target.connected:
+                self.change_distance(new_atom, atom, adjust=1)
+
+        if adjust_hydrogens is True:
+            if hasattr(target, "_saturation") and hasattr(
+                new_atom, "_saturation"
+            ):
+                change_Hs = new_atom._saturation - target._saturation
+                new_shape = None
+            else:
+                raise RuntimeError(
+                    "H adjust requested, but saturation is not known for %s"
+                    % ", ".join(
+                        [
+                            atom.element
+                            for atom in [target, new_atom]
+                            if not hasattr(atom, "_saturation")
+                        ]
+                    )
+                )
+
+        elif isinstance(adjust_hydrogens, tuple):
+            change_Hs, new_shape = adjust_hydrogens
+
+        else:
+            change_Hs = 0
+            new_shape = None
+
+        if change_Hs != 0 or new_shape is not None:
+            # if we're removing hydrogens, check if we have enough to remove
+            if change_Hs < 0:
+                nH = sum(
+                    [1 for atom in target.connected if atom.element == "H"]
+                )
+                if nH + change_Hs < 0:
+                    raise RuntimeError(
+                        "cannot remove %i hydrogens from an atom with %i hydrogens"
+                        % (abs(change_Hs), nH)
+                    )
+
+            # get vsepr geometry
+            old_shape, score = target.get_vsepr()
+
+            if new_shape is None:
+                shape = old_shape
+                if hasattr(new_atom, "_connectivity"):
+                    new_connectivity = new_atom._connectivity
+                else:
+                    new_connectivity = None
+
+                for i in range(0, abs(change_Hs)):
+                    shape = Atom.new_shape(
+                        shape, new_connectivity, np.sign(change_Hs)
+                    )
+                    if shape is None:
+                        raise RuntimeError(
+                            "shape changed from %s to None" % old_shape
+                        )
+
+                new_shape = shape
+
+            shape_object = Geometry(Atom.get_shape(new_shape))
+
+            if (
+                len(shape_object.atoms[1:]) - len(target.connected)
+                != change_Hs
+            ):
+                raise RuntimeError(
+                    "number of positions changed by %i, but a change of %i hydrogens was attempted"
+                    % (
+                        len(shape_object.atoms[1:]) - len(target.connected),
+                        change_Hs,
+                    )
+                )
+
+            if new_shape != old_shape:
+                if change_Hs < 0:
+                    # remove extra hydrogens
+                    removed_Hs = 1
+                    while removed_Hs <= abs(change_Hs):
+                        H_atom = [
+                            atom
+                            for atom in target.connected
+                            if atom.element == "H"
+                        ][0]
+                        self -= H_atom
+                        removed_Hs += 1
+
+                com = self.COM(target)
+
+                shape_object.coord_shift(com)
+
+                # get each branch off of the target atom
+                frags = [
+                    self.get_fragment(atom, target)
+                    for atom in target.connected
+                ]
+
+                # ring detection - remove ring fragments because those are more difficult to adjust
+                remove_frags = []
+                for i, frag1 in enumerate(frags):
+                    for frag2 in frags[i + 1 :]:
+                        dups = [atom for atom in frag2 if atom in frag1]
+                        if len(dups) != 0:
+                            remove_frags.append(frag1)
+                            remove_frags.append(frag2)
+
+                for frag in remove_frags:
+                    if frag in frags:
+                        frags.remove(frag)
+
+                frags.sort(key=len, reverse=True)
+                # for each position on the new idealized geometry, find the fragment
+                # that corresponds to it the best
+                # reorient that fragment to match the idealized geometry
+
+                previous_positions = []
+                for j, frag in enumerate(frags):
+                    v1 = target.bond(frag[0])
+                    max_overlap = None
+                    corresponding_position = None
+                    for i, position in enumerate(shape_object.atoms[1:]):
+                        if i in previous_positions:
+                            continue
+                        v2 = shape_object.atoms[0].bond(position)
+                        d = np.dot(v1, v2)
+                        if max_overlap is None or d > max_overlap:
+                            max_overlap = d
+                            corresponding_position = i
+
+                    previous_positions.append(corresponding_position)
+
+                for j, frag in enumerate(frags):
+                    corresponding_position = previous_positions[j] + 1
+
+                    v1 = target.bond(frag[0])
+                    v1 /= np.linalg.norm(v1)
+                    v2 = shape_object.atoms[0].bond(
+                        shape_object.atoms[corresponding_position]
+                    )
+                    v2 /= np.linalg.norm(v2)
+
+                    rv = np.cross(v1, v2)
+
+                    c = np.linalg.norm(v1 - v2)
+
+                    angle = np.arccos((c ** 2 - 2.0) / -2.0)
+
+                    self.rotate(rv, angle, targets=frag, center=target)
+
+                # add Hs if needed
+                if change_Hs > 0:
+                    # determine which connected atom is occupying which position on the shape
+                    best_positions = None
+                    min_rmsd = None
+                    for positions in itertools.permutations(
+                        shape_object.atoms[1:], len(target.connected)
+                    ):
+                        full_positions = [shape_object.atoms[0]] + list(
+                            positions
+                        )
+
+                        rmsd = shape_object.RMSD(
+                            self,
+                            targets=full_positions,
+                            ref_targets=[target, *target.connected],
+                            align=True,
+                        )
+
+                        if min_rmsd is None or rmsd < min_rmsd:
+                            min_rmsd = rmsd
+                            best_positions = full_positions
+
+                    rmsd = shape_object.RMSD(
+                        self,
+                        targets=best_positions,
+                        ref_targets=[target, *target.connected],
+                        align=True,
+                    )
+
+                    shape_object.coord_shift(
+                        shape_object.atoms[0].bond(new_atom)
+                    )
+
+                    positions = []
+                    for atom in target.connected:
+                        v2 = new_atom.bond(atom)
+                        max_overlap = None
+                        position = None
+                        for i, pos in enumerate(shape_object.atoms[1:]):
+                            v1 = shape_object.atoms[0].bond(pos)
+                            if i in positions:
+                                continue
+
+                            d = np.dot(v1, v2)
+
+                            if max_overlap is None or d > max_overlap:
+                                max_overlap = d
+                                position = i
+
+                        positions.append(position)
+
+                    # add hydrogens to positions that are not occupied
+                    for open_position in [
+                        i + 1
+                        for i in range(0, len(shape_object.atoms[1:]))
+                        if i not in positions
+                    ]:
+                        # add one because the 0th "position" of the shape is the central atom
+                        H_atom = Atom(
+                            element="H",
+                            coords=shape_object.atoms[open_position].coords,
+                            name=str(len(self.atoms) + 1),
+                        )
+
+                        self.change_distance(new_atom, H_atom)
+                        self += H_atom
+
+        self += new_atom
+        self -= target
+
+        self.refresh_connected()

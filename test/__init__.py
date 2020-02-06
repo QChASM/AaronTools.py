@@ -137,7 +137,7 @@ class TestWithTimer(unittest.TestCase):
         t = time.time() - self.start_time
         TestWithTimer.total_time += t
 
-        name = self.id().split(".")[1:]
+        name = self.id().split(".")[-2:]
         if not TestWithTimer.last_class or TestWithTimer.last_class != name[0]:
             TestWithTimer.last_class = name[0]
             TestWithTimer.count = 0

@@ -4,15 +4,13 @@ import itertools
 import os
 import re
 from glob import glob
-from urllib.request import urlopen
-from urllib.error import HTTPError
 
 from AaronTools.const import AARONLIB, QCHASM
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
 
-class RingFragment(Geometry):
+class Ring(Geometry):
     """
     Attributes:
         name
@@ -20,8 +18,8 @@ class RingFragment(Geometry):
         end
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "RingFrags", "*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools", "RingFragments", "*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Rings", "*.xyz")
+    BUILTIN = os.path.join(QCHASM, "AaronTools", "Rings", "*.xyz")
 
     def __init__(
         self,
@@ -36,8 +34,8 @@ class RingFragment(Geometry):
         """
 
         if isinstance(frag, (Geometry, list)):
-            # we can create substituent object from fragment
-            if isinstance(frag, RingFragment):
+            # we can create ring object from a geometry
+            if isinstance(frag, Ring):
                 self.name = name if name else frag.name
                 self.end = end if end else frag.end 
             elif isinstance(frag, Geometry):
@@ -52,9 +50,9 @@ class RingFragment(Geometry):
                 self.atoms = frag
         
         else:  # or we can create from file
-            # find substituent xyz file
+            # find ring xyz file
             fsub = None
-            for f in glob(RingFragment.AARON_LIBS) + glob(RingFragment.BUILTIN):
+            for f in glob(Ring.AARON_LIBS) + glob(Ring.BUILTIN):
                 match = frag + ".xyz" == os.path.basename(f)
                 if match:
                     fsub = f
@@ -65,7 +63,7 @@ class RingFragment(Geometry):
                 frag = os.path.basename(frag).rstrip(".xyz")
 
             if fsub is None:
-                raise RuntimeError("substituent name not recognized: %s" % fsub)
+                raise RuntimeError("ring name not recognized: %s" % frag)
 
             # load in atom info
             from_file = FileReader(fsub)
@@ -80,6 +78,15 @@ class RingFragment(Geometry):
             else:
                 self.end = None
     
+    @classmethod
+    def list(cls):
+        names = []
+        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
+            name = os.path.splitext(os.path.basename(f))[0]
+            names.append(name)
+
+        return names
+
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""
        
@@ -102,10 +109,12 @@ class RingFragment(Geometry):
             elif any([sum([atom1 in atom2.connected for atom2 in atom_list]) != 2 for atom1 in atom_list[1:-1]]):
                 return False
 
-            #first two atoms should only be connected to one atom
+            #first two atoms should only be connected to one atom unless they are connected to each other
             elif sum([sum([atom_list[0] in atom.connected]) + \
                       sum([atom_list[-1] in atom.connected]) for atom in atom_list]) \
-                        > 2:
+                        > 2 and \
+                    atom_list[0] not in atom_list[-1].connected:
+                
                 return False
 
             else:
@@ -129,27 +138,10 @@ class RingFragment(Geometry):
 
         for path in itertools.permutations(usable_atoms, path_length - len(start_atoms)):
             full_path = start_atoms + list(path)
-            if linearly_connected(full_path):
+            if linearly_connected(full_path) or path_length == 1:
                 self.end = list(full_path)
                 break
 
         if self.end is None:
             raise LookupError("unable to find %i long path starting with %s around %s" % (path_length, start, self.name))
-
-    @classmethod
-    def from_string(cls, name, end=None, form='smiles'):
-        """create ring fragment from string"""
-
-        ring = Geometry.from_string(name, form)
-        if end is not None:
-            if isinstance(end, int):
-                ring = RingFragment(ring)
-                ring.find_end(end)
-                return ring
-            elif isinstance(end, list):
-                return RingFragment(ring, end=end, name=name)
-            else:
-                raise ValueError("expected int or list for 'end' in 'from_string', got %s", str(end))
-        else:
-            return RingFragment(ring, name=name)
 

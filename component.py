@@ -27,7 +27,7 @@ class Component(Geometry):
         self,
         structure,
         name="",
-        comment="",
+        comment=None,
         tag=None,
         to_center=None,
         key_atoms=None,
@@ -81,6 +81,15 @@ class Component(Geometry):
             if float(a) != float(b):
                 return float(a) < float(b)
         return False
+
+    @classmethod
+    def list(cls):
+        names = []
+        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
+            name = os.path.splitext(os.path.basename(f))[0]
+            names.append(name)
+
+        return names
 
     def copy(self, atoms=None, name=None, comment=None):
         rv = super().copy()

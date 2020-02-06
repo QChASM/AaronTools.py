@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.fileIO import FileReader
 from AaronTools.trajectory import Pathway
 
 from warnings import warn
@@ -61,13 +61,13 @@ interpolate_parser.add_argument('-e', '--print-energy', \
 interpolate_parser.add_argument('-o', '--output-destination', \
                             type=str, \
                             nargs=1, \
-                            default=["traj-&i.xyz"], \
+                            default=[None], \
                             required=False, \
                             metavar='output destination', \
                             dest='outfile', \
                             help='output destination\n' + \
-                            '"&i" will be replaced with zero-padded numbers\n' +
-                            'Default: traj-&i.xyz for structures, stdout for energies')
+                            '"$i" will be replaced with zero-padded numbers\n' +
+                            'Default: traj-$i.xyz for structures, stdout for energies')
 
 interpolate_parser.add_argument('-u', '--use-unfinished', \
                             action='store_const', \
@@ -219,7 +219,7 @@ if args.print_E:
             dE = S.dE_func(t)
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
             
-    if outfile != "traj-&i.xyz":
+    if outfile is not None:
         with open(outfile, 'w') as f:
             f.write(nrg_out.rstrip())
     else:
@@ -242,11 +242,13 @@ if len(write_geoms) > 0:
     w = width(len(write_geoms))
     fmt = "%0" + "%i" % w + "i"
 
+if outfile is None:
+    outfile = "traj-$i.xyz"
+
 for i, G in enumerate(write_geoms):
-    my_outfile = outfile.replace("&i", fmt % i)
+    my_outfile = outfile.replace("$i", fmt % i)
     if my_outfile == outfile:
-        #if there's no &i, we are writing all the structures to the same file
-        FileWriter.write_file(G, style='xyz', append=True, outfile=my_outfile)
+        #if there's no $i, we are writing all the structures to the same file
+        G.write(append=True, outfile=my_outfile)
     else:
-        FileWriter.write_file(G, style='xyz', append=False, outfile=my_outfile)
-                
+        G.write(append=False, outfile=my_outfile)

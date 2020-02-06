@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileWriter, FileReader, read_types
+from AaronTools.fileIO import FileReader, read_types
 
 def three_atoms_and_a_float(vals):
     """check to see if argument is three ints and a float"""
@@ -141,7 +141,7 @@ for f in args.infile:
     out = out.rstrip()
 
     if len(args.set_ang) + len(args.change) > 0:
-        s = FileWriter.write_xyz(geom, append=True, outfile=args.outfile[0])
+        s = geom.write(append=True, outfile=args.outfile[0])
         if not args.outfile[0]:
             print(s)
     

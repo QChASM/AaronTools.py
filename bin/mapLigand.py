@@ -3,7 +3,7 @@
 import argparse
 from sys import stdin, argv, exit
 from AaronTools.atoms import Atom
-from AaronTools.fileIO import FileReader, FileWriter, read_types
+from AaronTools.fileIO import FileReader, read_types
 from AaronTools.catalyst import Catalyst
 from AaronTools.component import Component
 
@@ -14,6 +14,14 @@ maplig_parser.add_argument('infile', metavar='input file', \
                             nargs='*', \
                             default=[stdin], \
                             help='a coordinate file')
+
+maplig_parser.add_argument('-ls', '--list', \
+                                action="store_const", \
+                                const=True, \
+                                default=False, \
+                                required=False, \
+                                dest='list_avail', \
+                                help='list available ligands')
 
 maplig_parser.add_argument('-if', '--input-format', \
                                 type=str, \
@@ -42,13 +50,24 @@ maplig_parser.add_argument('-k', '--key-atoms', metavar='index', \
 maplig_parser.add_argument('-o', '--output', \
                             nargs=1, \
                             type=str, \
-                            default=False, \
+                            default=[False], \
                             required=False, \
                             metavar='output destination', \
                             dest='outfile', \
                             help='output destination\nDefault: stdout')
 
 args = maplig_parser.parse_args()
+
+if args.list_avail:
+    s = ""
+    for i, name in enumerate(sorted(Component.list())):
+        s += "%-35s" % name
+        if (i + 1) % 3 == 0:
+        #if (i + 1) % 1 == 0:
+            s += '\n'
+
+    print(s.strip())
+    exit(0)
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -70,9 +89,6 @@ for infile in args.infile:
     else:
         cat.map_ligand(lig, cat.components['ligand'][0].key_atoms)
 
-    if args.outfile:
-        FileWriter.write_xyz(cat, append=False, outfile=args.outfile[0])
-    else:
-        s = FileWriter.write_xyz(cat, append=False, outfile=False) 
+    s = cat.write(append=False, outfile=args.outfile[0])
+    if not args.outfile[0]:
         print(s)
-

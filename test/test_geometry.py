@@ -6,9 +6,10 @@ from copy import copy
 import numpy as np
 
 from AaronTools.atoms import Atom
-from AaronTools.fileIO import FileReader
+from AaronTools.substituent import Substituent
+from AaronTools.ring import Ring
+from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
-from AaronTools.ringfragment import RingFragment
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
@@ -605,30 +606,29 @@ class TestGeometry(TestWithTimer):
         rmsd = mol.RMSD(ref, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref))
 
-    def test_close_ring_approx(self):
+    def test_close_ring(self):
         mol = Geometry(TestGeometry.benzene)
 
         ref1 = Geometry(TestGeometry.naphthalene)
         mol1 = mol.copy()
-        mol1.ring_substitute(["7", "8"], RingFragment("benzene"))
+        mol1.ring_substitute(['7', '8'], Ring('benzene'))
         rmsd = mol1.RMSD(ref1, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref1))
+        self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
-        mol2.ring_substitute(["7", "8"], RingFragment("cyclohexane-chair.1"))
+        mol2.ring_substitute(['7', '8'], Ring('cyclohexane-chair.1'))
         rmsd = mol2.RMSD(ref2, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref2))
+        self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 
-    def test_close_ring_rmsd(self):
-        mol = Geometry(TestGeometry.naphthalene)
-        ref = Geometry(TestGeometry.pyrene)
-        targets1 = mol.find(["9", "15"])
-        targets2 = mol.find(["10", "16"])
-        mol.ring_substitute(targets1, RingFragment("benzene"))
-        mol.ring_substitute(targets2, RingFragment("benzene"))
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        mol3 = Geometry(TestGeometry.naphthalene)
+        ref3 = Geometry(TestGeometry.pyrene)
+        targets1 = mol3.find(['9', '15'])
+        targets2 = mol3.find(['10', '16'])
+        mol3.ring_substitute(targets1, Ring('benzene'))
+        mol3.ring_substitute(targets2, Ring('benzene'))
+        rmsd = mol3.RMSD(ref3, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
 
 def suite():
