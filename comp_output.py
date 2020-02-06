@@ -98,9 +98,15 @@ class CompOutput:
 
         return rv.rstrip()
 
-    def therm_corr(self, temperature=None, v0=100):
-        """returns thermal correction to energy, enthalpy correction to energy, and
-        entropy for the specified cutoff frequency and temperature in that order (Hartrees)"""
+    def therm_corr(self, temperature=None, v0=100, quasi_harmonic=False):
+        """returns thermal correction to energy, enthalpy correction to energy, and entropy
+        for the specified cutoff frequency and temperature
+        in that order (Hartrees for corrections, Eh/K for entropy)
+
+        temperature     -   float/None temperature in K, None will use self.temperature
+        v0              -   float/100  cutoff for quasi G corrections
+        quasi_harmonic  -   bool/False compute quasi harmonic corrections; False will compute quasi RRHO corrections
+        """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
             msg += "cannot calculate Grimme free energy."
@@ -113,8 +119,12 @@ class CompOutput:
         mult = self.multiplicity
         freqs = self.frequency.real_frequencies
 
-        vibtemps = PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANK / PHYSICAL.KB
-        vibtemps = [f_i * vibtemps for f_i in freqs]
+        vib_unit_convert = PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANK / PHYSICAL.KB
+        vibtemps = [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
+        if quasi_harmonic:
+            harm_vibtemps = [f_i * vib_unit_convert if f_i > v0 else v0 * vib_unit_convert for f_i in freqs if f_i > 0]
+        else:
+            harm_vibtemps = vibtemps
 
         Bav = PHYSICAL.PLANK ** 2 / (24 * np.pi ** 2 * PHYSICAL.KB)
         Bav *= sum([1 / r for r in rot])
@@ -148,37 +158,40 @@ class CompOutput:
 
         # Vibrational
         Ev = 0
-        Sv_qRRHO = 0
-        for i, vib in enumerate(vibtemps):
-            Sv_T = vib / (T * (np.exp(vib / T) - 1))
-            Sv_T -= np.log(1 - np.exp(-vib / T))
-            Ev += vib * (1 / 2 + 1 / (np.exp(vib / T) - 1))
+        Sv = 0
+        for i, (vib, harm_vib) in enumerate(zip(vibtemps, harm_vibtemps)):
+            Sv_T = harm_vib / (T * (np.exp(harm_vib / T) - 1))
+            Sv_T -= np.log(1 - np.exp(-harm_vib / T))
+            Ev += vib * (1. / 2 + 1 / (np.exp(vib / T) - 1))
 
-            mu = PHYSICAL.PLANK
-            mu /= 8 * np.pi ** 2 * freqs[i] * PHYSICAL.SPEED_OF_LIGHT
-            mu = mu * Bav / (mu + Bav)
-            Sr_eff = 1 / 2 + np.log(
-                np.sqrt(
-                    8 * np.pi ** 3 * mu * PHYSICAL.KB * T / PHYSICAL.PLANK ** 2
-                )
-            )
-            weight = 1 / (1 + (v0 / freqs[i]) ** 4)
+            if quasi_harmonic:
+                Sv += Sv_T
+            else:
+                mu = PHYSICAL.PLANK
+                mu /= (8 * np.pi**2 * freqs[i] * PHYSICAL.SPEED_OF_LIGHT)
+                mu = mu * Bav / (mu + Bav)
+                Sr_eff = 1 / 2 + np.log(np.sqrt(
+                    8 * np.pi**3 * mu * PHYSICAL.KB * T / PHYSICAL.PLANK**2))
+                weight = 1 / (1 + (v0 / freqs[i])**4)
 
-            Sv_qRRHO += weight * Sv_T + (1 - weight) * Sr_eff
+                Sv += weight * Sv_T + (1 - weight) * Sr_eff
+
         Ev *= PHYSICAL.GAS_CONSTANT
-        Sv_qRRHO *= PHYSICAL.GAS_CONSTANT
+        Sv *= PHYSICAL.GAS_CONSTANT
 
         Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
-        Hcorr = Ecorr + (
-            PHYSICAL.GAS_CONSTANT * T / (UNIT.HART_TO_KCAL * 1000)
-        )
-        Stot_qRRHO = (St + Sr + Sv_qRRHO + Se) / (UNIT.HART_TO_KCAL * 1000)
+        Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
+        Hcorr = Ecorr + (PHYSICAL.GAS_CONSTANT * T / (UNIT.HART_TO_KCAL * 1000))
+        Stot = (St + Sr + Sv + Se) / (UNIT.HART_TO_KCAL * 1000)
 
-        return Ecorr, Hcorr, Stot_qRRHO
+        return Ecorr, Hcorr, Stot
 
-    def calc_Grimme_G_corr(self, temperature=None, v0=100):
-        """returns quasi rrho free energy correction (Eh)"""
-        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0)
+    def calc_G_corr(self, temperature=None, v0=0, quasi_harmonic=False):
+        """returns quasi rrho free energy correction (Eh)
+        temperature     -   float/None  temperature; default is self.temperature
+        v0              -   cutoff      for quasi-rrho or quasi-harmonic entropy
+        quasi_harmonic  -   bool/False  use quasi-harmonic treatment for entropy"""
+        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, quasi_harmonic)
         T = temperature if temperature is not None else self.temperature
         Gcorr_qRRHO = Hcorr - T * Stot
 
@@ -186,7 +199,7 @@ class CompOutput:
 
     def calc_Grimme_G(self, temperature=None, v0=100):
         """returns quasi rrho free energy (Eh)"""
-        Gcorr_qRRHO = self.calc_Grimme_G_corr(temperature=temperature, v0=v0)
+        Gcorr_qRRHO = self.calc_G_corr(temperature=temperature, v0=v0, quasi_harmonic=False)
         return Gcorr_qRRHO + self.energy
 
     def bond_change(self, atom1, atom2, threshold=0.25):
