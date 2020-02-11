@@ -333,7 +333,7 @@ class FileReader:
             # geometry
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
-                    self.all_geom += [deepcopy(self.atoms)]
+                    self.all_geom += [(deepcopy(self.atoms), deepcopy(self.other))]
                 self.atoms, n = get_atoms(f, n)
             if just_geom:
                 line = f.readline()
