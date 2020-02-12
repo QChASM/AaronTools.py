@@ -109,7 +109,7 @@ class CompOutput:
         """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
-            msg += "cannot calculate Grimme free energy."
+            msg += "cannot calculate vibrational entropy."
             raise AttributeError(msg)
 
         rot = [temp for temp in self.rotational_temperature if temp != 0]
