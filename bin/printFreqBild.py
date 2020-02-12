@@ -141,11 +141,10 @@ for i, mode in enumerate(modes):
         info = tuple(t for s in [ \
             [x for x in G.atoms[n].coords], \
             [x for x in G.atoms[n].coords+dX[n]], \
-            [v_len/(v_len+0.75)], \
-            [G.atoms[n].element]]\
+            [v_len/(v_len+0.75)]]\
         for t in s)
 
         if v_len > 0.1:
-            output += ".arrow %10.6f %10.6f %10.6f   %10.6f %10.6f %10.6f   0.02 0.05 %5.3f #%s\n" % info
+            output += ".arrow %10.6f %10.6f %10.6f   %10.6f %10.6f %10.6f   0.02 0.05 %5.3f\n" % info
 
 print(output.rstrip())

@@ -15,7 +15,7 @@ thermo_parser.add_argument('infile', metavar='frequency output file', \
                          type=str, \
                          nargs='*', \
                          default=[sys.stdin], \
-                         help='completed QM output file with frequnecy info')
+                         help='completed QM output file with frequency info')
 
 thermo_parser.add_argument('-o', '--output', \
                         type=str, \
