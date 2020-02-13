@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import sys
-from os.path import split as path_split
 import numpy as np
 import argparse
 
@@ -34,7 +33,8 @@ thermo_parser.add_argument('-if', '--input-format', \
 
 thermo_parser.add_argument('-sp', '--single-point', \
                         type=str, \
-                        default=None, \
+                        nargs='*', \
+                        default=[None], \
                         required=False, \
                         dest='sp_file', \
                         help='file containing single-point energy')
@@ -53,17 +53,37 @@ thermo_parser.add_argument('-w0' , '--frequency-cutoff', \
                             dest='w0', \
                             help='cutoff frequency for quasi free energy corrections (1/cm)\nDefault: 100 cm^-1')
 
+thermo_parser.add_argument('-csv', '--comma-seperated', \
+                            action='store_true', \
+                            required=False, \
+                            dest='csv', \
+                            help='print output in CSV format')
+
 args = thermo_parser.parse_args()
 
-output = ""
-
-if args.sp_file is not None:
-    sp_file = FileReader(args.sp_file, just_geom=False)
-    sp_energy = sp_file.other['energy']
+if args.csv:
+    output = "E,ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),dZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP File,Thermo File\n"
 else:
-    sp_energy = None
+    output = ""
 
-for f in args.infile:
+infiles = args.infile
+
+if args.sp_file != [None]:
+    sp_filenames = [f for  f in args.sp_file]
+    sp_files = [FileReader(f, just_geom=False) for f in args.sp_file]
+    sp_energies = [sp_file.other['energy'] for sp_file in sp_files]
+else:
+    sp_energies = [None]
+    sp_filenames = [None]
+
+while len(sp_energies) < len(infiles):
+    sp_energies.extend([sp_file.other['energy'] for sp_file in sp_files])
+    sp_filenames.extend(args.sp_file)
+
+while len(infiles) < len(sp_filenames):
+    infiles.extend(args.infile)
+
+for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False)
@@ -79,10 +99,10 @@ for f in args.infile:
 
     co = CompOutput(infile)
     
-    if sp_energy is None:
+    if sp_nrg is None:
         nrg = co.energy
     else:
-        nrg = sp_energy
+        nrg = sp_nrg
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
     rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp)
@@ -94,18 +114,25 @@ for f in args.infile:
     else:
         t = args.temp
 
-    output += "electronic energy of %s = %.8f Eh\n" % (path_split(args.sp_file)[-1] \
-            if args.sp_file is not None else path_split(f)[-1], \
-            nrg)
-    output += "thermochemistry from %s at %.2f K:\n" % (path_split(f)[-1], t)
-    output += "    H(RRHO)           = %.8f Eh  (dH = %.8f)\n" % (nrg + dH, dH)
-    output += "    G(RRHO)           = %.8f Eh  (dG = %.8f)\n" % (nrg + rrho_dG, rrho_dG)
-    output += "  quasi treatments for entropy (w0=%.1f cm^-1):\n" % args.w0
-    output += "    G(Quasi-RRHO)     = %.8f Eh  (dG = %.8f)\n" % (nrg + qrrho_dG, qrrho_dG)
-    output += "    G(Quasi-harmonic) = %.8f Eh  (dG = %.8f)\n" % (nrg + qharm_dG, qharm_dG)
-
-    output += '\n'
-
+    if args.csv:
+        corrections = [co.ZPVE, dH, rrho_dG, qrrho_dG, qharm_dG]
+        therm = [nrg + correction for correction in corrections]
+        output += "%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%s,%s\n" \
+        % (nrg, *therm, *corrections, sp_file if sp_file is not None else f, f)
+    else:
+        output += "electronic energy of %s = %.8f Eh\n" % (sp_file \
+                if sp_file is not None else f, \
+                nrg)
+        output += "    ZPE               = %.10f Eh  (dZPE = %.10f)\n" % (nrg + co.ZPVE, co.ZPVE)
+        output += "thermochemistry from %s at %.2f K:\n" % (f, t)
+        output += "    H(RRHO)           = %.10f Eh  (dH = %.10f)\n" % (nrg + dH, dH)
+        output += "    G(RRHO)           = %.10f Eh  (dG = %.10f)\n" % (nrg + rrho_dG, rrho_dG)
+        output += "  quasi treatments for entropy (w0=%.1f cm^-1):\n" % args.w0
+        output += "    G(Quasi-RRHO)     = %.10f Eh  (dG = %.10f)\n" % (nrg + qrrho_dG, qrrho_dG)
+        output += "    G(Quasi-harmonic) = %.10f Eh  (dG = %.10f)\n" % (nrg + qharm_dG, qharm_dG)
+    
+        output += '\n'
+    
 output = output.strip()
 
 if args.outfile is not None:
