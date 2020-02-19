@@ -11,7 +11,7 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
-read_types = ["xyz", "log", "com", "sd"]
+read_types = ["xyz", "log", "com", "sd", "out"]
 write_types = ["xyz", "com"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -213,6 +213,8 @@ class FileReader:
                 self.read_xyz(f, get_all)
             elif self.file_type == "com":
                 self.read_com(f)
+            elif self.file_type == "out":
+                self.read_orca_out(f)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -240,6 +242,8 @@ class FileReader:
             self.read_com(f)
         elif self.file_type == "sd":
             self.read_sd(f)
+        elif self.file_type == "out":
+            self.read_orca_out(f)
 
         f.close()
 
@@ -291,6 +295,43 @@ class FileReader:
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
+
+    def read_orca_out(self, f, get_all=False, just_geom=True):
+        def get_atoms(f, n):
+            rv = []
+            self.skip_lines(f, 1)
+            n += 2
+            line = f.readline()
+            i = 0
+            while line.strip():
+                i += 1
+                line = line.strip()
+                atom_info = line.split()
+                element = atom_info[0]
+                coords = np.array([float(x) for x in atom_info[1:]])
+                rv += [Atom(element=element, coords=coords, name=str(i))]
+                
+                line = f.readline()
+                n += 1
+
+            return rv, n
+
+        line = f.readline()
+        n = 1
+        while line != "":
+            if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
+                if get_all and len(self.atoms) > 0:
+                    self.all_geom += [(deepcopy(self.atoms), deepcopy(self.other))]
+                
+                self.atoms, n = get_atoms(f, n)
+
+            if just_geom:
+                line = f.readline()
+                n += 1
+                continue
+            else:
+                if line.startswith('FINAL SINGLE POINT ENERGY'):
+                    self.other['energy'] = float(line.split()[-1])
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):

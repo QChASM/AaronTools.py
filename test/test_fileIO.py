@@ -61,6 +61,11 @@ class TestFileReader(TestWithTimer):
             self.assertEqual(str(n + 1), a.name)
             self.assertTrue(len(a.tags) == 0)
 
+    def test_read_orca_out_structure(self):
+        ref = FileReader("ref_files/orca_geom.xyz")
+        test = FileReader(os.path.join(prefix, "test_files/orca_geom.out"))
+        self.assertTrue(self.validate_atoms(ref, test))
+
     def test_read_log_structure(self):
         ref = FileReader("ref_files/file_io_normal.xyz")
         test = FileReader(os.path.join(prefix, "test_files/normal.log"))
