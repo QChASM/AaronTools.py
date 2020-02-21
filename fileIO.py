@@ -214,7 +214,7 @@ class FileReader:
             elif self.file_type == "com":
                 self.read_com(f)
             elif self.file_type == "out":
-                self.read_orca_out(f)
+                self.read_orca_out(f, get_all, just_geom)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -243,7 +243,7 @@ class FileReader:
         elif self.file_type == "sd":
             self.read_sd(f)
         elif self.file_type == "out":
-            self.read_orca_out(f)
+            self.read_orca_out(f, get_all, just_geom)
 
         f.close()
 
@@ -297,6 +297,7 @@ class FileReader:
             a.name = str(i + 1)
 
     def read_orca_out(self, f, get_all=False, just_geom=True):
+        print(get_all)
         def get_atoms(f, n):
             rv = []
             self.skip_lines(f, 1)
@@ -321,6 +322,8 @@ class FileReader:
         while line != "":
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
                     self.all_geom += [(deepcopy(self.atoms), deepcopy(self.other))]
                 
                 self.atoms, n = get_atoms(f, n)
@@ -332,6 +335,10 @@ class FileReader:
             else:
                 if line.startswith('FINAL SINGLE POINT ENERGY'):
                     self.other['energy'] = float(line.split()[-1])
+                
+                line = f.readline()
+                n += 1
+                continue
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
