@@ -79,6 +79,9 @@ class CompOutput:
             if k in from_file.other:
                 self.__setattr__(k, from_file.other[k])
 
+        if self.rotational_temperature is None:
+            self.compute_rot_temps()
+
         if self.frequency:
             self.grimme_g = self.calc_Grimme_G()
 
@@ -317,3 +320,25 @@ class CompOutput:
             else:
                 a.coords += vector[i] * step
         return geom
+
+    def compute_rot_temps(self):
+        """sets self's 'rotational_temperature' attribute by using self.geometry"""
+        self.geometry.coord_shift(-self.geometry.COM(mass_weight=True))
+        
+        inertia_mat = np.zeros((3,3))
+        for atom in self.geometry.atoms:
+            for i in range(0, 3):
+                for j in range(0, 3):
+                    if i == j:
+                        inertia_mat[i][j] += sum([atom.mass() * atom.coords[k]**2 for k in range(0, 3) if k != i])
+                    else:
+                        inertia_mat[i][j] -= atom.mass() * atom.coords[i] * atom.coords[j]    
+
+        principal_inertia, vecs = np.linalg.eigh(inertia_mat)
+
+        principal_inertia *= UNIT.AMU_TO_KG * 1e-20
+
+        #rotational constants in Hz
+        rot_consts = [PHYSICAL.PLANK/(8*np.pi**2 * moment) for moment in principal_inertia]
+
+        self.rotational_temperature = [ PHYSICAL.PLANK * const / PHYSICAL.KB for const in rot_consts]
