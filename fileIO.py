@@ -299,7 +299,9 @@ class FileReader:
             a.name = str(i + 1)
 
     def read_orca_out(self, f, get_all=False, just_geom=True):
+        """read orca output file"""
         def get_atoms(f, n):
+            """parse atom info"""
             rv = []
             self.skip_lines(f, 1)
             n += 2
@@ -383,13 +385,13 @@ class FileReader:
                 elif line.startswith("Zero point energy"):
                     self.other['ZPVE'] = float(line.split()[4])
                     
-                elif line.startswith("Thermal Enthalpy correction"):
+                elif line.startswith("Total Enthalpy"):
                     self.other['enthalpy'] = float(line.split()[4])
 
-                elif line.startswith("Total Gibbs"):
+                elif line.startswith("Final Gibbs"):
                     #NOTE - Orca seems to only print Grimme's Quasi-RRHO free energy
                     #RRHO can be computed in AaronTool's CompOutput by setting the w0 to 0
-                    self.other['G-E(el)'] = float(line.split()[2])
+                    self.other['free_energy'] = float(line.split()[2])
 
                 elif line.startswith('Rotational constants in cm-1:'):
                     #orca doesn't seem to print rotational constants in older versions
@@ -621,7 +623,7 @@ class FileReader:
                 else:
                     line = line.split(",")
                 other["charge"] = line[0]
-                other["mult"] = line[1]
+                other["multiplicity"] = line[1]
                 found_atoms = True
                 continue
             # constraints

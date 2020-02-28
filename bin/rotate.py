@@ -153,7 +153,7 @@ for f in args.infile:
     geom = Geometry(infile)
 
     if args.vector is not None:
-        vector = args.vector[0]
+        vector = args.vector
 
     if args.bond is not None:
         a1 = geom.find(args.bond[0])[0]
