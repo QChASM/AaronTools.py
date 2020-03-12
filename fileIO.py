@@ -386,12 +386,12 @@ class FileReader:
                     self.other['ZPVE'] = float(line.split()[4])
                     
                 elif line.startswith("Total Enthalpy"):
-                    self.other['enthalpy'] = float(line.split()[4])
+                    self.other['enthalpy'] = float(line.split()[3])
 
                 elif line.startswith("Final Gibbs"):
                     #NOTE - Orca seems to only print Grimme's Quasi-RRHO free energy
                     #RRHO can be computed in AaronTool's CompOutput by setting the w0 to 0
-                    self.other['free_energy'] = float(line.split()[2])
+                    self.other['free_energy'] = float(line.split()[5])
 
                 elif line.startswith('Rotational constants in cm-1:'):
                     #orca doesn't seem to print rotational constants in older versions
