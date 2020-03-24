@@ -10,11 +10,12 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
-read_types = ["xyz", "log", "com", "sd"]
+read_types = ["xyz", "log", "com", "sd", "out"]
 write_types = ["xyz", "com"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
+ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 ERRORS = {
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
@@ -215,6 +216,8 @@ class FileReader:
                 self.read_xyz(f, get_all)
             elif self.file_type == "com":
                 self.read_com(f)
+            elif self.file_type == "out":
+                self.read_orca_out(f, get_all, just_geom)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -228,6 +231,7 @@ class FileReader:
             f = open(self.name)
         else:
             fname = ".".join([self.name, self.file_type])
+            fname = os.path.expanduser(fname)
             if os.path.isfile(fname):
                 f = open(fname)
             else:
@@ -244,6 +248,8 @@ class FileReader:
             self.read_com(f)
         elif self.file_type == "sd":
             self.read_sd(f)
+        elif self.file_type == "out":
+            self.read_orca_out(f, get_all, just_geom)
 
         f.close()
 
@@ -296,6 +302,142 @@ class FileReader:
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
 
+    def read_orca_out(self, f, get_all=False, just_geom=True):
+        """read orca output file"""
+
+        def get_atoms(f, n):
+            """parse atom info"""
+            rv = []
+            self.skip_lines(f, 1)
+            n += 2
+            line = f.readline()
+            i = 0
+            while line.strip():
+                i += 1
+                line = line.strip()
+                atom_info = line.split()
+                element = atom_info[0]
+                coords = np.array([float(x) for x in atom_info[1:]])
+                rv += [Atom(element=element, coords=coords, name=str(i))]
+
+                line = f.readline()
+                n += 1
+
+            return rv, n
+
+        line = f.readline()
+        n = 1
+        while line != "":
+            if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
+                if get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                self.atoms, n = get_atoms(f, n)
+
+            if just_geom:
+                line = f.readline()
+                n += 1
+                continue
+            else:
+                if line.startswith("FINAL SINGLE POINT ENERGY"):
+                    self.other["energy"] = float(line.split()[-1])
+
+                elif line.startswith("VIBRATIONAL FREQUENCIES"):
+                    stage = "frequencies"
+                    freq_str = "VIBRATIONAL FREQUENCIES\n"
+                    self.skip_lines(f, 4)
+                    n += 5
+                    line = f.readline()
+                    while not (stage == "IR" and line == "\n") and line:
+                        if "--" not in line and line != "\n":
+                            freq_str += line
+
+                        if "NORMAL MODES" in line:
+                            stage = "modes"
+                            self.skip_lines(f, 6)
+                            n += 6
+
+                        if "IR SPECTRUM" in line:
+                            stage = "IR"
+                            self.skip_lines(f, 2)
+                            n += 2
+
+                        n += 1
+                        line = f.readline()
+
+                    self.other["frequency"] = Frequency(
+                        freq_str, hpmodes=False, form="out"
+                    )
+
+                elif line.startswith("Temperature"):
+                    self.other["temperature"] = float(line.split()[2])
+
+                elif line.startswith("Total Mass"):
+                    # this may only get printed for freq jobs
+                    self.other["mass"] = float(line.split()[3])
+                    self.other["mass"] *= UNIT.AMU_TO_KG
+
+                elif line.startswith(" Total Charge"):
+                    self.other["charge"] = int(line.split()[-1])
+
+                elif line.startswith(" Multiplicity"):
+                    self.other["multiplicity"] = int(line.split()[-1])
+
+                elif "rotational symmetry number" in line.strip():
+                    # TODO: make this cleaner
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-2]
+                    )
+
+                elif line.startswith("Zero point energy"):
+                    self.other["ZPVE"] = float(line.split()[4])
+
+                elif line.startswith("Total Enthalpy"):
+                    self.other["enthalpy"] = float(line.split()[3])
+
+                elif line.startswith("Final Gibbs"):
+                    # NOTE - Orca seems to only print Grimme's Quasi-RRHO free energy
+                    # RRHO can be computed in AaronTool's CompOutput by setting the w0 to 0
+                    self.other["free_energy"] = float(line.split()[5])
+
+                elif line.startswith("Rotational constants in cm-1:"):
+                    # orca doesn't seem to print rotational constants in older versions
+                    self.other["rotational_temperature"] = [
+                        float(x) for x in line.split()[-3:]
+                    ]
+                    self.other["rotational_temperature"] = [
+                        x
+                        * PHYSICAL.SPEED_OF_LIGHT
+                        * PHYSICAL.PLANK
+                        / PHYSICAL.KB
+                        for x in self.other["rotational_temperature"]
+                    ]
+
+                elif "Symmetry Number" in line:
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-1]
+                    )
+
+                elif "sn is the rotational symmetry number" in line:
+                    # older versions of orca print this differently
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-2]
+                    )
+
+                elif ORCA_NORM_FINISH in line:
+                    self.other["finished"] = True
+
+                # TODO E_ZPVE
+                # TODO gradient
+                # TODO error
+
+                line = f.readline()
+                n += 1
+
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
             rv = []
@@ -337,7 +479,9 @@ class FileReader:
             # geometry
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
-                    self.all_geom += [deepcopy(self.atoms)]
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
                 self.atoms, n = get_atoms(f, n)
             if just_geom:
                 line = f.readline()
@@ -501,7 +645,7 @@ class FileReader:
                 else:
                     line = line.split(",")
                 other["charge"] = line[0]
-                other["mult"] = line[1]
+                other["multiplicity"] = line[1]
                 found_atoms = True
                 continue
             # constraints
@@ -563,11 +707,12 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = np.array(forcek)
 
-    def __init__(self, data, hpmodes=None):
+    def __init__(self, data, hpmodes=None, form="log"):
         """
         :data: should either be a str containing the lines of the output file
             with frequency information, or a list of Data objects
         :hpmodes: required when data is a string
+        :form:    required when data is a string; denotes file format (log, out, ...)
         """
         self.data = []
         self.imaginary_frequencies = None
@@ -594,9 +739,76 @@ class Frequency:
         if hpmodes and num_head != 2:
             warn("Log file damaged, cannot get frequencies")
             return
-        self.parse_lines(lines, hpmodes)
+        if form == "log":
+            self.parse_lines(lines, hpmodes)
+        elif form == "out":
+            self.parse_orca_lines(lines, hpmodes)
+        else:
+            raise RuntimeError("no frequency parser for %s files" % form)
+
         self.sort_frequencies()
         return
+
+    def parse_orca_lines(self, lines, hpmodes):
+        """parse lines of orca output related to frequency
+        hpmodes is not currently used"""
+        # vibrational frequencies appear as a list, one per line
+        # block column 0 is the index of the mode
+        # block column 1 is the frequency in 1/cm
+        # skip line one b/c its just "VIBRATIONAL FREQUENCIES" with the way we got the lines
+        for n, line in enumerate(lines[1:]):
+            if line == "NORMAL MODES":
+                break
+
+            freq = line.split()[1]
+            self.data += [Frequency.Data(float(freq))]
+
+        # all 3N modes are printed with six modes in each block
+        # each column corresponds to one mode
+        # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
+        displacements = np.zeros((len(self.data), len(self.data)))
+        carryover = 0
+        start = 0
+        stop = 6
+        for i, line in enumerate(lines[n + 2 :]):
+            if "IR SPECTRUM" in line:
+                break
+
+            if i % (len(self.data) + 1) == 0:
+                carryover = i // (len(self.data) + 1)
+                start = 6 * carryover
+                stop = start + 6
+                continue
+
+            ndx = (i % (len(self.data) + 1)) - 1
+            mode_info = line.split()[1:]
+
+            displacements[ndx][start:stop] = [float(x) for x in mode_info]
+
+        # reshape columns into Nx3 arrays
+        for k, data in enumerate(self.data):
+            data.vector = np.reshape(
+                displacements[:, k], (len(self.data) // 3, 3)
+            )
+
+        # purge rotational and translational modes
+        n_data = len(self.data)
+        k = 0
+        while k < n_data:
+            if self.data[k].frequency == 0:
+                del self.data[k]
+                n_data -= 1
+            else:
+                k += 1
+
+        # IR intensities are only printed for vibrational
+        # the first column is the index of the mode
+        # the second column is the frequency
+        # the third is the intensity, which we read next
+        for t, line in enumerate(lines[n + 2 + i + carryover + 1 : -1]):
+            ir_info = line.split()
+            inten = float(ir_info[2])
+            self.data[t].intensity = inten
 
     def parse_lines(self, lines, hpmodes):
         num_head = 0
