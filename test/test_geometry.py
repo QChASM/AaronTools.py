@@ -6,10 +6,9 @@ from copy import copy
 import numpy as np
 
 from AaronTools.atoms import Atom
-from AaronTools.substituent import Substituent
-from AaronTools.ring import Ring
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
+from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 
@@ -215,12 +214,12 @@ class TestGeometry(TestWithTimer):
 
     def test_canonical_rank(self):
         pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
-        pentane_rank = [0, 1, 2, 1, 0]
+        pentane_rank = [0, 2, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 
         mol = Geometry(os.path.join(prefix, "test_files/6a2e5am1hex.xyz"))
-        mol_rank = [8, 6, 7, 9, 4, 4, 3, 5, 2, 0, 1, 1]
+        mol_rank = [11, 9, 8, 10, 6, 5, 4, 7, 3, 0, 2, 1]
         test_rank = mol.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, mol_rank)
 
@@ -336,10 +335,12 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(len(formed) == 0)
         self.assertSetEqual(broken, set([("10", "15")]))
         # formed
-        ref = geom.copy()
+        ref.change_distance("10", "15", dist=1, adjust=True)
+        ref.refresh_connected()
         geom.change_distance("10", "15", dist=-1, adjust=True)
         geom.refresh_connected()
         broken, formed = geom.compare_connectivity(ref)
+        print(broken, formed)
         self.assertTrue(len(broken) == 0)
         self.assertTrue(len(formed) == 1)
         self.assertSetEqual(formed, set([("10", "15")]))
@@ -611,33 +612,33 @@ class TestGeometry(TestWithTimer):
 
         ref1 = Geometry(TestGeometry.naphthalene)
         mol1 = mol.copy()
-        mol1.ring_substitute(['7', '8'], Ring('benzene'))
+        mol1.ring_substitute(["7", "8"], Ring("benzene"))
         rmsd = mol1.RMSD(ref1, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
-        mol2.ring_substitute(['7', '8'], Ring('cyclohexane-chair.1'))
+        mol2.ring_substitute(["7", "8"], Ring("cyclohexane-chair.1"))
         rmsd = mol2.RMSD(ref2, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 
         mol3 = Geometry(TestGeometry.naphthalene)
         ref3 = Geometry(TestGeometry.pyrene)
-        targets1 = mol3.find(['9', '15'])
-        targets2 = mol3.find(['10', '16'])
-        mol3.ring_substitute(targets1, Ring('benzene'))
-        mol3.ring_substitute(targets2, Ring('benzene'))
+        targets1 = mol3.find(["9", "15"])
+        targets2 = mol3.find(["10", "16"])
+        mol3.ring_substitute(targets1, Ring("benzene"))
+        mol3.ring_substitute(targets2, Ring("benzene"))
         rmsd = mol3.RMSD(ref3, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_add_subtract_iterable"))
+    suite.addTest(TestGeometry("test_canonical_rank"))
     return suite
 
 
-ONLYSOME = False
+ONLYSOME = True
 
 if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()

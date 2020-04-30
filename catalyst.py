@@ -41,7 +41,7 @@ class Catalyst(Geometry):
         self.other = self.parse_comment()
         self.detect_components()
 
-    def find_substituent(self, start, for_confs=True):
+    def find_substituent(self, start, for_confs=False):
         """
         Finds a substituent based on a given atom (matches start==sub.atoms[0])
 
@@ -54,7 +54,11 @@ class Catalyst(Geometry):
             if sub.atoms[0] == start:
                 return sub
         else:
-            msg = "Could not find substituent starting at atom {}"
+            if for_confs:
+                for sub in self.get_substituents(for_confs=not for_confs):
+                    if sub.atoms[0] == start:
+                        return None
+            msg = "Could not find substituent starting at atom {}."
             raise LookupError(msg.format(start.name))
 
     def get_substituents(self, for_confs=True):
@@ -84,17 +88,19 @@ class Catalyst(Geometry):
         rv = Catalyst(rv, refresh_connected=False)
         return rv
 
-    def rebuild(self):
+    def rebuild(self, reorder=False):
         atoms = []
         for comp in sorted(self.components["substrate"]):
-            comp.rebuild()
+            comp.rebuild(reorder)
             atoms += comp.atoms
         if self.center:
             atoms += self.center
         for comp in sorted(self.components["ligand"]):
-            comp.rebuild()
+            comp.rebuild(reorder)
             atoms += comp.atoms
         self.atoms = atoms
+        if reorder:
+            self.refresh_connected(rank=True)
         self.fix_comment()
 
     def write(self, name=None, style="xyz", *args, **kwargs):
@@ -186,8 +192,8 @@ class Catalyst(Geometry):
             if not lig_assigned and "ligand" in a.tags:
                 lig_assigned = True
             if a in self.center:
-                if center_max is None or center_max < float(a):
-                    center_max = float(a)
+                if center_max is None or center_max < self.atoms.index(a):
+                    center_max = self.atoms.index(a)
 
         if not lig_assigned and len(self.center) < 1:
             msg = (
@@ -204,7 +210,7 @@ class Catalyst(Geometry):
             if lig_assigned:
                 if "ligand" in a.tags:
                     lig += [a]
-            elif float(a) > center_max:
+            elif self.atoms.index(a) > center_max:
                 a.add_tag("ligand")
                 lig += [a]
 

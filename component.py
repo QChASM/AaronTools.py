@@ -77,9 +77,11 @@ class Component(Geometry):
         self.detect_backbone(to_center)
 
     def __lt__(self, other):
-        for a, b in zip(self.atoms, other.atoms):
-            if float(a) != float(b):
-                return float(a) < float(b)
+        if len(self) != len(other):
+            return len(self) < len(other)
+        for a, b in zip(sorted(self.atoms), sorted(other.atoms)):
+            if a < b:
+                return True
         return False
 
     @classmethod
@@ -95,10 +97,30 @@ class Component(Geometry):
         rv = super().copy()
         return Component(rv)
 
-    def rebuild(self):
-        atoms = self.backbone
+    def rebuild(self, reorder=False):
+        if reorder:
+            self.refresh_connected(rank=True)
+            self.backbone = self.reorder(targets=self.backbone)[0]
+            atoms = self.backbone
+        else:
+            atoms = self.backbone
+        for a in self.backbone:
+            for sub in sorted(self.substituents):
+                if sub.end != a:
+                    continue
+                if reorder:
+                    sub_atoms = self.reorder(targets=sub.atoms)[0]
+                else:
+                    sub_atoms = sub.atoms
+                for a in sub_atoms:
+                    if a not in atoms:
+                        atoms += [a]
         for sub in sorted(self.substituents):
-            for a in sub.atoms:
+            if reorder:
+                sub_atoms = self.reorder(targets=sub.atoms)[0]
+            else:
+                sub_atoms = sub.atoms
+            for a in sub_atoms:
                 if a not in atoms:
                     atoms += [a]
         self.atoms = atoms

@@ -490,7 +490,7 @@ class Geometry:
                 [atoms.index(i) for i in a.connected if i in atoms]
             ]
         if copy:
-            atoms = deepcopy(atoms)
+            atoms = [a.copy() for a in atoms]
         for a, con in zip(atoms, connectivity):
             a.connected = set([])
             for c in con:
@@ -510,17 +510,14 @@ class Geometry:
             a.connected = set([])
 
         # determine connectivity
-        refresh_ranks = False
         for i, a in enumerate(self.atoms):
             for b in self.atoms[i + 1 :]:
                 if a.is_connected(b, threshold):
                     a.connected.add(b)
                     b.connected.add(a)
-            if not refresh_ranks and a.connected ^ old_connectivity[i]:
-                refresh_ranks = True
 
         # get ranks
-        if refresh_ranks and rank:
+        if rank:
             self.refresh_ranks()
 
     def refresh_ranks(self):
@@ -529,80 +526,174 @@ class Geometry:
             a._rank = r
         return
 
+    def get_principle_axes(self, mass_weight=True):
+        """
+        Return: [principal moments], [principle axes]
+        """
+        COM = self.COM(mass_weight=mass_weight)
+        I_CM = np.zeros((3, 3))
+        for a in self:
+            if mass_weight:
+                mass = a.mass()
+            else:
+                mass = 1
+            coords = a.coords - COM
+            I_CM[0, 0] += mass * (coords[1] ** 2 + coords[2] ** 2)
+            I_CM[1, 1] += mass * (coords[0] ** 2 + coords[2] ** 2)
+            I_CM[2, 2] += mass * (coords[0] ** 2 + coords[1] ** 2)
+            I_CM[0, 1] -= mass * (coords[0] * coords[1])
+            I_CM[0, 2] -= mass * (coords[0] * coords[2])
+            I_CM[1, 2] -= mass * (coords[1] * coords[2])
+        I_CM[1, 0] = I_CM[0, 1]
+        I_CM[2, 0] = I_CM[0, 2]
+        I_CM[2, 1] = I_CM[1, 2]
+
+        return np.linalg.eigh(I_CM)
+
     def canonical_rank(self, heavy_only=False):
         """
-        put atoms in canonical smiles rank
-        (follows algorithm described in 10.1021/ci00062a008)
+        determin canonical ranking for atoms
+        (uses invariant described in 10.1021/ci00062a008 and algorithm described
+        in 10.1021/acs.jcim.5b00543)
         """
         primes = Primes.list(len(self.atoms))
-        atoms = {}  # {atom_idx: rank}
-        ranks = {}  # {rank: [atom_idx]}
+        atoms = []
+        ranks = []
 
-        def get_rank(atoms):
-            new_atoms = {}
-            new_ranks = {}
-            rank_key = sorted(set(atoms.values()))
+        def neighbors_rank(ranks):
+            # partitions key is product of rank and neighbors' rank
+            # use prime numbers for product so products are distinct
+            # eg: primes[2]*primes[2] != primes[1]*primes[4]
+            partitions = {}
+            for i, a in enumerate(atoms):
+                key = primes[ranks[i]]
+                for b in a.connected:
+                    if b in atoms:
+                        key *= primes[ranks[atoms.index(b)]]
+                partitions.setdefault(key, [])
+                partitions[key] += [i]
+            return update_ranks(ranks, partitions)
 
-            # looping through self.atoms should ensure that random flips
-            # between two tied atoms doesn't happen?
-            for i, a in enumerate(self):
-                if heavy_only and a.element == "H":
+        def update_ranks(ranks, partitions):
+            new_rank = 0
+            new_ranks = ranks.copy()
+            for key in sorted(partitions.keys()):
+                idx_list = partitions[key]
+                for idx in idx_list:
+                    new_ranks[idx] = new_rank
+                new_rank += len(idx_list)
+            return new_ranks
+
+        def tie_break(ranks):
+            """
+            Uses atom angles around COM -> shared_atom axis to break ties[
+            Does not break symmetry (eg: pentane carbons still [0, 2, 4, 2, 0]
+            because C2 and C4 are ~180 deg apart relative to COM-C5 axis)
+            """
+
+            def get_angle(vi, vj, norm):
+                dot = np.dot(vi, vj)
+                cross = np.cross(vi, vj)
+                det = np.dot(norm, cross)
+                rv = np.arctan2(det, dot)
+                if rv < 0:
+                    rv += 2 * np.pi
+                rv = np.rad2deg(rv)
+                return round(rv, 0)
+
+            new_ranks = ranks.copy()
+            partitions = {}
+            for i, rank in enumerate(ranks):
+                partitions.setdefault(rank, [])
+                partitions[rank] += [i]
+
+            new_partitions = partitions.copy()
+            for rank, idx_list in partitions.items():
+                if len(idx_list) == 1:
                     continue
-                val = rank_key.index(atoms[i])
-                new_atoms[i] = val
-                if val in new_ranks:
-                    new_ranks[val] += [i]
-                else:
-                    new_ranks[val] = [i]
-            return new_atoms, new_ranks
+                # split ties into groups connected to same atom
+                groups = {}
+                for i in idx_list[:-1]:
+                    a = atoms[i]
+                    for j in idx_list[1:]:
+                        b = atoms[j]
+                        connected = a.connected & b.connected
+                        if len(connected) == 1:
+                            k = atoms.index(connected.pop())
+                            groups.setdefault(k, set([i]))
+                            groups[k] |= set([j])
+                for shared_idx, connected in groups.items():
+                    shared = atoms[shared_idx]
+                    connected = sorted(connected)
+                    norm = shared.coords - self.COM()
+                    norm /= np.linalg.norm(norm)
+                    for i in connected[:-1]:
+                        vi = atoms[i].coords - shared.coords
+                        for j in connected[1:]:
+                            vj = atoms[j].coords - shared.coords
+                            ij = get_angle(vi, vj, norm)
+                            ji = get_angle(vj, vi, norm)
+                            if ij == ji:
+                                # this is here to not break symmetry
+                                # ij == ji only if angle is 180 deg
+                                continue
+                            new_partitions.setdefault(rank + 1, [])
+                            if ij > ji and i in new_partitions[rank]:
+                                new_partitions[rank + 1] += [i]
+                                new_partitions[rank].remove(i)
+                            elif j in new_partitions[rank]:
+                                new_partitions[rank + 1] += [j]
+                                new_partitions[rank].remove(j)
+            new_ranks = update_ranks(ranks, new_partitions)
+            return new_ranks
 
-        # use invariants as initial rank
-        for i, a in enumerate(self.atoms):
+        # rank all atoms the same initially
+        for a in self.atoms:
             if heavy_only and a.element == "H":
                 continue
-            atoms[i] = a.get_invariant()
+            atoms += [a]
+            ranks += [0]
 
-        atoms, ranks = get_rank(atoms)
+        # partition and re-rank using invariants
+        partitions = {}
+        for i, a in enumerate(atoms):
+            a._invariant = a.get_invariant()
+            partitions.setdefault(a._invariant, [])
+            partitions[a._invariant] += [i]
+        ranks = update_ranks(ranks, partitions)
 
-        # use neighbors to break ties
-        count = 0
-        while count < 500:
-            count += 1
-            new_atoms = {}
-            for i in atoms:
-                # new rank is product of neighbors' prime rank
-                val = primes[atoms[i]]
-                for c in self.atoms[i].connected:
-                    j = self.atoms.index(c)
-                    if heavy_only and c.element == "H":
-                        continue
-                    val *= primes[atoms[j]]
-                new_atoms[i] = val
-            atoms, new_ranks = get_rank(new_atoms)
-            if new_ranks == ranks:
+        # re-rank using neighbors until no change
+        for i in range(500):
+            new_ranks = neighbors_rank(ranks)
+            if ranks == new_ranks:
                 break
-            if sorted(new_ranks.keys()) == sorted(ranks.keys()):
-                for i in new_atoms:
-                    new_atoms[i] *= 2
-                new_atoms[ranks[0][0]] -= 1
-            atoms, new_ranks = get_rank(new_atoms)
             ranks = new_ranks
         else:
-            warn_str = "\nMax number of canonical ranking cycles exceeded: {}"
-            warn_str = warn_str.format(self.name)
-            warn(warn_str)
+            warn("Max cycles reached in canonical sorting (neighbor-ranks)")
 
-        rv = []
-        for a in self.atoms:
-            i = self.atoms.index(a)
-            if i in atoms:
-                rv += [atoms[i]]
-        return rv
+        # break ties using spatial positions
+        # AND update neighbors until no change
+        for i in range(500):
+            new_ranks = tie_break(ranks)
+            new_ranks = neighbors_rank(new_ranks)
+            if ranks == new_ranks:
+                break
+            ranks = new_ranks
+        else:
+            warn("Max cycles reached in canonicla sorting (tie-breaking)")
+
+        # store ranks in Atom
+        for r, a in zip(ranks, atoms):
+            a._rank = r
+        return ranks
 
     def reorder(
         self, start=None, targets=None, canonical=True, heavy_only=False
     ):
         """
+        Returns:
+            list(ordered_targets), list(non_targets)
+
         Depth-first reorder of atoms based on canonical ranking
         if canonical is True (default):
             starts at lowest canonical rank (use when invariance desired)
@@ -612,10 +703,11 @@ class Geometry:
         """
 
         def rank_sort(targets, reverse=False):
+            rv = sorted(targets, reverse=not reverse)
             try:
-                return sorted(targets, key=lambda a: a._rank, reverse=reverse)
+                return sorted(rv, key=lambda a: a._rank, reverse=reverse)
             except TypeError:
-                return sorted(targets, reverse=not reverse)
+                return rv
 
         def find_min(targets):
             return rank_sort(targets)[0]
@@ -640,12 +732,16 @@ class Geometry:
                 order = [find_max(targets)]
         else:
             order = self.find(start)
-        start = rank_sort(order, reverse=canonical)[0]
-        stack = rank_sort(start.connected, reverse=canonical)
+        start = rank_sort(order, reverse=canonical)
+        stack = []
+        for s in start:
+            stack += rank_sort(s.connected, reverse=canonical)
         atoms_left = set(targets) - set(order) - set(stack)
         while len(stack) > 0:
             this = stack.pop()
             if heavy_only and this.element == "H":
+                continue
+            if this in order:
                 continue
             order += [this]
             connected = this.connected & atoms_left
@@ -713,7 +809,7 @@ class Geometry:
                 rv += [(con[0], con[1], 1)]
         return rv
 
-    def compare_connectivity(self, ref, thresh=None, by_name=True):
+    def compare_connectivity(self, ref, thresh=None, return_idx=False):
         """
         Compares connectivity of self relative to ref
         Returns: broken, formed
@@ -734,10 +830,7 @@ class Geometry:
 
         not_found = set(self.atoms)
         for i, r in enumerate(ref.atoms):
-            if by_name:
-                s = self.find(r.name)[0]
-            else:
-                s = self.atoms[i]
+            s = self.find(r.name)[0]
             not_found.remove(s)
 
             conn = set(self.find(i.name)[0] for i in r.connected)
@@ -745,16 +838,22 @@ class Geometry:
                 continue
             for c in conn - s.connected:
                 if thresh is not None:
-                    dist = r.dist(ref.find(c.name)) - s.dist(c)
+                    dist = r.dist(ref.find(c.name)[0]) - s.dist(c)
                     if abs(dist) <= thresh:
                         continue
-                broken.add(tuple(sorted([s.name, c.name])))
+                if return_idx:
+                    broken.add(tuple(sorted([i, self.atoms.index(c)])))
+                else:
+                    broken.add(tuple(sorted([s.name, c.name])))
             for c in s.connected - conn:
                 if thresh is not None:
-                    dist = r.dist(ref.find(c.name)) - s.dist(c)
+                    dist = r.dist(ref.find(c.name)[0]) - s.dist(c)
                     if abs(dist) <= thresh:
                         continue
-                formed.add(tuple(sorted([s.name, c.name])))
+                if return_idx:
+                    broken.add(tuple(sorted([i, self.atoms.index(c)])))
+                else:
+                    formed.add(tuple(sorted([s.name, c.name])))
         return broken, formed
 
     # geometry measurement

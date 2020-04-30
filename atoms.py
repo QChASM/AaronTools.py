@@ -130,7 +130,7 @@ class Atom:
 
     def __lt__(self, other):
         """
-        sorts by canonical smiles invariant, then by name
+        sorts by canonical smiles rank, then by invariant, then by name
             more connections first
             then, more non-H bonds first
             then, higher atomic number first
@@ -143,6 +143,7 @@ class Atom:
             and self._rank != other._rank
         ):
             return self._rank > other._rank
+
         a = self.get_invariant()
         b = other.get_invariant()
         if a != b:
@@ -155,10 +156,12 @@ class Atom:
         while len(b) < len(a):
             b += ["0"]
         for i, j in zip(a, b):
-            if int(i) != int(j):
-                return int(i) < int(j)
-        else:
-            return True
+            try:
+                if int(i) != int(j):
+                    return int(i) < int(j)
+            except ValueError:
+                pass
+        return True
 
     def __repr__(self):
         s = ""
@@ -230,6 +233,21 @@ class Atom:
         return "{:01d}{:03d}{:03d}{:01d}".format(
             int(nconn), int(nB * 10), int(z), int(nH)
         )
+
+    def copy(self):
+        rv = Atom()
+        for key, val in self.__dict__.items():
+            try:
+                rv.__dict__[key] = val.copy()
+            except AttributeError:
+                rv.__dict__[key] = val
+                if val.__class__.__module__ != "builtins":
+                    warn(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(val)
+                        )
+                    )
+        return rv
 
     # measurement
     def is_connected(self, other, tolerance=None):
@@ -479,9 +497,7 @@ class Atom:
                 return "trigonal bipryamid"
 
         else:
-            raise RuntimeError(
-                "no shape method is defined for %s" % old_shape
-            )
+            raise RuntimeError("no shape method is defined for %s" % old_shape)
 
     def get_vsepr(self):
         """determine vsepr geometry around an atom

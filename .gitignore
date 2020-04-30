@@ -1,5 +1,6 @@
 /__pycache__
 /cache
+/utils/cache
 /**/__pycache__
 /**/Session.vim
 /bond_length

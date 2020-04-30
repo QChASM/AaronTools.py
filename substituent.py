@@ -26,7 +26,9 @@ class Substituent(Geometry):
 
     AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
     BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
-    CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache", "substituents")
+    CACHE_FILE = os.path.join(
+        os.path.dirname(__file__), "cache", "substituents"
+    )
 
     try:
         with open(CACHE_FILE) as f:
@@ -120,11 +122,16 @@ class Substituent(Geometry):
 
     def __lt__(self, other):
         if len(self.atoms) != len(other.atoms):
-            return self.atoms < other.atoms
-        elif self.end != other.end:
-            return self.end < other.end
-        else:
-            return self.atoms[0] < other.atoms[0]
+            return len(self.atoms) < len(other.atoms)
+        if self.end < other.end and not other.end < self.end:
+            return True
+        for a, b in zip(
+            self.reorder(start=self.atoms[0])[0],
+            other.reorder(start=other.atoms[0])[0],
+        ):
+            if a < b and not b < a:
+                return True
+        return False
 
     def copy(self, atoms=None, name=None, targets=None, end=None):
         """
@@ -226,7 +233,7 @@ class Substituent(Geometry):
 
             with open(Substituent.CACHE_FILE, "w") as f:
                 json.dump(Substituent.cache, f)
-        
+
         return found
 
     def align_to_bond(self, bond):
@@ -251,4 +258,3 @@ class Substituent(Geometry):
             angle *= -1
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
-
