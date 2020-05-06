@@ -3,7 +3,7 @@
 """Generates prime numbers"""
 import sys
 
-from os import path
+from os import path, makedirs
 from math import sqrt
 
 class Primes:
@@ -14,7 +14,11 @@ class Primes:
         Primes.clean = clean
         if cache is not None:
             Primes.cache = cache
-        if Primes.clean:
+        if Primes.clean or not path.exists(Primes.cache):
+            dir, cache_file = path.split(Primes.cache)
+            if not path.exists(dir):
+                makedirs(dir)
+            
             with open(Primes.cache, 'w') as f:
                 f.writelines([str(i) + "\n" for i in Primes.primes])
             f.close()
