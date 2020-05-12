@@ -644,8 +644,8 @@ class FileReader:
                     line = line.split()
                 else:
                     line = line.split(",")
-                other["charge"] = line[0]
-                other["multiplicity"] = line[1]
+                other["charge"] = int(line[0])
+                other["multiplicity"] = int(line[1])
                 found_atoms = True
                 continue
             # constraints
