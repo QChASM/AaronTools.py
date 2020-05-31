@@ -29,7 +29,7 @@ substitute_parser.add_argument('-if', '--input-format', \
                                 default=None, \
                                 choices=read_types, \
                                 dest='input_format', \
-                                help="file format of input, required if input is stdin")
+                                help="file format of input - xyz is assumed if input is stdin")
 
 substitute_parser.add_argument('-s', '--substitute', metavar='n=new substituent', \
                             type=str, \
@@ -73,8 +73,7 @@ for infile in args.infile:
         if args.input_format is not None:
             f = FileReader(('from stdin', args.input_format[0], stdin))
         else:
-            substitute_parser.print_help()
-            raise TypeError("when no input file is given, stdin is read and a format must be specified")
+            f = FileReader(('from stdin', 'xyz', stdin))
 
     geom = Geometry(f)
    

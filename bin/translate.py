@@ -22,7 +22,7 @@ translate_parser.add_argument('-if', '--input-format', \
                         choices=read_types, \
                         default=None, \
                         dest='input_format', \
-                        help="file format of input - required if input is stdin")
+                        help="file format of input - xyz is assumed if input is stdin")
 
 translate_parser.add_argument('-f', '--fragment',\
                         type=str, \
@@ -108,8 +108,7 @@ for f in args.infile:
         if args.input_format is not None:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
-            translate_parser.print_help()
-            raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+            infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
 

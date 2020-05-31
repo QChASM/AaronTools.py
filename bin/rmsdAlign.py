@@ -44,7 +44,7 @@ rmsd_parser.add_argument('-if', '--input-format', \
                         default=None, \
                         choices=read_types, \
                         dest='input_format', \
-                        help="file format of input - required if input is stdin")
+                        help="file format of input - xyz is assumed if input is stdin")
 
 rmsd_parser.add_argument('-r', '--reference' ,\
                         type=str, \
@@ -75,6 +75,12 @@ rmsd_parser.add_argument('-rt', '--ref-targets',\
                         metavar='targets', \
                         help='target atoms on reference (1-indexed)')
 
+rmsd_parser.add_argument('-v', '--value', \
+                          action='store_true', \
+                          required=False, \
+                          dest='value_only', \
+                          help='print RMSD only')
+
 rmsd_parser.add_argument('-o', '--output', \
                         type=str, \
                         nargs=1, \
@@ -104,8 +110,7 @@ for f in args.infile:
         if args.input_format is not None:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
-            rmsd_parser.print_help()
-            raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+            infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
 
@@ -114,6 +119,15 @@ for f in args.infile:
 
     geom.comment = "rmsd = %f" % rmsd
 
-    s = geom.write(append=True, outfile=args.outfile[0])
-    if not args.outfile[0]:
-        print(s)
+    if not args.value_only:
+        s = geom.write(append=True, outfile=args.outfile[0])
+        if not args.outfile[0]:
+            print(s)
+
+    else:
+        if args.outfile[0]:
+            with open(args.outfile[0], 'a') as f:
+                f.write("%f\n" % rmsd)
+
+        else:
+            print("%f" % rmsd)
