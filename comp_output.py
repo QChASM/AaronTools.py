@@ -101,14 +101,16 @@ class CompOutput:
 
         return rv.rstrip()
 
-    def therm_corr(self, temperature=None, v0=100, quasi_harmonic=False):
+    def therm_corr(self, temperature=None, v0=100, method="RRHO"):
         """returns thermal correction to energy, enthalpy correction to energy, and entropy
         for the specified cutoff frequency and temperature
         in that order (Hartrees for corrections, Eh/K for entropy)
 
-        temperature     -   float/None temperature in K, None will use self.temperature
-        v0              -   float/100  cutoff for quasi G corrections
-        quasi_harmonic  -   bool/False compute quasi harmonic corrections; False will compute quasi RRHO corrections
+        temperature     -   float/None               temperature in K, None will use self.temperature
+        v0              -   float/100                cutoff for quasi G corrections
+        method          -   str/RRHO, QRRHO, QHARM   type of quasi treatment (RRHO  - no quasi treatment
+                                                                              QRRHO - Grimme's quasi-RRHO
+                                                                              QHARM - Truhlar's quasi-harmonic)
         """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
@@ -126,7 +128,7 @@ class CompOutput:
             PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANK / PHYSICAL.KB
         )
         vibtemps = [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
-        if quasi_harmonic:
+        if method == "QHARM":
             harm_vibtemps = [
                 f_i * vib_unit_convert if f_i > v0 else v0 * vib_unit_convert
                 for f_i in freqs
@@ -173,7 +175,7 @@ class CompOutput:
             Sv_T -= np.log(1 - np.exp(-harm_vib / T))
             Ev += vib * (1.0 / 2 + 1 / (np.exp(vib / T) - 1))
 
-            if quasi_harmonic:
+            if method == "QHARM":
                 Sv += Sv_T
             else:
                 mu = PHYSICAL.PLANK
@@ -189,7 +191,10 @@ class CompOutput:
                         / PHYSICAL.PLANK ** 2
                     )
                 )
-                weight = 1 / (1 + (v0 / freqs[i]) ** 4)
+                if method == "QRRHO":
+                    weight = 1 / (1 + (v0 / freqs[i]) ** 4)
+                elif method == "RRHO":
+                    weight = 1
 
                 Sv += weight * Sv_T + (1 - weight) * Sr_eff
 
@@ -205,12 +210,12 @@ class CompOutput:
 
         return Ecorr, Hcorr, Stot
 
-    def calc_G_corr(self, temperature=None, v0=0, quasi_harmonic=False):
+    def calc_G_corr(self, temperature=None, v0=0, method="RRHO"):
         """returns quasi rrho free energy correction (Eh)
-        temperature     -   float/None  temperature; default is self.temperature
-        v0              -   cutoff      for quasi-rrho or quasi-harmonic entropy
-        quasi_harmonic  -   bool/False  use quasi-harmonic treatment for entropy"""
-        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, quasi_harmonic)
+        temperature     -   float/None              temperature; default is self.temperature
+        v0              -   cutoff                  for quasi-rrho or quasi-harmonic entropy
+        method          -   str/RRHO, QRRHO, QHARM  method for treating entropy"""
+        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method)
         T = temperature if temperature is not None else self.temperature
         Gcorr_qRRHO = Hcorr - T * Stot
 
@@ -219,7 +224,7 @@ class CompOutput:
     def calc_Grimme_G(self, temperature=None, v0=100):
         """returns quasi rrho free energy (Eh)"""
         Gcorr_qRRHO = self.calc_G_corr(
-            temperature=temperature, v0=v0, quasi_harmonic=False
+            temperature=temperature, v0=v0, method="QRRHO"
         )
         return Gcorr_qRRHO + self.energy
 

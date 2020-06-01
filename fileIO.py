@@ -82,7 +82,8 @@ class FileWriter:
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))
 
-        if os.path.dirname(geom.name) and not os.access(
+        if outfile is None and \
+            os.path.dirname(geom.name) and not os.access(
             os.path.dirname(geom.name), os.W_OK
         ):
             os.makedirs(os.path.dirname(geom.name))

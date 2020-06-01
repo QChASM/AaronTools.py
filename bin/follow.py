@@ -172,26 +172,22 @@ for i, mode in enumerate(modes):
         w = width(args.animate[0])
         fmt = "%0" + "%i" % w + "i"
 
-        Gf = G.copy()
-        Gf.update_geometry(G.coords() + dX)
-        Gr = G.copy()
-        Gr.update_geometry(G.coords() - dX)
+        Xf = G.coords() + dX
+        X = G.coords()
+        Xr = G.coords() - dX
 
         #make a scales(t) function so we can see the animation progress in the XYZ file comment
         if args.roundtrip:
-            S = Pathway([Gf, G, Gr, G, Gf])
-            ev = [Pathway.get_splines_vector([-x, 0, x, 0, -x]) for x in scale[i]]
-            m = Pathway.get_splines_mat(5)
+            other_vars = {}
+            for i, mode_scale in enumerate(scale[i]):
+               other_vars['scale %i'] = [mode_scale, 0, -mode_scale, 0, mode_scale] 
+            S = Pathway(G, np.array([Xf, X, Xr, X, Xf]), other_vars=other_vars)
 
         else:
-            S = Pathway([Gf, G, Gr])
-            ev = [Pathway.get_splines_vector([-x, 0, x]) for x in scale[i]]
-            m = Pathway.get_splines_mat(3)
-
-        mi = np.linalg.inv(m)
-        ev = np.transpose(ev)
-        c = np.dot(mi, ev)
-        scaling, df = Pathway.get_E_func(c, S.region_length)
+            other_vars = {}
+            for i, mode_scale in enumerate(scale[i]):
+               other_vars['scale %i'] = [mode_scale, 0, -mode_scale] 
+            S = Pathway(G, np.array([Xf, X, Xr]), other_vars=other_vars)
 
         #print animation frames
         for k, t in enumerate(np.linspace(0, 1, num=args.animate[0])):
@@ -201,7 +197,7 @@ for i, mode in enumerate(modes):
                 outfile = outfiles[i]
 
             Gt = S.Geom_func(t)
-            Gt.comment = "animating mode %s scaled to displace at most %s" % (repr(mode), scaling(t))
+            Gt.comment = "animating mode %s scaled to displace at most [%s]" % (repr(mode), ", ".join(str(S.var_func[key](t)) for key in other_vars))
             s = Gt.write(append, outfile=outfile)
             if not outfile:
                 print(s)

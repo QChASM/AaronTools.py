@@ -106,8 +106,8 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
     rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp)
-    qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, quasi_harmonic=False)
-    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, quasi_harmonic=True)
+    qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO")
+    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM")
 
     if args.temp is None:
         t = co.temperature
