@@ -10,12 +10,13 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
-read_types = ["xyz", "log", "com", "sd", "out"]
+read_types = ["xyz", "log", "com", "sd", "out", "dat"]
 write_types = ["xyz", "com"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
+PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
 ERRORS = {
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
@@ -219,6 +220,8 @@ class FileReader:
                 self.read_com(f)
             elif self.file_type == "out":
                 self.read_orca_out(f, get_all, just_geom)
+            elif self.file_type == "dat":
+                self.read_psi4_out(f, get_all, just_geom)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -251,6 +254,8 @@ class FileReader:
             self.read_sd(f)
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)
+        elif self.file_type == "dat":
+            self.read_psi4_out(f, get_all, just_geom)
 
         f.close()
 
@@ -302,6 +307,110 @@ class FileReader:
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
+
+    def read_psi4_out(self, f, get_all=False, just_geom=True):
+        def get_atoms(f, n):
+            rv = []
+            self.skip_lines(f, 1)
+            n += 2
+            line = f.readline()
+            i = 0
+            mass = 0
+            while line.strip():
+                i += 1
+                line = line.strip()
+                atom_info = line.split()
+                element = atom_info[0]
+                coords = np.array([float(x) for x in atom_info[1:-1]])
+                rv += [Atom(element=element, coords=coords, name=str(i))]
+                mass += float(atom_info[-1])
+
+                line = f.readline()
+                n += 1
+
+            return rv, mass, n
+
+        line = f.readline()
+        n = 1
+        while line != "":
+            if line.startswith('    Geometry (in Angstrom), charge'):
+                if not just_geom:
+                    self.other['charge'] = int(line.split()[5].strip(','))
+                    self.other['multiplicity'] = int(line.split()[8].strip(':'))
+
+            elif line.strip().startswith('Center'):
+                if get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                self.atoms, mass, n = get_atoms(f, n)
+                if not just_geom:
+                    self.other["mass"] = mass
+                    self.other["mass"] *= UNIT.AMU_TO_KG
+
+            if just_geom:
+                line = f.readline()
+                n += 1
+                continue
+            else:
+                if line.strip().startswith('Current energy'):
+                    self.other["energy"] = float(line.split()[-1])
+
+                elif line.strip().startswith('Total E0'):
+                    self.other["energy"] = float(line.split()[-2])
+
+                elif line.strip().startswith('Correction ZPE'):
+                    self.other["ZPVE"] = float(line.split()[-4])
+
+                elif line.strip().startswith('Total ZPE'):
+                    self.other['E_ZPVE'] = float(line.split()[-2])
+
+                elif line.strip().startswith('Total H, Enthalpy'):
+                    self.other['enthalpy'] = float(line.split()[-2])
+
+                elif line.strip().startswith('Total G, Free'):
+                    self.other['free_energy'] = float(line.split()[-2])
+                    self.other['temperature'] = float(line.split()[-4])
+
+                elif 'symmetry no. =' in line:
+                    self.other['rotational_symmetry_number'] = int(
+                        line.split()[-1].strip(')')
+                    )
+
+                elif line.strip().startswith('Rotational constants:') and \
+                         line.strip().endswith('[cm^-1]') and \
+                         'rotational_temperature' not in self.other:
+                    self.other["rotational_temperature"] = [
+                        float(x) for x in line.split()[-8:-1:3]
+                    ]
+                    self.other["rotational_temperature"] = [
+                        x
+                        * PHYSICAL.SPEED_OF_LIGHT
+                        * PHYSICAL.PLANK
+                        / PHYSICAL.KB
+                        for x in self.other["rotational_temperature"]
+                    ]
+
+                elif line.startswith('  Vibration '):
+                    freq_str = ""
+                    while not line.strip().startswith('=='):
+                        freq_str += line
+                        line = f.readline()
+                        n += 1
+
+                    self.other["frequency"] = Frequency(
+                        freq_str, hpmodes=False, form="dat"
+                    )
+
+                elif PSI4_NORM_FINISH in line:
+                    self.other["finished"] = True
+                
+                line = f.readline()
+                n += 1
 
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
@@ -744,12 +853,51 @@ class Frequency:
             self.parse_lines(lines, hpmodes)
         elif form == "out":
             self.parse_orca_lines(lines, hpmodes)
+        elif form == "dat":
+            self.parse_psi4_lines(lines, hpmodes)
         else:
             raise RuntimeError("no frequency parser for %s files" % form)
 
         self.sort_frequencies()
         return
 
+    def parse_psi4_lines(self, lines, hpmodes):
+        """parse lines of psi4 output related to frequencies
+        hpmodes is not used"""
+        # normal mode info appears in blocks, with up to 3 modes per block
+        # at the top is the index of the normal mode
+        # next is the frequency in wavenumbers (cm^-1)
+        # after a line of '-----' are the normal displacements
+        read_displacement = False
+        modes = []
+        for n, line in enumerate(lines):
+            if len(line.strip()) == 0:
+                read_displacement = False
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.vector = np.array(modes[i])
+
+            elif read_displacement:
+                info = [float(x) for x in line.split()[2:]]
+                for i, mode in enumerate(modes):
+                    mode.append(info[3*i:3*(i+1)])
+
+            elif line.strip().startswith('Vibration'):
+                nmodes = len(line.split()) - 1
+
+            elif line.strip().startswith('Freq'):
+                freqs = [float(x) for x in line.split()[2:]]
+                for freq in freqs:
+                    self.data.append(Frequency.Data(float(freq)))
+
+            elif line.strip().startswith('Force const'):
+                force_consts = [float(x) for x in line.split()[3:]]
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.forcek = force_consts[i]
+
+            elif line.strip().startswith('----'):
+                read_displacement = True
+                modes = [[] for i in range(0, nmodes)]
+            
     def parse_orca_lines(self, lines, hpmodes):
         """parse lines of orca output related to frequency
         hpmodes is not currently used"""
