@@ -1692,35 +1692,6 @@ class Geometry:
         if refresh_ranks:
             self.refresh_ranks()
 
-    def short_walk(self, atom1, atom2):
-        """try to find the shortest path between atom1 and atom2"""
-        a1 = self.find(atom1)[0]
-        a2 = self.find(atom2)[0]
-        l = [a1]
-        start = a1
-        max_iter = len(self.atoms)
-        i = 0
-        while start != a2:
-            i += 1
-            if i > max_iter:
-                raise LookupError(
-                    "could not determine best path between %s and %s"
-                    % (str(atom1), str(atom2))
-                )
-            v1 = start.bond(a2)
-            max_overlap = None
-            for atom in start.connected:
-                if atom not in l:
-                    v2 = start.bond(atom)
-                    overlap = np.dot(v1, v2)
-                    if max_overlap is None or overlap > max_overlap:
-                        new_start = atom
-                        max_overlap = overlap
-
-            l.append(new_start)
-            start = new_start
-        return l
-
     @classmethod
     def from_string(cls, name, form="smiles"):
         """get structure from string
