@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import sys
-import numpy as np
 import argparse
+import os
 
-from AaronTools.geometry import Geometry
-from AaronTools.fileIO import FileReader, read_types
+from AaronTools.fileIO import FileReader
 from AaronTools.comp_output import CompOutput
+
+from glob import glob
 
 thermo_parser = argparse.ArgumentParser(description='print thermal corrections and free energy', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -28,7 +29,7 @@ thermo_parser.add_argument('-if', '--input-format', \
                         nargs=1, \
                         default=None, \
                         dest='input_format', \
-                        choices=['.log', '.out'], \
+                        choices=['.log', '.out', '.dat'], \
                         help="file format of input - required if input is stdin")
 
 thermo_parser.add_argument('-sp', '--single-point', \
@@ -59,22 +60,58 @@ thermo_parser.add_argument('-csv', '--comma-seperated', \
                             dest='csv', \
                             help='print output in CSV format')
 
+thermo_parser.add_argument('-d', '--delimiter', \
+                        type=str, \
+                        default='comma', \
+                        dest='delimiter', \
+                        choices=['comma', 'semicolon', 'tab', 'space'], \
+                        help="CSV delimiter")
+
+thermo_parser.add_argument('-r', '--recursive', \
+                            metavar='PATTERN', \
+                            type=str, \
+                            nargs='*', \
+                            default=None, \
+                            required=False, \
+                            dest='pattern', \
+                            help='search subdirectories of current directory for files matching PATTERN')
+
 args = thermo_parser.parse_args()
 
 if args.csv:
-    output = "E,ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),dZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP File,Thermo File\n"
+    if args.delimiter == 'comma':
+        delim = ','
+    elif args.delimiter == 'semicolon':
+        delim = ';'
+    elif args.delimiter == 'tab':
+        delim = '\t'
+    elif args.delimiter == 'space':
+        delim = ' '
+        
+    output = delim.join(["E", "ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
+                         "dZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)", \
+                         "SP_File", "Thermo_File"])
+    output += '\n'
 else:
     output = ""
 
-infiles = args.infile
+if args.pattern is None:
+    infiles = args.infile
+else:
+    infiles = []
+    cwd = os.getcwd()
+    for root, dirs, files in os.walk(cwd, topdown=True):
+        for pattern in args.pattern:
+            full_glob = os.path.join(root, pattern)
+            infiles.extend(glob(full_glob))
 
 if args.sp_file != [None]:
     sp_filenames = [f for  f in args.sp_file]
     sp_files = [FileReader(f, just_geom=False) for f in args.sp_file]
     sp_energies = [sp_file.other['energy'] for sp_file in sp_files]
 else:
-    sp_energies = [None]
-    sp_filenames = [None]
+    sp_energies = [None for f in infiles]
+    sp_filenames = [None for f in infiles]
 
 while len(sp_energies) < len(infiles):
     sp_energies.extend([sp_file.other['energy'] for sp_file in sp_files])
@@ -105,7 +142,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         nrg = sp_nrg
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
-    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp)
+    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
     qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO")
     qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM")
 
@@ -115,21 +152,25 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         t = args.temp
 
     if args.csv:
+        nrg_str = "%.6f" % nrg
         corrections = [co.ZPVE, dH, rrho_dG, qrrho_dG, qharm_dG]
         therm = [nrg + correction for correction in corrections]
-        output += "%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%.12f,%s,%s\n" \
-        % (nrg, *therm, *corrections, sp_file if sp_file is not None else f, f)
+        output += delim.join([nrg_str] + \
+                             ["%.6f" % x for x in corrections] + \
+                             ["%.6f" % x for x in therm] + \
+                             [sp_file if sp_file is not None else f, f])
+        output += '\n'
     else:
         output += "electronic energy of %s = %.8f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
                 nrg)
-        output += "    ZPE               = %.10f Eh  (dZPE = %.10f)\n" % (nrg + co.ZPVE, co.ZPVE)
+        output += "    ZPE               = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
-        output += "    H(RRHO)           = %.10f Eh  (dH = %.10f)\n" % (nrg + dH, dH)
-        output += "    G(RRHO)           = %.10f Eh  (dG = %.10f)\n" % (nrg + rrho_dG, rrho_dG)
+        output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
+        output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)
         output += "  quasi treatments for entropy (w0=%.1f cm^-1):\n" % args.w0
-        output += "    G(Quasi-RRHO)     = %.10f Eh  (dG = %.10f)\n" % (nrg + qrrho_dG, qrrho_dG)
-        output += "    G(Quasi-harmonic) = %.10f Eh  (dG = %.10f)\n" % (nrg + qharm_dG, qharm_dG)
+        output += "    G(Quasi-RRHO)     = %.6f Eh  (dG = %.6f)\n" % (nrg + qrrho_dG, qrrho_dG)
+        output += "    G(Quasi-harmonic) = %.6f Eh  (dG = %.6f)\n" % (nrg + qharm_dG, qharm_dG)
     
         output += '\n'
     
