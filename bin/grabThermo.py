@@ -4,10 +4,15 @@ import sys
 import argparse
 import os
 
-from AaronTools.fileIO import FileReader
 from AaronTools.comp_output import CompOutput
+from AaronTools.fileIO import FileReader
+from AaronTools.geometry import Geometry
 
 from glob import glob
+
+from numpy import isclose
+
+from warnings import warn
 
 thermo_parser = argparse.ArgumentParser(description='print thermal corrections and free energy', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -99,16 +104,41 @@ if args.pattern is None:
     infiles = args.infile
 else:
     infiles = []
-    cwd = os.getcwd()
-    for root, dirs, files in os.walk(cwd, topdown=True):
-        for pattern in args.pattern:
-            full_glob = os.path.join(root, pattern)
-            infiles.extend(glob(full_glob))
+    if args.infile == [sys.stdin]:
+        directories = [os.getcwd()]
+    else:
+        directories = []
+        for directory in args.infile:
+            directories.extend(glob(directory))
+
+    for directory in directories:
+        for root, dirs, files in os.walk(directory, topdown=True):
+            for pattern in args.pattern:
+                full_glob = os.path.join(root, pattern)
+                infiles.extend(glob(full_glob))
 
 if args.sp_file != [None]:
-    sp_filenames = [f for  f in args.sp_file]
-    sp_files = [FileReader(f, just_geom=False) for f in args.sp_file]
+    if args.pattern is None:
+        sp_filenames = [f for  f in args.sp_file]
+    
+    else:
+        sp_filenames = []
+        if args.infile == [sys.stdin]:
+            directories = [os.getcwd()]
+        else:
+            directories = []
+            for directory in args.infile:
+                directories.extend(glob(directory))
+
+        for directory in directories:
+            for root, dirs, files in os.walk(directory, topdown=True):
+                for pattern in args.sp_file:
+                    full_glob = os.path.join(root, pattern)
+                    sp_filenames.extend(glob(full_glob))
+
+    sp_files = [FileReader(f, just_geom=False) for f in sp_filenames]
     sp_energies = [sp_file.other['energy'] for sp_file in sp_files]
+
 else:
     sp_energies = [None for f in infiles]
     sp_filenames = [None for f in infiles]
@@ -140,6 +170,12 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         nrg = co.energy
     else:
         nrg = sp_nrg
+        sp_geom = Geometry(sp_file)
+        freq_geom = Geometry(infile)
+        rmsd = sp_geom.RMSD(freq_geom)
+        if not isclose(rmsd, 0, atol=1e-5):
+            warn("\ngeometries in supposed single-point/thermochemistry pair appear to be different (rmsd = %.5f)\n" % rmsd + 
+                 "%s\n%s" % (sp_geom.name, freq_geom.name))
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
     rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
@@ -156,12 +192,12 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         corrections = [co.ZPVE, dH, rrho_dG, qrrho_dG, qharm_dG]
         therm = [nrg + correction for correction in corrections]
         output += delim.join([nrg_str] + \
-                             ["%.6f" % x for x in corrections] + \
                              ["%.6f" % x for x in therm] + \
+                             ["%.6f" % x for x in corrections] + \
                              [sp_file if sp_file is not None else f, f])
         output += '\n'
     else:
-        output += "electronic energy of %s = %.8f Eh\n" % (sp_file \
+        output += "electronic energy of %s = %.6f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
                 nrg)
         output += "    ZPE               = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
