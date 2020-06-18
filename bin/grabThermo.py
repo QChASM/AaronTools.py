@@ -117,6 +117,8 @@ else:
                 full_glob = os.path.join(root, pattern)
                 infiles.extend(glob(full_glob))
 
+    infiles.sort()
+
 if args.sp_file != [None]:
     if args.pattern is None:
         sp_filenames = [f for  f in args.sp_file]
@@ -135,6 +137,8 @@ if args.sp_file != [None]:
                 for pattern in args.sp_file:
                     full_glob = os.path.join(root, pattern)
                     sp_filenames.extend(glob(full_glob))
+    
+    sp_filenames.sort()
 
     sp_files = [FileReader(f, just_geom=False) for f in sp_filenames]
     sp_energies = [sp_file.other['energy'] for sp_file in sp_files]

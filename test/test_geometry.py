@@ -52,6 +52,7 @@ class TestGeometry(TestWithTimer):
     ]
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
     benzene = os.path.join(prefix, "test_files/benzene.xyz")
+    pyridine = os.path.join(prefix, "test_files/pyridine.xyz")
     pentane = os.path.join(prefix, "test_files/pentane.xyz")
     naphthalene = os.path.join(prefix, "ref_files/naphthalene.xyz")
     tetrahydronaphthalene = os.path.join(
@@ -340,7 +341,6 @@ class TestGeometry(TestWithTimer):
         geom.change_distance("10", "15", dist=-1, adjust=True)
         geom.refresh_connected()
         broken, formed = geom.compare_connectivity(ref)
-        print(broken, formed)
         self.assertTrue(len(broken) == 0)
         self.assertTrue(len(formed) == 1)
         self.assertSetEqual(formed, set([("10", "15")]))
@@ -631,6 +631,14 @@ class TestGeometry(TestWithTimer):
         rmsd = mol3.RMSD(ref3, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
+    def test_change_element(self):
+        mol = Geometry(TestGeometry.benzene)
+
+        ref = Geometry(TestGeometry.pyridine)
+        mol.change_element("1", "N", adjust_hydrogens=True)
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
+
 
 def suite():
     suite = unittest.TestSuite()
@@ -638,7 +646,7 @@ def suite():
     return suite
 
 
-ONLYSOME = True
+ONLYSOME = False
 
 if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()

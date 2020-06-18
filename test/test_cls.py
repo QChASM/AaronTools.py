@@ -23,6 +23,7 @@ from AaronTools.test.test_geometry import is_close
 class TestCLS(TestWithTimer):
     benz_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
+    pyridine = os.path.join(prefix, "test_files", "pyridine.xyz")
     pentane = os.path.join(prefix, "test_files", "pentane.xyz")
     naphthalene = os.path.join(prefix, "ref_files", "naphthalene.xyz")
     tetrahydronaphthalene = os.path.join(
@@ -31,6 +32,12 @@ class TestCLS(TestWithTimer):
     pyrene = os.path.join(prefix, "ref_files", "pyrene.xyz")
     benz_OH_Cl = os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
     frequencies = os.path.join(prefix, "test_files", "normal.log")
+
+    g09_com_file = os.path.join(prefix, "test_files", "5a-sub1.R.ts1.Cf1.3.com")
+    g09_log_file = os.path.join(prefix, "test_files", "opt_normal.log")
+    orca_out_file = os.path.join(prefix, "test_files", "orca_geom.out")
+    psi4_dat_file = os.path.join(prefix, "test_files", "psi4-test.out")
+    xyz_file = os.path.join(prefix, "test_files", "benzene.xyz")
 
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
    
@@ -54,6 +61,20 @@ class TestCLS(TestWithTimer):
         
         angle = float(out)
         self.assertTrue(is_close(angle, 124.752, 10 ** -2))
+    
+    def test_bond(self):
+        """measuring bonds"""
+        args = [os.path.join(self.aarontools_bin, "bond.py"), \
+                TestCLS.benzene, \
+                "-m", "1", "2"]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+        
+        self.assertTrue(len(err) == 0)
+        
+        angle = float(out)
+        self.assertTrue(is_close(angle, 1.3952, 10 ** -2))
 
     def test_dihedral(self):
         """measuring dihedrals"""
@@ -213,6 +234,109 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         self.assertTrue(out_list[0] == ref_list[0])
         self.assertTrue(out_list[1].split(',')[:-2] == ref_list[1].split(',')[:-2])
+
+    def test_printXYZ(self):
+        #for each test, the rmsd tolerance is determined based on the number of atoms and 
+        #the precision we use when printing xyz files
+        #test xyz file
+        ref_xyz = Geometry(TestCLS.xyz_file)
+
+        args = [os.path.join(self.aarontools_bin, "printXYZ.py"), \
+                TestCLS.xyz_file]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref_xyz, align=True)
+        self.assertTrue(rmsd < len(ref_xyz.atoms) * (3 * 1e-5))
+        
+        
+        #test gaussian input file
+        ref_com = Geometry(TestCLS.g09_com_file)
+
+        args = [os.path.join(self.aarontools_bin, "printXYZ.py"), \
+                TestCLS.g09_com_file]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref_com, align=True)
+        self.assertTrue(rmsd < len(ref_com.atoms) * (3 * 1e-5))
+        
+
+        #test gaussian output file
+        ref_log = Geometry(TestCLS.g09_log_file)
+
+        args = [os.path.join(self.aarontools_bin, "printXYZ.py"), \
+                TestCLS.g09_log_file]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref_log, align=True)
+        self.assertTrue(rmsd < len(ref_log.atoms) * (3 * 1e-5))
+
+
+        #test orca output file
+        ref_out = Geometry(TestCLS.orca_out_file)
+
+        args = [os.path.join(self.aarontools_bin, "printXYZ.py"), \
+                TestCLS.orca_out_file]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref_out, align=True)
+        self.assertTrue(rmsd < len(ref_out.atoms) * (3 * 1e-5))
+       
+        
+        #test psi4 output files and format flat
+        ref_dat = Geometry(FileReader((TestCLS.psi4_dat_file, 'dat', None)))
+
+        args = [os.path.join(self.aarontools_bin, "printXYZ.py"), \
+                TestCLS.psi4_dat_file, '-if', 'dat']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref_dat, align=True)
+        self.assertTrue(rmsd < len(ref_dat.atoms) * (3 * 1e-5))
+
+    def test_changeElement(self):
+        ref = Geometry(TestCLS.pyridine)
+
+        args = [os.path.join(self.aarontools_bin, "changeElement.py"), \
+                TestCLS.benzene, '-e', '1=N', '-c']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+       
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
 
 
 if __name__ == "__main__":
