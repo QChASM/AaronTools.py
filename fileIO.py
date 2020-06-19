@@ -739,17 +739,32 @@ class FileReader:
                         "solvent=(\S+)\)", line
                     ).group(1)
                 if "scrf=" in line:
+                    #solvent model should be non-greedy b/c solvent name can have commas
                     other["solvent_model"] = re.search(
-                        "scrf=\((\S+),", line
+                        "scrf=\((\S+?),", line
                     ).group(1)
                 if "EmpiricalDispersion=" in line:
                     other["emp_dispersion"] = re.search(
                         "EmpiricalDispersion=(\S+)", line
                     ).group(1)
-                if "int=(grid(" in line:
-                    other["grid"] = re.search("int=\(grid(\S+)", line).group(1)
-                for _ in range(4):
-                    line = f.readline()
+                if "int=(grid" in line or "integral=(grid" in line.lower():
+                    other["grid"] = re.search("(?:int||Integral)=\(grid[(=](\S+?)\)", line).group(1)
+                #comments can be multiple lines long
+                #but there should be a blank line between the route and the comment
+                #and another between the comment and the charge+mult
+                blank_lines = 0
+                while blank_lines < 2:
+                    line = f.readline().strip()
+                    if len(line) == 0:
+                        blank_lines += 1
+                    else:
+                        if 'comment' not in other:
+                            other['comment'] = ""
+
+                        other['comment'] += "%s\n" % line
+                
+                other['comment'] = other['comment'].strip()
+                line = f.readline()
                 if len(line.split()) > 1:
                     line = line.split()
                 else:
