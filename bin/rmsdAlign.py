@@ -81,6 +81,18 @@ rmsd_parser.add_argument('-v', '--value', \
                           dest='value_only', \
                           help='print RMSD only')
 
+rmsd_parser.add_argument('-s', '--sort', \
+                          action='store_true', \
+                          required=False, \
+                          dest='sort', \
+                          help='sort atoms')
+
+rmsd_parser.add_argument('-n', '--non-hydrogen', \
+                          action='store_true', \
+                          required=False, \
+                          dest='heavy', \
+                          help='ignore hydrogen atoms')
+
 rmsd_parser.add_argument('-o', '--output', \
                         type=str, \
                         nargs=1, \
@@ -115,7 +127,7 @@ for f in args.infile:
     geom = Geometry(infile)
 
     #align
-    rmsd = geom.RMSD(ref_geom, align=True, targets=args.in_target, ref_targets=args.ref_target)
+    rmsd = geom.RMSD(ref_geom, align=True, targets=args.in_target, ref_targets=args.ref_target, heavy_only=args.heavy, sort=args.sort)
 
     geom.comment = "rmsd = %f" % rmsd
 

@@ -33,6 +33,9 @@ class TestCLS(TestWithTimer):
     benz_OH_Cl = os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
     frequencies = os.path.join(prefix, "test_files", "normal.log")
 
+    rmsd_sort_1 = os.path.join(prefix, "test_files", "test_rmsd_sort1.xyz")
+    rmsd_sort_2 = os.path.join(prefix, "test_files", "test_rmsd_sort2.xyz")
+
     g09_com_file = os.path.join(prefix, "test_files", "5a-sub1.R.ts1.Cf1.3.com")
     g09_log_file = os.path.join(prefix, "test_files", "opt_normal.log")
     orca_out_file = os.path.join(prefix, "test_files", "orca_geom.out")
@@ -104,6 +107,20 @@ class TestCLS(TestWithTimer):
         
         rmsd = float(out)
         self.assertTrue(is_close(rmsd, 0, 10 ** -5))
+
+        #test sorting flag
+        args = [os.path.join(self.aarontools_bin, "rmsdAlign.py"), \
+                "-r", TestCLS.rmsd_sort_1, \
+                TestCLS.rmsd_sort_2, \
+                "--value", "--sort"]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+        
+        self.assertTrue(len(err) == 0)
+        
+        rmsd = float(out)
+        self.assertTrue(rmsd < 0.1)
 
     def test_substitute(self):
         ref = Geometry(TestCLS.benz_NO2_Cl)
