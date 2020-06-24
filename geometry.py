@@ -932,7 +932,7 @@ class Geometry:
         ref,
         align=False,
         heavy_only=False,
-        sort=True,
+        sort=False,
         targets=None,
         ref_targets=None,
         debug=False,
@@ -1073,13 +1073,19 @@ class Geometry:
 
         # return rmsd
         if not align:
-            return rmsd
+            if debug:
+                return Geometry(targets), Geometry(ref_targets), rmsd
+            else:
+                return rmsd
         # or update geometry and return rmsd
         self.coord_shift(-com)
         if np.linalg.norm(vec) > 0:
             self.rotate(vec)
         self.coord_shift(ref_com)
-        return rmsd
+        if debug:
+            return Geometry(targets), Geometry(ref_targets), rmsd
+        else:
+            return rmsd
 
     def get_near(self, ref, dist, by_bond=False, include_ref=False):
         """
@@ -1769,7 +1775,7 @@ class Geometry:
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
             ring_fragment.RMSD(
-                geom, align=True, targets=ring_fragment.end, ref_targets=walk
+                geom, align=True, targets=ring_fragment.end, ref_targets=walk, sort=True
             )
 
             ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)

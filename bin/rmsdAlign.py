@@ -127,7 +127,11 @@ for f in args.infile:
     geom = Geometry(infile)
 
     #align
+    #order1, order2, rmsd = geom.RMSD(ref_geom, align=True, targets=args.in_target, ref_targets=args.ref_target, heavy_only=args.heavy, sort=args.sort, debug=True)
     rmsd = geom.RMSD(ref_geom, align=True, targets=args.in_target, ref_targets=args.ref_target, heavy_only=args.heavy, sort=args.sort)
+
+    #for atom1, atom2 in zip(order1.atoms, order2.atoms):
+    #    print(atom1.name, atom2.name)
 
     geom.comment = "rmsd = %f" % rmsd
 

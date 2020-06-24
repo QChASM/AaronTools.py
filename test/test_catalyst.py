@@ -22,6 +22,9 @@ class TestCatalyst(TestWithTimer):
     org_tri = Catalyst(
         os.path.join(prefix, "test_files/catalysts/org_tri.xyz")
     )
+    ptco4 = Catalyst(
+        os.path.join(prefix, "test_files", "ptco4.xyz")
+    )
     catalysts = [tm_simple, tm_multi, org_1, org_tri]
 
     monodentate = Component(os.path.join(prefix, "test_files/ligands/ACN.xyz"))
@@ -113,6 +116,13 @@ class TestCatalyst(TestWithTimer):
     def test_map_ligand(self):
         monodentate = TestCatalyst.monodentate
         tridentate = TestCatalyst.tridentate
+
+        """
+        #TODO: get a reference file for this
+        # two monodentate -> bidentate
+        ptco4 = TestCatalyst.ptco4.copy()
+        ptco4.map_ligand('EDA', ["3", "5"])
+        """
 
         # bidentate -> monodentate, none
         tm_simple = TestCatalyst.tm_simple.copy()

@@ -103,6 +103,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
         
+        if len(err) != 0:
+            print(err)
         self.assertTrue(len(err) == 0)
         
         rmsd = float(out)
@@ -117,6 +119,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
         
+        if len(err) != 0:
+            print(err)
         self.assertTrue(len(err) == 0)
         
         rmsd = float(out)
@@ -148,12 +152,12 @@ class TestCLS(TestWithTimer):
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
-       
+
         self.assertTrue(len(err) == 0)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
-        rmsd = mol.RMSD(ref1, align=True)
+        rmsd = mol.RMSD(ref1, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
 
     def test_grabThermo(self):
