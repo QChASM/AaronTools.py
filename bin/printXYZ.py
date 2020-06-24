@@ -30,7 +30,7 @@ xyz_parser.add_argument('-if', '--input-format', \
                         default=None, \
                         dest='input_format', \
                         choices=read_types, \
-                        help="file format of input - required if input is stdin")
+                        help="file format of input - xyz is assumed if input is stdin")
 
 xyz_parser.add_argument('-c', '--comment', \
                         type=str, \
@@ -53,8 +53,7 @@ for f in args.infile:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
             if len(sys.argv) >= 1:
-                xyz_parser.print_help()
-                raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+                infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
     if args.comment[0]:

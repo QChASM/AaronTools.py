@@ -85,11 +85,8 @@ interpolate_parser.add_argument('-t', '--print-ts', \
                             metavar=('t1', 't2'), \
                             dest='specific_ts', \
                             help='space-separated list of t values at which to print structures \n{t| 0 <= t <= 1}')
-
 """
-we used scipy.linalg.null_space to use normal modes to get to 3N coordinates
-but we don't want scipy to be a requirement for just one tiny thing
-
+#TODO: add this back in
 interpolate_parser.add_argument('-q', '--use-normal-modes', \
                             type=str, \
                             nargs=1, \
@@ -154,17 +151,23 @@ else:
     ref_G = Gs[0]
     Q = None
 """
+
 ref_G = Gs[0]
 Q = None
 
 #align all input geometries to the reference
+nrg = []
 for G in Gs:
     centroid = G.COM(mass_weight=True)
     G.coord_shift(vector = -1*centroid)
     G.RMSD(ref=ref_G, align=True)
+    if 'energy' in G.other:
+        nrg.append(G.other['energy'])
+    else:
+        nrg.append(0)
 
 #interpolate between the structures
-S = Pathway(Gs, Q)
+S = Pathway(Gs[0], np.array([G.coords() for G in Gs]), basis=Q, other_vars={'energy':nrg})
 s_max, r_max = Pathway.t_to_s(1, S.region_length)
 
 #header for writing energies
@@ -179,16 +182,16 @@ if args.print_max or args.print_min:
     ts = np.linspace(0, 1, num=10001)
     dt = ts[1] - ts[0]
     for t in ts:
-        dEdt = S.dE_func(t)*S.dE_func(t+dt)
-        if dEdt <= 0 and S.dE_func(t) > 0 and args.print_max:
+        dEdt = S.dvar_func_dt['energy'](t) * S.dvar_func_dt['energy'](t+dt)
+        if dEdt <= 0 and S.dvar_func['energy'](t) > 0 and args.print_max:
             max_n_min_ts.append(t)
-        if dEdt <= 0 and S.dE_func(t) < 0 and args.print_min:
+        if dEdt <= 0 and S.dvar_func_dt['energy'](t) < 0 and args.print_min:
             max_n_min_ts.append(t)
 
     for i, t in enumerate(max_n_min_ts):
-        E = S.E_func(t)
+        E = S.var_func['energy'](t)
         if args.print_E:
-            dE = S.dE_func(t)
+            dE = S.dvar_func_dt['energy'](t)
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
         else:
             G = S.Geom_func(t)
@@ -200,12 +203,12 @@ if args.specific_ts:
     #print structures for specified values of t
     for i, t in enumerate(args.specific_ts):
         if args.print_E:
-            E = S.E_func(t)
-            dE = S.dE_func(t)
+            E = S.var_func['energy'](t)
+            dE = S.dvar_func_dt['energy'](t)
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
         else:
             G = S.Geom_func(t)
-            E = S.E_func(t)
+            E = S.var_func['energy'](t)
             comment = "E(%f) = %f" % (t, E)
             G.comment = comment
             write_geoms.append(G.copy())
@@ -215,8 +218,8 @@ if args.print_E:
         ss = np.linspace(0, s_max, num=args.n_struc[0])
         for s in ss:
             t = Pathway.s_to_t(s, S.region_length)
-            E = S.E_func(t)
-            dE = S.dE_func(t)
+            E = S.var_func['energy'](t)
+            dE = S.dvar_func_dt['energy'](t)
             nrg_out += "%f\t%f\t%f\n" % (t,E,dE)
             
     if outfile is not None:
@@ -233,7 +236,7 @@ else:
         ts = np.linspace(0, 1, num=args.n_struc[0])
         for i, t in enumerate(ts):
             G = S.Geom_func(t)
-            E = S.E_func(t)
+            E = S.var_func['energy'](t)
             comment = "E(%f) = %f" % (t, E)
             G.comment = comment
             write_geoms.append(G.copy())

@@ -46,7 +46,7 @@ dihedral_parser.add_argument('-if', '--input-format', \
                         nargs=1, \
                         choices=read_types, \
                         default=None, \
-                        help="file format of input - required if input is stdin")
+                        help="file format of input - xyz is assumed if input is stdin")
 
 dihedral_parser.add_argument('-m', '--measure', metavar=('atom1', 'atom2', 'atom3', 'atom4'),\
                         action='append', \
@@ -104,8 +104,7 @@ for f in args.infile:
         if args.input_format is not None:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
-            dihedral_parser.print_help()
-            raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+            infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
 

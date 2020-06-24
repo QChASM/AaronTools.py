@@ -47,7 +47,7 @@ angle_parser.add_argument('-if', '--input-format', \
                         default=None, \
                         choices=read_types, \
                         dest='input_format', \
-                        help="file format of input - required if input is stdin")
+                        help="file format of input - xyz is assumed if input is stdin")
 
 angle_parser.add_argument('-m', '--measure', metavar=('atom1', 'center', 'atom3'),\
                         action='append', \
@@ -105,8 +105,7 @@ for f in args.infile:
         if args.input_format is not None:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
-            angle_parser.print_help()
-            raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+            infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
 

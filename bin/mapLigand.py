@@ -29,7 +29,7 @@ maplig_parser.add_argument('-if', '--input-format', \
                                 default=None, \
                                 choices=read_types, \
                                 dest='input_format', \
-                                help="file format of input, required if input is stdin")
+                                help="file format of input - xyz is assumed if input is stdin")
 
 maplig_parser.add_argument('-l', '--ligand', metavar='ligand', \
                             type=str, \
@@ -79,15 +79,31 @@ for infile in args.infile:
         if args.input_format is not None:
             f = FileReader(('from stdin', args.input_format[0], stdin))
         else:
-            maplig_parser.print_help()
-            raise TypeError("when no input file is given, stdin is read and a format must be specified")
+            f = FileReader(('from stdin', 'xyz', stdin))
     
     cat = Catalyst(f)
     lig = args.ligand[0]
     if args.key is not None:
         cat.map_ligand(lig, args.key)
     else:
-        cat.map_ligand(lig, cat.components['ligand'][0].key_atoms)
+        ligand = Component(lig)
+        old_key_atoms = []
+        j = 0
+        while len(old_key_atoms) < len(ligand.key_atoms):
+            if j >= len(cat.components['ligand']):
+                raise RuntimeError("new ligand appears to have a higher denticity than old ligands combined")
+            else:
+                old_key_atoms.extend(cat.components['ligand'][j].key_atoms)
+                j += 1
+
+        if len(old_key_atoms) % len(ligand.key_atoms) == 0:
+            k = 0
+            ligands = []
+            while k != len(old_key_atoms):
+                k += len(ligand.key_atoms)
+                ligands.append(ligand.copy())
+        
+            cat.map_ligand(ligands, old_key_atoms)
 
     s = cat.write(append=False, outfile=args.outfile[0])
     if not args.outfile[0]:

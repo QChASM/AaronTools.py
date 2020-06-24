@@ -7,50 +7,36 @@ class Pathway:
     interpolating between multiple Geometries
     
     Attributes:
-        G                   list(Geometry)          input Geometry objects
-        nG                  int                     number of geometries in G
-        N_Cart              int                     number of cartesean coordinates
-        B                   list(np.array(float, shape=(N_Cart x N_Cart)))
+        G                       list(Geometry)          input Geometry objects
+        nG                      int                     number of geometries in G
+        N_Cart                  int                     number of cartesean coordinates
+        B                       list(np.array(float, shape=(N_Cart x N_Cart)))
                                                     matrix representation of basis used to interpolate between geometries
-        Bi                  list(np.array(float))   inverse of B
-        region_length       list(float)             length of each subregion
-        Geom_func(t)        function(x=float)       returns interpolated Geometry ({t | 0 <= t <= 1})
-        coord_func(t)       function(x=float)       returns interpolated basis vector coefficients ({t | 0 <= t <= 1})
-        dcoord_func_dt(t)   function(x=float)       derivative of coord_func(t)
-        E_func(t)           function(x=float)       returns interpolated energies
-        dE_func_dt(t)       function(x=float)       derivative of E_func
+        Bi                      list(np.array(float))   inverse of B
+        region_length           list(float)             length of each subregion
+        Geom_func(t)            function(x=float)       returns interpolated Geometry ({t | 0 <= t <= 1})
+        coord_func(t)           function(x=float)       returns interpolated basis vector coefficients ({t | 0 <= t <= 1})
+        dcoord_func_dt(t)       function(x=float)       derivative of coord_func(t)
+        var_func(var, t)        function(x=float)       returns interpolated variable 'var' at t
+        dvar_func_dt(var, t)    function(x=float)       derivative of var_func
     """
 
-    def __init__(self, G_list, modes = None, mass_weighted = False):
+    def __init__(self, geometry, coordinate_array, other_vars={}, basis=None, mass_weighted=False):
         """initialize Pathway
 
-            G_list          list(Geometry)      Geometry objects
-            modes           list(np.array(float, shape=(n_atoms,3)))
-                                                coordinate displacement matrices (shape n_atoms x 3)
-            mass_weighted   bool                True if modes are mass-weighted
+            geometry            Geometry            
+            coordinate_array    np.array(float, shape=(N, n_atoms, 3))      coordinates for the geometry at N different points
+            other_vars          dict('variable name':[float])               dictionary of other variables (e.g. energy)
+            basis               list(np.array(float, shape=(n_atoms,3)))    coordinate displacement matrices (shape n_atoms x 3)
+            mass_weighted       bool                                        True if modes are mass-weighted
 
             raises RuntimeError if geometries in G_list don't have the same number of atoms
             or the atoms are in a different order"""
-        self.G = G_list
+        self.geometry = geometry
+        self.coordsets = coordinate_array
+        self.other_vars = other_vars
 
-        # check to make sure the atoms have a chance of being in the same order in all input geometries
-        if not all([ len(G.atoms) == len(self.G[0].atoms) for G in self.G[1:] ]):
-            s = "\n"
-            frmt = "%" + str(max([len(G.name) for G in self.G])) + "s %s\n"
-            for G in self.G:
-                s += frmt % (G.name, len(G.atoms))
-            raise RuntimeError("not all input geometries have the same number of atoms: %s" % s)
-
-        if not all([ all([G.atoms[i].element == self.G[0].atoms[i].element \
-            for i in range(0, len(self.G[0].atoms))]) \
-            for G in self.G[1:]]):
-            s = "\n"
-            frmt = "%" + str(max([len(G.name) for G in self.G])) + "s %s\n"
-            for G in self.G:
-                s += frmt % (G.name, ' '.join([atom.element for atom in G.atoms]))
-            raise RuntimeError("atoms are not in the same order in some of the input geometries: %s" % s)
-
-        if modes is None:
+        if basis is None:
             #if no modes are given, cartesean coordinates are used
             self.gen_basis([], mass_weighted)
         else:
@@ -61,8 +47,8 @@ class Pathway:
 
     @property
     def nG(self):
-        """returns len(self.G_list)"""
-        return len(self.G)
+        """returns number of input coordinate sets"""
+        return self.coordsets.shape[0]
 
     def gen_basis(self, modes, mass_depen = False):
         """expand number of basis vectors for coordinate displacement matrices to N_Cart
@@ -74,13 +60,13 @@ class Pathway:
         """
 
         B = []
-        N_Cart = 3*len(self.G[0].atoms)
+        N_Cart = 3*len(self.geometry.atoms)
 
         #go through each of the supplied coordinate displacement matrices
         #remove mass-weighting if needed, and reshape
         for v, mode in enumerate(modes):
             no_mass_mode = []
-            for i, atom in enumerate(self.G[0].atoms):
+            for i, atom in enumerate(self.geometry.atoms):
                 if mass_depen:
                     no_mass_mode.append(mode[i] * atom.mass())
                 else:
@@ -106,13 +92,10 @@ class Pathway:
         """generate cartesean-displacement-representation coordinate and energy interpolation functions
         sets self.coord_func, self.dcoord_func_dt, self.E_func, and self.dE_func_dt"""
 
-        #determine coeffiencts for basis vectors that will transform self.G[0] into each
-        #of the other Geometries in self.G
         basis_rep = []
-        N_Cart = 3*len(self.G[0].atoms)
-        for G in self.G:
-            XYZ = G.coords()
-            dXYZ = XYZ - self.G[0].coords()
+        N_Cart = 3*len(self.geometry.atoms)
+        for XYZ in self.coordsets:
+            dXYZ = XYZ - self.coordsets[0]
             a = Pathway.dXYZ_to_Q(dXYZ, self.Bi)
             basis_rep.append(np.reshape(a, (N_Cart, 1)))
 
@@ -123,10 +106,6 @@ class Pathway:
         M = Pathway.get_splines_mat(self.nG)
         #B is a matrix with basis rep. coefficients, or zeros for derivative rows in M
         B = np.zeros( (4*(self.nG-1), N_Cart) )
-        if all([hasattr(G, 'other') for G in self.G]) and all(["energy" in G.other for G in self.G]):
-            E = Pathway.get_splines_vector( [G.other['energy'] for G in self.G] )
-        else:
-            E = Pathway.get_splines_vector( [0 for G in self.G] )
 
         for i in range(0, self.nG-1):
             for j in range(0, N_Cart):
@@ -135,7 +114,6 @@ class Pathway:
 
         Mi = np.linalg.inv(M)
         C = np.dot(Mi, B)
-        cE = np.dot(Mi, E)
 
         #get arc length for each region
         arc_length = Pathway.get_arc_length(C)
@@ -146,21 +124,29 @@ class Pathway:
 
         #set self's coordinate function (coordinates are coefficients for cartesean displacement representation)
         self.coord_func, self.dcoord_func_dt = self.get_coord_func(C, region_length)
-        self.E_func, self.dE_func = Pathway.get_E_func(cE, region_length)
+        self.var_func = {}
+        self.dvar_func_dt = {}
+        for var in self.other_vars:
+            cVar = np.dot(Mi, Pathway.get_splines_vector(self.other_vars[var]))
+            self.var_func[var], self.dvar_func_dt[var] = Pathway.get_var_func(cVar, region_length)
 
     def Geom_func(self, t):
         """returns a Geometry from the interpolated pathway at point t
         t       float       point on pathway {t|0 <= t <= 1}"""
-        Q = self.coord_func(t)
-        G = Pathway.q_to_xyz(self.G[0], self.B, Q)
+        G = self.geometry.copy()
+        G.update_geometry(self.coords_func(t))
         return G
+
+    def coords_func(self, t):
+        Q = self.coord_func(t)
+        return self.q_to_xyz(Q)
 
     def get_coord_func(self, C, region_length):
         """returns function for cartesean displacement rep. coordinate as a function of t (t [0, 1])
         and a derivative of this function
         C               array-like(float, shape = (4*n_subregions, N_Cart))     matrix of cubic polynomial coefficients
         region_length   array-like(float)                                       arc length of each subregion"""
-        N_Cart = 3*len(self.G[0].atoms)
+        N_Cart = 3*len(self.geometry.atoms)
         def coord(t):
             #map input t to s and region number
             s, r = Pathway.t_to_s(t, region_length)
@@ -180,23 +166,23 @@ class Pathway:
         return coord, dcoorddt
 
     @staticmethod
-    def get_E_func(cE, region_length):
-        """just like get_coord_func, but for energies"""
-        def E_func(t):
+    def get_var_func(cVar, region_length):
+        """just like get_coord_func, but for other variables"""
+        def var_func(t):
             s, r = Pathway.t_to_s(t, region_length)
 
-            E = cE[4*r]*(s-r)**3 + cE[4*r+1]*(s-r)**2 + cE[4*r+2]*(s-r) + cE[4*r+3]
+            var = cVar[4*r]*(s-r)**3 + cVar[4*r+1]*(s-r)**2 + cVar[4*r+2]*(s-r) + cVar[4*r+3]
 
-            return E
+            return var
 
-        def dEdt_func(t):
+        def dvardt_func(t):
             s, r = Pathway.t_to_s(t, region_length)
 
-            dE = 3*cE[4*r]*(s-r)**2 + 2*cE[4*r+1]*(s-r) + cE[4*r+2]
+            dvar = 3*cVar[4*r]*(s-r)**2 + 2*cVar[4*r+1]*(s-r) + cVar[4*r+2]
 
-            return dE
+            return dvar
 
-        return E_func, dEdt_func
+        return var_func, dvardt_func
     
     @staticmethod
     def dXYZ_to_Q(dXYZ, Bi):
@@ -206,18 +192,12 @@ class Pathway:
         a = np.dot(Bi, q)
         return a
 
-    @staticmethod
-    def q_to_xyz(Gi, modes, current_q):
-        """takes current_q weights for modes (basis matrices), and a Geometry
-        returns Geometry that has coordinates modified"""
-        G = Gi.copy()
-        X = G.coords()
-        for i, mode in enumerate(np.transpose(modes)):
-            X += current_q[i]*np.reshape(mode, (len(G.atoms), 3))
+    def q_to_xyz(self, current_q):
+        coords = self.coordsets[0].copy()
+        for i, mode in enumerate(np.transpose(self.B)):
+            coords += current_q[i]*np.reshape(mode, (len(self.geometry.atoms), 3))
 
-        G.update_geometry(X)
-
-        return G
+        return coords
 
     @staticmethod
     def get_splines_mat(n_nodes):

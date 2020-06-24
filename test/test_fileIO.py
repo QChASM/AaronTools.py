@@ -9,7 +9,10 @@ from AaronTools.test import TestWithTimer, prefix
 
 
 class TestFileReader(TestWithTimer):
-    small_mol = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    small_mol = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    com_file1 = os.path.join(prefix, "test_files", "test-route.com")
+    com_file2 = os.path.join(prefix, "test_files", "test-route-2.com")
+    psi4_output_file = os.path.join(prefix, "test_files", "psi4-test.out")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -27,7 +30,7 @@ class TestFileReader(TestWithTimer):
         for r, t in zip(ref.atoms, test.atoms):
             if r.element != t.element:
                 return False
-            if np.linalg.norm(r.coords - t.coords) > 10 ** -6:
+            if np.linalg.norm(r.coords - t.coords) > 10 ** -5:
                 return False
             if "name" not in skip and r.name != t.name:
                 return False
@@ -63,22 +66,54 @@ class TestFileReader(TestWithTimer):
 
     def test_read_orca_out_structure(self):
         ref = FileReader("ref_files/orca_geom.xyz")
-        test = FileReader(os.path.join(prefix, "test_files/orca_geom.out"))
+        test = FileReader(os.path.join(prefix, "test_files", "orca_geom.out"))
+        self.assertTrue(self.validate_atoms(ref, test))
+
+    def test_read_psi4_dat_structure(self):
+        ref = FileReader(os.path.join(prefix, "ref_files", "psi4_geom.xyz"))
+        test = FileReader((self.psi4_output_file, 'dat', None))
         self.assertTrue(self.validate_atoms(ref, test))
 
     def test_read_log_structure(self):
         ref = FileReader("ref_files/file_io_normal.xyz")
-        test = FileReader(os.path.join(prefix, "test_files/normal.log"))
+        test = FileReader(os.path.join(prefix, "test_files", "normal.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_error.xyz")
-        test = FileReader(os.path.join(prefix, "test_files/error.log"))
+        test = FileReader(os.path.join(prefix, "test_files", "error.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
         ref = FileReader("ref_files/file_io_died.xyz")
-        test = FileReader(os.path.join(prefix, "test_files/died.log"))
+        test = FileReader(os.path.join(prefix, "test_files", "died.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
+    def test_read_com_info(self):
+        """testing if we can read route info"""
+        ref1 = {'method': 'B3LYP/aug-cc-pVDZ', \
+                'temperature': '298.15', \
+                'solvent': '1,1,1-TriChloroEthane', \
+                'solvent_model': 'PCM', \
+                'emp_dispersion': 'GD3', \
+                'grid': 'SuperFineGrid', \
+                'comment': 'testing 1 2 3\ntesting 1 2 3', \
+                'charge': 0, \
+                'multiplicity': 1}
+
+        test = FileReader(self.com_file1, just_geom=False)
+        self.assertEqual(test.other, ref1)
+
+        ref2 = {'method': 'B3LYP/aug-cc-pVDZ', \
+                'temperature': '298.15', \
+                'solvent': '1,1,1-TriChloroEthane', \
+                'solvent_model': 'PCM', \
+                'emp_dispersion': 'GD3', \
+                'grid': 'ultrafinegrid', \
+                'comment': 'testing 1 2 3\ntesting 1 2 3', \
+                'charge': 0, \
+                'multiplicity': 1}
+
+        test = FileReader(self.com_file2, just_geom=False)
+        self.assertEqual(test.other, ref2)
 
 if __name__ == "__main__":
     unittest.main()

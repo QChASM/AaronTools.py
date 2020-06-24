@@ -52,6 +52,7 @@ class TestGeometry(TestWithTimer):
     ]
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
     benzene = os.path.join(prefix, "test_files/benzene.xyz")
+    pyridine = os.path.join(prefix, "test_files/pyridine.xyz")
     pentane = os.path.join(prefix, "test_files/pentane.xyz")
     naphthalene = os.path.join(prefix, "ref_files/naphthalene.xyz")
     tetrahydronaphthalene = os.path.join(
@@ -615,6 +616,14 @@ class TestGeometry(TestWithTimer):
         mol3.ring_substitute(targets2, Ring("benzene"))
         rmsd = mol3.RMSD(ref3, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
+
+    def test_change_element(self):
+        mol = Geometry(TestGeometry.benzene)
+
+        ref = Geometry(TestGeometry.pyridine)
+        mol.change_element("1", "N", adjust_hydrogens=True)
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
 
 
 def suite():

@@ -31,19 +31,15 @@ element_parser.add_argument('-if', '--input-format', \
                             default=None, \
                             dest='input_format', \
                             choices=read_types, \
-                            help="file format of input - required if input is stdin")
-
-element_parser.add_argument('-t', '--targets', \
-                            type=str, \
-                            nargs=1, \
-                            required=True, \
-                            dest='targets', \
-                            help='comma- or hyphen-separated list of target atoms')
+                            help="file format of input - xyz is assumed if input is stdin")
 
 element_parser.add_argument('-e', '--element', \
+                            metavar='target=new element', \
+                            type=str, \
+                            nargs='*', \
                             required=True, \
-                            dest='element', \
-                            help='symbol for new element')
+                            dest='targets', \
+                            help='')
 
 element_parser.add_argument('-b', '--fix-bonds', \
                             action='store_true', \
@@ -73,7 +69,6 @@ element_parser.add_argument('-g', '--geometry', \
 
 args = element_parser.parse_args()
 
-element = args.element
 fix_bonds = args.fix_bonds
 
 if args.change_hs is None:
@@ -104,13 +99,20 @@ for f in args.infile:
             infile = FileReader(('from stdin', args.input_format[0], f))
         else:
             if len(sys.argv) >= 1:
-                xyz_parser.print_help()
-                raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+                infile = FileReader(('from stdin', 'xyz', f))
 
     geom = Geometry(infile)
 
-    targets = geom.find(args.targets[0])
-    geom.change_element(targets, element, adjust_bonds=fix_bonds, adjust_hydrogens=adjust_structure)
+    target_list = []
+    for sub in args.targets:
+        ndx_targets = sub.split('=')[0]
+        target_list.append(geom.find(ndx_targets))
+
+    for i, target in enumerate(target_list):
+        element = args.targets[i].split('=')[1]
+        #changeElement will only change one at a time
+        for single_target in target:
+            geom.change_element(single_target, element, adjust_bonds=fix_bonds, adjust_hydrogens=adjust_structure)
 
     s = geom.write(append=True, outfile=args.outfile[0])
     if not args.outfile[0]:

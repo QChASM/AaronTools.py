@@ -1929,8 +1929,8 @@ class Geometry:
         target = self.find(target)
         if len(target) > 1:
             raise RuntimeError(
-                "only one atom's element can be changed at a time: %s"
-                % ", ".join(target)
+                "only one atom's element can be changed at a time (%i attempted)"
+                % len(target)
             )
         else:
             target = target[0]
