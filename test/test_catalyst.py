@@ -114,51 +114,82 @@ class TestCatalyst(TestWithTimer):
         monodentate = TestCatalyst.monodentate
         tridentate = TestCatalyst.tridentate
 
-        tm_simple = TestCatalyst.tm_simple.copy()
-        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
-        self.assertTrue(
-            validate(
-                tm_simple,
-                Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz")),
-            )
-        )
-
-        tm_simple = TestCatalyst.tm_simple.copy()
-        tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
-        self.assertTrue(
-            validate(
-                tm_simple,
-                Geometry(os.path.join(prefix, "ref_files/lig_map_3.xyz")),
-            )
-        )
-
-        org_tri = TestCatalyst.org_tri.copy()
-        org_tri.map_ligand(tridentate, ["30", "28", "58"])
-        self.assertTrue(
-            validate(
-                org_tri,
-                Geometry(os.path.join(prefix, "ref_files/lig_map_4.xyz")),
-            )
-        )
-
+        # bidentate -> monodentate, none
         tm_simple = TestCatalyst.tm_simple.copy()
         tm_simple.map_ligand(monodentate, ["35"])
         self.assertTrue(
             validate(
                 tm_simple,
-                Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz")),
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_1.xyz")),
+            )
+        )
+
+        # bidentate -> two monodentate
+        tm_simple = TestCatalyst.tm_simple.copy()
+        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_2.xyz")),
+            )
+        )
+
+        # bidentate -> two bulky monodentate
+        tm_simple = TestCatalyst.tm_simple.copy()
+        tm_simple.map_ligand(["iPr-NC3C"] * 2, ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_5.xyz")),
+            )
+        )
+
+        # bidentate -> bidentate
+        tm_simple = TestCatalyst.tm_simple.copy()
+        tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_3.xyz")),
+            )
+        )
+
+        # tridentate -> tridentate
+        org_tri = TestCatalyst.org_tri.copy()
+        org_tri.map_ligand(tridentate, ["30", "28", "58"])
+        self.assertTrue(
+            validate(
+                org_tri,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_4.xyz")),
+            )
+        )
+
+        # tridentate -> monodentate + bidentate -> tridentate
+        org_tri = TestCatalyst.org_tri.copy()
+        org_tri.map_ligand(["EDA", "ACN"], ["30", "28", "58"])
+        self.assertTrue(
+            validate(
+                org_tri,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz")),
+            )
+        )
+        org_tri = Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        org_tri.map_ligand(tridentate, ["33", "34", "25"])
+        self.assertTrue(
+            validate(
+                org_tri,
+                Catalyst(os.path.join(prefix, "ref_files/lig_map_7.xyz")),
             )
         )
 
     def test_fix_comment(self):
         cat = TestCatalyst.tm_simple.copy()
-        cat.write("tmp")
         self.assertEqual(
-            cat.comment, "C:34 K:1,5 L:35-93 F:1-2;1-34;2-13;2-34;13-34"
+            cat.comment, "C:34 K:1,2 L:35-93 F:1-2;1-13;1-34;2-34;13-34"
         )
         cat.substitute("Me", "4")
         self.assertEqual(
-            cat.comment, "C:37 K:1,5 L:38-96 F:1-2;1-37;2-16;2-37;16-37"
+            cat.comment, "C:37 K:1,2 L:38-96 F:1-2;1-16;1-37;2-37;16-37"
         )
 
     def test_next_conformer(self):
@@ -200,10 +231,10 @@ class TestCatalyst(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCatalyst("test_init"))
-    suite.addTest(TestCatalyst("test_detect_components"))
+    # suite.addTest(TestCatalyst("test_init"))
+    # suite.addTest(TestCatalyst("test_detect_components"))
     suite.addTest(TestCatalyst("test_map_ligand"))
-    suite.addTest(TestCatalyst("test_fix_comment"))
+    # suite.addTest(TestCatalyst("test_fix_comment"))
     # suite.addTest(TestCatalyst("test_next_conformer"))
     return suite
 

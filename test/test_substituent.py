@@ -7,7 +7,7 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 class TestSubstituent(TestWithTimer):
@@ -23,8 +23,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, "CF:2,180")
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(180))
-        rmsd = ref.RMSD(sub, longsort=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        self.assertTrue(validate(sub, ref))
         return
 
     def is_NO2(self, sub):
@@ -33,8 +32,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, "CF:2,120")
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(120))
-        rmsd = ref.RMSD(sub, sort=True, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
+        self.assertTrue(validate(sub, ref, thresh=1e-5))
         return
 
     def test_init(self):
@@ -47,7 +45,7 @@ class TestSubstituent(TestWithTimer):
 
     def test_copy(self):
         sub = Substituent("COCH3")
-        sub = sub.copy(name="COCH3")
+        sub = sub.copy()
         self.is_COCH3(sub)
         return
 

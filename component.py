@@ -31,7 +31,7 @@ class Component(Geometry):
         tag=None,
         to_center=None,
         key_atoms=None,
-        refresh_connected=False,
+        refresh_connected=True,
     ):
         """
         comp is either a file, a geometry, or an atom list
@@ -55,7 +55,6 @@ class Component(Geometry):
                 raise FileNotFoundError(
                     "Cannot find ligand in library:", structure
                 )
-
         super().__init__(structure, name, comment, refresh_connected)
 
         if tag is not None:
@@ -75,6 +74,7 @@ class Component(Geometry):
         for a in self.key_atoms:
             a.tags.add("key")
         self.detect_backbone(to_center)
+        self.rebuild()
 
     def __lt__(self, other):
         if len(self) != len(other):
@@ -97,33 +97,22 @@ class Component(Geometry):
         rv = super().copy()
         return Component(rv)
 
-    def rebuild(self, reorder=False):
-        if reorder:
-            self.refresh_connected(rank=True)
-            self.backbone = self.reorder(targets=self.backbone)[0]
-            atoms = self.backbone
-        else:
-            atoms = self.backbone
-        for a in self.backbone:
-            for sub in sorted(self.substituents):
-                if sub.end != a:
-                    continue
-                if reorder:
-                    sub_atoms = self.reorder(targets=sub.atoms)[0]
-                else:
-                    sub_atoms = sub.atoms
-                for a in sub_atoms:
-                    if a not in atoms:
-                        atoms += [a]
+    def rebuild(self):
+        self.refresh_ranks()
+        sub_atoms = []
         for sub in sorted(self.substituents):
-            if reorder:
-                sub_atoms = self.reorder(targets=sub.atoms)[0]
-            else:
-                sub_atoms = sub.atoms
-            for a in sub_atoms:
-                if a not in atoms:
-                    atoms += [a]
-        self.atoms = atoms
+            tmp = [sub.atoms[0]]
+            tmp += sorted(sub.atoms[1:])
+            for t in tmp:
+                if t in sub_atoms:
+                    continue
+                if self.backbone and t in self.backbone:
+                    continue
+                sub_atoms += [t]
+        if self.backbone is None:
+            self.backbone = [a for a in self.atoms if a not in sub_atoms]
+        self.backbone = sorted(self.backbone)
+        self.atoms = self.backbone + sub_atoms
 
     def substitute(self, sub, target, attached_to=None):
         """
@@ -134,8 +123,8 @@ class Component(Geometry):
         if not isinstance(sub, Substituent):
             sub = Substituent(sub)
 
-        super().substitute(sub, target, attached_to, refresh_ranks=False)
-        self.detect_backbone()
+        super().substitute(sub, target, attached_to)
+        self.detect_backbone(to_center=self.backbone)
         self.rebuild()
 
     def get_frag_list(self, targets=None, max_order=None):
@@ -155,6 +144,8 @@ class Component(Geometry):
 
                 frag_a = self.get_fragment(a, b)
                 frag_b = self.get_fragment(b, a)
+                if sorted(frag_a) == sorted(frag_b):
+                    continue
 
                 if len(frag_a) == 1 and frag_a[0].element == "H":
                     continue
@@ -164,11 +155,10 @@ class Component(Geometry):
                 if max_order is not None and a.bond_order(b) > max_order:
                     continue
 
-                if len(set(frag_a) & set(frag_b)) == 0:
-                    if frag_a not in frag_list:
-                        frag_list += [(frag_a, a, b)]
-                    if frag_b not in frag_list:
-                        frag_list += [(frag_b, b, a)]
+                if (frag_a, a, b) not in frag_list:
+                    frag_list += [(frag_a, a, b)]
+                if (frag_b, b, a) not in frag_list:
+                    frag_list += [(frag_b, b, a)]
         return frag_list
 
     def detect_backbone(self, to_center=None):
@@ -178,15 +168,9 @@ class Component(Geometry):
 
         :to_center:   the atoms connected to the metal/active center
         """
-        # handle the case in which we want to refresh the backbone
         # we must remove any tags already made
-        refresh_connected = True
         for a in self.atoms:
-            if refresh_connected and a.connected:
-                refresh_connected = False
             a.tags.discard("backbone")
-        if refresh_connected:
-            self.refresh_connected()
         self.backbone = []
         if self.substituents is not None:
             for sub in self.substituents:
@@ -199,7 +183,7 @@ class Component(Geometry):
 
         # get atoms connected to center
         if to_center is not None:
-            to_center = self.find_exact(to_center)
+            to_center = self.find(to_center)
         else:
             try:
                 to_center = self.find("key")
@@ -207,36 +191,33 @@ class Component(Geometry):
                 to_center = []
             try:
                 center = self.find("center")
+                to_center += list(c.connected for c in center)
             except LookupError:
                 center = []
-            to_center += list(c.connected for c in center)
 
         new_tags = {}  # hold atom tag options until assignment determined
         subs_found = {}  # for testing which sub assignment is best
         sub_atoms = set([])  # holds atoms assigned to substituents
-        for frag_tup in frag_list:
+        for frag_tup in sorted(frag_list, key=lambda x: len(x[0])):
             frag, start, end = frag_tup
             if frag[0] != start:
-                frag = (
-                    [start]
-                    + frag[: frag.index(start)]
-                    + frag[frag.index(start) + 1 :]
-                )
+                frag = self.reorder(start=start, targets=frag)[0]
             # if frag contains atoms from to_center, it's part of backbone
-            if to_center:
-                is_backbone = False
-                for a in frag:
-                    if a in to_center:
-                        is_backbone = True
-                        break
-                # skip substituent assignment if part of backbone
-                if is_backbone:
-                    continue
+            is_backbone = False
+            for a in frag:
+                if to_center and a in to_center:
+                    is_backbone = True
+                    break
+            # skip substituent assignment if part of backbone
+            if is_backbone:
+                continue
             # try to find fragment in substituent library
             try:
                 sub = Substituent(frag, end=end)
             except LookupError:
                 continue
+            if not to_center and len(frag) > len(self.atoms) - len(sub_atoms):
+                break
             # save atoms and tags if found
             sub_atoms = sub_atoms.union(set(frag))
             subs_found[sub.name] = len(sub.atoms)
@@ -256,10 +237,7 @@ class Component(Geometry):
                 # want to keep the largest one (eg: tBu instead of Me)
                 sub_length = []
                 for t in tags:
-                    if t.startswith("sub-"):
-                        sub_length += [-subs_found[t]]
-                    else:
-                        sub_length += [subs_found[t]]
+                    sub_length += [subs_found[t]]
                 max_length = max(sub_length)
                 if max_length < 0:
                     max_length = min(sub_length)
@@ -269,12 +247,11 @@ class Component(Geometry):
                 a.add_tag(tags[0])
 
         # tag backbone
-        for a in self.atoms:
-            if a in sub_atoms:
-                continue
+        for a in set(self.atoms) - set(sub_atoms):
             a.add_tag("backbone")
             self.backbone += [a]
-        self.rebuild()
+        if not self.backbone:
+            self.backbone = None
         return
 
     def capped_backbone(self, to_center=None, as_copy=True):
@@ -308,27 +285,23 @@ class Component(Geometry):
         if self.substituents is None:
             self.detect_backbone()
 
-        targets = {}
-        for sub in self.substituents:
-            try:
-                targets[len(sub.atoms)] += [sub]
-            except KeyError:
-                targets[len(sub.atoms)] = [sub]
-
         # minimize torsion for each substituent
-        # largest to smallest
-        for k in sorted(targets.keys(), reverse=True):
-            for sub in targets[k]:
-                axis = sub.atoms[0].bond(sub.end)
-                center = sub.end
-                self.minimize_torsion(sub.atoms, axis, center, geom)
-                if all_frags:
-                    for frag, a, b in self.get_frag_list(
-                        targets=sub.atoms, max_order=1
-                    ):
-                        axis = a.bond(b)
-                        center = b.coords
-                        self.minimize_torsion(frag, axis, center, geom)
+        increment = 30
+        for i, sub in enumerate(sorted(self.substituents, reverse=True)):
+            if i > len(self.substituents):
+                increment = 5
+            axis = sub.atoms[0].bond(sub.end)
+            center = sub.end
+            self.minimize_torsion(
+                sub.atoms, axis, center, geom, increment=increment
+            )
+            if all_frags:
+                for frag, a, b in self.get_frag_list(
+                    targets=sub.atoms, max_order=1
+                ):
+                    axis = a.bond(b)
+                    center = b.coords
+                    self.minimize_torsion(frag, axis, center, geom)
 
     def sub_rotate(self, start, angle=None):
         start = self.find_exact(start)[0]
@@ -338,6 +311,8 @@ class Component(Geometry):
         end = sub.end
         if angle is None:
             angle = sub.conf_angle
+        if not angle:
+            return
         self.change_dihedral(
             start, end, angle, fix=4, adjust=True, as_group=True
         )

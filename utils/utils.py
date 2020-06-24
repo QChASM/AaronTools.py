@@ -1,4 +1,9 @@
+import copy
+
 import numpy as np
+
+import AaronTools.atoms as Atoms
+import AaronTools.geometry as Geometry
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -156,37 +161,164 @@ def add_dict(this, other, skip=[]):
             this[key] = val
     return this
 
+
 def integrate(fun, a, b, n=101):
-     """numerical integration using Simpson's method
+    """numerical integration using Simpson's method
      fun - function to integrate
      a - integration starts at point a
      b - integration stops at point b
      n - number of points used for integration"""
-     import numpy as np
+    import numpy as np
 
-     dx = float(b-a)/(n-1)
-     x_set = np.linspace(a, b, num=n)
-     s = -(fun(a) + fun(b))
-     i = 1
-     max_4th_deriv = 0
-     while i < n:
-         if i % 2 == 0:
-             s += 2*fun(x_set[i])
-         else:
-             s += 4*fun(x_set[i])
+    dx = float(b - a) / (n - 1)
+    x_set = np.linspace(a, b, num=n)
+    s = -(fun(a) + fun(b))
+    i = 1
+    max_4th_deriv = 0
+    while i < n:
+        if i % 2 == 0:
+            s += 2 * fun(x_set[i])
+        else:
+            s += 4 * fun(x_set[i])
 
-         if i < n-4 and i >= 3:
-             sg_4th_deriv = 6*fun(x_set[i-3]) + 1*fun(x_set[i-2]) - 7*fun(x_set[i-1]) - 3*fun(x_set[i]) - 7*fun(x_set[i+1]) + fun(x_set[i+2]) + 6*fun(x_set[i+3])
-             sg_4th_deriv /= 11*dx**4
+        if i < n - 4 and i >= 3:
+            sg_4th_deriv = (
+                6 * fun(x_set[i - 3])
+                + 1 * fun(x_set[i - 2])
+                - 7 * fun(x_set[i - 1])
+                - 3 * fun(x_set[i])
+                - 7 * fun(x_set[i + 1])
+                + fun(x_set[i + 2])
+                + 6 * fun(x_set[i + 3])
+            )
+            sg_4th_deriv /= 11 * dx ** 4
 
-             if abs(sg_4th_deriv) > max_4th_deriv:
-                 max_4th_deriv = abs(sg_4th_deriv)
+            if abs(sg_4th_deriv) > max_4th_deriv:
+                max_4th_deriv = abs(sg_4th_deriv)
 
-         i += 1
+        i += 1
 
-     s = s * dx/3.
+    s = s * dx / 3.0
 
-     #close enough error estimate
-     e = (abs(b-a)**5)*max_4th_deriv/(180*n**4)
+    # close enough error estimate
+    e = (abs(b - a) ** 5) * max_4th_deriv / (180 * n ** 4)
 
-     return (s, e)
+    return (s, e)
+
+
+def same_cycle(graph, a, b):
+    """
+    Determines if Atom :a: and Atom :b: are in the same cycle in a undirected :graph:
+
+    Returns: True if cycle found containing a and b, False otherwise
+
+    :graph: connectivity matrix or Geometry
+    :a:, :b: indices in connectivity matrix/Geometry or Atoms in Geometry
+    """
+    if isinstance(a, Atoms.Atom):
+        a = graph.atoms.index(a)
+    if isinstance(b, Atoms.Atom):
+        b = graph.atoms.index(b)
+    if isinstance(graph, Geometry.Geometry):
+        graph = [
+            [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
+        ]
+    graph = copy.deepcopy(graph)
+
+    graph, removed = trim_leaves(graph)
+    if a in removed or b in removed:
+        return False
+    path = shortest_path(graph, a, b)
+    for p, q in zip(path[:-1], path[1:]):
+        graph[p].remove(q)
+        graph[q].remove(p)
+    path = shortest_path(graph, a, b)
+    if not path:
+        return False
+    return True
+
+
+def shortest_path(graph, start, end):
+    """
+    Find shortest path from :start: to :end: in :graph: using Dijkstra's algorithm
+    Returns: list(node_index) if path found, None if path not found
+
+    :graph: the connection matrix or Geometry
+    :start: the first atom or node index
+    :end: the last atom or node index
+    """
+    if isinstance(start, Atoms.Atom):
+        start = graph.atoms.index(start)
+    if isinstance(end, Atoms.Atom):
+        end = graph.atoms.index(end)
+    if isinstance(graph, Geometry.Geometry):
+        graph = [
+            [graph.atoms.index(j) for j in i.connected if j in graph.atoms]
+            for i in graph.atoms
+        ]
+    graph = copy.deepcopy(graph)
+
+    # initialize distance array, parent array, and set of unvisited nodes
+    dist = [np.inf for x in graph]
+    parent = [-1 for x in graph]
+    unvisited = set([i for i in range(len(graph))])
+
+    dist[start] = 0
+    current = start
+    while True:
+        # for all unvisited neighbors of current node, update distances
+        # if we update the distance to a neighboring node,
+        # then also update its parent to be the current node
+        for v in graph[current]:
+            if v not in unvisited:
+                continue
+            if dist[v] == np.inf:
+                new_dist = dist[current] + 1
+            else:
+                new_dist = dist[current] + dist[v]
+            if dist[v] > new_dist:
+                dist[v] = new_dist
+                parent[v] = current
+        # mark current node as visited
+        # select closest unvisited node to be next node
+        # break loop if we found end node or if no unvisited connected nodes
+        unvisited.remove(current)
+        if end not in unvisited:
+            break
+        current = None
+        for u in unvisited:
+            if current is None or dist[u] < dist[current]:
+                current = u
+        if dist[current] == np.inf:
+            break
+    # return shortest path from start to end
+    path = [end]
+    while True:
+        if parent[path[-1]] == -1:
+            break
+        path += [parent[path[-1]]]
+    path.reverse()
+    if path[0] != start or path[-1] != end:
+        return None
+    return path
+
+
+def trim_leaves(graph, _removed=[]):
+    if isinstance(graph, Geometry.Geometry):
+        graph = [
+            [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
+        ]
+    graph = copy.deepcopy(graph)
+    some_removed = False
+
+    for i, con in enumerate(graph):
+        if len(con) == 1:
+            graph[con[0]].remove(i)
+            graph[i].remove(con[0])
+            some_removed = True
+            _removed += [i]
+
+    if some_removed:
+        graph, _removed = trim_leaves(graph, _removed)
+
+    return graph, set(_removed)

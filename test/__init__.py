@@ -37,9 +37,7 @@ def check_atom_list(ref, comp):
     return rv
 
 
-def validate(
-    test, ref, thresh=None, heavy_only=False, sort=False, debug=False
-):
+def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
     """
     Validates `test` geometry against `ref` geometry
     Returns: True if validation passed, False if failed
@@ -51,9 +49,13 @@ def validate(
         if thresh is None: use rmsd_tol() to determine
         if thresh is "tight": use rmsd_tol(superTight=True)
         if thresh is "loose": use rmsd_tol(superLoose=True)
-    :sort: do canonical sorting of atoms first
+    :sort: allow canonical sorting of atoms
     :debug: print info useful for debugging
     """
+    if debug:
+        ref.write("ref")
+        test.write("test")
+
     if thresh is None:
         thresh = rmsd_tol(ref)
     try:
@@ -70,17 +72,29 @@ def validate(
     t_el = sorted([t.element for t in test.atoms])
     r_el = sorted([r.element for r in ref.atoms])
     if len(t_el) != len(r_el):
+        if debug:
+            print(
+                "wrong number of atoms: {} (test) vs. {} (ref)".format(
+                    len(t_el), len(r_el)
+                )
+            )
         return False
 
     for t, r in zip(t_el, r_el):
         if t != r:
+            if debug:
+                print("elements don't match")
             return False
     # and RMSD should be below a threshold
     if debug:
-        rmsd, ref, test = ref.RMSD(
+        rmsd = ref.RMSD(
             test, align=debug, heavy_only=heavy_only, sort=sort, debug=True
         )
         print("RMSD:", rmsd, "\tTHRESH:", thresh)
+        ref.refresh_ranks()
+        test.refresh_ranks()
+        ref.atoms = ref.reorder()[0]
+        test.atoms = test.reorder()[0]
         ref.write("ref")
         test.write("test")
     else:

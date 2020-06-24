@@ -237,6 +237,10 @@ class Atom:
     def copy(self):
         rv = Atom()
         for key, val in self.__dict__.items():
+            if key == "connected":
+                continue
+            if key == "constraint":
+                continue
             try:
                 rv.__dict__[key] = val.copy()
             except AttributeError:

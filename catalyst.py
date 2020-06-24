@@ -8,6 +8,7 @@ from AaronTools.component import Component
 from AaronTools.const import TMETAL
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils import utils
 
 
 class Catalyst(Geometry):
@@ -88,19 +89,17 @@ class Catalyst(Geometry):
         rv = Catalyst(rv, refresh_connected=False)
         return rv
 
-    def rebuild(self, reorder=False):
+    def rebuild(self):
         atoms = []
         for comp in sorted(self.components["substrate"]):
-            comp.rebuild(reorder)
+            comp.rebuild()
             atoms += comp.atoms
         if self.center:
             atoms += self.center
         for comp in sorted(self.components["ligand"]):
-            comp.rebuild(reorder)
+            comp.rebuild()
             atoms += comp.atoms
         self.atoms = atoms
-        if reorder:
-            self.refresh_connected(rank=True)
         self.fix_comment()
 
     def write(self, name=None, style="xyz", *args, **kwargs):
@@ -146,11 +145,12 @@ class Catalyst(Geometry):
             new_comment = new_comment[:-1]
             # ligand atoms
             new_comment += " L:"
+            ids = sorted(ids)
             last_i = None
-            for i in sorted(ids):
+            for i in ids:
                 if last_i is None:
                     new_comment += "{}-".format(i)
-                elif last_i != i - 1:
+                elif last_i + 1 != i:
                     new_comment += "{},{}-".format(last_i, i)
                     if i == ids[-1]:
                         new_comment = new_comment[:-1]
@@ -325,7 +325,8 @@ class Catalyst(Geometry):
             ligand.coord_shift(shift)
 
             # bend around key axis
-            old_walk = old_ligand.short_walk(*old_keys)
+            old_walk = old_ligand.shortest_path(*old_keys)
+            print(old_walk)
             if len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
@@ -335,7 +336,8 @@ class Catalyst(Geometry):
             else:
                 old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
 
-            new_walk = ligand.short_walk(*new_keys)
+            new_walk = ligand.shortest_path(*new_keys)
+            print(new_walk)
             if len(new_walk) == 2:
                 new_con = set([])
                 for k in new_keys:
@@ -380,20 +382,27 @@ class Catalyst(Geometry):
 
         def map_more_key(self, old_ligand, ligand, old_keys, new_keys):
             # backbone fragments separated by rotatable bonds
-            frag_list = ligand.get_frag_list(ligand.backbone, max_order=1)
+            frag_list = ligand.get_frag_list(max_order=1)
+            ligand.write("ligand")
 
             # get key atoms on each side of rotatable bonds
             key_count = {}
             for frag, a, b in frag_list:
-                tmp = []
+                n_keys = []
                 for i in frag:
                     if i not in ligand.key_atoms:
                         continue
-                    tmp += [i]
-                if len(tmp) not in key_count:
-                    key_count[len(tmp)] = [(frag, a, b)]
+                    n_keys += [i]
+                if len(n_keys) < 1 or len(n_keys) > 2:
+                    continue
+                if a in ligand.key_atoms or b in ligand.key_atoms:
+                    continue
+                if utils.same_cycle(ligand, a, b):
+                    continue
+                if len(n_keys) not in key_count:
+                    key_count[len(n_keys)] = [(frag, a, b)]
                 else:
-                    key_count[len(tmp)] += [(frag, a, b)]
+                    key_count[len(n_keys)] += [(frag, a, b)]
 
             partial_map = False
             mapped_frags = []
@@ -407,7 +416,7 @@ class Catalyst(Geometry):
                             continue
                         ok += [old_keys[i]]
                         nk += [n]
-                    map_2_key(old_ligand, ligand, ok, nk, rev_ang=True)
+                    map_2_key(old_ligand, ligand, ok, nk)
                     partial_map = True
                     mapped_frags += [frag]
                     continue
@@ -431,11 +440,10 @@ class Catalyst(Geometry):
                             break
             return
 
+        # find old and new keys
         old_keys = self.find(old_keys)
-
         if isinstance(ligands, (str, Geometry)):
             ligands = [ligands]
-
         new_keys = []
         for i, ligand in enumerate(ligands):
             if not isinstance(ligand, Component):
@@ -443,7 +451,6 @@ class Catalyst(Geometry):
                 ligands[i] = ligand
             ligand.refresh_connected()
             new_keys += ligand.key_atoms
-
         if len(old_keys) != len(new_keys):
             raise ValueError(
                 "Cannot map ligand. "
@@ -460,7 +467,6 @@ class Catalyst(Geometry):
             for c in self.components["ligand"]:
                 if k in c.atoms:
                     old_ligands += [c]
-
         start = 0
         end = None
         for i, ligand in enumerate(ligands):
@@ -483,8 +489,9 @@ class Catalyst(Geometry):
                     new_keys[start:end],
                 )
 
-            for l in ligand.atoms:
-                l.name = old_keys[start].name + "." + l.name
+            for a in ligand.atoms:
+                a.name = old_keys[start].name + "." + a.name
+                a.add_tag("ligand")
             start = end
 
         # remove old
@@ -500,10 +507,20 @@ class Catalyst(Geometry):
         # add new
         for ligand in ligands:
             self.components["ligand"] += [ligand]
-            for sub in ligand.substituents:
-                if sub.conf_num is None or sub.conf_num <= 1:
-                    continue
         self.rebuild()
+        # rotate monodentate to relieve clashing
+        for ligand in self.components["ligand"]:
+            if len(ligand.key_atoms) == 1:
+                targets = ligand.atoms
+                key = ligand.key_atoms[0]
+                if self.center:
+                    start = self.COM(self.center)
+                    end = key.coords
+                else:
+                    start = key.coords
+                    end = self.COM(key.connected)
+                axis = end - start
+                self.minimize_torsion(targets, axis, center=key, increment=8)
         self.remove_clash()
         if minimize:
             self.minimize()

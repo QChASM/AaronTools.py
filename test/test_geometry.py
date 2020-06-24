@@ -10,7 +10,7 @@ from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 def is_close(a, b, tol=10 ** -8, debug=False):
@@ -214,7 +214,7 @@ class TestGeometry(TestWithTimer):
 
     def test_canonical_rank(self):
         pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
-        pentane_rank = [0, 2, 4, 2, 0]
+        pentane_rank = [1, 3, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 
@@ -267,12 +267,12 @@ class TestGeometry(TestWithTimer):
         for t in tmp:
             tmp = tmp - np.array([-10, 0, 0])
         test.update_geometry(tmp)
-        self.assertEqual(ref, test)
+        self.assertTrue(validate(test, ref))
 
         # using file
         ref.coord_shift([10, 0, 0])
         test.update_geometry(TestGeometry.benz_NO2_Cl)
-        self.assertEqual(ref, test)
+        self.assertTrue(validate(test, ref))
 
     def test_near(self):
         def compare(test, ref):
@@ -340,7 +340,6 @@ class TestGeometry(TestWithTimer):
         geom.change_distance("10", "15", dist=-1, adjust=True)
         geom.refresh_connected()
         broken, formed = geom.compare_connectivity(ref)
-        print(broken, formed)
         self.assertTrue(len(broken) == 0)
         self.assertTrue(len(formed) == 1)
         self.assertSetEqual(formed, set([("10", "15")]))
@@ -411,41 +410,31 @@ class TestGeometry(TestWithTimer):
         ref = Geometry(TestGeometry.benz_NO2_Cl)
 
         # RMSD of copied object should be 0
-        other = ref.copy()
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
-        # if they are out of order, sorting should help
-        res = ref.RMSD(other, longsort=True)
-        self.assertTrue(res < rmsd_tol(other, superTight=True))
+        test = ref.copy()
+        self.assertTrue(validate(test, ref))
 
         # RMSD of shifted copy should be 0
-        other = ref.copy()
-        other.coord_shift([1, 2, 3])
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
+        test = ref.copy()
+        test.coord_shift([1, 2, 3])
+        self.assertTrue(validate(test, ref))
 
         # RMSD of rotated copy should be 0
-        other = ref.copy()
-        other.rotate([1, 2, 3], 2.8)
-        other.write("tmp")
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref))
+        test = ref.copy()
+        test.rotate([1, 2, 3], 2.8)
+        self.assertTrue(validate(test, ref))
 
         # RMSD of two different structures should not be 0
-        other = Geometry(TestGeometry.pentane)
-        self.assertTrue(ref.RMSD(other) > 10 ** -2)
+        test = Geometry(TestGeometry.pentane)
+        self.assertFalse(validate(test, ref))
 
         # RMSD of similar molecule
-        other = Geometry(TestGeometry.benzene)
-        res = ref.RMSD(other, targets="C", ref_targets="C")
+        test = Geometry(TestGeometry.benzene)
+        res = ref.RMSD(test, targets="C", ref_targets="C")
         self.assertTrue(res < rmsd_tol(ref))
-        res = ref.RMSD(other, sort=True)
 
     # geometry manipulation
     def test_get_fragment(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
-
-        # get NO2 fragment using tag
-        frag = mol.get_fragment(mol.atoms[11], mol.atoms[0], copy=False)
-        v_frag = mol.atoms[11:]
-        self.assertSequenceEqual(frag, v_frag)
 
         # get Cl using name
         frag = mol.get_fragment("11", "4", copy=False)
@@ -584,10 +573,6 @@ class TestGeometry(TestWithTimer):
                 mol.dihedral(*atom_args), original_dihedral + np.deg2rad(30)
             )
         )
-        self.assertEqual(
-            mol,
-            Geometry(os.path.join(prefix, "test_files/change_dihedral_0.xyz")),
-        )
 
         # set dihedral to 60 deg
         mol.change_dihedral(*atom_args, 60, radians=False)
@@ -638,7 +623,7 @@ def suite():
     return suite
 
 
-ONLYSOME = True
+ONLYSOME = False
 
 if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()

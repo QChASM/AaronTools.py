@@ -3,6 +3,7 @@ import os
 import unittest
 
 from AaronTools.component import Component
+from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, validate
 
@@ -65,7 +66,6 @@ class TestComponent(TestWithTimer):
 
     def test_detect_backbone(self):
         geom = TestComponent.RQ_tBu.copy()
-        geom.detect_backbone()
 
         backbone = geom.find("1,2,7-20")
         Me = geom.find("3,21-23")
@@ -84,26 +84,13 @@ class TestComponent(TestWithTimer):
 
     def test_minimize_torsion(self):
         ref = Component("ref_files/minimize_torsion.xyz")
-        ref.refresh_ranks()
 
         geom = TestComponent.benz.copy()
         geom.substitute(Substituent("tBu"), "12")
         geom.substitute(Substituent("Ph"), "10")
         geom.substitute(Substituent("OH"), "7")
         geom.minimize_sub_torsion()
-        geom.refresh_ranks()
-
-        for i in range(2):
-            if i != 0:
-                geom.sub_rotate("10", 180)
-            for j in range(3):
-                if j != 0:
-                    geom.sub_rotate("12", 120)
-                res = validate(geom, ref, heavy_only=True, sort=True, thresh=1)
-                if res:
-                    self.assertTrue(res)
-                    return
-        self.assertTrue(res)
+        self.assertTrue(validate(geom, ref, heavy_only=True))
 
     def test_sub_rotate(self):
         geom = TestComponent.RQ_tBu.copy()
@@ -119,9 +106,10 @@ ONLYSOME = False
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestComponent("test_detect_backbone"))
-    suite.addTest(TestComponent("test_substitute"))
-    # suite.addTest(TestComponent("test_minimize_torsion"))
+    suite.addTest(TestComponent("test_detect_backbone"))
+    # suite.addTest(TestComponent("test_sub_rotate"))
+    # suite.addTest(TestComponent("test_substitute"))
+    suite.addTest(TestComponent("test_minimize_torsion"))
     return suite
 
 

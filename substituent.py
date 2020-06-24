@@ -39,18 +39,25 @@ class Substituent(Geometry):
 
     def __init__(
         self,
-        sub,
+        sub=None,
         name=None,
         targets=None,
         end=None,
         conf_num=None,
         conf_angle=None,
+        detect=True,
     ):
         """
         sub is either a file sub, a geometry, or an atom list
         """
-        # end is connection point
+        self.name = name
+        self.atoms = []
         self.end = end
+        self.conf_angle = conf_angle
+        self.conf_num = conf_num
+        self.comment = None
+        if sub is None:
+            return
 
         if isinstance(sub, (Geometry, list)):
             # we can create substituent object from fragment
@@ -58,10 +65,12 @@ class Substituent(Geometry):
                 self.name = name if name else sub.name
                 self.conf_num = conf_num if conf_num else sub.conf_num
                 self.conf_angle = conf_angle if conf_angle else sub.conf_angle
+                self.comment = sub.comment
             elif isinstance(sub, Geometry):
                 self.name = name if name else sub.name
                 self.conf_num = conf_num
                 self.conf_angle = conf_angle
+                self.comment = sub.comment
             else:
                 self.name = name
                 self.conf_num = conf_num
@@ -77,7 +86,7 @@ class Substituent(Geometry):
                 self.atoms = sub.find(targets)
 
             # detect sub and conformer info
-            if not conf_num or not conf_angle:
+            if detect and (not conf_num or not conf_angle):
                 if not self.detect_sub():
                     LookupError(
                         "Substituent not found in library: " + str(self.name)
@@ -121,10 +130,10 @@ class Substituent(Geometry):
             self.name += "-{}".format(end.name)
 
     def __lt__(self, other):
-        if len(self.atoms) != len(other.atoms):
-            return len(self.atoms) < len(other.atoms)
         if self.end < other.end and not other.end < self.end:
             return True
+        if len(self.atoms) != len(other.atoms):
+            return len(self.atoms) < len(other.atoms)
         for a, b in zip(
             self.reorder(start=self.atoms[0])[0],
             other.reorder(start=other.atoms[0])[0],
@@ -133,20 +142,24 @@ class Substituent(Geometry):
                 return True
         return False
 
-    def copy(self, atoms=None, name=None, targets=None, end=None):
+    def copy(self, end=None):
         """
         creates a new copy of the geometry
         parameters:
             atoms (list): defaults to all atoms
             name (str): defaults to NAME_copy
         """
-        if atoms is None:
-            atoms = deepcopy(self.atoms)
-        if name is None:
-            name = self.name
-        if end is None:
-            end = self.end
-        return Substituent(atoms, name, targets=targets, end=end)
+        rv = super().copy()
+        rv = Substituent(
+            rv,
+            end=end,
+            conf_angle=self.conf_angle,
+            conf_num=self.conf_num,
+            detect=False,
+        )
+        if end is not None:
+            rv.atoms[0].connected.add(rv.end)
+        return rv
 
     @classmethod
     def list(cls):
@@ -168,62 +181,54 @@ class Substituent(Geometry):
 
         # temporarily detach end from sub so the connectivity is same as
         # for the library substituent by itself
-        if self.end:
-            self.atoms[0].connected.remove(self.end)
+        test_sub = self.copy()
+        test_sub.refresh_ranks()
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
             filename = os.path.basename(f)
             match = re.search("^([\s\S]+).xyz", filename)
             name = match.group(1)
             # test number of atoms against cache
-            if name in sub_lengths and len(self.atoms) != sub_lengths[name]:
+            if (
+                name in sub_lengths
+                and len(test_sub.atoms) != sub_lengths[name]
+            ):
                 continue
-            test_sub = Substituent(name)
+            ref_sub = Substituent(name)
+            ref_sub.refresh_ranks()
             # add to cache
-            sub_lengths[test_sub.name] = len(test_sub.atoms)
+            sub_lengths[ref_sub.name] = len(ref_sub.atoms)
             cache_changed = True
 
             # want same number of atoms
-            if len(self.atoms) != len(test_sub.atoms):
+            if len(test_sub.atoms) != len(ref_sub.atoms):
                 continue
 
-            for a in self.atoms:
-                b_found = False
-                not_found = set(test_sub.atoms)
-                for b in not_found:
-                    # and correct elements
-                    if a.element != b.element:
-                        continue
-                    # and correct connections
-                    if len(a.connected) != len(b.connected):
-                        continue
-                    # and correct connected elements
-                    for i, j in zip(
-                        sorted([aa.element for aa in a.connected]),
-                        sorted([bb.element for bb in b.connected]),
-                    ):
-                        if i != j:
-                            break
-                    else:
-                        b_found = True
+            for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
+                # want correct elements
+                if a.element != b.element:
+                    break
+                # and correct connections
+                if len(a.connected) != len(b.connected):
+                    break
+                # and correct connected elements
+                failed = False
+                for i, j in zip(
+                    sorted([aa.element for aa in a.connected]),
+                    sorted([bb.element for bb in b.connected]),
+                ):
+                    if i != j:
+                        failed = True
                         break
-                if b_found:
-                    not_found.discard(b)
-                else:
-                    # don't test this sub anymore, just go to next one
+                if failed:
                     break
             else:
-                found = True
                 # if found, save name and conf info
-                self.name = test_sub.name
-                self.comment = test_sub.comment
-                self.conf_angle = test_sub.conf_angle
-                self.conf_num = test_sub.conf_num
+                self.name = ref_sub.name
+                self.comment = ref_sub.comment
+                self.conf_angle = ref_sub.conf_angle
+                self.conf_num = ref_sub.conf_num
                 break
-
-        # reattach end to sub
-        if self.end:
-            self.atoms[0].connected.add(self.end)
 
         # update cache
         if cache_changed:
@@ -258,3 +263,6 @@ class Substituent(Geometry):
             angle *= -1
         axis = self.atoms[0].bond(self.end)
         self.rotate(axis, angle, center=self.end)
+
+    def rebuild(self):
+        super().rebuild(start=self.atoms[0])
