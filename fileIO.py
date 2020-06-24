@@ -965,11 +965,15 @@ class Frequency:
             else:
                 k += 1
 
+        for k, line in enumerate(lines):
+            if line == "IR SPECTRUM":
+                intensity_start = k + 2
+
         # IR intensities are only printed for vibrational
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        for t, line in enumerate(lines[n + 2 + i + carryover + 1 : -1]):
+        for t, line in enumerate(lines[intensity_start: -1]):
             ir_info = line.split()
             inten = float(ir_info[2])
             self.data[t].intensity = inten
