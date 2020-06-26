@@ -215,7 +215,7 @@ class TestGeometry(TestWithTimer):
 
     def test_canonical_rank(self):
         pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
-        pentane_rank = [1, 3, 4, 2, 0]
+        pentane_rank = [0, 2, 4, 3, 1]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 

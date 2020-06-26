@@ -22,9 +22,7 @@ class TestCatalyst(TestWithTimer):
     org_tri = Catalyst(
         os.path.join(prefix, "test_files/catalysts/org_tri.xyz")
     )
-    ptco4 = Catalyst(
-        os.path.join(prefix, "test_files", "ptco4.xyz")
-    )
+    ptco4 = Catalyst(os.path.join(prefix, "test_files", "ptco4.xyz"))
     catalysts = [tm_simple, tm_multi, org_1, org_tri]
 
     monodentate = Component(os.path.join(prefix, "test_files/ligands/ACN.xyz"))
@@ -241,10 +239,10 @@ class TestCatalyst(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestCatalyst("test_init"))
-    # suite.addTest(TestCatalyst("test_detect_components"))
+    suite.addTest(TestCatalyst("test_init"))
+    suite.addTest(TestCatalyst("test_detect_components"))
     suite.addTest(TestCatalyst("test_map_ligand"))
-    # suite.addTest(TestCatalyst("test_fix_comment"))
+    suite.addTest(TestCatalyst("test_fix_comment"))
     # suite.addTest(TestCatalyst("test_next_conformer"))
     return suite
 

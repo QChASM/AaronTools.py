@@ -86,10 +86,8 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
                 print("elements don't match")
             return False
     # and RMSD should be below a threshold
+    rmsd = ref.RMSD(test, align=debug, heavy_only=heavy_only, sort=sort)
     if debug:
-        rmsd = ref.RMSD(
-            test, align=debug, heavy_only=heavy_only, sort=sort, debug=True
-        )
         print("RMSD:", rmsd, "\tTHRESH:", thresh)
         ref.refresh_ranks()
         test.refresh_ranks()
@@ -97,10 +95,6 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
         test.atoms = test.reorder()[0]
         ref.write("ref")
         test.write("test")
-    else:
-        rmsd = ref.RMSD(
-            test, align=debug, heavy_only=heavy_only, sort=sort, debug=False
-        )
     return rmsd < thresh
 
 
@@ -160,7 +154,7 @@ class TestWithTimer(unittest.TestCase):
         name = name[1]
         TestWithTimer.count += 1
         print(
-            "\r    {:3.0f}: {:<30s} {:.3f}s  ".format(
+            "\r    {:3.0f}: {:<30s} {: 3.3f}s  ".format(
                 TestWithTimer.count, name, t
             ),
             end="",

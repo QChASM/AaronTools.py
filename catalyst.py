@@ -326,7 +326,6 @@ class Catalyst(Geometry):
 
             # bend around key axis
             old_walk = old_ligand.shortest_path(*old_keys)
-            print(old_walk)
             if len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
@@ -337,7 +336,6 @@ class Catalyst(Geometry):
                 old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
 
             new_walk = ligand.shortest_path(*new_keys)
-            print(new_walk)
             if len(new_walk) == 2:
                 new_con = set([])
                 for k in new_keys:
