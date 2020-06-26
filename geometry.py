@@ -634,13 +634,7 @@ class Geometry:
                 for shared_idx, connected in groups.items():
                     shared = atoms[shared_idx]
                     connected = sorted(connected)
-                    other_connections = shared.connected - set(
-                        atoms[i] for i in connected
-                    )
-                    if other_connections:
-                        center = self.COM(targets=other_connections)
-                    else:
-                        center = self.COM()
+                    center = self.COM()
                     norm = shared.coords - center
                     start_idx = None
                     min_dist = None
@@ -1775,7 +1769,11 @@ class Geometry:
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
             ring_fragment.RMSD(
-                geom, align=True, targets=ring_fragment.end, ref_targets=walk, sort=True
+                geom,
+                align=True,
+                targets=ring_fragment.end,
+                ref_targets=walk,
+                sort=True,
             )
 
             ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
