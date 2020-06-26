@@ -21,7 +21,7 @@ class TestPathway(TestWithTimer):
         )
         S = Pathway(self.t60, array([self.t60.coords(), self.t90.coords()]))
         geom = S.Geom_func(0.4)
-        rmsd = geom.RMSD(ref, align=True)
+        rmsd = geom.RMSD(ref, align=True, sort=False)
         self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
 
 def suite():
