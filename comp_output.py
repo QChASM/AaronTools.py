@@ -345,7 +345,10 @@ class CompOutput:
         return geom
 
     def compute_rot_temps(self):
-        """sets self's 'rotational_temperature' attribute by using self.geometry"""
+        """sets self's 'rotational_temperature' attribute by using self.geometry
+        not recommended b/c atoms should be specific isotopes, but this uses
+        average atomic weights
+        exists because older versions of ORCA don't print rotational temperatures"""
         self.geometry.coord_shift(-self.geometry.COM(mass_weight=True))
         
         inertia_mat = np.zeros((3,3))

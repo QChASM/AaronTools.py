@@ -1696,78 +1696,13 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
-    def short_walk(self, atom1, atom2):
-        """try to find the shortest path between atom1 and atom2"""
-        a1 = self.find(atom1)[0]
-        a2 = self.find(atom2)[0]
-        l = [a1]
-        start = a1
-        max_iter = len(self.atoms)
-        i = 0
-        while start != a2:
-            i += 1
-            if i > max_iter:
-                raise LookupError(
-                    "could not determine best path between %s and %s"
-                    % (str(atom1), str(atom2))
-                )
-            v1 = start.bond(a2)
-            max_overlap = None
-            for atom in start.connected:
-                if atom not in l:
-                    v2 = start.bond(atom)
-                    overlap = np.dot(v1, v2)
-                    if max_overlap is None or overlap > max_overlap:
-                        new_start = atom
-                        max_overlap = overlap
-
-            l.append(new_start)
-            start = new_start
-        return l
-
-    @classmethod
-    def from_string(cls, name, form="smiles"):
-        """get structure from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API"""
-
-        accepted_forms = ["iupac", "smiles"]
-
-        if form not in accepted_forms:
-            raise NotImplementedError(
-                "cannot create substituent given %s; use one of %s" % form,
-                str(accepted_forms),
-            )
-
-        if form == "smiles":
-            smiles = name
-        elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
-
-        url_sd = (
-            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-            % smiles
-        )
-        s_sd = urlopen(url_sd).read().decode("utf8")
-        f = FileReader((name, "sd", s_sd))
-        return Geometry(f)
-
     def ring_substitute(self, targets, ring_fragment):
         """take ring, reorient it, put it on self and replace targets with atoms
         on the ring fragment"""
 
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
+            #align ring's end to geom's walk
             ring_fragment.RMSD(
                 geom,
                 align=True,
@@ -1797,7 +1732,9 @@ class Geometry:
             geom.refresh_connected()
 
         def ring_waddle(geom, targets, walk_end, ring):
-            """adjusted the new bond lengths by moving the ring in a 'waddling' motion"""
+            """adjusted the new bond lengths by moving the ring in a 'waddling' motion
+            pivot on one end atom to adjust the bond lenth of the other, then do
+            the same with the other end atom"""
             if hasattr(ring.end[0], "_radii") and hasattr(
                 walk_end[0], "_radii"
             ):
@@ -1873,7 +1810,9 @@ class Geometry:
             )
 
     def short_walk(self, atom1, atom2, avoid=None):
-        """try to find the shortest path between atom1 and atom2"""
+        """try to find the shortest path between atom1 and atom2
+        avoid - atoms to not including in this path
+        returns the list of atoms on this path, including atom1 and atom2"""
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
         if avoid is None:
@@ -1885,6 +1824,8 @@ class Geometry:
         max_iter = len(self.atoms)
         i = 0
         while start != a2:
+            #look at all atoms connected to start and find the one
+            #that is most in the direction of atom2
             i += 1
             if i > max_iter:
                 raise LookupError(
@@ -1903,13 +1844,16 @@ class Geometry:
                         max_overlap = overlap
 
             if new_start is None:
+                #no unavoidable atom was found on start - this is a dead end
+                #go back 
                 l.remove(start)
                 avoid.append(start)
                 if len(l) > 1:
                     start = l[-1]
                 else:
-                    raise RuntimeError(
-                        "could not determine bet path between %s and %s"
+                    #we came all the way back to atom1 - no path can be found
+                    raise LookupError(
+                        "could not determine best path between %s and %s"
                         % (str(atom1), str(atom2))
                     )
             else:
@@ -1923,11 +1867,13 @@ class Geometry:
     ):
         """change the element of an atom on self
         target              - target atom
-        new_element         - str, element of new atom
-        adjust_bonds        - bool, adjust distance to bonded atoms
-        adjust_hydrogens    - bool/tuple(int, str), try to add or remove hydrogens and guess how many
-                                    hydrogens to add or remove/remove specified number of hydrogens and
-                                    set the geometry to the specified shape (see Atom.get_shape for a list of shapes)
+        new_element         - str:  element of new atom
+        adjust_bonds        - bool: adjust distance to bonded atoms
+        adjust_hydrogens    - bool: try to add or remove hydrogens and guess how many
+                                    hydrogens to add or remove
+                              tuple(int, str): remove specified number of hydrogens and
+                                               set the geometry to the specified shape 
+                                               (see Atom.get_shape for a list of shapes)
         """
 
         target = self.find(target)

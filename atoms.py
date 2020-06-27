@@ -317,7 +317,7 @@ class Atom:
         linear 1
         linear 2
         bent 2a (tetrahedral electron geometry w/ 2 bonds)
-        bent 2b (trigonal planar electron geometry)
+        bent 2b (trigonal planar electron geometry w/ 2 bonds)
         trigonal planar
         bent 3 (tetrahedral electron geometry w/ 3 bonds)
         t shaped
@@ -360,6 +360,7 @@ class Atom:
 
     @classmethod
     def linear_shape(cls):
+        """returns a list of 3 dummy atoms in a linear shape"""
         center = Atom("X", np.zeros(3), name="0")
         pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
         pos2 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="2")
@@ -368,11 +369,13 @@ class Atom:
 
     @classmethod
     def trigonal_planar_shape(cls):
+        """returns a list of 4 dummy atoms in a trigonal planar shape"""
         positions = cls.trigonal_bipyramidal_shape()
         return positions[:-2]
 
     @classmethod
     def tetrahedral_shape(cls):
+        """returns a list of 5 dummy atoms in a tetrahedral shape"""
         center = Atom("X", np.zeros(3), name="0")
         angle = np.deg2rad(109.471 / 2)
         pos1 = Atom(
@@ -392,6 +395,7 @@ class Atom:
 
     @classmethod
     def trigonal_bipyramidal_shape(cls):
+        """returns a list of 6 dummy atoms in a trigonal bipryamidal shape"""
         center = Atom("X", np.zeros(3), name="0")
         angle = np.deg2rad(120)
         pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
@@ -408,6 +412,7 @@ class Atom:
 
     @classmethod
     def octahedral_shape(cls):
+        """returns a list of 7 dummy atoms in an octahedral shape"""
         center = Atom("X", np.zeros(3), name="0")
         pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
         pos2 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="2")
@@ -420,8 +425,7 @@ class Atom:
 
     @staticmethod
     def new_shape(old_shape, new_connectivity, bond_change):
-        """EXPERIMENTAL
-        returns the name of the expected vsepr geometry when the number of bonds
+        """returns the name of the expected vsepr geometry when the number of bonds
         changes by +/- 1
 
         old_shape - :str: vsepr geometry name
@@ -505,9 +509,24 @@ class Atom:
 
     def get_vsepr(self):
         """determine vsepr geometry around an atom
-        e.g. tetrahedral, sawhorse, etc.
-        returns geometry name as a string and the score assigned to that geometry
-        scores > 0.5 are generally questionable"""
+        returns shape as a string and the score assigned to that shape
+        returns None if self has > 6 bonds
+        scores > 0.5 are generally questionable
+        shape can be:
+            linear 1
+            linear 2
+            bent 2a
+            bent 2b
+            bent 3
+            trigonal planar
+            t shaped
+            tetrahedral
+            sawhorse
+            square planar
+            square pyramid
+            trigonal bipyramid
+            octahedral
+            """
 
         # determine what geometries to try based on the number of bonded atoms
         try_shapes = {}
