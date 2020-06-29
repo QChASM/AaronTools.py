@@ -332,13 +332,18 @@ class FileReader:
 
         line = f.readline()
         n = 1
+        read_geom = False
         while line != "":
             if line.startswith('    Geometry (in Angstrom), charge'):
                 if not just_geom:
                     self.other['charge'] = int(line.split()[5].strip(','))
                     self.other['multiplicity'] = int(line.split()[8].strip(':'))
 
-            elif line.strip().startswith('Center'):
+            elif line.strip() == 'SCF':
+                read_geom = True
+            
+            elif line.strip().startswith('Center') and read_geom:
+                read_geom = False
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
@@ -357,7 +362,7 @@ class FileReader:
                 n += 1
                 continue
             else:
-                if line.strip().startswith('Current energy'):
+                if line.strip().startswith('Total Energy ='):
                     self.other["energy"] = float(line.split()[-1])
 
                 elif line.strip().startswith('Total E0'):
