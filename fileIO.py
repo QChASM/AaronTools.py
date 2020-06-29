@@ -971,7 +971,7 @@ class Frequency:
                 k += 1
 
         for k, line in enumerate(lines):
-            if line == "IR SPECTRUM":
+            if line.strip() == "IR SPECTRUM":
                 intensity_start = k + 2
 
         # IR intensities are only printed for vibrational
