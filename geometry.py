@@ -14,6 +14,7 @@ import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
 from AaronTools.const import D_CUTOFF, ELEMENTS
 from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.finders import Finder
 from AaronTools.utils.prime_numbers import Primes
 
 COORD_THRESHOLD = 0.2
@@ -441,6 +442,9 @@ class Geometry:
             if isinstance(arg, Atom):
                 return [arg]
             rv = []
+            if isinstance(arg, Finder):
+                rv += arg.get_matching_atoms(self.atoms, self)
+            
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
                 test_name = arg.replace(".", "\.")
