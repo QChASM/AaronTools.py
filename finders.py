@@ -19,11 +19,18 @@ class BondsFrom(Finder):
         self.central_atom = atom
         self.n_bonds = number_of_bonds
 
+    def __str__(self):
+        return "atoms within %i bonds of %s" % (self.n_bonds, self.central_atom)
+
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
         matching_atoms = []
         for atom in atoms:
-            path = geometry.shortest_path(atom, self.central_atom)
+            try:
+                path = geometry.shortest_path(atom, self.central_atom)
+            except LookupError:
+                continue
+
             if len(path) - 1 == self.n_bonds:
                 matching_atoms.append(atom)
 
@@ -37,6 +44,9 @@ class WithinRadius(Finder):
 
         self.point = np.array(point)
         self.radius = radius
+    
+    def __str__(self):
+        return "atoms within %.2f angstroms of (%.2f, %.2f, %.2f)" % (self.radius, *self.point)
 
     def get_matching_atoms(self, atoms, geometry=None):
         """returns list(Atom) that are within a radius of a point"""
