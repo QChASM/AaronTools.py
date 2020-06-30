@@ -1803,7 +1803,7 @@ class Geometry:
                 align=True,
                 targets=ring_fragment.end,
                 ref_targets=walk,
-                sort=True,
+                sort=False,
             )
 
             ring_waddle(geom, targets, [walk[1], walk[-2]], ring_fragment)
