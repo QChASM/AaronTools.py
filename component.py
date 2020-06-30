@@ -127,40 +127,6 @@ class Component(Geometry):
         self.detect_backbone(to_center=self.backbone)
         self.rebuild()
 
-    def get_frag_list(self, targets=None, max_order=None):
-        """
-        find fragments connected by only one bond
-        (both fragments contain no overlapping atoms)
-        """
-        if targets:
-            atoms = self.find(targets)
-        else:
-            atoms = self.atoms
-        frag_list = []
-        for i, a in enumerate(atoms[:-1]):
-            for b in atoms[i + 1 :]:
-                if b not in a.connected:
-                    continue
-
-                frag_a = self.get_fragment(a, b)
-                frag_b = self.get_fragment(b, a)
-                if sorted(frag_a) == sorted(frag_b):
-                    continue
-
-                if len(frag_a) == 1 and frag_a[0].element == "H":
-                    continue
-                if len(frag_b) == 1 and frag_b[0].element == "H":
-                    continue
-
-                if max_order is not None and a.bond_order(b) > max_order:
-                    continue
-
-                if (frag_a, a, b) not in frag_list:
-                    frag_list += [(frag_a, a, b)]
-                if (frag_b, b, a) not in frag_list:
-                    frag_list += [(frag_b, b, a)]
-        return frag_list
-
     def detect_backbone(self, to_center=None):
         """
         Detects backbone and substituents attached to backbone

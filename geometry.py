@@ -326,6 +326,101 @@ class Geometry:
             rv += [atom.connected]
         return rv
 
+    def get_frag_list(self, targets=None, max_order=None):
+        """
+        find fragments connected by only one bond
+        (both fragments contain no overlapping atoms)
+        """
+        if targets:
+            atoms = self.find(targets)
+        else:
+            atoms = self.atoms
+        frag_list = []
+        for i, a in enumerate(atoms[:-1]):
+            for b in atoms[i+1:]:
+                if b not in a.connected:
+                    continue
+
+                frag_a = self.get_fragment(a, b)
+                frag_b = self.get_fragment(b, a)
+                
+                if sorted(frag_a) == sorted(frag_b):
+                    continue
+
+                if len(frag_a) == 1 and frag_a[0].element == "H":
+                    continue
+                if len(frag_b) == 1 and frag_b[0].element == "H":
+                    continue
+
+                if max_order is not None and a.bond_order(b) > max_order:
+                    continue
+
+                if (frag_a, a, b) not in frag_list:
+                    frag_list += [(frag_a, a, b)]
+                if (frag_b, b, a) not in frag_list:
+                    frag_list += [(frag_b, b, a)]
+        return frag_list
+    
+    def detect_substituents(self):
+        """sets self.substituents to a list of substituents"""
+        from AaronTools.substituent import Substituent
+        #TODO: allow detection of specific substituents only
+        #       -check fragment length and elements against
+        #        that of the specified substituent
+        
+        #copy-pasted from Component.detect_backbone, but 
+        #removed stuff that refers to the center/backbone
+
+        if not hasattr(self, "substituents") or self.substituents is None:
+            self.substituents = []
+        
+        frag_list = self.get_frag_list()
+
+        new_tags = {}  # hold atom tag options until assignment determined
+        subs_found = {}  # for testing which sub assignment is best
+        sub_atoms = set([])  # holds atoms assigned to substituents
+        for frag_tup in sorted(frag_list, key=lambda x: len(x[0])):
+            frag, start, end = frag_tup
+            if frag[0] != start:
+                frag = self.reorder(start=start, targets=frag)[0]
+
+            # try to find fragment in substituent library
+            try:
+                sub = Substituent(frag, end=end)
+            except LookupError:
+                continue
+            
+            #substituents with more than half of self's atoms are ignored
+            if len(frag) > len(self.atoms) - len(sub_atoms):
+                continue
+            # save atoms and tags if found
+            sub_atoms = sub_atoms.union(set(frag))
+            subs_found[sub.name] = len(sub.atoms)
+            for a in sub.atoms:
+                if a in new_tags:
+                    new_tags[a] += [sub.name]
+                else:
+                    new_tags[a] = [sub.name]
+            # save substituent
+            self.substituents += [sub]
+
+        # tag substituents
+        for a in new_tags:
+            tags = new_tags[a]
+            if len(tags) > 1:
+                # if multiple substituent assignments possible,
+                # want to keep the largest one (eg: tBu instead of Me)
+                sub_length = []
+                for t in tags:
+                    sub_length += [subs_found[t]]
+                max_length = max(sub_length)
+                if max_length < 0:
+                    max_length = min(sub_length)
+                keep = sub_length.index(max_length)
+                a.add_tag(tags[keep])
+            else:
+                a.add_tag(tags[0])
+
     def find(self, *args, debug=False):
         """
         finds atom in geometry
@@ -1055,7 +1150,7 @@ class Geometry:
         ref.coord_shift(-ref_com)
 
         # try current ordering
-        min_rmsd = _RMSD(ref_targets, targets)
+        min_rmsd = _RMSD(ref.atoms, this.atoms)
         # try canonical ordering
         if sort:
             targets = this.reorder()[0]
