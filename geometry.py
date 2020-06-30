@@ -426,7 +426,7 @@ class Geometry:
         """
         finds atom in geometry
         Parameters:
-            *args are tags, names or elements
+            *args are tags, names, elements, or a Finder subclass
             args=(['this', 'that'], 'other') will find atoms for which
                 ('this' || 'that') && 'other' == True
         Returns:
@@ -532,7 +532,7 @@ class Geometry:
             if len(rv[0]) == 0:
                 raise LookupError(
                     "Could not find atom: %s on\n%s\n%s"
-                    % (str(args), self.name, str(self))
+                    % ("; ".join([str(x) for x in args]), self.name, str(self))
                 )
             return rv[0]
 
