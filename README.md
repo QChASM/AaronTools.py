@@ -8,3 +8,8 @@ See the <a href="https://github.com/QChASM/AaronTools.py/wiki">Wiki</a> for inst
 A Perl implementation of AaronTools is also <a href="https://github.com/QChASM/AaronTools">available here.</a>
 
 If you have any questions, feel free to contact us at catalysttrends@uga.edu
+
+# Requirements
+python3
+
+numpy
