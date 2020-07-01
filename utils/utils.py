@@ -3,7 +3,6 @@ import copy
 import numpy as np
 
 import AaronTools.atoms as Atoms
-import AaronTools.geometry as Geometry
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -215,11 +214,12 @@ def same_cycle(graph, a, b):
     :graph: connectivity matrix or Geometry
     :a:, :b: indices in connectivity matrix/Geometry or Atoms in Geometry
     """
+    from AaronTools.geometry import Geometry
     if isinstance(a, Atoms.Atom):
         a = graph.atoms.index(a)
     if isinstance(b, Atoms.Atom):
         b = graph.atoms.index(b)
-    if isinstance(graph, Geometry.Geometry):
+    if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
         ]
@@ -247,11 +247,12 @@ def shortest_path(graph, start, end):
     :start: the first atom or node index
     :end: the last atom or node index
     """
+    from AaronTools.geometry import Geometry
     if isinstance(start, Atoms.Atom):
         start = graph.atoms.index(start)
     if isinstance(end, Atoms.Atom):
         end = graph.atoms.index(end)
-    if isinstance(graph, Geometry.Geometry):
+    if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected if j in graph.atoms]
             for i in graph.atoms
@@ -304,7 +305,8 @@ def shortest_path(graph, start, end):
 
 
 def trim_leaves(graph, _removed=[]):
-    if isinstance(graph, Geometry.Geometry):
+    from AaronTools.geometry import Geometry
+    if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
         ]
