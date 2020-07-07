@@ -175,8 +175,8 @@ for f in args.infile:
         raise RuntimeError("specify --targets or --fragment, but not both")
     
     elif args.fragment is not None:
-        targets = geom.get_fragment(args.fragment)
-    
+        targets = geom.get_all_connected(args.fragment)
+        
     else:
         targets = args.targets
 

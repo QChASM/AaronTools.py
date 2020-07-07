@@ -1306,6 +1306,21 @@ class Geometry:
         self.refresh_connected()
         return
 
+    def get_all_connected(self, target):
+        def _get_all_connected(geom, target, avoid):
+            atoms = [target]
+            for atom in target.connected:
+                if atom not in avoid:
+                    new_avoid = avoid + [target]
+                    atoms.extend([x for x in _get_all_connected(geom, atom, new_avoid) if x not in atoms])
+
+            return atoms
+        
+        target = self.find(target)[0]
+        atoms = _get_all_connected(self, target, [])
+
+        return atoms
+    
     def get_fragment(
         self, start, stop=None, as_object=False, copy=False, biggest=False
     ):
