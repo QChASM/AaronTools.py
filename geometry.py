@@ -439,14 +439,19 @@ class Geometry:
 
         def _find(arg):
             """ find a single atom """
+            #print(arg)
             if isinstance(arg, Atom):
+                #print('atom')
                 return [arg]
+            
             rv = []
             if isinstance(arg, Finder):
+                #print('finder')
                 rv += arg.get_matching_atoms(self.atoms, self)
             
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
+                #print('name')
                 test_name = arg.replace(".", "\.")
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
                 test_name = re.compile("^" + test_name + "$")
@@ -456,6 +461,7 @@ class Geometry:
                         rv += [a]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
+                #print('comma list')
                 list_style = arg.split(",")
                 if len(list_style) > 1:
                     for i in list_style:
@@ -467,16 +473,19 @@ class Geometry:
             elif (
                 isinstance(arg, str)
                 and len(arg.split("-")) > 1
-                and not re.search("\w+", arg)
+                and not re.search("[A-Za-z]", arg)
             ):
+                #print('range list')
                 rv += _find_between(arg)
 
             elif isinstance(arg, str) and arg in ELEMENTS:
+                #print('element')
                 # this is an element
                 for a in self.atoms:
                     if a.element == arg:
                         rv += [a]
             else:
+                #print('tag')
                 # this is a tag
                 for a in self.atoms:
                     if arg in a.tags:
@@ -1316,7 +1325,7 @@ class Geometry:
         start = self.find(start)
         if stop is None:
             best = None
-            for stop in start.connected:
+            for stop in start[0].connected:
                 frag = self.get_fragment(start, stop, as_object, copy)
                 if (
                     best is None

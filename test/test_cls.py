@@ -22,16 +22,28 @@ from AaronTools.test.test_geometry import is_close
 
 
 class TestCLS(TestWithTimer):
-    benz_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    benz_NO2_Cl = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
+    
     pyridine = os.path.join(prefix, "test_files", "pyridine.xyz")
-    pentane = os.path.join(prefix, "test_files", "pentane.xyz")
+    
+    chlorotoluene = os.path.join(prefix, "test_files", "chlorotoluene.xyz")
+    chlorotoluene_ref = os.path.join(prefix, "ref_files", "chlorotoluene_180.xyz")
+    
+    benzene_dimer = os.path.join("test_files", "benzene_dimer.xyz")
+    benzene_dimer_ref = os.path.join("ref_files", "benzene_dimer_ref.xyz")
+
     naphthalene = os.path.join(prefix, "ref_files", "naphthalene.xyz")
+    
     tetrahydronaphthalene = os.path.join(
         prefix, "ref_files", "tetrahydronaphthalene.xyz"
     )
+    
     pyrene = os.path.join(prefix, "ref_files", "pyrene.xyz")
+    
     benz_OH_Cl = os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
+    
     frequencies = os.path.join(prefix, "test_files", "normal.log")
 
     rmsd_sort_1 = os.path.join(prefix, "test_files", "test_rmsd_sort1.xyz")
@@ -378,6 +390,86 @@ thermochemistry from test_files/normal.log at 298.00 K:
         mol = Geometry(fr)
         rmsd = mol.RMSD(ref, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref))
+    
+    def test_rotate(self):
+        ref = Geometry(TestCLS.chlorotoluene_ref)
+
+        #range of targets
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "rotate.py"), \
+                TestCLS.chlorotoluene, \
+                '-b', '3', '12', \
+                '-t', '12-15', \
+                '-a', '180']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
+
+
+        #enumerate all targets
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "rotate.py"), \
+                TestCLS.chlorotoluene, \
+                '-b', '3', '12', \
+                '-t', '12,13,14,15', \
+                '-a', '180']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref))
+
+
+        #rotate all atom by 180 - rmsd should be basically 0
+        ref2 = Geometry(TestCLS.chlorotoluene)
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "rotate.py"), \
+                TestCLS.chlorotoluene, \
+                '-x', 'x', \
+                '-a', '180']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref2, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref2))
+        
+        #rotate one fragment
+        ref3 = Geometry(TestCLS.benzene_dimer_ref)
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "rotate.py"), \
+                TestCLS.benzene_dimer, \
+                '-p', '1-12', \
+                '-f', '1', \
+                '-a', '10']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref3, align=True)
+        self.assertTrue(rmsd < rmsd_tol(ref3))
 
 
 if __name__ == "__main__":
