@@ -19,7 +19,7 @@ class BondsFrom(Finder):
         self.central_atom = atom
         self.n_bonds = number_of_bonds
 
-    def __str__(self):
+    def __repr__(self):
         return "atoms %i bonds of %s" % (self.n_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
@@ -42,7 +42,7 @@ class WithinBondsOf(BondsFrom):
     def __init__(self, atom, number_of_bonds):
         super().__init__(atom, number_of_bonds)
 
-    def __str__(self):
+    def __repr__(self):
         return "atoms %i bonds of %s" % (self.n_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
@@ -67,7 +67,7 @@ class BondedTo(Finder):
 
         self.atom = atom
 
-    def __str__(self):
+    def __repr__(self):
         return "atoms bonded to %s" % self.atom
 
     def get_matching_atoms(self, atoms, geometry=None):
@@ -83,7 +83,7 @@ class WithinRadiusFromPoint(Finder):
         self.point = np.array(point)
         self.radius = radius
     
-    def __str__(self):
+    def __repr__(self):
         return "atoms within %.2f angstroms of (%.2f, %.2f, %.2f)" % (self.radius, *self.point)
 
     def get_matching_atoms(self, atoms, geometry=None):
@@ -106,7 +106,7 @@ class WithinRadiusFromAtom(Finder):
         self.point = atom
         self.radius = radius
     
-    def __str__(self):
+    def __repr__(self):
         return "atoms within %.2f angstroms of %s" % (self.radius, self.atom)
 
     def get_matching_atoms(self, atoms, geometry=None):
@@ -129,7 +129,7 @@ class NotAny(Finder):
 
         self.critera = args
 
-    def __str__(self):
+    def __repr__(self):
         return "not any of: %s" % ", ".join([str(x) for x in self.critera])
 
     def get_matching_atoms(self, atoms, geometry):
@@ -151,7 +151,7 @@ class AnyTransitionMetal(Finder):
     def __init__(self):
         super().__init__()
 
-    def __str__(self):
+    def __repr__(self):
         return "any transition metal"
 
     def get_matching_atoms(self, atoms, geometry=None):
@@ -165,7 +165,7 @@ class AnyNonTransitionMetal(NotAny):
     def __init__(self):
         super().__init__(AnyTransitionMetal())
 
-    def __str__(self):
+    def __repr__(self):
         return "any non-transition metal"
 
 
@@ -176,7 +176,7 @@ class HasAttribute(Finder):
 
         self.attribute_name = attribute
 
-    def __str__(self):
+    def __repr__(self):
         return "atoms with the '%s' attribute" % self.attribute_name
 
     def get_matching_atoms(self, atoms, geometry=None):
@@ -184,4 +184,77 @@ class HasAttribute(Finder):
         return [atom for atom in atoms if hasattr(atom, self.attribute_name)]
 
 
+class VSEPR(Finder):
+    """atoms with the specified VSEPR geometry
+    see Atom.get_shape for a list of valid vsepr_geometry strings"""
+    def __init__(self, vsepr_geometry):
+        super().__init__()
+        
+        self.vsepr = vsepr_geometry
+    
+    def __repr__(self):
+        return "atoms with %s shape" % self.vsepr
 
+    def get_matching_atoms(self, atoms, geometry=None):
+        matching_atoms = []
+        for atom in atoms:
+            shape, score = atom.get_vsepr()
+            if shape == self.vsepr and score < 0.5:
+                matching_atoms.append(atom)
+        
+        return matching_atoms
+
+
+class BondedElements(Finder):
+    """atoms bonded to the specified neighboring elements
+    if match_exact=True (default), elements must match exactly 
+    e.g. BondedElements('C') will find
+    atoms bonded to only one carbon and nothing else"""
+    def __init__(self, *args, match_exact=True):
+        super().__init__()
+        
+        self.elements = list(args)
+        self.match_exact = match_exact
+        
+    def __repr__(self):
+        if len(self.elements) == 0:
+            return "atoms bonded to nothing"
+        elif len(self.elements) == 1:
+            return "atoms bonded to %s" % self.elements[0]
+        else:
+            return "atoms bonded to %s and %s" % (", ".join(self.elements[:-1]), self.elements[-1])
+    
+    def get_matching_atoms(self, atoms, geometry=None):
+        matching_atoms = []
+        if self.match_exact:
+            ref = "".join(sorted(self.elements))
+        else:
+            ref = self.elements
+        
+        for atom in atoms:
+            if self.match_exact:
+                ele_list = [a.element for a in [ele for ele in atom.connected]]
+                test = "".join(sorted(ele_list))
+                if ref == test:
+                    matching_atoms.append(atom)
+            
+            else:
+                bonded_eles = [bonded_atom.element for bonded_atom in atom.connected]
+                if all([ele in bonded_eles for ele in self.elements]):
+                    matching_atoms.append(atom)
+        
+        return matching_atoms
+
+
+class NumberOfBonds(Finder):
+    """atoms with the specified number of bonds"""
+    def __init__(self, num_bonds):
+        super().__init__()
+        
+        self.num_bonds = num_bonds
+    
+    def __repr__(self):
+        return "atoms with %i bonds" % self.num_bonds
+    
+    def get_matching_atoms(self, atoms, geometry=None):
+        return [atom for atom in atoms if len(atom.connected) == self.num_bonds]
