@@ -26,8 +26,9 @@ rotate_parser.add_argument('-if', '--input-format', \
                         dest='input_format', \
                         help="file format of input - xyz is assumed if input is stdin")
 
-rotated_atoms = rotate_parser.add_argument_group('rotated atoms')
-rotated_atoms.add_argument('-t', '--target',\
+rotated_atoms = rotate_parser.add_argument_group('rotated atoms (default is all atoms)')
+rot_atoms = rotated_atoms.add_mutually_exclusive_group(required=False)
+rot_atoms.add_argument('-t', '--target',\
                         type=str, \
                         default=None, \
                         required=False, \
@@ -35,16 +36,15 @@ rotated_atoms.add_argument('-t', '--target',\
                         metavar='targets', \
                         help='atoms to rotate (1-indexed)\n' + \
                         'comma- and/or hyphen-separated list\n' + \
-                        'hyphens denote a range of atoms; commas separate individual atoms or ranges\n' + \
-                        'Default: whole structure')
+                        'hyphens denote a range of atoms; commas separate individual atoms or ranges')
 
-rotated_atoms.add_argument('-f', '--fragment', \
+rot_atoms.add_argument('-f', '--fragment', \
                             type=str, \
                             default=None, \
                             required=False, \
                             dest='fragment', \
                             metavar='target', \
-                            help='rotate fragment containing target\ncannot be used with \'--target\'')
+                            help='rotate fragment containing target')
 
 
 rotate_parser.add_argument('-c', '--center' , \
@@ -55,7 +55,8 @@ rotate_parser.add_argument('-c', '--center' , \
                         help='translate the centroid of the specified atoms to the\norigin before rotating')
 
 defined_vector = rotate_parser.add_argument_group('define vector')
-defined_vector.add_argument('-v', '--vector',\
+def_vector = defined_vector.add_mutually_exclusive_group(required=True)
+def_vector.add_argument('-v', '--vector',\
                         type=float, \
                         nargs=3, \
                         default=None, \
@@ -64,7 +65,7 @@ defined_vector.add_argument('-v', '--vector',\
                         metavar=('x', 'y', 'z'), \
                         help='rotate about the vector from the origin to (x, y, z)')
 
-defined_vector.add_argument('-b', '--bond', \
+def_vector.add_argument('-b', '--bond', \
                         type=str, \
                         nargs=2, \
                         default=None, \
@@ -72,7 +73,7 @@ defined_vector.add_argument('-b', '--bond', \
                         metavar=('a1', 'a2'), \
                         help='rotate about the vector from atom a1 to atom a2 (1-indexed)')
 
-defined_vector.add_argument('-x', '--axis', \
+def_vector.add_argument('-x', '--axis', \
                         type=str, \
                         nargs=1, \
                         default=None, \
@@ -81,7 +82,7 @@ defined_vector.add_argument('-x', '--axis', \
                         choices=['x', 'y', 'z'], \
                         help='rotate about specified axis')
 
-defined_vector.add_argument('-g', '--group', \
+def_vector.add_argument('-g', '--group', \
                         type=str, \
                         default=None, \
                         required=False, \
@@ -90,7 +91,7 @@ defined_vector.add_argument('-g', '--group', \
                         help='rotate about axis from origin (or center specified with \'--center\')\n' +
                         'to the centroid of the specified atoms')
 
-defined_vector.add_argument('-p', '--perpendicular', \
+def_vector.add_argument('-p', '--perpendicular', \
                         type=str, \
                         default=None,\
                         required=False, \
