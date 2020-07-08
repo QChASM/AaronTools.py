@@ -24,16 +24,16 @@ translate_parser.add_argument('-if', '--input-format', \
                         dest='input_format', \
                         help="file format of input - xyz is assumed if input is stdin")
 
-translate_parser.add_argument('-f', '--fragment',\
+translate_parser.add_argument('-t', '--targets',\
                         type=str, \
                         nargs=1, \
                         default=None, \
                         required=False, \
-                        dest='fragment', \
+                        dest='targets', \
                         metavar='targets', \
-                        help='fragment to move (default: whole structure)')
+                        help='atoms to move (default: whole structure)')
 
-translate_parser.add_argument('-t', '--targets',\
+translate_parser.add_argument('-ct', '--center-targets',\
                         type=str, \
                         nargs=1, \
                         default=None, \
@@ -44,16 +44,19 @@ translate_parser.add_argument('-t', '--targets',\
                         'comma (,) and/or hyphen (-) separated list\n' + \
                         'hyphens denote a range of atoms\n' + \
                         'commas separate individual atoms or ranges\n' + \
-                        'Default: whole structure')
+                        'default: whole structure')
 
-translate_parser.add_argument('-v', '--vector',\
+translate_mode = translate_parser.add_argument_group('translation mode (default: move centroid to origin)')
+trans_modes = translate_mode.add_mutually_exclusive_group(required=True)
+trans_modes.add_argument('-v', '--vector',\
                         type=float, \
                         nargs=3, \
                         default=None, \
                         required=False, \
                         dest='vector', \
                         metavar=('x', 'y', 'z'), \
-                        help='translate in direction of this vector - vector is normalized when "-d" is used')
+                        help='translate in direction of this vector\n' + \
+                        'vector is normalized when --distance/-d is used')
 
 translate_parser.add_argument('-d', '--distance',\
                         type=float, \
@@ -61,18 +64,20 @@ translate_parser.add_argument('-d', '--distance',\
                         default=None, \
                         required=False, \
                         dest='distance', \
-                        help='translate targets to a point')
+                        help='distance translated - only applies to --vector/-v')
 
-translate_parser.add_argument('-dest', '--destination',\
+trans_modes.add_argument('-dest', '--destination',\
                         type=float, \
                         nargs=3, \
                         default=None, \
                         required=False, \
                         dest='dest', \
                         metavar=('x', 'y', 'z'), \
-                        help='translate fragment to a point \nDefault: COM of targets')
+                        help='translate fragment to a point')
 
-translate_parser.add_argument('-com', '--center-of-mass',\
+center_parser = translate_parser.add_argument_group("center (default: centroid)")
+center_option = center_parser.add_mutually_exclusive_group(required=False)
+center_option.add_argument('-com', '--center-of-mass',\
                         action='store_const', \
                         const=True, \
                         default=None, \
@@ -80,7 +85,7 @@ translate_parser.add_argument('-com', '--center-of-mass',\
                         dest='com', \
                         help='translate the center of mass of the targets to the destination')
 
-translate_parser.add_argument('-cent', '--centroid',\
+center_option.add_argument('-cent', '--centroid',\
                         action='store_const', \
                         const=True, \
                         default=None, \

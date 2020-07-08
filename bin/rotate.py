@@ -150,9 +150,6 @@ elif args.num is not None and args.angle is not None:
     args.num = args.num[0]
     args.angle = args.angle[0]
 
-if sum([axis is not None for axis in [args.axis, args.bond, args.vector, args.group, args.perp]]) != 1:
-    raise ValueError("must specify exactly one of '--axis', '--bond', '--vector', '--group', '--perpendicular'")
-
 if not args.radians:
     args.angle = np.deg2rad(args.angle)
 
@@ -172,10 +169,7 @@ for f in args.infile:
     center = args.center
 
 
-    if args.targets is not None and args.fragment is not None:
-        raise RuntimeError("specify --targets or --fragment, but not both")
-    
-    elif args.fragment is not None:
+    if args.fragment is not None:
         targets = geom.get_all_connected(args.fragment)
         
     else:
@@ -190,6 +184,7 @@ for f in args.infile:
         a2 = geom.find(args.bond[1])[0]
         vector = a1.bond(a2)
         if center is None:
+            warn("center set to the coordinates of atom %s; using --center/-c will override this" % a1.name)
             center = a1.coords
     
     elif args.axis is not None:

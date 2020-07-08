@@ -61,7 +61,7 @@ freqbild_parser.add_argument('-s', '--scale', \
                             dest='scale', \
                             metavar='max displacement', \
                             help="scale the longest vector to be this many Angstroms long\n" + \
-                            "default is 1.5\n may be delimited in accordance with the --mode option")
+                            "default is 1.5\nmay be delimited in accordance with the --mode option")
 
 freqbild_parser.add_argument('-r', '--remove-mass', \
                             action='store_const', \

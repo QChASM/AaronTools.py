@@ -34,7 +34,7 @@ element_parser.add_argument('-if', '--input-format', \
                             help="file format of input - xyz is assumed if input is stdin")
 
 element_parser.add_argument('-e', '--element', \
-                            metavar='target=new element', \
+                            metavar='target=element', \
                             type=str, \
                             nargs='*', \
                             required=True, \

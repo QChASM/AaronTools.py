@@ -31,7 +31,7 @@ substitute_parser.add_argument('-if', '--input-format', \
                                 dest='input_format', \
                                 help="file format of input - xyz is assumed if input is stdin")
 
-substitute_parser.add_argument('-s', '--substitute', metavar='n=new substituent', \
+substitute_parser.add_argument('-s', '--substitute', metavar='n=substituent', \
                             type=str, \
                             nargs='*', \
                             default=None, \

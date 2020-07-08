@@ -398,7 +398,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "rotate.py"), \
                 TestCLS.chlorotoluene, \
-                '-b', '3', '12', \
+                '-b', '3', '12', '-c', '3', \
                 '-t', '12-15', \
                 '-a', '180']
 
@@ -417,7 +417,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "rotate.py"), \
                 TestCLS.chlorotoluene, \
-                '-b', '3', '12', \
+                '-b', '3', '12', '-c', '3', \
                 '-t', '12,13,14,15', \
                 '-a', '180']
 
