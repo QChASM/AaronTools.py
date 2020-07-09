@@ -64,7 +64,9 @@ for f in args.infile:
         col = "%.2e/%s" % (float(co.gradient[crit]['value']), 'YES' if co.gradient[crit]['converged'] else 'NO')
         s += "  %14s" % col
 
-    if co.finished:
+    if len(header_vals) == 0:
+        s += "  no progress found"
+    elif co.finished:
         s += "  finished"
     else:
         s += "  not finished"
