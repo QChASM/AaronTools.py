@@ -413,12 +413,95 @@ class FileReader:
 
                 elif PSI4_NORM_FINISH in line:
                     self.other["finished"] = True
-                
+
+                elif line.startswith('    Convergence Criteria'):
+                    #for tolerances:
+                    #psi4 puts '*' next to converged values and 'o' in place of things that aren't monitored
+                    grad = {}
+                    
+                    dE_tol = line[24:38]
+                    if 'o' in dE_tol:
+                        dE_tol = None
+                    else:
+                        dE_tol = dE_tol.split()[0]
+
+                    max_f_tol = line[38:52]
+                    if 'o' in max_f_tol:
+                        max_f_tol = None
+                    else:
+                        max_f_tol = max_f_tol.split()[0]
+                    
+                    rms_f_tol = line[52:66]
+                    if 'o' in rms_f_tol:
+                        rms_f_tol = None
+                    else:
+                        rms_f_tol = rms_f_tol.split()[0]
+                    
+                    max_d_tol = line[66:80]
+                    if 'o' in max_d_tol:
+                        max_d_tol = None
+                    else:
+                        max_d_tol = max_d_tol.split()[0]
+                    
+                    rms_d_tol = line[80:94]
+                    if 'o' in rms_d_tol:
+                        rms_d_tol = None
+                    else:
+                        rms_d_tol = rms_d_tol.split()[0]
+
+                    line = f.readline()
+                    line = f.readline()
+                    n+= 2
+                    
+                    #for convergence:
+                    #psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
+                    if dE_tol is not None:
+                        dE_conv = line[24:38]
+                        dE = float(dE_conv.split()[0])
+                        grad['Delta E'] = {}
+                        grad['Delta E']['value'] = dE
+                        grad['Delta E']['converged'] = '*' in dE_conv
+
+                    if max_f_tol is not None:
+                        max_f_conv = line[38:52]
+                        max_f = float(max_f_conv.split()[0])
+                        grad['Max Force'] = {}
+                        grad['Max Force']['value'] = max_f
+                        grad['Max Force']['converged'] = '*' in max_f_conv
+
+                    if rms_f_tol is not None:
+                        rms_f_conv = line[52:66]
+                        rms_f = float(rms_f_conv.split()[0])
+                        grad['RMS Force'] = {}
+                        grad['RMS Force']['value'] = rms_f
+                        grad['RMS Force']['converged'] = '*' in rms_f_conv
+
+                    if max_d_tol is not None:
+                        max_d_conv = line[66:80]
+                        max_d = float(max_d_conv.split()[0])
+                        grad['Max Disp'] = {}
+                        grad['Max Disp']['value'] = max_d
+                        grad['Max Disp']['converged'] = '*' in max_d_conv
+
+                    if rms_d_tol is not None:
+                        rms_d_conv = line[80:94]
+                        rms_d = float(rms_d_conv.split()[0])
+                        grad['RMS Disp'] = {}
+                        grad['RMS Disp']['value'] = rms_d
+                        grad['RMS Disp']['converged'] = '*' in max_d_conv
+
+                    self.other['gradient'] = grad
+
                 line = f.readline()
                 n += 1
 
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
+
+        def add_grad(grad, name, line):
+            grad[name] = {}
+            grad[name]['value'] = line.split()[-3]
+            grad[name]['converged'] = line.split()[-1] == 'YES'
 
         def get_atoms(f, n):
             """parse atom info"""
@@ -543,11 +626,33 @@ class FileReader:
                         line.split()[-2]
                     )
 
+                elif 'Geometry convergence' in line:
+                    grad = {}
+                    self.skip_lines(f, 2)
+                    n += 3
+                    line = f.readline()
+                    while line and re.search('\w', line):
+                        if re.search('Energy\schange', line):
+                            add_grad(grad, 'Delta E', line)
+                        elif re.search('RMS\sgradient', line):
+                            add_grad(grad, 'RMS Force', line)
+                        elif re.search('MAX\sgradient', line):
+                            add_grad(grad, 'Max Force', line)
+                        elif re.search('RMS\sstep', line):
+                            add_grad(grad, 'RMS Disp', line)
+                        elif re.search('MAX\sstep', line):
+                            add_grad(grad, 'Max Disp', line)
+
+                        line = f.readline()
+                        n += 1
+
+                    self.other['gradient'] = grad
+
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
 
+
                 # TODO E_ZPVE
-                # TODO gradient
                 # TODO error
 
                 line = f.readline()

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import sys
-import os
-import numpy as np
 import argparse
 from warnings import warn
 from AaronTools.geometry import Geometry
