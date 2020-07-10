@@ -96,8 +96,7 @@ follow_parser.add_argument('-o', '--output-destination', \
                             default=False, \
                             required=False, \
                             dest='outfile', \
-                            metavar=('mode 1', 'mode 2'), \
-                            help='output destination\n"&i" in file name will be replaced with zero-padded numbers\nDefault: stdout')
+                            help='output destination\n"$i" in file name will be replaced with zero-padded numbers\nDefault: stdout')
 """
 follow_parser.add_argument('-e', '--energy-scale', \
                             action='store_const', \
@@ -136,7 +135,7 @@ else:
 
 for i, mode in enumerate(modes):
     if outfiles[i]:
-        if '&i' not in outfiles[i]:
+        if '$i' not in outfiles[i]:
             append = True
     else:
         append = False
@@ -192,7 +191,7 @@ for i, mode in enumerate(modes):
         #print animation frames
         for k, t in enumerate(np.linspace(0, 1, num=args.animate[0])):
             if outfiles[i] is not False:
-                outfile = outfiles[i].replace("&i", fmt % k)
+                outfile = outfiles[i].replace("$i", fmt % k)
             else:
                 outfile = outfiles[i]
 

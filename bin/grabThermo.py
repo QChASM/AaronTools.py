@@ -34,7 +34,7 @@ thermo_parser.add_argument('-if', '--input-format', \
                         nargs=1, \
                         default=None, \
                         dest='input_format', \
-                        choices=['.log', '.out', '.dat'], \
+                        choices=['log', 'out', 'dat'], \
                         help="file format of input - required if input is stdin")
 
 thermo_parser.add_argument('-sp', '--single-point', \

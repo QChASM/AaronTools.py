@@ -1307,6 +1307,7 @@ class Geometry:
         return
 
     def get_all_connected(self, target):
+        """returns a list of all elements on the target atom's monomer"""
         def _get_all_connected(geom, target, avoid):
             atoms = [target]
             for atom in target.connected:
