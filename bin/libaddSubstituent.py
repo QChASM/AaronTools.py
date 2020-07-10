@@ -13,15 +13,13 @@ libaddsub_parser = argparse.ArgumentParser(description='add a substituent to you
                     formatter_class=argparse.RawTextHelpFormatter)
 libaddsub_parser.add_argument('infile', metavar='input file', \
                                 type=str, \
-                                nargs=1, \
                                 default=None, \
                                 help='a coordinate file')
 
 libaddsub_parser.add_argument('-n', '--name', \
                                 type=str, \
-                                nargs=1, \
                                 required=False, \
-                                default=[None], \
+                                default=None, \
                                 dest='name', \
                                 help="""Name of substituent being added to the library
 if no name is given, the substituent will be printed to STDOUT""")
@@ -50,10 +48,13 @@ libaddsub_parser.add_argument('-c', '--conf', \
 
 args = libaddsub_parser.parse_args()
 
-infile = args.infile[0]
-name = args.name[0]
+infile = args.infile
+name = args.name
 n_confs = args.confangle[0]
 angle = args.confangle[1]
+
+if n_confs < 1:
+    raise RuntimeError("conformers cannot be < 1")
 
 geom = Geometry(infile)
 

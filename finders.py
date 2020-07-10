@@ -198,9 +198,11 @@ class VSEPR(Finder):
     def get_matching_atoms(self, atoms, geometry=None):
         matching_atoms = []
         for atom in atoms:
-            shape, score = atom.get_vsepr()
-            if shape == self.vsepr and score < 0.5:
-                matching_atoms.append(atom)
+            out = atom.get_vsepr()
+            if out is not None:
+                shape, score = atom.get_vsepr()
+                if shape == self.vsepr and score < 0.5:
+                    matching_atoms.append(atom)
         
         return matching_atoms
 

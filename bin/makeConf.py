@@ -138,16 +138,17 @@ for infile in args.infile:
     if args.list_info:
         total_conf = 1
         if len(args.infile) > 1:
-            s = "%s\n" % infile
+            s += "%s\n" % infile
         else:
-            s = ''
-        s += 'Sub\tRotamers\n'
+            s += ''
+        s += 'Substituent \tRotamers\n'
         for sub in substituents:
             if sub.conf_num > 1:
-                s += "%s\t%s\n" % (sub.name, sub.conf_num)
+                s += "%2s=%-10s\t%s\n" % (sub.end.name, sub.name, sub.conf_num)
                 total_conf *= sub.conf_num
         s += "Total Number of Conformers = %i\n" % total_conf
-        print(s.strip())
+        if infile is not args.infile[-1]:
+            s += '\n'
         continue
 
     conformers = []
@@ -189,5 +190,5 @@ for infile in args.infile:
             geom.write(outfile=outfile, append='$i' not in args.outfile)
 
     
-if args.outfile is None and not args.list_info:
+if args.outfile is None or args.list_info:
     print(s[:-1])
