@@ -107,7 +107,7 @@ for infile in args.infile:
         detect_subs = True
     else:
         for sub in args.substituents:
-            if re.search("^\d+=", sub):
+            if re.search("^\d+.*=\w+", sub):
                 ndx_targets = sub.split('=')[0]
                 target_list.append(geom.find(ndx_targets))
                 explicit_subnames.append('='.join(sub.split('=')[1:]))
