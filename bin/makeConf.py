@@ -28,6 +28,14 @@ makeconf_parser.add_argument('-ls', '--list', \
                                 dest='list_avail', \
                                 help='list available substituents')
 
+makeconf_parser.add_argument('-i', '--info', \
+                                action='store_const', \
+                                const=True, \
+                                default=False, \
+                                required=False, \
+                                dest='list_info', \
+                                help='list information on substituents to be generated')
+
 makeconf_parser.add_argument('-if', '--input-format', \
                                 type=str, \
                                 nargs=1, \
@@ -62,6 +70,7 @@ makeconf_parser.add_argument('-o', '--output-destination', \
 
 args = makeconf_parser.parse_args()
 
+#Tony: Let's only print rotatable subs (ie, ones with more than one conformer)
 if args.list_avail:
     s = ""
     for i, name in enumerate(sorted(Substituent.list())):
@@ -126,6 +135,21 @@ for infile in args.infile:
                 except LookupError:
                     pass
     
+    if args.list_info:
+        total_conf = 1
+        if len(args.infile) > 1:
+            s = "%s\n" % infile
+        else:
+            s = ''
+        s += 'Sub\tRotamers\n'
+        for sub in substituents:
+            if sub.conf_num > 1:
+                s += "%s\t%s\n" % (sub.name, sub.conf_num)
+                total_conf *= sub.conf_num
+        s += "Total Number of Conformers = %i\n" % total_conf
+        print(s.strip())
+        continue
+
     conformers = []
     rotations = []
     for sub in substituents:
@@ -165,5 +189,5 @@ for infile in args.infile:
             geom.write(outfile=outfile, append='$i' not in args.outfile)
 
     
-if args.outfile is None:
+if args.outfile is None and not args.list_info:
     print(s[:-1])
