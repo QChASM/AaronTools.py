@@ -127,7 +127,10 @@ for f in args.infile:
         geom.change_dihedral(a1, a2, a3, a4, vals[4], radians=args.radians, adjust=True, as_group=True)
 
     #print specified dihedrals
-    out = ''
+    if len(args.infile) > 1:
+        out = "%s\t" % f
+    else:
+        out = ''
     for dihedral in args.measure:
         a1 = geom.atoms[dihedral[0]-1]
         a2 = geom.atoms[dihedral[1]-1]
