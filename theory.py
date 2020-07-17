@@ -3,6 +3,7 @@
 import os
 
 from AaronTools.geometry import Geometry
+from AaronTools.utils.utils import combine_dicts
 
 KNOWN_SEMI_EMPIRICAL = ["AM1", "PM3", "PM6", "PM7", "HF-3c"]
 
@@ -39,7 +40,7 @@ class Theory:
 
     PSI4_SETTINGS: dict(setting_name: [value])
     PSI4_BEFORE_GEOM: list(str)
-    PSI4_AFTER_GEOM: list(str) - $FUNCTIONAL will be replaced with functional name
+    PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with functional name
     PSI4_COMMENT: list(str)
     PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
     PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ functional))
@@ -48,32 +49,32 @@ class Theory:
     GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
     GAUSSIAN_COORDINATES: ignored
     GAUSSIAN_CONSTRAINTS: ignored
-    GAUSSIAN_GEN_BASIS: list(str)
-    GAUSSIAN_GEN_ECP: list(str)
+    GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
+    GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
     GAUSSIAN_POST: list(str)
     GAUSSIAN_COMMENT: list(str)
 """
     
-    ORCA_ROUTE = 1 # simple input
-    ORCA_BLOCKS = 2 #blocks
+    ORCA_ROUTE = "simple" # simple input
+    ORCA_BLOCKS = "blocks" #blocks
     ORCA_COORDINATES = 3 #molecule (not used)
-    ORCA_COMMENT = 4 #comments
+    ORCA_COMMENT = "comments" #comments
     
-    PSI4_SETTINGS = 1 # set { stuff }
-    PSI4_BEFORE_GEOM = 2 #before geometry - basis info goes here
-    PSI4_AFTER_GEOM = 3 #after geometry
-    PSI4_COMMENT = 4 #comments
-    PSI4_COORDINATES = 5 #molecule - used for symmetry etc.
-    PSI4_JOB = 6 #energy, optimize, etc
+    PSI4_SETTINGS = "settings" # set { stuff }
+    PSI4_BEFORE_GEOM = "before molecule" #before geometry - basis info goes here
+    PSI4_AFTER_JOB = "after job" #after job
+    PSI4_COMMENT = "comments" #comments
+    PSI4_COORDINATES = "molecule" #molecule - used for symmetry etc.
+    PSI4_JOB = "job" #energy, optimize, etc
     
-    GAUSSIAN_PRE_ROUTE = 1 #can be used for things like %chk=some.chk
-    GAUSSIAN_ROUTE = 2 #route specifies most options, e.g. #n B3LYP/3-21G opt 
-    GAUSSIAN_COORDINATES = 3 #coordinate section
-    GAUSSIAN_CONSTRAINTS = 4 #constraints section (e.g. B 1 2 F)
-    GAUSSIAN_GEN_BASIS = 5 #gen or genecp basis section
-    GAUSSIAN_GEN_ECP = 6 #genecp ECP section
-    GAUSSIAN_POST = 7 #after everything else (e.g. NBO options)
-    GAUSSIAN_COMMENT = 8 #comment line after the route
+    GAUSSIAN_PRE_ROUTE = "link0" #can be used for things like %chk=some.chk
+    GAUSSIAN_ROUTE = "route" #route specifies most options, e.g. #n B3LYP/3-21G opt 
+    GAUSSIAN_COORDINATES = 3 #coordinate section - ignored
+    GAUSSIAN_CONSTRAINTS = 4 #constraints section (e.g. B 1 2 F) - ignored
+    GAUSSIAN_GEN_BASIS = "gen basis" #gen or genecp basis section
+    GAUSSIAN_GEN_ECP = "gen ecp" #genecp ECP section
+    GAUSSIAN_POST = "end of file" #after everything else (e.g. NBO options)
+    GAUSSIAN_COMMENT = "comments" #comment line after the route
 
     ACCEPTED_INIT_KW = ['functional', \
                         'basis', \
@@ -128,8 +129,8 @@ class Theory:
             return self.get_psi4_footer(other_kw_dict)
 
     def get_gaussian_header(self, other_kw_dict, return_warnings=False):
-        """write Gaussian09/16 input file
-        other_kw_dict is a dictionary with file positions (using GAUSSIAN_* int map)
+        """write Gaussian09/16 input file header (up to charge mult)
+        other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
         returns warnings if a certain feature is not available in Gaussian"""
 
@@ -159,23 +160,10 @@ class Theory:
         s += "#n %s" % func
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_gaussian_basis_info()
-            basis_elements = self.basis.elements_in_basis
-            #check if any element is in multiple basis sets
-            for element in basis_elements:
-                if basis_elements.count(element) > 1:
-                    warnings.append("%s is in basis set multiple times" % element)
-
-            #check to make sure all elements have a basis set
             if self.structure is not None:
-                struc_elements = set([atom.element for atom in self.structure.atoms])
-
-                elements_wo_basis = []
-                for ele in struc_elements:
-                    if ele not in basis_elements:
-                        elements_wo_basis.append(ele)
-
-                if len(elements_wo_basis) > 0:
-                    warnings.append("no basis set for %s" % ", ".join(elements_wo_basis))
+                basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
+                if basis_warning is not None:
+                    warnings.append(warning)
 
             if self.GAUSSIAN_ROUTE in basis_info:
                 s += "%s" % basis_info[self.GAUSSIAN_ROUTE]
@@ -193,6 +181,22 @@ class Theory:
             other_kw_dict = combine_dicts(other_kw_dict, grid)
             if warning is not None:
                 warnings.append(warning)
+
+        if self.constraints is not None and any(len(self.constraints[key]) > 0 for key in self.constraints):
+            if self.GAUSSIAN_ROUTE not in other_kw_dict:
+                other_kw_dict[self.GAUSSIAN_ROUTE] = {}
+
+            for kw in other_kw_dict[self.GAUSSIAN_ROUTE]:
+                if kw.lower() == 'opt':
+                    for option in other_kw_dict[self.GAUSSIAN_ROUTE][kw]:
+                        if option.lower() == 'modredundant':
+                            break
+                    else:
+                        other_kw_dict[self.GAUSSIAN_ROUTE][kw].append('ModRedundant')
+                    
+                    break
+            else:
+                other_kw_dict[self.GAUSSIAN_ROUTE]['Opt'] = ['ModRedundant']
 
         if self.GAUSSIAN_ROUTE in other_kw_dict:
             for option in other_kw_dict[self.GAUSSIAN_ROUTE]:
@@ -274,26 +278,29 @@ class Theory:
         s += "\n"
 
         if self.constraints is not None and self.structure is not None:
-            for constraint in self.constraints['bonds']:
-                atom1, atom2 = constraint
-                ndx1 = self.structure.atoms.index(atom1) + 1
-                ndx2 = self.structure.atoms.index(atom2) + 1
-                s += "B %2i %2i F\n" % (ndx1, ndx2)
+            if 'bonds' in self.constraints:
+                for constraint in self.constraints['bonds']:
+                    atom1, atom2 = constraint
+                    ndx1 = self.structure.atoms.index(atom1) + 1
+                    ndx2 = self.structure.atoms.index(atom2) + 1
+                    s += "B %2i %2i F\n" % (ndx1, ndx2)
 
-            for constraint in self.constraints['angles']:
-                atom1, atom2, atom3 = constraint
-                ndx1 = self.structure.atoms.index(atom1) + 1
-                ndx2 = self.structure.atoms.index(atom2) + 1
-                ndx3 = self.structure.atoms.index(atom3) + 1
-                s += "A %2i %2i %2i F\n" % (ndx1, ndx2, ndx3)
+            if 'angles' in self.constraints:
+                for constraint in self.constraints['angles']:
+                    atom1, atom2, atom3 = constraint
+                    ndx1 = self.structure.atoms.index(atom1) + 1
+                    ndx2 = self.structure.atoms.index(atom2) + 1
+                    ndx3 = self.structure.atoms.index(atom3) + 1
+                    s += "A %2i %2i %2i F\n" % (ndx1, ndx2, ndx3)
 
-            for constraint in self.constraints['torsions']:
-                atom1, atom2, atom3, atom4 = constraint
-                ndx1 = self.structure.atoms.index(atom1) + 1
-                ndx2 = self.structure.atoms.index(atom2) + 1
-                ndx3 = self.structure.atoms.index(atom3) + 1
-                ndx4 = self.structure.atoms.index(atom4) + 1
-                s += "D %2i %2i %2i %2i F\n" % (ndx1, ndx2, ndx3, ndx4)
+            if 'torsions' in self.constraints:
+                for constraint in self.constraints['torsions']:
+                    atom1, atom2, atom3, atom4 = constraint
+                    ndx1 = self.structure.atoms.index(atom1) + 1
+                    ndx2 = self.structure.atoms.index(atom2) + 1
+                    ndx3 = self.structure.atoms.index(atom3) + 1
+                    ndx4 = self.structure.atoms.index(atom4) + 1
+                    s += "D %2i %2i %2i %2i F\n" % (ndx1, ndx2, ndx3, ndx4)
 
             s += '\n'
 
@@ -324,7 +331,7 @@ class Theory:
 
     def get_orca_header(self, other_kw_dict, return_warnings=False):
         """get ORCA input file header
-        other_kw_dict is a dictionary with file positions (using ORCA_* int map)
+        other_kw_dict is a dictionary with file positions (using ORCA_*)
         corresponding to options/keywords
         returns file content and warnings e.g. if a certain feature is not available in ORCA
         returns str of header content
@@ -361,37 +368,47 @@ class Theory:
                 combined_dict[self.ORCA_BLOCKS]['geom'] = []
 
             combined_dict[self.ORCA_BLOCKS]['geom'].append("constraints")
-            for constraint in self.constraints['atoms']:
-                atom1 = constraint
-                ndx1 = self.structure.atoms.index(atom1)
-                s = "    {C %2i C}" % (ndx1)
-                combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
+            if 'atoms' in self.constraints:
+                for constraint in self.constraints['atoms']:
+                    atom1 = constraint
+                    ndx1 = self.structure.atoms.index(atom1)
+                    s = "    {C %2i C}" % (ndx1)
+                    combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
 
-            for constraint in self.constraints['bonds']:
-                atom1, atom2 = constraint
-                ndx1 = self.structure.atoms.index(atom1)
-                ndx2 = self.structure.atoms.index(atom2)
-                s = "    {B %2i %2i C}" % (ndx1, ndx2)
-                combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
+            if 'bonds' in self.constraints:
+                for constraint in self.constraints['bonds']:
+                    atom1, atom2 = constraint
+                    ndx1 = self.structure.atoms.index(atom1)
+                    ndx2 = self.structure.atoms.index(atom2)
+                    s = "    {B %2i %2i C}" % (ndx1, ndx2)
+                    combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
 
-            for constraint in self.constraints['angles']:
-                atom1, atom2, atom3 = constraint
-                ndx1 = self.structure.atoms.index(atom1)
-                ndx2 = self.structure.atoms.index(atom2)
-                ndx3 = self.structure.atoms.index(atom3)
-                s = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
-                combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
-
-            for constraint in self.constraints['torsions']:
-                atom1, atom2, atom3, atom4 = constraint
-                ndx1 = self.structure.atoms.index(atom1)
-                ndx2 = self.structure.atoms.index(atom2)
-                ndx3 = self.structure.atoms.index(atom3)
-                ndx4 = self.structure.atoms.index(atom4)
-                s = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
-                combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
+            if 'angles' in self.constraints:
+                for constraint in self.constraints['angles']:
+                    atom1, atom2, atom3 = constraint
+                    ndx1 = self.structure.atoms.index(atom1)
+                    ndx2 = self.structure.atoms.index(atom2)
+                    ndx3 = self.structure.atoms.index(atom3)
+                    s = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
+                    combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
+            
+            if 'torsions' in self.constraints:
+                for constraint in self.constraints['torsions']:
+                    atom1, atom2, atom3, atom4 = constraint
+                    ndx1 = self.structure.atoms.index(atom1)
+                    ndx2 = self.structure.atoms.index(atom2)
+                    ndx3 = self.structure.atoms.index(atom3)
+                    ndx4 = self.structure.atoms.index(atom4)
+                    s = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
+                    combined_dict[self.ORCA_BLOCKS]['geom'].append(s)
 
             combined_dict[self.ORCA_BLOCKS]['geom'].append("end")
+
+            for kw in combined_dict[self.ORCA_ROUTE]:
+                if kw.lower().startswith('opt'):
+                    break
+            else:
+                combined_dict[self.ORCA_ROUTE].append('Opt')
 
         s = ""
 
@@ -448,9 +465,9 @@ class Theory:
         else:
             return s
 
-    def get_psi4_header(self, other_kw_dict, fname=None):
+    def get_psi4_header(self, other_kw_dict, return_warnings=False):
         """write Psi4 input file
-        other_kw_dict is a dictionary with file positions (using PSI4_* int map)
+        other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
         returns file content and warnings e.g. if a certain feature is not available in Psi4"""
 
@@ -535,48 +552,65 @@ class Theory:
 
             s += "}\n\n"
 
-        if self.constraints is not None:
-            if len(self.constraints['atoms']) > 0 and self.structure is not None:
-                s += "freeze_list = \"\"\"\n"
-                for atom in self.constraints['atoms']:
-                    s += "    %2i xyz\n" % (self.structure.atoms.index(atom) + 1)
-
-                s += "\"\"\"\n"
-                s += "    \n"
+        if self.constraints is not None and any([len(self.constraints[key]) > 0 for key in self.constraints]):
+            if 'atoms' in self.constraints:
+                if len(self.constraints['atoms']) > 0 and self.structure is not None:
+                    s += "freeze_list = \"\"\"\n"
+                    for atom in self.constraints['atoms']:
+                        s += "    %2i xyz\n" % (self.structure.atoms.index(atom) + 1)
+    
+                    s += "\"\"\"\n"
+                    s += "    \n"
 
             s += "set optking {\n"
 
-            if len(self.constraints['atoms']) > 0 and self.structure is not None:
-                s += "    frozen_cartesian $freeze_list\n"
+            if 'atoms' in self.constraints:
+                if len(self.constraints['atoms']) > 0 and self.structure is not None:
+                    s += "    frozen_cartesian $freeze_list\n"
 
-            if len(self.constraints['bonds']) > 0 and self.structure is not None:
-                s += "    frozen_distance = (\"\n"
-                for bond in self.constraints['bonds']:
-                    atom1, atom2 = bond
-                    s += "        %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, self.structure.atoms.index(atom2) + 1)
+            if 'bonds' in self.constraints:
+                if len(self.constraints['bonds']) > 0 and self.structure is not None:
+                    s += "    frozen_distance = (\"\n"
+                    for bond in self.constraints['bonds']:
+                        atom1, atom2 = bond
+                        s += "        %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
+                                                    self.structure.atoms.index(atom2) + 1)
 
-                s += "    \")\n"
+                    s += "    \")\n"
 
-            if len(self.constraints['angles']) > 0 and self.structure is not None:
-                s += "    frozen_bend = (\"\n"
-                for angle in self.constraints['angles']:
-                    atom1, atom2, atom3 = angle
-                    s += "        %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, self.structure.atoms.index(atom2) + 1, self.structure.atoms.index(atom3) + 1)
-
-                s += "    \")\n"
-
-            if len(self.constraints['torsions']) > 0 and self.structure is not None:
-                s += "    frozen_dihedral = (\"\n"
-                for torsion in self.constraints['torsions']:
-                    atom1, atom2, atom3, atom4 = torsion
-                    s += "        %2i %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
+            if 'angles' in self.constraints:
+                if len(self.constraints['angles']) > 0 and self.structure is not None:
+                    s += "    frozen_bend = (\"\n"
+                    for angle in self.constraints['angles']:
+                        atom1, atom2, atom3 = angle
+                        s += "        %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
                                                         self.structure.atoms.index(atom2) + 1, \
-                                                        self.structure.atoms.index(atom3) + 1, \
-                                                        self.structure.atoms.index(atom4) + 1)
+                                                        self.structure.atoms.index(atom3) + 1)
 
-                s += "    \")\n"
+                    s += "    \")\n"
+
+            if 'torsions' not in self.constraints:
+                if len(self.constraints['torsions']) > 0 and self.structure is not None:
+                    s += "    frozen_dihedral = (\"\n"
+                    for torsion in self.constraints['torsions']:
+                        atom1, atom2, atom3, atom4 = torsion
+                        s += "        %2i %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
+                                                            self.structure.atoms.index(atom2) + 1, \
+                                                            self.structure.atoms.index(atom3) + 1, \
+                                                            self.structure.atoms.index(atom4) + 1)
+
+                    s += "    \")\n"
 
             s += "}\n\n"
+
+            if self.PSI4_JOB not in other_kw_dict:
+                other_kw_dict[self.PSI4_JOB] = {}
+
+            for kw in other_kw_dict[self.PSI4_JOB]:
+                if kw == 'optimize':
+                    break
+            else:
+                other_kw_dict[self.PSI4_JOB]['optimize'] = []
 
         functional = self.functional.get_psi4()[0]
         if self.empirical_dispersion is not None:
@@ -600,8 +634,8 @@ class Theory:
                 
                 s += ")\n"
 
-        if self.PSI4_AFTER_GEOM in other_kw_dict:
-            for opt in other_kw_dict[self.PSI4_AFTER_GEOM]:
+        if self.PSI4_AFTER_JOB in other_kw_dict:
+            for opt in other_kw_dict[self.PSI4_AFTER_JOB]:
                 if "$FUNCTIONAL" in opt:
                     opt = opt.replace("$FUNCTIONAL", "'%s'" % functional)
 

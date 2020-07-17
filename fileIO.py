@@ -11,7 +11,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 
 read_types = ["xyz", "log", "com", "sd", "out", "dat"]
-write_types = ["xyz", "com"]
+write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
@@ -101,6 +101,28 @@ class FileWriter:
                 raise TypeError(
                     "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
                 )
+        elif style.lower() == "inp":
+            if "theory" in kwargs and "step" in kwargs:
+                step = kwargs["step"]
+                theory = kwargs["theory"]
+                del kwargs["step"]
+                del kwargs["theory"]
+                out = cls.write_inp(geom, step, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
+                )
+        elif style.lower() == "in":
+            if "theory" in kwargs and "step" in kwargs:
+                step = kwargs["step"]
+                theory = kwargs["theory"]
+                del kwargs["step"]
+                del kwargs["theory"]
+                out = cls.write_in(geom, step, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
+                )
 
         return out
 
@@ -159,6 +181,46 @@ class FileWriter:
                 f.write(s)
 
         return
+
+    @classmethod
+    def write_inp(cls, geom, step, theory, outfile=None, **kwargs):
+        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
+        s = theory.make_header(geom, step, form='orca', **kwargs)
+        for atom in geom.atoms:
+            s += fmt.format(atom.element, *atom.coords)
+
+        s += '*\n'
+
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            fname = "{}.{}.com".format(geom.name, step2str(step))
+            with open(fname, "w") as f:
+                f.write(s)
+        elif outfile is False:
+            return s
+        else:
+            with open(outfile, "w") as f:
+                f.write(s)
+
+    @classmethod
+    def write_in(cls, geom, step, theory, outfile=None, **kwargs):
+        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
+        s = theory.make_header(geom, step, form='psi4', **kwargs)
+        for atom in geom.atoms:
+            s += fmt.format(atom.element, *atom.coords)
+
+        s += theory.make_footer(geom, step, form='psi4', **kwargs)
+
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            fname = "{}.{}.com".format(geom.name, step2str(step))
+            with open(fname, "w") as f:
+                f.write(s)
+        elif outfile is False:
+            return s
+        else:
+            with open(outfile, "w") as f:
+                f.write(s)
 
 
 class FileReader:
