@@ -24,7 +24,6 @@ class Theory:
                                         bonds: [[Atom, Atom]]
                                         angles: [[Atom, Atom, Atom]]
                                         torsions: [[Atom, Atom, Atom, Atom]]
-                                    all keys must be present for footers (except atoms if writing gaussian)
     empirical_dispersion    -   EmpiricalDispersion object
     grid                    -   IntegrationGrid object
     
@@ -198,8 +197,9 @@ class Theory:
             else:
                 other_kw_dict[self.GAUSSIAN_ROUTE]['Opt'] = ['ModRedundant']
 
-        if self.GAUSSIAN_ROUTE in other_kw_dict:
-            for option in other_kw_dict[self.GAUSSIAN_ROUTE]:
+        if self.GAUSSIAN_ROUTE in other_kw_dict.keys():
+            #reverse order b/c then freq comes after opt
+            for option in sorted(other_kw_dict[self.GAUSSIAN_ROUTE].keys(), key=str.lower, reverse=True):
                 known_opts = []
                 s += option
                 if len(other_kw_dict[self.GAUSSIAN_ROUTE][option]) > 1 or \

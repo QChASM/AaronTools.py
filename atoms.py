@@ -321,6 +321,7 @@ class Atom:
         trigonal planar
         bent 3 (tetrahedral electron geometry w/ 3 bonds)
         t shaped
+        tetrahedral
         sawhorse
         square planar
         trigonal bipyramid
@@ -347,8 +348,8 @@ class Atom:
             return cls.trigonal_bipyramidal_shape()[0:5]
         elif shape_name == "square planar":
             return cls.octahedral_shape()[0:5]
-        elif shape_name == "trigonal bipyramid":
-            return cls.trigonal_bipyramid_shape()
+        elif shape_name == "trigonal bipyramidal":
+            return cls.trigonal_bipyramidal_shape()
         elif shape_name == "square pyramid":
             return cls.octahedral_shape()[0:6]
         elif shape_name == "octahedral":
@@ -512,21 +513,8 @@ class Atom:
         returns shape as a string and the score assigned to that shape
         returns None if self has > 6 bonds
         scores > 0.5 are generally questionable
-        shape can be:
-            linear 1
-            linear 2
-            bent 2a
-            bent 2b
-            bent 3
-            trigonal planar
-            t shaped
-            tetrahedral
-            sawhorse
-            square planar
-            square pyramid
-            trigonal bipyramid
-            octahedral
-            """
+        see atom.get_shape for a list of shapes
+        """
 
         # determine what geometries to try based on the number of bonded atoms
         try_shapes = {}
@@ -550,7 +538,7 @@ class Atom:
 
         elif len(self.connected) == 5:
             try_shapes["trigonal bipyramid"] = Atom.get_shape(
-                "trigonal bipyramid"
+                "trigonal bipyramidal"
             )
             try_shapes["square pyramid"] = Atom.get_shape("square pyramid")
 

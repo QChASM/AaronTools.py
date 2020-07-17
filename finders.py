@@ -54,7 +54,7 @@ class WithinBondsOf(BondsFrom):
             except LookupError:
                 continue
 
-            if len(path) - 1 <= self.n_bonds:
+            if len(path) - 1 <= self.n_bonds and len(path) > 1:
                 matching_atoms.append(atom)
 
         return matching_atoms
@@ -103,7 +103,7 @@ class WithinRadiusFromAtom(Finder):
     def __init__(self, atom, radius):
         super().__init__()
 
-        self.point = atom
+        self.atom = atom
         self.radius = radius
     
     def __repr__(self):
