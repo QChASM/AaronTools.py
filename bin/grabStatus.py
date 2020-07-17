@@ -27,7 +27,7 @@ stat_parser.add_argument('-if', '--input-format', \
 stat_parser.add_argument('-o', '--output', \
                             type=str, \
                             nargs='+', \
-                            default=False, \
+                            default=None, \
                             required=False, \
                             dest='outfile', \
                             help='output destination\nDefault: stdout')

@@ -390,9 +390,9 @@ class Geometry:
                 sub = Substituent(frag, end=end)
             except LookupError:
                 continue
-            
+           
             #substituents with more than half of self's atoms are ignored
-            if len(frag) > len(self.atoms) - len(sub_atoms):
+            if len(frag) > len(self.atoms) - len(frag):
                 continue
             # save atoms and tags if found
             sub_atoms = sub_atoms.union(set(frag))
@@ -402,6 +402,10 @@ class Geometry:
                     new_tags[a] += [sub.name]
                 else:
                     new_tags[a] = [sub.name]
+            
+            print(sub.name)
+            print(sub.write(outfile=False))
+
             # save substituent
             self.substituents += [sub]
 

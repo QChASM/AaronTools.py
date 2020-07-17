@@ -9,7 +9,7 @@ from warnings import warn
 
 import numpy as np
 
-from AaronTools.const import AARONLIB, QCHASM
+from AaronTools.const import AARONLIB, QCHASM, VDW_RADII
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
@@ -241,6 +241,84 @@ class Substituent(Geometry):
 
         return found
 
+    def sterimol(self, parameter='L', return_vector=False):
+        """returns sterimol parameter value for the specified parameter
+        return_vector: bool/returns tuple(vector start, vector end) instead
+        parameter (str) can be:
+            'L'
+            'B5'
+        """
+        if self.end is None:
+            raise RuntimeError("cannot calculate sterimol values for substituents without end")
+
+        from AaronTools.finders import BondedTo
+
+        atom1 = self.find(BondedTo(self.end))[0]
+        atom2 = self.end
+
+        print(atom1.name, atom2.name)
+
+        L_axis = atom2.bond(atom1)
+        L_axis /= np.linalg.norm(L_axis)
+
+        param_value = None
+        vector = None
+        
+        for atom in self.atoms:
+            test_v = atom2.bond(atom)
+            test_L = np.dot(test_v, L_axis) - atom1.dist(atom2) + \
+                     VDW_RADII[atom1.element] + VDW_RADII[atom.element]
+            
+            if parameter == 'L':
+                test_L = np.dot(test_v, L_axis) - atom1.dist(atom2) + \
+                         VDW_RADII[atom1.element] + VDW_RADII[atom.element]
+                if param_value is None or test_L > param_value:
+                    param_value = test_L
+                    start = atom1.coords - VDW_RADII[atom1.element] * L_axis
+                    vector = (start, start + param_value * L_axis)
+
+            elif parameter == 'B1':
+                b = np.dot(test_v, L_axis)
+                test_B1_v = test_v - (b * L_axis)
+                test_B1 = np.linalg.norm(test_B1_v) + VDW_RADII[atom.element]
+                if (param_value is None or test_B1 < param_value) and \
+                   (len(self.atoms) == 1 or atom is not atom1):
+                    param_value = test_B1
+                    start = atom.coords - test_B1_v
+                    if np.linalg.norm(test_B1_v) > 3*np.finfo(float).eps:
+                        perp_vec = test_B1_v
+                    else:
+                        v_n = test_v / np.linalg.norm(test_v)
+                        perp_vec = v_n[::-1]
+                        perp_vec -= np.dot(v_n, perp_vec) * v_n
+                    
+                    end = start + test_B1 * (perp_vec / np.linalg.norm(perp_vec))
+                    
+                    vector = (start, end)
+
+            elif parameter == 'B5':
+                b = np.dot(test_v, L_axis)
+                test_B5_v = test_v - (b * L_axis)
+                test_B5 = np.linalg.norm(test_B5_v) + VDW_RADII[atom.element]
+                if param_value is None or test_B5 > param_value:
+                    param_value = test_B5
+                    start = atom.coords - test_B5_v
+                    if np.linalg.norm(test_B5_v) > 3*np.finfo(float).eps:
+                        perp_vec = test_B5_v
+                    else:
+                        v_n = test_v / np.linalg.norm(test_v)
+                        perp_vec = v_n[::-1]
+                        perp_vec -= np.dot(v_n, perp_vec) * v_n
+                    
+                    end = start + test_B5 * (perp_vec / np.linalg.norm(perp_vec))
+                    
+                    vector = (start, end)
+
+        if return_vector:
+            return vector
+        else:
+            return param_value
+    
     def align_to_bond(self, bond):
         """
         align substituent to a bond vector

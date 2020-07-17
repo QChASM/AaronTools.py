@@ -99,7 +99,7 @@ class FileWriter:
                 out = cls.write_com(geom, step, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing com files, **kwargs must include: theory=Aaron.Theory(), step=int/float()"
+                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
                 )
 
         return out

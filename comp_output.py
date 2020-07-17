@@ -22,6 +22,10 @@ class CompOutput:
         gradient, E_ZPVE, ZPVE
     """
 
+    QUASI_HARMONIC = "QHARM"
+    QUASI_RRHO     = "QRRHO"
+    RRHO           = "RRHO"
+
     def __init__(self, fname="", get_all=True):
         self.geometry = None
         self.opts = None
@@ -191,9 +195,9 @@ class CompOutput:
                         / PHYSICAL.PLANK ** 2
                     )
                 )
-                if method == "QRRHO":
+                if method == self.QUASI_RRHO:
                     weight = 1 / (1 + (v0 / freqs[i]) ** 4)
-                elif method == "RRHO":
+                elif method == self.RRHO:
                     weight = 1
 
                 Sv += weight * Sv_T + (1 - weight) * Sr_eff
@@ -224,7 +228,7 @@ class CompOutput:
     def calc_Grimme_G(self, temperature=None, v0=100):
         """returns quasi rrho free energy (Eh)"""
         Gcorr_qRRHO = self.calc_G_corr(
-            temperature=temperature, v0=v0, method="QRRHO"
+            temperature=temperature, v0=v0, method=self.QUASI_RRHO
         )
         return Gcorr_qRRHO + self.energy
 

@@ -17,7 +17,7 @@ class TestPathway(TestWithTimer):
     def test_interpolating_structure(self):
         # test to see if interpolated geometry is correct
         ref = Geometry(
-            os.path.join(prefix, "ref_files/torsion_interpolation.xyz")
+            os.path.join(prefix, "ref_files", "torsion_interpolation.xyz")
         )
         S = Pathway(self.t60, array([self.t60.coords(), self.t90.coords()]))
         geom = S.Geom_func(0.4)

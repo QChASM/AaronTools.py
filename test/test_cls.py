@@ -15,9 +15,10 @@ import AaronTools
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
+from AaronTools.catalyst import Catalyst
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 from AaronTools.test.test_geometry import is_close
 
 
@@ -54,6 +55,13 @@ class TestCLS(TestWithTimer):
     orca_out_file = os.path.join(prefix, "test_files", "orca_geom.out")
     psi4_dat_file = os.path.join(prefix, "test_files", "psi4-test.out")
     xyz_file = os.path.join(prefix, "test_files", "benzene.xyz")
+
+    tm_simple = os.path.join(prefix, "test_files", "catalysts", "tm_single-lig.xyz")
+    
+    t60 = os.path.join(prefix, "test_files", "torsion-60.xyz")
+    t90 = os.path.join(prefix, "test_files", "torsion-90.xyz")
+
+    opt_file_1 = os.path.join(prefix, "test_files", "opt_running.log")
 
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
 
@@ -145,6 +153,7 @@ class TestCLS(TestWithTimer):
         self.assertTrue(rmsd < 0.1)
 
     def test_substitute(self):
+        """test substitute.py"""
         ref = Geometry(TestCLS.benz_NO2_Cl)
 
         args = [sys.executable, \
@@ -163,6 +172,7 @@ class TestCLS(TestWithTimer):
         self.assertTrue(rmsd < rmsd_tol(ref))
 
     def test_closeRing(self):
+        """test closeRing.py"""
         ref1 = Geometry(TestCLS.naphthalene)
 
         args = [sys.executable, \
@@ -181,6 +191,7 @@ class TestCLS(TestWithTimer):
         self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
 
     def test_grabThermo(self):
+        """test grabThermo.py"""
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "grabThermo.py"), \
                 TestCLS.frequencies]
@@ -200,8 +211,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
     G(Quasi-harmonic) = -1855.532510 Eh  (dG = 0.486148)
 """
         #strip b/c windows adds \r to the end of lines
-        out_list = [x.strip() for x in out.decode('utf-8').split('\n')]
-        ref_list = ref.split('\n')
+        out_list = out.decode('utf-8').splitlines()
+        ref_list = ref.splitlines()
 
         #can't test all the lines b/c paths might be different
         #test sp energy
@@ -222,6 +233,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         self.assertTrue(len(err) == 0)
 
+        out_list = out.decode('utf-8').splitlines()
         self.assertTrue(out_list[0][-16:] == ref_list[0][-16:])
         for i in [1, 3, 4, 6, 7]:
             self.assertTrue(out_list[i][-34:] == ref_list[i][-34:])
@@ -240,8 +252,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         ref_csv = """E,ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),dZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
 -1856.018658,-1855.474686,-1855.440616,-1855.538017,-1855.532805,-1855.532510,0.543972,0.578042,0.480642,0.485854,0.486148,test_files/normal.log,test_files/normal.log"""
 
-        out_list = [x.strip() for x in out.decode('utf-8').split('\n')]
-        ref_list = ref_csv.split('\n')
+        out_list = out.decode('utf-8').splitlines()
+        ref_list = ref_csv.splitlines()
 
         self.assertTrue(out_list[0] == ref_list[0])
         self.assertTrue(out_list[1].split(',')[:-2] == ref_list[1].split(',')[:-2])
@@ -257,8 +269,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         self.assertTrue(len(err) == 0)
 
-        out_list = [x.strip() for x in out.decode('utf-8').split('\n')]
-        ref_list = ref_csv.split('\n')
+        out_list = out.decode('utf-8').splitlines()
+        ref_list = ref_csv.splitlines()
 
         self.assertTrue(out_list[0] == ref_list[0])
         self.assertTrue(out_list[1].split(',')[:-2] == ref_list[1].split(',')[:-2])
@@ -276,13 +288,14 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         self.assertTrue(len(err) == 0)
 
-        out_list = [x.strip() for x in out.decode('utf-8').split('\n')]
-        ref_list = ref_csv.split('\n')
+        out_list = out.decode('utf-8').splitlines()
+        ref_list = ref_csv.splitlines()
 
         self.assertTrue(out_list[0] == ref_list[0])
         self.assertTrue(out_list[1].split(',')[:-2] == ref_list[1].split(',')[:-2])
 
     def test_printXYZ(self):
+        """test printXYZ.py"""
         #for each test, the rmsd tolerance is determined based on the number of atoms and
         #the precision we use when printing xyz files
         #test xyz file
@@ -375,6 +388,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         self.assertTrue(rmsd < len(ref_dat.atoms) * (3 * 1e-5))
 
     def test_changeElement(self):
+        """test changeElement.py"""
         ref = Geometry(TestCLS.pyridine)
 
         args = [sys.executable, \
@@ -392,6 +406,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         self.assertTrue(rmsd < rmsd_tol(ref))
     
     def test_rotate(self):
+        """test rotate.py"""
         ref = Geometry(TestCLS.chlorotoluene_ref)
 
         #range of targets
@@ -457,7 +472,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "rotate.py"), \
                 TestCLS.benzene_dimer, \
-                '-p', '1-12', \
+                '-p', '1-12', '-c', '1-12', \
                 '-f', '1', \
                 '-a', '10']
 
@@ -472,5 +487,79 @@ thermochemistry from test_files/normal.log at 298.00 K:
         self.assertTrue(rmsd < rmsd_tol(ref3))
 
 
+    def test_mapLigand(self):
+        """test mapLigand.py"""
+        ref = Catalyst(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "mapLigand.py"), \
+                TestCLS.tm_simple, '-l', 'S-tBu-BOX', '-k', '35,36']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')))
+        mol = Catalyst(fr)
+        self.assertTrue(validate(mol, ref))
+    
+    def test_interpolate(self):
+        """test interpolate.py
+        assumes current working directory is writable b/c interpolate doesn't
+        print structures to stdout"""
+        ref = Geometry(
+            os.path.join(prefix, "ref_files/torsion_interpolation.xyz")
+        )
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "interpolate.py"), \
+                TestCLS.t60, TestCLS.t90, '-t', '0.40', '-u']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        mol = Geometry('traj-0.xyz')
+        os.remove('traj-0.xyz')
+        rmsd = mol.RMSD(ref, align=True, sort=True)
+        self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
+    
+    def test_grabStatus(self):
+        """test grabStatus.py"""
+
+        #gaussian file that is not finished
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "grabStatus.py"), \
+                TestCLS.opt_file_1]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        self.assertTrue(len(err) == 0)
+
+        ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
+            test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
+
+        ref_lines = ref.splitlines()
+        ref_status_line = ref_lines[1]
+
+        lines = out.decode('utf-8').splitlines()
+        test_line = lines[1]
+
+        #don't include filename in test b/c that will be different
+        for ref_item, test_item in zip(ref_status_line.split()[-6:], test_line.split()[-6:]):
+            #print(ref_item, test_item)
+            self.assertTrue(ref_item == test_item)
+
+    
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(TestCLS("test_grabStatus"))
+    return suite
+
 if __name__ == "__main__":
+    runner = unittest.TextTestRunner()
     unittest.main()
+    #runner.run(suite())

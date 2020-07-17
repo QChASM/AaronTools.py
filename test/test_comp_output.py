@@ -50,10 +50,11 @@ class TestCompOutput(TestWithTimer):
                 copy(tmp.enthalpy),
                 copy(tmp.free_energy),
                 copy(tmp.calc_Grimme_G()),
+                copy(tmp.calc_G_corr(method="QHARM")),
             ]
         ]
         ref = [
-            [-1856.01865834, -1855.440611, -1855.538011, -1855.5328046892625]
+            [-1856.01865834, -1855.440611, -1855.538011, -1855.5328046892625, 0.486148]
         ]
 
         tmp = logs[1]

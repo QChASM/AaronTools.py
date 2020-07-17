@@ -184,7 +184,7 @@ for f in args.infile:
         a2 = geom.find(args.bond[1])[0]
         vector = a1.bond(a2)
         if center is None:
-            warn("center set to the coordinates of atom %s; using --center/-c will override this" % a1.name)
+            warn("center set to the coordinates of atom %s; using --center/-c none will override this" % a1.name)
             center = a1.coords
     
     elif args.axis is not None:
@@ -197,15 +197,21 @@ for f in args.infile:
             vector -= geom.COM(targets=center)
 
     elif args.perp is not None:
+        if len(geom.find(args.perp)) < 3:
+            raise RuntimeError("must specify at least three atoms to --perpendicular/-p")
+        
         xyz = geom.coords(args.perp) - geom.COM(args.perp)
         R = np.dot(xyz.T, xyz)
         u, s, vh = np.linalg.svd(R, compute_uv=True)
         vector = u[:,-1]
-        if center is not None:
-            warn("'--center' is ignored because '--perpendicular' was used")
-        
-        center = geom.COM(args.perp)
+        print(vector)
+        if center is None:
+            warn("center set to the centroid of atoms %s; using --center/-c none will override this" % args.perp)
+            center = geom.COM(args.perp)
 
+    if args.center is not None and args.center.lower() == 'none':
+        center = None
+    
     rotated_geoms = []
     for i in range(0, args.num):
         geom.rotate(vector, args.angle, targets=targets, center=center)

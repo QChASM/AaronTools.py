@@ -260,3 +260,100 @@ class NumberOfBonds(Finder):
     
     def get_matching_atoms(self, atoms, geometry=None):
         return [atom for atom in atoms if len(atom.connected) == self.num_bonds]
+
+
+class ChiralCentres(Finder):
+    """chiral centers
+    atoms with a non-planar VSEPR geometry with all bonded groups
+    being distinct
+    currently does not find chiral centers in rings"""
+    #IUPAC spelling 
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        return "chiral centers"
+
+    def get_matching_atoms(self, atoms, geometry):
+        from AaronTools.geometry import Geometry
+
+        matching_atoms = []
+
+        #need to do multiple passes b/c sometimes atoms are chiral
+        # b/c they are connected to chiral fragments
+        chiral_atoms_changed = True
+        k = 0
+        while chiral_atoms_changed:
+            chiral_atoms_changed = False
+            k += 1
+            for atom in atoms:
+                if atom in matching_atoms:
+                    continue
+
+                if len(atom.connected) < 3:
+                    continue
+
+                vsepr = atom.get_vsepr()
+                if vsepr is not None:
+                    shape, score = vsepr
+                    if shape in  ['trigonal planar', 't shaped', 'sqaure planar']:
+                        continue
+
+                frags = []
+                for bonded_atom in atom.connected:
+                    frags.append(geometry.get_fragment(bonded_atom, atom, as_object=True))
+            
+                chiral = True
+                for i, frag1 in enumerate(frags):
+                    frag1.refresh_ranks()
+                    for frag2 in frags[:i]:
+                        same = True
+                        if len(frag1.atoms) != len(frag2.atoms):
+                            same = False
+                            continue
+
+                        for a, b in zip(sorted(frag1.atoms), sorted(frag2.atoms)):
+                            # want correct elements
+                            if a.element != b.element:
+                                same = False
+                                break
+                            # and correct connections
+                            if len(a.connected) != len(b.connected):
+                                same = False
+                                break
+                            
+                            # and other chiral atoms
+                            # using name instead of just 'in matching_atoms' 
+                            # b/c get_fragment returns a copy of the atoms
+                            if a.name in [chiral_atom.name for chiral_atom in matching_atoms] and \
+                               b.name in [chiral_atom.name for chiral_atom in matching_atoms]:
+                                #use RMSD to see if they have the same handedness
+                                a_connected = sorted(a.connected)
+                                b_connected = sorted(b.connected)
+                                a_targets = [a] + list(a_connected)
+                                b_targets = [b] + list(b_connected)
+                                if frag1.RMSD(frag2, targets=a_targets, ref_targets=b_targets, sort=False) < 0.1:
+                                    same = False
+                                    break
+
+                            # and correct connected elements
+                            for i, j in zip(
+                                sorted([aa.element for aa in a.connected]),
+                                sorted([bb.element for bb in b.connected]),
+                            ):
+                                if i != j:
+                                    same = False
+                                    break
+
+                        if same:
+                            chiral = False
+                            break
+            
+                if chiral:
+                    chiral_atoms_changed = True
+                    matching_atoms.append(atom)
+        
+        return matching_atoms
+
+#alternative spelling
+ChiralCenters = ChiralCentres
