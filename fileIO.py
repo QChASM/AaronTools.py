@@ -604,7 +604,9 @@ class FileReader:
                 continue
             else:
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
-                    self.other["energy"] = float(line.split()[-1])
+                    #if the wavefunction doesn't converge, ORCA prints a message next
+                    #to the energy so we can't use line.split()[-1]
+                    self.other["energy"] = float(line.split()[4])
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"

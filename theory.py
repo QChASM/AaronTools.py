@@ -95,7 +95,7 @@ class Theory:
                 #print("%s not in kw" % key)
                 self.__setattr__(key, None)
 
-    def make_header(self, geom, step, form='gaussian', other_kw_dict={}, **kwargs):
+    def make_header(self, geom, step=None, form='gaussian', other_kw_dict={}, **kwargs):
         """geom: Geometry
         step: float
         form: str, gaussian, orca, or psi4
@@ -104,15 +104,18 @@ class Theory:
         self.structure = geom
 
         if form == "gaussian":
-            other_kw_dict[self.GAUSSIAN_COMMENT] = ["step %.1f" % step]
+            if step is not None:
+                other_kw_dict[self.GAUSSIAN_COMMENT] = ["step %.1f" % step]
             return self.get_gaussian_header(other_kw_dict)
         
         elif form == "orca":
-            other_kw_dict[self.ORCA_COMMENT] = ["step %.1f" % step]
+            if step is not None:
+                other_kw_dict[self.ORCA_COMMENT] = ["step %.1f" % step]
             return self.get_orca_header(other_kw_dict)
         
         elif form == "psi4":
-            other_kw_dict[self.PSI4_COMMENT] = ["step %.1f" % step]
+            if step is not None:
+                other_kw_dict[self.PSI4_COMMENT] = ["step %.1f" % step]
             return self.get_psi4_header(other_kw_dict)
     
     def make_footer(self, geom, step, form='gaussian', other_kw_dict={}):
@@ -136,6 +139,7 @@ class Theory:
         warnings = []
         s = ""
 
+        #processors, memory, and other link 0 stuff
         if self.processors is not None:
             s += "%%NProcShared=%i\n" % self.processors
 
@@ -160,6 +164,7 @@ class Theory:
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_gaussian_basis_info()
             if self.structure is not None:
+                #check basis elements to make sure no element is in two basis sets or left out of any
                 basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
                 if basis_warning is not None:
                     warnings.append(warning)
@@ -169,18 +174,22 @@ class Theory:
 
         s += " "
 
+        #add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
             disp, warning = self.empirical_dispersion.get_gaussian()
             other_kw_dict = combine_dicts(other_kw_dict, disp)
             if warning is not None:
                 warnings.append(warning)
 
+        #add Integral(grid=X)
         if self.grid is not None:
             grid, warning = self.grid.get_gaussian()
             other_kw_dict = combine_dicts(other_kw_dict, grid)
             if warning is not None:
                 warnings.append(warning)
 
+        #if there are constraints, make sure opt(modredundant) is used
+        #add it if it isn't
         if self.constraints is not None and any(len(self.constraints[key]) > 0 for key in self.constraints):
             if self.GAUSSIAN_ROUTE not in other_kw_dict:
                 other_kw_dict[self.GAUSSIAN_ROUTE] = {}
@@ -197,6 +206,9 @@ class Theory:
             else:
                 other_kw_dict[self.GAUSSIAN_ROUTE]['Opt'] = ['ModRedundant']
 
+        #add other route options
+        #only one option can be specfied
+        #e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
         if self.GAUSSIAN_ROUTE in other_kw_dict.keys():
             #reverse order b/c then freq comes after opt
             for option in sorted(other_kw_dict[self.GAUSSIAN_ROUTE].keys(), key=str.lower, reverse=True):
@@ -225,6 +237,7 @@ class Theory:
 
         s += "\n\n"
 
+        #add comment, removing any trailing newlines
         if self.GAUSSIAN_COMMENT in other_kw_dict:
             if len(other_kw_dict[self.GAUSSIAN_COMMENT]) > 0:
                 s += "\n".join([x.rstrip() for x in other_kw_dict[self.GAUSSIAN_COMMENT]])
@@ -235,6 +248,7 @@ class Theory:
                 s += '\n'
 
         else:
+            #gaussian requires a comment
             if self.comment is None:
                 s += "comment\n"
             else:
@@ -242,6 +256,7 @@ class Theory:
 
         s += "\n"
 
+        #charge mult
         s += "%i %i\n" % (self.charge, self.multiplicity)
 
         if return_warnings:
@@ -255,28 +270,21 @@ class Theory:
         s = ""
         warnings = []
 
+        #if functional is not semi emperical, basis set might be gen or genecp
+        #get basis info (will be written after constraints)
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_gaussian_basis_info()
             basis_elements = self.basis.elements_in_basis
             #check if any element is in multiple basis sets
-            for element in basis_elements:
-                if basis_elements.count(element) > 1:
-                    warnings.append("%s is in basis set multiple times" % element)
-
             #check to make sure all elements have a basis set
             if self.structure is not None:
-                struc_elements = set([atom.element for atom in self.structure.atoms])
-
-                elements_wo_basis = []
-                for ele in struc_elements:
-                    if ele not in basis_elements:
-                        elements_wo_basis.append(ele)
-
-                if len(elements_wo_basis) > 0:
-                    warnings.append("no basis set for %s" % ", ".join(elements_wo_basis))
+                basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
+                if basis_warning is not None:
+                    warnings.append(basis_warning)
 
         s += "\n"
 
+        #bond, angle, and torsion constraints
         if self.constraints is not None and self.structure is not None:
             if 'bonds' in self.constraints:
                 for constraint in self.constraints['bonds']:
@@ -304,6 +312,7 @@ class Theory:
 
             s += '\n'
 
+        #write gen info
         if not self.functional.is_semiempirical:
             if self.GAUSSIAN_GEN_BASIS in basis_info:
                 s += basis_info[self.GAUSSIAN_GEN_BASIS]
@@ -315,13 +324,15 @@ class Theory:
                 
                 s += '\n'
 
+        #post info e.g. for NBOREAD
         if self.GAUSSIAN_POST in other_kw_dict:
             for item in other_kw_dict[self.GAUSSIAN_POST]:
                 s += item
                 s += " "
 
             s += '\n'
-
+        
+        #new lines
         s += '\n\n'
 
         if return_warnings:
@@ -339,6 +350,7 @@ class Theory:
         
         warnings = []
 
+        #if functional isn't semi-empirical, get basis info to write later
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_orca_basis_info()
             if self.structure is not None:
@@ -353,6 +365,7 @@ class Theory:
 
         combined_dict = combine_dicts(other_kw_dict, basis_info)
 
+        #get grid info
         if self.grid is not None:
             grid_info, warning = self.grid.get_orca()
             if warning is not None:
@@ -363,7 +376,10 @@ class Theory:
 
             combined_dict = combine_dicts(combined_dict, grid_info)
 
-        if self.constraints is not None and self.structure is not None:
+        #get constraints info
+        if self.constraints is not None and \
+           self.structure is not None and \
+           any(len(self.constraints[key]) > 0 for key in self.constraints.keys()):
             if 'geom' not in combined_dict[self.ORCA_BLOCKS]:
                 combined_dict[self.ORCA_BLOCKS]['geom'] = []
 
@@ -404,36 +420,43 @@ class Theory:
 
             combined_dict[self.ORCA_BLOCKS]['geom'].append("end")
 
+            #make sure opt is used when there are constraints
             for kw in combined_dict[self.ORCA_ROUTE]:
                 if kw.lower().startswith('opt'):
                     break
             else:
                 combined_dict[self.ORCA_ROUTE].append('Opt')
 
+        #start building input file header
         s = ""
 
+        #comment
         if self.ORCA_COMMENT in combined_dict:
             for comment in combined_dict[self.ORCA_COMMENT]:
                 for line in comment.split('\n'):
                     s += "#%s\n" % line
 
         s += "!"
+        #functional
         if self.functional is not None:
             func, warning = self.functional.get_orca()
             if warning is not None:
                 warnings.append(warning)
             s += " %s" % func
 
+        #dispersion
         if self.empirical_dispersion is not None:
             if not s.endswith(' '):
                 s += " "
 
+            #TODO make dispersion behave like grid, returning ({ORCA_ROUTE:['D2']}, None) or w/e
             dispersion, warning = self.empirical_dispersion.get_orca()
             if warning is not None:
                 warnings.append(warning)
 
             s += "%s" % dispersion
 
+        #add other route options
         if self.ORCA_ROUTE in combined_dict:
             if not s.endswith(' '):
                 s += " "
@@ -442,12 +465,15 @@ class Theory:
 
         s += "\n"
 
+        #procs
         if self.processors is not None:
             s += "%%pal\n    nprocs %i\nend\n" % self.processors
 
+            #orca memory is per core, so only specify it if processors are specified
             if self.memory is not None:
                 s += "%%MaxCore %i\n" % (int(1000 * self.memory / self.processors))
 
+        #add other blocks
         if self.ORCA_BLOCKS in combined_dict:
             for kw in combined_dict[self.ORCA_BLOCKS]:
                 if any(len(x) > 0 for x in combined_dict[self.ORCA_BLOCKS][kw]):
@@ -458,6 +484,7 @@ class Theory:
 
             s += "\n"
 
+        #start of coordinate section - end of header
         s += "*xyz %i %i\n" % (self.charge, self.multiplicity)
         
         if return_warnings:
@@ -473,6 +500,7 @@ class Theory:
 
         warnings = []
 
+        #get basis info if functional is not semi empirical
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_psi4_basis_info('sapt' in self.functional.get_psi4()[0].lower())
             if self.structure is not None:
@@ -482,6 +510,8 @@ class Theory:
                 if warning is not None:
                     warnings.append(warning)
 
+            #aux basis sets might have a '%s' b/c the keyword to apply them depends on
+            #the functional - replace %s with the appropriate thing for the functional
             for key in basis_info:
                 for i in range(0, len(basis_info[key])):
                     if "%s" in basis_info[key][i]:
@@ -513,19 +543,24 @@ class Theory:
                 warnings.append(warning)
             combined_dict = combine_dicts(combined_dict, grid_info)
 
+        #start building input file header
         s = ""
 
+        #comment
         if self.PSI4_COMMENT in combined_dict:
             for comment in combined_dict[self.PSI4_COMMENT]:
                 for line in comment.split('\n'):
                     s += "#%s\n" % line
 
+        #procs
         if self.processors is not None:
             s += "set_num_threads(%i)\n" % self.processors
 
+        #mem
         if self.memory is not None:
             s += "memory %i GB\n" % self.memory
 
+        #before geometry options e.g. basis {} or building a dft functional
         if self.PSI4_BEFORE_GEOM in combined_dict:
             if len(combined_dict[self.PSI4_BEFORE_GEOM]) > 0:
                 for opt in combined_dict[self.PSI4_BEFORE_GEOM]:
@@ -544,6 +579,8 @@ class Theory:
         s = ""
         warnings = []
 
+        #settings
+        #a setting will only get added if its list has at least one item, but only the first item will be used
         if self.PSI4_SETTINGS in other_kw_dict and any(len(other_kw_dict[self.PSI4_SETTINGS][setting]) > 0 for setting in other_kw_dict[self.PSI4_SETTINGS]):
             s += "set {\n"
             for setting in other_kw_dict[self.PSI4_SETTINGS]:
@@ -552,7 +589,8 @@ class Theory:
 
             s += "}\n\n"
 
-        if self.constraints is not None and any([len(self.constraints[key]) > 0 for key in self.constraints]):
+        #constraints
+        if self.constraints is not None and any([len(self.constraints[key]) > 0 for key in self.constraints.keys()]):
             if 'atoms' in self.constraints:
                 if len(self.constraints['atoms']) > 0 and self.structure is not None:
                     s += "freeze_list = \"\"\"\n"
@@ -603,6 +641,7 @@ class Theory:
 
             s += "}\n\n"
 
+            #make sure its an optimization if there are constraints
             if self.PSI4_JOB not in other_kw_dict:
                 other_kw_dict[self.PSI4_JOB] = {}
 
@@ -612,12 +651,15 @@ class Theory:
             else:
                 other_kw_dict[self.PSI4_JOB]['optimize'] = []
 
+        #functional is functional name + dispersion if there is dispersion
         functional = self.functional.get_psi4()[0]
         if self.empirical_dispersion is not None:
             functional += self.empirical_dispersion.get_psi4()[0]
 
+        #for each job, start with nrg = f('functional'
+        #unless return_wfn=True, then do nrg, wfn = f('functional'
         if self.PSI4_JOB in other_kw_dict:
-            for func in other_kw_dict[self.PSI4_JOB]:
+            for func in sorted(other_kw_dict[self.PSI4_JOB].keys(), reverse=True):
                 if any(['return_wfn' in kwarg and ('True' in kwarg or 'on' in kwarg) \
                         for kwarg in other_kw_dict[self.PSI4_JOB][func]]):
                     s += "nrg, wfn = %s('%s'" % (func, functional)
@@ -634,6 +676,7 @@ class Theory:
                 
                 s += ")\n"
 
+        #after job stuff - replace $FUNCTIONAL with functional
         if self.PSI4_AFTER_JOB in other_kw_dict:
             for opt in other_kw_dict[self.PSI4_AFTER_JOB]:
                 if "$FUNCTIONAL" in opt:
@@ -674,7 +717,7 @@ class Functional:
             return ("PBE1PBE", None)
         
         #methods available in ORCA but not Gaussian
-        elif self.name == "𝜔ωB97X-D3":
+        elif self.name == "ωB97X-D3":
             return ("wB97XD", "ωB97X-D3 is not available in Gaussian, switching to ωB97X-D2")
         elif self.name == "B3LYP":
             return ("B3LYP", "Gaussian's B3LYP uses a different LDA")
@@ -684,24 +727,33 @@ class Functional:
 
     def get_orca(self):
         """maps proper functional name to one ORCA accepts"""
-        if self.name == "ωB97X-D":
+        if self.name == "ωB97X-D" or any([test == self.name.lower() for test in ["wb97xd", "wb97x-d"]]):
             return ("wB97X-D3", "ωB97X-D may refer to ωB97X-D2 or ωB97X-D3 - using the latter")
         elif self.name == "ωB97X-D3":
             return ("wB97X-D3", None)
-        elif self.name == "B97-D":
+        elif self.name.upper() == "B97-D":
             return ("B97-D2", "B97-D may refer to B97-D2 or B97-D3 - using the former")
         elif self.name == "Gaussian's B3LYP":
             return ("B3LYP/G", None)
-        elif self.name == "M06-L":
+        elif self.name.upper() == "M06-L":
             #why does M06-2X get a hyphen but not M06-L? 
             return ("M06L", None)
+        elif self.name.upper() == "PBE1PBE":
+            return ("PBE0", None)
         
         else:
             return self.name.replace('ω', 'w'), None
     
     def get_psi4(self):
         """maps proper functional name to one Psi4 accepts"""
-        return self.name.replace('ω', 'w'), None
+        if self.name.lower().startswith('wb97xd'):
+            return "wB97X-D", None 
+        
+        elif self.name.upper() == "PBE1PBE":
+            return ("PBE0", None)
+        
+        else:
+            return self.name.replace('ω', 'w'), None
 
 
 class BasisSet:
@@ -725,6 +777,7 @@ class BasisSet:
         return elements
     
     def get_gaussian_basis_info(self):
+        """returns dict used by get_gaussian_header/footer with basis info"""
         info = {}
 
         if self.basis is not None:
@@ -821,6 +874,7 @@ class BasisSet:
         return info    
     
     def get_orca_basis_info(self):
+        """return dict for get_orca_header"""
         #TODO: warn if basis should be f12
         info = {Theory.ORCA_BLOCKS:{'basis':[]}, Theory.ORCA_ROUTE:[]}
 
@@ -985,7 +1039,8 @@ class BasisSet:
         return info
 
     def get_psi4_basis_info(self, sapt=False):
-        """sapt: bool, use df_basis_sapt instead of df_basis_scf for jk basis"""
+        """sapt: bool, use df_basis_sapt instead of df_basis_scf for jk basis
+        return dict for get_psi4_header"""
         s = ""
         s2 = None
         s3 = None
@@ -1066,6 +1121,7 @@ class BasisSet:
         return info
 
     def check_for_elements(self, elements):
+        """checks to make sure each element is in a basis set"""
         warning = ""
         if self.basis is not None:
             elements_without_basis = {}
@@ -1096,6 +1152,7 @@ class Basis:
         """
         name         -   basis set base name (e.g. 6-31G)
         elements     -   list of element symbols the basis set applies to
+        aux_type     -   str - ORCA: one of BasisSet.ORCA_AUX; Psi4: one of BasisSet.PSI4_AUX
         user_defined -   file containing basis info/False for builtin basis sets
         """
         self.name = name
@@ -1131,14 +1188,20 @@ class Basis:
     @staticmethod
     def map_orca_basis(name):
         """returns the ORCA name of the basis set
-        currently doesn't do anything"""
-        return name
+        currently just adds hyphen to Karlsruhe basis if it isn't there"""
+        if name.startswith('def2') and not name.startswith('def2-'):
+            return name.replace('def2', 'def2-', 1)
+        else:
+            return name
     
     @staticmethod
     def map_psi4_basis(name):
         """returns the Psi4 name of the basis set
-        currently doesn't do anything"""
-        return name
+        currently just adds hyphen to Karlsruhe basis if it isn't there"""
+        if name.startswith('def2') and not name.startswith('def2-'):
+            return name.replace('def2', 'def2-', 1)
+        else:
+            return name
 
 
 class ECP(Basis):
@@ -1156,6 +1219,21 @@ class ECP(Basis):
 class EmpiricalDispersion:
     """try to keep emerpical dispersion keywords and settings consistent across file types"""
     def __init__(self, name):
+        """name can be (availability may vary):
+            Grimme D2
+            Zero-damped Grimme D3
+            Becke-Johnson damped Grimme D3
+            Becke-Johnson damped modified Grimme D3
+            Petersson-Frisch
+            Grimme D4
+            Chai & Head-Gordon
+            Nonlocal Approximation
+            Pernal, Podeszwa, Patkowski, & Szalewicz
+            Podeszwa, Katarzyna, Patkowski, & Szalewicz
+            Řezác, Greenwell, & Beran
+        
+        or simply the keyword for the input file type you are using"""
+        
         self.name = name
 
     def get_gaussian(self):
@@ -1167,9 +1245,7 @@ class EmpiricalDispersion:
         
         Dispersion methods available in other software that will be modified are:
         Grimme D4
-        undampened Grimme D3
-        
-        other methods will raise RuntimeError"""
+        undampened Grimme D3"""
         
         if self.name == "Grimme D2":
             return ({Theory.GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD2"]}}, None)
@@ -1183,14 +1259,17 @@ class EmpiricalDispersion:
         #dispersions in ORCA but not Gaussian
         elif self.name == "Grimme D4":
             return ({Theory.GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3BJ"]}}, "Grimme's D4 has no keyword in Gaussian, switching to GD3BJ")
-        elif self.name == "undampened Grimme D3":
-            return ({Theory.GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3"]}}, "undampened Grimme's D3 is unavailable in Gaussian, switching to GD3")
-        
+
         #unrecognized
         else:
-            raise RuntimeError("unrecognized emperical dispersion: %s" % self.name)
+            return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_orca(self):
+        """Acceptable keywords for ORCA are:
+        Grimme D2
+        Zero-damped Grimme D3"
+        Becke-Johnson damped Grimme D3
+        Grimme D4"""
         if self.name == "Grimme D2":
             return ("D2", None)
         elif self.name == "Zero-damped Grimme D3":
@@ -1199,8 +1278,20 @@ class EmpiricalDispersion:
             return ("D3BJ", None)
         elif self.name == "Grimme D4":
             return ("D4", None)
+        else:
+            return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_psi4(self):
+        """Acceptable keywords for Psi4 are:
+        Grimme D1
+        Grimme D2
+        Zero-damped Grimme D3
+        Becke-Johnson damped Grimme D3
+        Chai & Head-Gordon
+        Nonlocal Approximation
+        Pernal, Podeszwa, Patkowski, & Szalewicz
+        Podeszwa, Katarzyna, Patkowski, & Szalewicz
+        Řezác, Greenwell, & Beran"""
         if self.name == "Grimme D1":
             return ("-d1", None)        
         if self.name == "Grimme D2":
@@ -1221,11 +1312,13 @@ class EmpiricalDispersion:
             return ("-das2010", None)        
         elif self.name == "Řezác, Greenwell, & Beran":
             return ("dmp2", None)
+        else:
+            return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 
 
 class ImplicitSolvent:
     """this isn't really used
-    solvents are added by directly using other_kw_dict or whatever"""
+    solvents should be added by directly using other_kw_dict"""
     KNOWN_GAUSSIAN_SOLVENTS = ["Water", 
                                "Acetonitrile", 
                                "Methanol", 
@@ -1440,53 +1533,96 @@ class IntegrationGrid:
     def __init__(self, name):
         """name: str, gaussian keyword (e.g. SuperFineGrid), ORCA keyword (e.g. Grid7) or '(radial, angular)'
         ORCA can only use ORCA grid keywords
-        Gaussian can use its keywords and will try to use ORCA keywords
-        Psi4 will use '(r, a)'"""
+        Gaussian can use its keywords and will try to use ORCA keywords, and can use (\d+, \d+) or \d+
+        Psi4 will use '(\d+, \d+)' and will try to use ORCA or Gaussian keywords"""
         self.name = name
 
     def get_gaussian(self):
         """gets gaussian integration grid info and a warning as tuple(dict, str or None)
         dict is of the form {Theory.GAUSSIAN_ROUTE:[x]}"""
-        if self.name == "UltraFine":
+        if self.name.lower() == "ultrafine":
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=UltraFine"]}}, None)
-        elif self.name == "FineGrid":
+        elif self.name.lower() == "finegrid":
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=FineGrid"]}}, None)
-        elif self.name == "SuperFineGrid":
+        elif self.name.lower() == "superfinegrid":
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=SuperFineGrid"]}}, None)
 
         #Grids available in ORCA but not Gaussian
         #uses n_rad from K-Kr as specified in ORCA 4.2.1 manual (section 9.3)
         #XXX: there's probably IOp's that can get closer
-        elif self.name == "Grid 2":
+        elif self.name.lower() == "grid2":
             n_rad = 45
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i110" % n_rad]}}, "Approximating ORCA Grid 2")
-        elif self.name == "Grid 3":
+        elif self.name.lower() == "grid3":
             n_rad = 45
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i194" % n_rad]}}, "Approximating ORCA Grid 3")
-        elif self.name == "Grid 4":
+        elif self.name.lower() == "grid4":
             n_rad = 45
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i302" % n_rad]}}, "Approximating ORCA Grid 4")
-        elif self.name == "Grid 5":
+        elif self.name.lower() == "grid5":
             n_rad = 50
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i434" % n_rad]}}, "Approximating ORCA Grid 5")
-        elif self.name == "Grid 6":
+        elif self.name.lower() == "grid6":
             n_rad = 55
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i590" % n_rad]}}, "Approximating ORCA Grid 6")
-        elif self.name == "Grid 7":
+        elif self.name.lower() == "grid7":
             n_rad = 60
             return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i770" % n_rad]}}, "Approximating ORCA Grid 7")
 
         else:
-            return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%s" % self.name]}}, "grid may not be available in Gaussian")
+            #grid format may be (int, int)
+            #or just int
+            match = re.match('\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)', self.name)
+            match_digit = re.match('-?\d+?', self.name)
+            if match:
+                r = match.group(0)
+                a = match.group(1)
+                return({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%i%03i" % (r, a)]}}, None)
+            elif match_digit:
+                return({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%s" % self.name]}}, None)
+            else:
+                return ({Theory.GAUSSIAN_ROUTE:{"Integral":["grid=%s" % self.name]}}, "grid may not be available in Gaussian")
 
     def get_orca(self):
         """translates grid to something ORCA accepts
-        current just returns self.name"""
+        current just returns tuple(dict(ORCA_ROUTE:[self.name]), None)"""
         #TODO: allow '(r, a)'
         return ({Theory.ORCA_ROUTE:[self.name, "Final%s" % self.name]}, None)
 
     def get_psi4(self):
-        #TODO: allow keywords
-        radial, spherical = [x.strip() for x in self.name[1:-1].split(', ')]
-        return ({Theory.PSI4_SETTINGS:{'dft_radial_points':[radial], 'dft_spherical_points':[spherical]}}, None)
+        """returns ({PSI4_SETTINGS:{'dft_radial_points':['n'], 'dft_spherical_points':['m']}}, warning)"""
+        if self.name.lower() == "ultrafine":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['99'], 'dft_spherical_points':['590']}}, None)
+        elif self.name.lower() == "finegrid":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['75'], 'dft_spherical_points':['302']}}, None)
+        elif self.name.lower() == "superfinegrid":
+            #radial is 175 for 1st row, 250 for later rows
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['250'], 'dft_spherical_points':['974']}}, "Approximating Gaussian SuperFineGrid")
+
+        #uses radial from K-Kr as specified in ORCA 4.2.1 manual (section 9.3)
+        #XXX: there's probably IOp's that can get closer
+        elif self.name.lower() == "grid2":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['45'], 'dft_spherical_points':['110']}}, "Approximating ORCA Grid 2")
+        elif self.name.lower() == "grid3":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['45'], 'dft_spherical_points':['194']}}, "Approximating ORCA Grid 3")
+        elif self.name.lower() == "grid4":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['45'], 'dft_spherical_points':['302']}}, "Approximating ORCA Grid 4")
+        elif self.name.lower() == "grid5":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['50'], 'dft_spherical_points':['434']}}, "Approximating ORCA Grid 5")
+        elif self.name.lower() == "grid6":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['55'], 'dft_spherical_points':['590']}}, "Approximating ORCA Grid 6")
+        elif self.name.lower() == "grid7":
+            return ({Theory.PSI4_SETTINGS:{'dft_radial_points':['60'], 'dft_spherical_points':['770']}}, "Approximating ORCA Grid 7")
+
+        else:
+            #grid format may be (int, int)
+            #or just int
+            match = re.match('\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)', self.name)
+            if match:
+                r = match.group(0)
+                a = match.group(1)
+                return({Theory.PSI4_SETTINGS:{'dft_radial_points':[r], 'dft_spherical_points':[a]}}, None)
+            
+            else:
+                raise RuntimeError("could not determine acceptable Psi4 grid settings for %s" % self.name)
 
