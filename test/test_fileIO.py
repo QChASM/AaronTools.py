@@ -160,8 +160,8 @@ def2TZVP
                         empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
                  )
 
-        kw_dict = {Theory.GAUSSIAN_ROUTE: {"opt": ['VeryTight'], \
-                                           "freq": ['hpmodes', 'noraman'], \
+        kw_dict = {GAUSSIAN_ROUTE: {"opt": ['VeryTight'], \
+                                    "freq": ['hpmodes', 'noraman'], \
                    }
         }
 
