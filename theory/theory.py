@@ -4,11 +4,22 @@ from AaronTools.utils.utils import combine_dicts
 from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, ORCA_COORDINATES, ORCA_COMMENT, \
                               \
                               PSI4_SETTINGS, PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, \
-                              PSI4_COMMENT, PSI4_COORDINATES, PSI4_JOB, \
+                              PSI4_COMMENT, PSI4_COORDINATES, PSI4_JOB, PSI4_OPTKING, \
                               \
                               GAUSSIAN_PRE_ROUTE, GAUSSIAN_ROUTE, GAUSSIAN_COORDINATES, \
                               GAUSSIAN_CONSTRAINTS, GAUSSIAN_GEN_BASIS, GAUSSIAN_GEN_ECP, \
                               GAUSSIAN_POST, GAUSSIAN_COMMENT
+
+def probable_job_order(word):
+    """sorts job keywords so that the job is other settings -> opt -> freq -> sp"""
+    if word.lower() in ['energy', 'sp']:
+        return 9003
+    elif word.lower().startswith('opt'):
+        return 9001
+    elif word.lower().startswith('freq') or word.lower().startswith('numfreq'):
+        return 9002
+    else:
+        return 0
 
 class Theory:
     """a Theory object can be used to create an input file for different QM software
@@ -17,7 +28,8 @@ class Theory:
     structure               -   AaronTools Geometry 
     charge                  -   total charge
     multiplicity            -   electronic multiplicity
-    
+    job_types               -   list(JobType)
+
     functional              -   Functional object
     basis                   -   BasisSet object
     constraints             -   dictionary of bond, angle, and torsional constraints (keys: atoms, bonds, angles, torsions)
@@ -45,11 +57,12 @@ class Theory:
     PSI4_COMMENT: list(str)
     PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
     PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ functional))
-    
+    PSI4_OPTKING: dict(setting_name: [value])
+
     GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
     GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
     GAUSSIAN_COORDINATES: ignored
-    GAUSSIAN_CONSTRAINTS: ignored
+    GAUSSIAN_CONSTRAINTS: list(str)
     GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
     GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
     GAUSSIAN_POST: list(str)
@@ -65,7 +78,8 @@ class Theory:
                         'empirical_dispersion', \
                         'charge', \
                         'multiplicity', \
-                        'grid']
+                        'grid', \
+                        'job_types']
 
     def __init__(self, **kw):
         for key in self.ACCEPTED_INIT_KW:
@@ -117,6 +131,11 @@ class Theory:
         corresponding to options/keywords
         returns warnings if a certain feature is not available in Gaussian"""
 
+        if self.job_types is not None:
+            for job in self.job_types:
+                job_dict = job.get_gaussian()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+
         warnings = []
         s = ""
 
@@ -141,19 +160,21 @@ class Theory:
         if warning is not None:
             warnings.append(warning)
 
-        s += "#n %s" % func
-        if not self.functional.is_semiempirical:
-            basis_info = self.basis.get_gaussian_basis_info()
-            if self.structure is not None:
-                #check basis elements to make sure no element is in two basis sets or left out of any
-                basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
-                if basis_warning is not None:
-                    warnings.append(warning)
+        s += "#n "
+        if self.functional is not None:
+            s +="%s" % func
+            if not self.functional.is_semiempirical and self.basis is not None:
+                basis_info = self.basis.get_gaussian_basis_info()
+                if self.structure is not None:
+                    #check basis elements to make sure no element is in two basis sets or left out of any
+                    basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
+                    if basis_warning is not None:
+                        warnings.append(warning)
+    
+                if GAUSSIAN_ROUTE in basis_info:
+                    s += "%s" % basis_info[GAUSSIAN_ROUTE]
 
-            if GAUSSIAN_ROUTE in basis_info:
-                s += "%s" % basis_info[GAUSSIAN_ROUTE]
-
-        s += " "
+            s += " "
 
         #add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -169,30 +190,12 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
-        #if there are constraints, make sure opt(modredundant) is used
-        #add it if it isn't
-        if self.constraints is not None and any(len(self.constraints[key]) > 0 for key in self.constraints):
-            if GAUSSIAN_ROUTE not in other_kw_dict:
-                other_kw_dict[GAUSSIAN_ROUTE] = {}
-
-            for kw in other_kw_dict[GAUSSIAN_ROUTE]:
-                if kw.lower() == 'opt':
-                    for option in other_kw_dict[GAUSSIAN_ROUTE][kw]:
-                        if option.lower() == 'modredundant':
-                            break
-                    else:
-                        other_kw_dict[GAUSSIAN_ROUTE][kw].append('ModRedundant')
-                    
-                    break
-            else:
-                other_kw_dict[GAUSSIAN_ROUTE]['Opt'] = ['ModRedundant']
-
         #add other route options
         #only one option can be specfied
         #e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
         if GAUSSIAN_ROUTE in other_kw_dict.keys():
             #reverse order b/c then freq comes after opt
-            for option in sorted(other_kw_dict[GAUSSIAN_ROUTE].keys(), key=str.lower, reverse=True):
+            for option in sorted(other_kw_dict[GAUSSIAN_ROUTE].keys(), key=probable_job_order):
                 known_opts = []
                 s += option
                 if len(other_kw_dict[GAUSSIAN_ROUTE][option]) > 1 or \
@@ -248,12 +251,17 @@ class Theory:
 
     def get_gaussian_footer(self, other_kw_dict, return_warnings=False):
         """write footer of gaussian input file"""
+        if self.job_types is not None:
+            for job in self.job_types:
+                job_dict = job.get_gaussian()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+
         s = ""
         warnings = []
 
         #if functional is not semi emperical, basis set might be gen or genecp
         #get basis info (will be written after constraints)
-        if not self.functional.is_semiempirical:
+        if self.functional is not None and not self.functional.is_semiempirical and self.basis is not None:
             basis_info = self.basis.get_gaussian_basis_info()
             basis_elements = self.basis.elements_in_basis
             #check if any element is in multiple basis sets
@@ -266,30 +274,10 @@ class Theory:
         s += "\n"
 
         #bond, angle, and torsion constraints
-        if self.constraints is not None and self.structure is not None:
-            if 'bonds' in self.constraints:
-                for constraint in self.constraints['bonds']:
-                    atom1, atom2 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
-                    s += "B %2i %2i F\n" % (ndx1, ndx2)
-
-            if 'angles' in self.constraints:
-                for constraint in self.constraints['angles']:
-                    atom1, atom2, atom3 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
-                    ndx3 = self.structure.atoms.index(atom3) + 1
-                    s += "A %2i %2i %2i F\n" % (ndx1, ndx2, ndx3)
-
-            if 'torsions' in self.constraints:
-                for constraint in self.constraints['torsions']:
-                    atom1, atom2, atom3, atom4 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
-                    ndx3 = self.structure.atoms.index(atom3) + 1
-                    ndx4 = self.structure.atoms.index(atom4) + 1
-                    s += "D %2i %2i %2i %2i F\n" % (ndx1, ndx2, ndx3, ndx4)
+        if GAUSSIAN_CONSTRAINTS in other_kw_dict:
+            for constraint in other_kw_dict[GAUSSIAN_CONSTRAINTS]:
+                s += constraint
+                s += '\n'
 
             s += '\n'
 
@@ -302,8 +290,6 @@ class Theory:
 
             if GAUSSIAN_GEN_ECP in basis_info:
                 s += basis_info[GAUSSIAN_GEN_ECP]
-                
-                s += '\n'
 
         #post info e.g. for NBOREAD
         if GAUSSIAN_POST in other_kw_dict:
@@ -329,6 +315,11 @@ class Theory:
         returns str of header content
         if return_warnings, returns str, list(warning)"""
         
+        if self.job_types is not None:
+            for job in self.job_types:
+                job_dict = job.get_orca()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+
         warnings = []
 
         #if functional isn't semi-empirical, get basis info to write later
@@ -356,57 +347,6 @@ class Theory:
                 grid_info[ORCA_ROUTE].pop(1)
 
             combined_dict = combine_dicts(combined_dict, grid_info)
-
-        #get constraints info
-        if self.constraints is not None and \
-           self.structure is not None and \
-           any(len(self.constraints[key]) > 0 for key in self.constraints.keys()):
-            if 'geom' not in combined_dict[ORCA_BLOCKS]:
-                combined_dict[ORCA_BLOCKS]['geom'] = []
-
-            combined_dict[ORCA_BLOCKS]['geom'].append("constraints")
-            if 'atoms' in self.constraints:
-                for constraint in self.constraints['atoms']:
-                    atom1 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    s = "    {C %2i C}" % (ndx1)
-                    combined_dict[ORCA_BLOCKS]['geom'].append(s)
-
-            if 'bonds' in self.constraints:
-                for constraint in self.constraints['bonds']:
-                    atom1, atom2 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
-                    s = "    {B %2i %2i C}" % (ndx1, ndx2)
-                    combined_dict[ORCA_BLOCKS]['geom'].append(s)
-
-            if 'angles' in self.constraints:
-                for constraint in self.constraints['angles']:
-                    atom1, atom2, atom3 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
-                    ndx3 = self.structure.atoms.index(atom3)
-                    s = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
-                    combined_dict[ORCA_BLOCKS]['geom'].append(s)
-            
-            if 'torsions' in self.constraints:
-                for constraint in self.constraints['torsions']:
-                    atom1, atom2, atom3, atom4 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
-                    ndx3 = self.structure.atoms.index(atom3)
-                    ndx4 = self.structure.atoms.index(atom4)
-                    s = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
-                    combined_dict[ORCA_BLOCKS]['geom'].append(s)
-
-            combined_dict[ORCA_BLOCKS]['geom'].append("end")
-
-            #make sure opt is used when there are constraints
-            for kw in combined_dict[ORCA_ROUTE]:
-                if kw.lower().startswith('opt'):
-                    break
-            else:
-                combined_dict[ORCA_ROUTE].append('Opt')
 
         #start building input file header
         s = ""
@@ -478,6 +418,11 @@ class Theory:
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
         returns file content and warnings e.g. if a certain feature is not available in Psi4"""
+
+        if self.job_types is not None:
+            for job in self.job_types:
+                job_dict = job.get_psi4()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
         warnings = []
 
@@ -557,7 +502,12 @@ class Theory:
 
     def get_psi4_footer(self, other_kw_dict, return_warnings=False):
         """get psi4 footer"""
-        s = ""
+        if self.job_types is not None:
+            for job in self.job_types:
+                job_dict = job.get_psi4()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+
+        s = "\n"
         warnings = []
 
         #settings
@@ -569,68 +519,14 @@ class Theory:
                     s += "    %-20s    %s\n" % (setting, other_kw_dict[PSI4_SETTINGS][setting][0])
 
             s += "}\n\n"
-
-        #constraints
-        if self.constraints is not None and any([len(self.constraints[key]) > 0 for key in self.constraints.keys()]):
-            if 'atoms' in self.constraints:
-                if len(self.constraints['atoms']) > 0 and self.structure is not None:
-                    s += "freeze_list = \"\"\"\n"
-                    for atom in self.constraints['atoms']:
-                        s += "    %2i xyz\n" % (self.structure.atoms.index(atom) + 1)
-    
-                    s += "\"\"\"\n"
-                    s += "    \n"
-
+        
+        if PSI4_OPTKING in other_kw_dict and any(len(other_kw_dict[PSI4_OPTKING][setting]) > 0 for setting in other_kw_dict[PSI4_OPTKING]):
             s += "set optking {\n"
-
-            if 'atoms' in self.constraints:
-                if len(self.constraints['atoms']) > 0 and self.structure is not None:
-                    s += "    frozen_cartesian $freeze_list\n"
-
-            if 'bonds' in self.constraints:
-                if len(self.constraints['bonds']) > 0 and self.structure is not None:
-                    s += "    frozen_distance = (\"\n"
-                    for bond in self.constraints['bonds']:
-                        atom1, atom2 = bond
-                        s += "        %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                    self.structure.atoms.index(atom2) + 1)
-
-                    s += "    \")\n"
-
-            if 'angles' in self.constraints:
-                if len(self.constraints['angles']) > 0 and self.structure is not None:
-                    s += "    frozen_bend = (\"\n"
-                    for angle in self.constraints['angles']:
-                        atom1, atom2, atom3 = angle
-                        s += "        %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                        self.structure.atoms.index(atom2) + 1, \
-                                                        self.structure.atoms.index(atom3) + 1)
-
-                    s += "    \")\n"
-
-            if 'torsions' not in self.constraints:
-                if len(self.constraints['torsions']) > 0 and self.structure is not None:
-                    s += "    frozen_dihedral = (\"\n"
-                    for torsion in self.constraints['torsions']:
-                        atom1, atom2, atom3, atom4 = torsion
-                        s += "        %2i %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                            self.structure.atoms.index(atom2) + 1, \
-                                                            self.structure.atoms.index(atom3) + 1, \
-                                                            self.structure.atoms.index(atom4) + 1)
-
-                    s += "    \")\n"
+            for setting in other_kw_dict[PSI4_OPTKING]:
+                if len(other_kw_dict[PSI4_OPTKING][setting]) > 0:
+                    s += "    %-20s    %s\n" % (setting, other_kw_dict[PSI4_OPTKING][setting][0])
 
             s += "}\n\n"
-
-            #make sure its an optimization if there are constraints
-            if PSI4_JOB not in other_kw_dict:
-                other_kw_dict[PSI4_JOB] = {}
-
-            for kw in other_kw_dict[PSI4_JOB]:
-                if kw == 'optimize':
-                    break
-            else:
-                other_kw_dict[PSI4_JOB]['optimize'] = []
 
         #functional is functional name + dispersion if there is dispersion
         functional = self.functional.get_psi4()[0]
@@ -640,7 +536,7 @@ class Theory:
         #for each job, start with nrg = f('functional'
         #unless return_wfn=True, then do nrg, wfn = f('functional'
         if PSI4_JOB in other_kw_dict:
-            for func in sorted(other_kw_dict[PSI4_JOB].keys(), reverse=True):
+            for func in sorted(other_kw_dict[PSI4_JOB].keys(), key=probable_job_order):
                 if any(['return_wfn' in kwarg and ('True' in kwarg or 'on' in kwarg) \
                         for kwarg in other_kw_dict[PSI4_JOB][func]]):
                     s += "nrg, wfn = %s('%s'" % (func, functional)

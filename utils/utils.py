@@ -160,24 +160,48 @@ def add_dict(this, other, skip=[]):
             this[key] = val
     return this
 
-def combine_dicts(d1, d2):
+def combine_dicts(d1, d2, case_sensitive=False):
+    """combine dictionaries d1 and d2 to return a dictionary
+    with keys d1.keys() + d2.keys()
+    if a key is in d1 and d2, the items will be combined:
+        if they are both dictionaries, combine_dicts is called recursively
+        otherwise, they are combined with '+'
+        if case_sensitive=False, the key in the output will be the lowercase
+        of the d1 key and d2 key (only for combined items)
+    """
     #TODO
     #accept any number of input dicts
     out = {}
-    for key in set(list(d1.keys()) + list(d2.keys())):
-        if key in d1 and not key in d2:
-            out[key] = d1[key]
-            
-        elif key in d2 and key not in d1:
-            out[key] = d2[key]
-            
-        else:
-            if isinstance(d1[key], dict) and isinstance(d2[key], dict):
-                out[key] = combine_dicts(d1[key], d2[key])
+    case_keys_1 = list(d1.keys())
+    case_keys_2 = list(d2.keys())
+    if case_sensitive:
+        keys_1 = case_keys_1
+        keys_2 = case_keys_2
+    else:
+        keys_1 = [key.lower() if isinstance(key, str) else key for key in case_keys_1]
+        keys_2 = [key.lower() if isinstance(key, str) else key for key in case_keys_2]
+
+    #go through keys from d1
+    for case_key, key in zip(case_keys_1, keys_1):
+        #if the key is only in d1, add the item to out
+        if key in keys_1 and key not in keys_2:
+            out[case_key] = d1[case_key]
+
+        #if the key is in both, combine the items
+        elif key in keys_1 and key in keys_2:
+            key_2 = case_keys_2[keys_2.index(key)]
+            if isinstance(d1[case_key], dict) and isinstance(d2[key_2], dict):
+                out[key] = combine_dicts(d1[case_key], d2[key_2], case_sensitive=case_sensitive)
 
             else:
-                out[key] = d1[key] + d2[key]
-                
+                out[key] = d1[case_key] + d2[key_2]
+
+    #go through keys from d2
+    for case_key, key in zip(case_keys_2, keys_2):
+        #if it's only in d2, add item to out
+        if key in keys_2 and key not in keys_1:
+            out[case_key] = d2[case_key]
+
     return out
 
 def integrate(fun, a, b, n=101):

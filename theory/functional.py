@@ -17,7 +17,7 @@ class Functional:
             return ("wB97XD", None)
         elif self.name == "Gaussian's B3LYP":
             return ("B3LYP", None)
-        elif self.name == "B97X-D":
+        elif self.name == "B97-D":
             return ("B97D", None)
         elif self.name.startswith("M06-"):
             return (self.name.replace("M06-", "M06", 1), None)
@@ -49,17 +49,24 @@ class Functional:
             return ("M06L", None)
         elif self.name.upper() == "PBE1PBE":
             return ("PBE0", None)
-        
+       
+        elif self.name.upper() == 'M062X':
+            return ('M06-2X', None)
+
         else:
             return self.name.replace('ω', 'w'), None
     
     def get_psi4(self):
         """maps proper functional name to one Psi4 accepts"""
-        if self.name.lower().startswith('wb97xd'):
+        if self.name.lower() == 'wb97xd':
             return "wB97X-D", None 
         
         elif self.name.upper() == "PBE1PBE":
             return ("PBE0", None)
+        elif self.name.upper() == "M062X":
+            return ("M06-2X", None)
+        elif self.name.upper() == "M06L":
+            return ("M06-L", None)
         
         else:
             return self.name.replace('ω', 'w'), None
