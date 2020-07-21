@@ -5,7 +5,7 @@ class Functional:
     used to ensure the proper keyword is used
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
-    def __init__(self, name, is_semiempirical):
+    def __init__(self, name, is_semiempirical=False):
         """name: str, functional name
         is_semiemperical: bool, basis set is not required"""
         self.name = name

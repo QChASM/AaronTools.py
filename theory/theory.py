@@ -32,12 +32,6 @@ class Theory:
 
     functional              -   Functional object
     basis                   -   BasisSet object
-    constraints             -   dictionary of bond, angle, and torsional constraints (keys: atoms, bonds, angles, torsions)
-                                    items are:
-                                        atoms: [Atom]
-                                        bonds: [[Atom, Atom]]
-                                        angles: [[Atom, Atom, Atom]]
-                                        torsions: [[Atom, Atom, Atom, Atom]]
     empirical_dispersion    -   EmpiricalDispersion object
     grid                    -   IntegrationGrid object
     
@@ -72,7 +66,6 @@ class Theory:
     ACCEPTED_INIT_KW = ['functional', \
                         'basis', \
                         'structure', \
-                        'constraints', \
                         'memory', \
                         'processors', \
                         'empirical_dispersion', \
@@ -113,7 +106,7 @@ class Theory:
                 other_kw_dict[PSI4_COMMENT] = ["step %.1f" % step]
             return self.get_psi4_header(other_kw_dict)
     
-    def make_footer(self, geom, step, form='gaussian', other_kw_dict={}):
+    def make_footer(self, geom, step=None, form='gaussian', other_kw_dict={}):
         """geom: Geometry
         step: float (ignored)
         form: str, gaussian or psi4
@@ -494,6 +487,19 @@ class Theory:
                     s += '\n'
                 s += '\n'
 
+        
+        s += "molecule {\n"
+        s += "%2i %i\n" % (self.charge, self.multiplicity)
+        if PSI4_COORDINATES in combined_dict:
+            for kw in combined_dict[self.PSI4_COORDINATES]:
+                if len(combined_dict[self.PSI4_COORDINATES][kw]) > 0:
+                    opt = combined_dict[self.PSI4_COORDINATES][kw][0]
+                    if 'pubchem' in kw.lower() and not kw.strip().endswith(':'):
+                        kw = kw.strip() + ':'
+                    s += "%s %s\n" % (kw.strip(), opt)
+                
+                else:
+                    s += "%s\n" % kw
 
         if return_warnings:
             return s, warnings
@@ -507,7 +513,7 @@ class Theory:
                 job_dict = job.get_psi4()
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
-        s = "\n"
+        s = "}\n\n"
         warnings = []
 
         #settings

@@ -42,6 +42,7 @@ class OptimizationJob(JobType):
         self.structure = geom
 
     def get_gaussian(self):
+        """returns a dict with keys: GAUSSIAN_ROUTE, GAUSSIAN_CONSTRAINTS"""
         if self.ts:
             out = {GAUSSIAN_ROUTE:{'Opt':['ts']}}
         else:
@@ -78,6 +79,7 @@ class OptimizationJob(JobType):
         return out
 
     def get_orca(self):
+        """returns a dict with keys: ORCA_ROUTE, ORCA_BLOCKS"""
         if self.ts:
             out = {ORCA_ROUTE:['OptTS']}
         else:
@@ -126,6 +128,7 @@ class OptimizationJob(JobType):
         return out
 
     def get_psi4(self):
+        """returns a dict with keys: PSI4_JOB, PSI4_OPTKING, PSI4_BEFORE_GEOM"""
         if self.ts:
             out = {PSI4_JOB:{'optimize':[]}, PSI4_SETTINGS:{'opt_type':['ts']}}
         else:
@@ -149,7 +152,7 @@ class OptimizationJob(JobType):
 
             if 'bonds' in self.constraints:
                 if len(self.constraints['bonds']) > 0 and self.structure is not None:
-                    s = "(\n"
+                    s = "(\"\n"
                     for bond in self.constraints['bonds']:
                         atom1, atom2 = bond
                         s += "        %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
@@ -161,7 +164,7 @@ class OptimizationJob(JobType):
 
             if 'angles' in self.constraints:
                 if len(self.constraints['angles']) > 0 and self.structure is not None:
-                    s = "(\n"
+                    s = "(\"\n"
                     for angle in self.constraints['angles']:
                         atom1, atom2, atom3 = angle
                         s += "        %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
@@ -174,7 +177,7 @@ class OptimizationJob(JobType):
 
             if 'torsions' in self.constraints:
                 if len(self.constraints['torsions']) > 0 and self.structure is not None:
-                    s += '(\n'
+                    s += '(\"\n'
                     for torsion in self.constraints['torsions']:
                         atom1, atom2, atom3, atom4 = torsion
                         s += "        %2i %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
@@ -197,22 +200,28 @@ class FrequencyJob(JobType):
         self.temperature = temperature
 
     def get_gaussian(self):
+        """returns a dict with keys: GAUSSIAN_ROUTE"""
         return {GAUSSIAN_ROUTE:{'Freq':['temperature=%.2f' % self.temperature]}}
 
     def get_orca(self):
+        """returns a dict with keys: ORCA_ROUTE"""
         return {ORCA_ROUTE:['Freq'], ORCA_BLOCKS:{'freq':['Temp    %.2f' % self.temperature]}}
 
     def get_psi4(self):
+        """returns a dict with keys: PSI4_JOB"""
         return {PSI4_JOB:{'frequencies':[]}, PSI4_SETTINGS:{'T': ["%.2f" % self.temperature]}}
 
 
 class SinglePointJob(JobType):
     """single point energy"""
     def get_gaussian(self):
+        """returns a dict with keys: GAUSSIAN_ROUTE"""
         return {GAUSSIAN_ROUTE:{'SP':[]}}
 
     def get_orca(self):
+        """returns a dict with keys: ORCA_ROUTE"""
         return {ORCA_ROUTE:['SP']}
 
     def get_psi4(self):
+        """returns a dict with keys: PSI4_JOB"""
         return {PSI4_JOB:{'energy':[]}}
