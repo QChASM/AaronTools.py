@@ -122,7 +122,7 @@ class TestFileReader(TestWithTimer):
         #if it fails, someone may have added a column of whitespace or something
         geom = Geometry(self.small_mol)
        
-        ref = """#n PBE1PBE/gen opt=VeryTight freq=(hpmodes,noraman) EmpiricalDispersion=GD3BJ
+        ref = """#n PBE1PBE/gen EmpiricalDispersion=GD3BJ opt=VeryTight freq=(hpmodes,noraman)
 
 step 0.0
 

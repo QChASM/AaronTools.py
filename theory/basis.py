@@ -373,6 +373,8 @@ class BasisSet:
     def check_for_elements(self, elements):
         """checks to make sure each element is in a basis set"""
         warning = ""
+        #assume all elements aren't in a basis set, remove from the list if they have a basis
+        #need to check each type of aux basis
         if self.basis is not None:
             elements_without_basis = {}
             for basis in self.basis:

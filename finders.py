@@ -266,7 +266,8 @@ class ChiralCentres(Finder):
     """chiral centers
     atoms with a non-planar VSEPR geometry with all bonded groups
     being distinct
-    currently does not find chiral centers in rings"""
+    for rings, looks for a set of unique canonical ranks for atoms that 
+    are all the same number of bonds away from one atom"""
     #IUPAC spelling 
     def __init__(self):
         super().__init__()
@@ -279,60 +280,65 @@ class ChiralCentres(Finder):
 
         matching_atoms = []
 
-        #need to do multiple passes b/c sometimes atoms are chiral
         # b/c they are connected to chiral fragments
+        geometry.refresh_ranks()
         chiral_atoms_changed = True
+        ranks = geometry.canonical_rank(break_ties=False, update=False)
+        frags = []
+        for atom in geometry.atoms:
+            frags.append([])
+            for bonded_atom in atom.connected:
+                frags[-1].append(geometry.get_fragment(bonded_atom, atom, as_object=False))
+
+        #need to do multiple passes b/c sometimes atoms are chiral
         k = 0
         while chiral_atoms_changed:
             chiral_atoms_changed = False
             k += 1
-            for atom in atoms:
+            #skip atoms we've already found
+            for ndx, atom in enumerate(atoms):
                 if atom in matching_atoms:
                     continue
 
+                #can't be chiral with 2 bonds
                 if len(atom.connected) < 3:
                     continue
 
+                #planar vsepr don't get checked
                 vsepr = atom.get_vsepr()
                 if vsepr is not None:
                     shape, score = vsepr
                     if shape in  ['trigonal planar', 't shaped', 'sqaure planar']:
                         continue
 
-                frags = []
-                for bonded_atom in atom.connected:
-                    frags.append(geometry.get_fragment(bonded_atom, atom, as_object=True))
-            
                 chiral = True
-                for i, frag1 in enumerate(frags):
-                    frag1.refresh_ranks()
-                    for frag2 in frags[:i]:
+                for i, frag1 in enumerate(frags[ndx]):
+                    #get the ranks of the atoms in this fragment
+                    ranks_1 = [ranks[geometry.atoms.index(atom)] for atom in frag1]
+                    for j, frag2 in enumerate(frags[ndx][:i]):
                         same = True
-                        if len(frag1.atoms) != len(frag2.atoms):
+                        
+                        ranks_2 = [ranks[geometry.atoms.index(atom)] for atom in frag2]
+                        
+                        if len(frag1) != len(frag2):
                             same = False
                             continue
 
-                        for a, b in zip(sorted(frag1.atoms), sorted(frag2.atoms)):
+                        for a, b in zip(sorted(ranks_1), sorted(ranks_2)):
                             # want correct elements
-                            if a.element != b.element:
+                            if a != b:
                                 same = False
                                 break
-                            # and correct connections
-                            if len(a.connected) != len(b.connected):
-                                same = False
-                                break
-                            
+                           
+                        for a, b in zip(sorted(frag1), sorted(frag2)):
                             # and other chiral atoms
-                            # using name instead of just 'in matching_atoms' 
-                            # b/c get_fragment returns a copy of the atoms
-                            if a.name in [chiral_atom.name for chiral_atom in matching_atoms] and \
-                               b.name in [chiral_atom.name for chiral_atom in matching_atoms]:
+                            if a in matching_atoms and b in matching_atoms:
                                 #use RMSD to see if they have the same handedness
                                 a_connected = sorted(a.connected)
                                 b_connected = sorted(b.connected)
                                 a_targets = [a] + list(a_connected)
                                 b_targets = [b] + list(b_connected)
-                                if frag1.RMSD(frag2, targets=a_targets, ref_targets=b_targets, sort=False) < 0.1:
+                                if geometry.RMSD(geometry, targets=a_targets, ref_targets=b_targets, sort=False, align=False) < 0.1:
                                     same = False
                                     break
 
@@ -345,10 +351,33 @@ class ChiralCentres(Finder):
                                     same = False
                                     break
 
+                        
+                        ring_atoms = [bonded_atom for bonded_atom in atom.connected if bonded_atom in frag1 and bonded_atom in frag2]
+                        if len(ring_atoms) > 0:
+                            #this is a ring
+                            #look at the rank of all atoms that are n bonds away from this atom
+                            #if the ranks are ever all different, this is a chiral center
+                            n_bonds = 1
+                            acceptable_nbonds = True
+                            while acceptable_nbonds:
+                                try:
+                                    atoms_within_nbonds = geometry.find(BondsFrom(atom, n_bonds))
+                                    nbonds_ranks = [ranks[geometry.atoms.index(a)] for a in atoms_within_nbonds]
+                                    if all([nbonds_ranks.count(r) == 1 for r in nbonds_ranks]):
+                                        same = False
+                                        acceptable_nbonds = False
+                                    n_bonds += 1
+                                except LookupError:
+                                    acceptable_nbonds = False
+
+                            if not same:
+                                break
+
+
                         if same:
                             chiral = False
                             break
-            
+
                 if chiral:
                     chiral_atoms_changed = True
                     matching_atoms.append(atom)

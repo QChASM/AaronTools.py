@@ -11,7 +11,11 @@ class TestFinder(TestWithTimer):
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
     catalyst = os.path.join(prefix, "test_files", "catalysts", "tm_single-lig.xyz")
     ligand = os.path.join(prefix, "test_files", "R-Quinox-tBu3.xyz")
-    
+
+    chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
+    chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
+    chiral_mol_2 = os.path.join(prefix, "test_files", "chiral_centers_2.xyz")
+
     def test_BondsFrom(self):
         # test to see if interpolated geometry is correct
         mol = Geometry(self.benzene)
@@ -107,6 +111,21 @@ class TestFinder(TestWithTimer):
         self.assertTrue(all([atom in mol.find('1') for atom in out]))
 
 
+        mol = Geometry(self.chiral_ring)
+        out = mol.find(ChiralCenters())
+        self.assertTrue(all([atom in mol.find('3,12') for atom in out]))
+
+        #next two tests are finding chiral centers that are chiral
+        #b/c of other chiral centers
+        mol = Geometry(self.chiral_mol_1)
+        out = mol.find(ChiralCenters())
+        self.assertTrue(all([atom in mol.find('1,3,5') for atom in out]))
+
+        mol = Geometry(self.chiral_mol_2)
+        out = mol.find(ChiralCenters())
+        self.assertTrue(all([atom in mol.find('1,4') for atom in out]))
+
+
 
 def suite():
     suite = unittest.TestSuite()
@@ -118,7 +137,6 @@ def suite():
     suite.addTest(TestFinder("test_NotAny"))
     suite.addTest(TestFinder("test_AnyTransitionMetal"))
     suite.addTest(TestFinder("test_AnyNonTransitionMetal"))
-    suite.addTest(TestFinder("test_VSEPR"))
     suite.addTest(TestFinder("test_VSEPR"))
     suite.addTest(TestFinder("test_BondedElements"))
     suite.addTest(TestFinder("test_NumberOfBonds"))

@@ -51,7 +51,7 @@ class EmpiricalDispersion:
     def get_orca(self):
         """Acceptable keywords for ORCA are:
         Grimme D2
-        Zero-damped Grimme D3"
+        Zero-damped Grimme D3
         Becke-Johnson damped Grimme D3
         Grimme D4"""
         if self.name == "Grimme D2":
