@@ -10,6 +10,11 @@ from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, ORCA_COORDINATES, ORCA_CO
                               GAUSSIAN_CONSTRAINTS, GAUSSIAN_GEN_BASIS, GAUSSIAN_GEN_ECP, \
                               GAUSSIAN_POST, GAUSSIAN_COMMENT
 
+from .emp_dispersion import EmpiricalDispersion
+from .grid import IntegrationGrid
+from .basis import BasisSet
+from .functional import Functional, KNOWN_SEMI_EMPIRICAL
+
 def probable_job_order(word):
     """sorts job keywords so that the job is other settings -> opt -> freq -> sp"""
     if word.lower() in ['energy', 'sp']:
@@ -24,16 +29,17 @@ def probable_job_order(word):
 class Theory:
     """a Theory object can be used to create an input file for different QM software
     The creation of a Theory object does not depend on the specific QM software - that is determined when the file is written
+    attribute names are the same as initialization keywords
     valid initialization key words are:
-    structure               -   AaronTools Geometry 
+    geometry                -   AaronTools Geometry 
     charge                  -   total charge
     multiplicity            -   electronic multiplicity
     job_types               -   list(JobType)
 
-    functional              -   Functional object
-    basis                   -   BasisSet object
-    empirical_dispersion    -   EmpiricalDispersion object
-    grid                    -   IntegrationGrid object
+    functional              -   Functional object (or str - Functional instance will be created)
+    basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(kw)))
+    empirical_dispersion    -   EmpiricalDispersion object (or str)
+    grid                    -   IntegrationGrid object (or str)
     
     memory                  -   allocated memory (GB)
     processors              -   allocated cores
@@ -63,59 +69,78 @@ class Theory:
     GAUSSIAN_COMMENT: list(str)
 """
 
-    ACCEPTED_INIT_KW = ['functional', \
-                        'basis', \
-                        'structure', \
+    ACCEPTED_INIT_KW = ['geometry', \
                         'memory', \
                         'processors', \
-                        'empirical_dispersion', \
                         'charge', \
                         'multiplicity', \
-                        'grid', \
                         'job_types']
 
-    def __init__(self, **kw):
+    def __init__(self, functional=None, basis=None, empirical_dispersion=None, grid=None, **kw):
         for key in self.ACCEPTED_INIT_KW:
             if key in kw:
-                #print("%s in kw" % key)
                 self.__setattr__(key, kw[key])
             else:
-                #print("%s not in kw" % key)
                 self.__setattr__(key, None)
 
-    def make_header(self, geom, step=None, form='gaussian', other_kw_dict={}, **kwargs):
+            #if functional, basis, etc aren't the expected classes, make them so
+            if functional is not None:
+                if not isinstance(functional, Functional):
+                    functional = Functional(functional, functional.upper() in KNOWN_SEMI_EMPIRICAL)
+            
+            self.functional = functional
+
+            if grid is not None:
+                if not isinstance(grid, IntegrationGrid):
+                    grid = IntegrationGrid(grid)
+            
+            self.grid = grid
+
+            if basis is not None:
+                if not isinstance(basis, BasisSet):
+                    basis = BasisSet(basis)
+            
+            self.basis = basis
+
+            if empirical_dispersion is not None:
+                if not isinstance(empirical_dispersion, EmpiricalDispersion):
+                    empirical_dispersion = EmpiricalDispersion(empirical_dispersion)
+            
+            self.empirical_dispersion = empirical_dispersion
+
+    def make_header(self, geom, step=None, style='gaussian', other_kw_dict={}, **kwargs):
         """geom: Geometry
         step: float
         form: str, gaussian, orca, or psi4
         other_kw_dict: dict, keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
 
-        self.structure = geom
+        self.geometry = geom
 
-        if form == "gaussian":
+        if style == "gaussian":
             if step is not None:
                 other_kw_dict[GAUSSIAN_COMMENT] = ["step %.1f" % step]
             return self.get_gaussian_header(other_kw_dict)
         
-        elif form == "orca":
+        elif style == "orca":
             if step is not None:
                 other_kw_dict[ORCA_COMMENT] = ["step %.1f" % step]
             return self.get_orca_header(other_kw_dict)
         
-        elif form == "psi4":
+        elif style == "psi4":
             if step is not None:
                 other_kw_dict[PSI4_COMMENT] = ["step %.1f" % step]
             return self.get_psi4_header(other_kw_dict)
     
-    def make_footer(self, geom, step=None, form='gaussian', other_kw_dict={}):
+    def make_footer(self, geom, step=None, style='gaussian', other_kw_dict={}):
         """geom: Geometry
         step: float (ignored)
         form: str, gaussian or psi4
         other_kw_dict: dict, keys are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
-        if form == "gaussian":
+        if style == "gaussian":
             return self.get_gaussian_footer(other_kw_dict)
 
-        elif form == "psi4":
+        elif style == "psi4":
             return self.get_psi4_footer(other_kw_dict)
 
     def get_gaussian_header(self, other_kw_dict, return_warnings=False):
@@ -149,18 +174,17 @@ class Theory:
                     s += '\n'
 
         #start route line with functional
-        func, warning = self.functional.get_gaussian()
-        if warning is not None:
-            warnings.append(warning)
-
         s += "#n "
         if self.functional is not None:
-            s +="%s" % func
+            func, warning = self.functional.get_gaussian()
+            if warning is not None:
+                warnings.append(warning)
+            s += "%s" % func
             if not self.functional.is_semiempirical and self.basis is not None:
                 basis_info = self.basis.get_gaussian_basis_info()
-                if self.structure is not None:
+                if self.geometry is not None:
                     #check basis elements to make sure no element is in two basis sets or left out of any
-                    basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
+                    basis_warning = self.basis.check_for_elements([atom.element for atom in self.geometry.atoms])
                     if basis_warning is not None:
                         warnings.append(warning)
     
@@ -224,13 +248,6 @@ class Theory:
             if not s.endswith('\n'):
                 s += '\n'
 
-        else:
-            #gaussian requires a comment
-            if self.comment is None:
-                s += "comment\n"
-            else:
-                s += "%s\n" % self.comment
-
         s += "\n"
 
         #charge mult
@@ -259,8 +276,8 @@ class Theory:
             basis_elements = self.basis.elements_in_basis
             #check if any element is in multiple basis sets
             #check to make sure all elements have a basis set
-            if self.structure is not None:
-                basis_warning = self.basis.check_for_elements([atom.element for atom in self.structure.atoms])
+            if self.geometry is not None:
+                basis_warning = self.basis.check_for_elements([atom.element for atom in self.geometry.atoms])
                 if basis_warning is not None:
                     warnings.append(basis_warning)
 
@@ -275,7 +292,7 @@ class Theory:
             s += '\n'
 
         #write gen info
-        if not self.functional.is_semiempirical:
+        if self.functional is not None and not self.functional.is_semiempirical:
             if GAUSSIAN_GEN_BASIS in basis_info:
                 s += basis_info[GAUSSIAN_GEN_BASIS]
             
@@ -318,8 +335,8 @@ class Theory:
         #if functional isn't semi-empirical, get basis info to write later
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_orca_basis_info()
-            if self.structure is not None:
-                struc_elements = set([atom.element for atom in self.structure.atoms])
+            if self.geometry is not None:
+                struc_elements = set([atom.element for atom in self.geometry.atoms])
             
                 warning = self.basis.check_for_elements(struc_elements)
                 if warning is not None:
@@ -422,8 +439,8 @@ class Theory:
         #get basis info if functional is not semi empirical
         if not self.functional.is_semiempirical:
             basis_info = self.basis.get_psi4_basis_info('sapt' in self.functional.get_psi4()[0].lower())
-            if self.structure is not None:
-                struc_elements = set([atom.element for atom in self.structure.atoms])
+            if self.geometry is not None:
+                struc_elements = set([atom.element for atom in self.geometry.atoms])
 
                 warning = self.basis.check_for_elements(struc_elements)
                 if warning is not None:
@@ -456,11 +473,6 @@ class Theory:
             basis_info = {}
 
         combined_dict = combine_dicts(other_kw_dict, basis_info)
-        if self.grid is not None:
-            grid_info, warning = self.grid.get_psi4()
-            if warning is not None:
-                warnings.append(warning)
-            combined_dict = combine_dicts(combined_dict, grid_info)
 
         #start building input file header
         s = ""
@@ -516,6 +528,13 @@ class Theory:
         s = "}\n\n"
         warnings = []
 
+        #grid
+        if self.grid is not None:
+            grid_info, warning = self.grid.get_psi4()
+            if warning is not None:
+                warnings.append(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, grid_info)
+        
         #settings
         #a setting will only get added if its list has at least one item, but only the first item will be used
         if PSI4_SETTINGS in other_kw_dict and any(len(other_kw_dict[PSI4_SETTINGS][setting]) > 0 for setting in other_kw_dict[PSI4_SETTINGS]):

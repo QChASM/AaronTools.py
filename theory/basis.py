@@ -12,8 +12,14 @@ class BasisSet:
     PSI4_AUX = ["JK", "RI"]
 
     def __init__(self, basis, ecp=None):
-        """basis: list(Basis) or None
+        """basis: list(Basis), Basis, str, or None
         ecp: list(ECP) or None"""
+        if isinstance(basis, str):
+            #TODO: make Basis(elements=['all' or 'tm' or 'not tm']) do things
+            basis = [Basis(basis, ['all'])]
+        elif isinstance(basis, Basis):
+            basis = [basis]
+
         self.basis = basis
         self.ecp = ecp
 
@@ -31,8 +37,12 @@ class BasisSet:
         info = {}
 
         if self.basis is not None:
+            #check if we need to use gen or genecp:
+            #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
+            #    -multiple basis sets
+            #    -an ecp
             if all([basis == self.basis[0] for basis in self.basis]) and not self.basis[0].user_defined and self.ecp is None:
-                info[GAUSSIAN_ROUTE] = "/%s" % Basis.map_gaussian09_basis(self.basis[0].name)
+                info[GAUSSIAN_ROUTE] = "/%s" % Basis.get_gaussian(self.basis[0].name)
             else:
                 if self.ecp is None:
                     info[GAUSSIAN_ROUTE] = "/gen"
@@ -40,11 +50,13 @@ class BasisSet:
                     info[GAUSSIAN_ROUTE] = "/genecp"
                     
                 s = ""
+                #gaussian flips out if you specify basis info for an element that
+                #isn't on the molecule, so make sure the basis set has an element
                 for basis in self.basis:
                     if len(basis.elements) > 0 and not basis.user_defined:
                         s += " ".join([ele for ele in basis.elements])
                         s += " 0\n"
-                        s += Basis.map_gaussian09_basis(basis.get_basis_name())
+                        s += Basis.get_gaussian(basis.get_basis_name())
                         s += "\n****\n"
                     
                 for basis in self.basis:
@@ -84,7 +96,7 @@ class BasisSet:
                 if len(basis.elements) > 0 and not basis.user_defined:
                     s += " ".join([ele for ele in basis.elements])
                     s += " 0\n"
-                    s += Basis.map_gaussian09_basis(basis.get_basis_name())
+                    s += Basis.get_gaussian(basis.get_basis_name())
                     s += "\n"
                 
             for basis in self.ecp:
@@ -136,7 +148,7 @@ class BasisSet:
                     if basis.aux_type is None:
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = Basis.map_orca_basis(basis.get_basis_name())
+                                s = Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                                 
@@ -150,7 +162,7 @@ class BasisSet:
                                 s = "newGTO            %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
                         
@@ -159,7 +171,7 @@ class BasisSet:
                     elif basis.aux_type == "C":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = "%s/C" % Basis.map_orca_basis(basis.get_basis_name())
+                                s = "%s/C" % Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                         
@@ -173,7 +185,7 @@ class BasisSet:
                                 s = "newAuxCGTO        %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s/C\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s/C\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
                                             
@@ -182,7 +194,7 @@ class BasisSet:
                     elif basis.aux_type == "J":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = "%s/J" % Basis.map_orca_basis(basis.get_basis_name())
+                                s = "%s/J" % Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                             
@@ -196,7 +208,7 @@ class BasisSet:
                                 s = "newAuxJGTO        %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s/J\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s/J\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
 
@@ -205,7 +217,7 @@ class BasisSet:
                     elif basis.aux_type == "JK":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = "%s/JK" % Basis.map_orca_basis(basis.get_basis_name())
+                                s = "%s/JK" % Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                             
@@ -219,7 +231,7 @@ class BasisSet:
                                 s = "newAuxJKGTO       %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s/JK\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s/JK\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
                                 
@@ -228,7 +240,7 @@ class BasisSet:
                     elif basis.aux_type == "CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = "%s-CABS" % Basis.map_orca_basis(basis.get_basis_name())
+                                s = "%s-CABS" % Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                             
@@ -242,7 +254,7 @@ class BasisSet:
                                 s = "newCABSGTO        %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s-CABS\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s-CABS\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
                                 
@@ -251,7 +263,7 @@ class BasisSet:
                     elif basis.aux_type == "OptRI CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                s = "%s-OptRI" % Basis.map_orca_basis(basis.get_basis_name())
+                                s = "%s-OptRI" % Basis.get_orca(basis.get_basis_name())
                                 info[ORCA_ROUTE].append(s)
                                 first_basis.append(basis.aux_type)
                                 
@@ -265,7 +277,7 @@ class BasisSet:
                                 s = "newCABSGTO        %-2s " % ele
                                 
                                 if not basis.user_defined:
-                                    s += "\"%s-OptRI\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                                    s += "\"%s-OptRI\" end" % Basis.get_orca(basis.get_basis_name())
                                 else:
                                     s += "\"%s\" end" % basis.user_defined
                                 
@@ -276,7 +288,7 @@ class BasisSet:
                 if len(basis.elements) > 0 and not basis.user_defined:
                     for ele in basis.elements:
                         s = "newECP            %-2s " % ele
-                        s += "\"%s\" end" % Basis.map_orca_basis(basis.get_basis_name())
+                        s += "\"%s\" end" % Basis.get_orca(basis.get_basis_name())
                     
                         info[ORCA_BLOCKS]['basis'].append(s)
  
@@ -304,37 +316,37 @@ class BasisSet:
                     first_basis.append(basis.aux_type)
                     if basis.aux_type is None or basis.user_defined:
                         s += "basis {\n"
-                        s += "    assign    %s\n" % Basis.map_psi4_basis(basis.get_basis_name())
+                        s += "    assign    %s\n" % Basis.get_psi4(basis.get_basis_name())
                         
                     elif basis.aux_type == "JK":
                         if sapt:
                             s4 = "df_basis_sapt {\n"
                         else:
                             s4 = "df_basis_scf {\n"
-                        s4 += "    assign %s-jkfit\n" % Basis.map_psi4_basis(basis.get_basis_name())
+                        s4 += "    assign %s-jkfit\n" % Basis.get_psi4(basis.get_basis_name())
                     
                     elif basis.aux_type == "RI":
                         s2 = "df_basis_%s {\n"
                         if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
-                            s2 += "    assign %s-rifit\n" % Basis.map_psi4_basis(basis.get_basis_name())
+                            s2 += "    assign %s-rifit\n" % Basis.get_psi4(basis.get_basis_name())
                         else:
-                            s2 += "    assign %s-ri\n" % Basis.map_psi4_basis(basis.get_basis_name())
+                            s2 += "    assign %s-ri\n" % Basis.get_psi4(basis.get_basis_name())
 
                 else:
                     if basis.aux_type is None or basis.user_defined:
                         for ele in basis.elements:
-                            s += "    assign %2s %s\n" % (ele, Basis.map_psi4_basis(basis.get_basis_name()))
+                            s += "    assign %2s %s\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                     
                     elif basis.aux_type == "JK":
                         for ele in basis.elements:
-                            s2 += "    assign %2s %s-jkfit\n" % (ele, Basis.map_psi4_basis(basis.get_basis_name()))
+                            s2 += "    assign %2s %s-jkfit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                             
                     elif basis.aux_type == "RI":
                         for ele in basis.elements:
                             if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
-                                s2 += "    assign %2s %s-rifit\n" % (ele, Basis.map_psi4_basis(basis.get_basis_name()))
+                                s2 += "    assign %2s %s-rifit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                             else:
-                                s2 += "    assign %2s %s-ri\n" % (ele, Basis.map_psi4_basis(basis.get_basis_name()))
+                                s2 += "    assign %2s %s-ri\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                                     
             if any(basis.user_defined for basis in self.basis):
                 s3 = ""
@@ -408,6 +420,7 @@ class Basis:
         user_defined -   file containing basis info/False for builtin basis sets
         """
         self.name = name
+        #TODO: allow elements to be 'all', 'tm', or 'not tm'
         self.elements = elements
         self.aux_type = aux_type
         self.user_defined = user_defined
@@ -429,7 +442,7 @@ class Basis:
         return name
 
     @staticmethod
-    def map_gaussian09_basis(name):
+    def get_gaussian(name):
         """returns the Gaussian09/16 name of the basis set
         currently just removes the hyphen from the Karlsruhe def2 ones"""
         if name.startswith('def2-'):
@@ -438,7 +451,7 @@ class Basis:
             return name    
 
     @staticmethod
-    def map_orca_basis(name):
+    def get_orca(name):
         """returns the ORCA name of the basis set
         currently just adds hyphen to Karlsruhe basis if it isn't there"""
         if name.startswith('def2') and not name.startswith('def2-'):
@@ -447,7 +460,7 @@ class Basis:
             return name
     
     @staticmethod
-    def map_psi4_basis(name):
+    def get_psi4(name):
         """returns the Psi4 name of the basis set
         currently just adds hyphen to Karlsruhe basis if it isn't there"""
         if name.startswith('def2') and not name.startswith('def2-'):

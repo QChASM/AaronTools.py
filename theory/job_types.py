@@ -52,6 +52,11 @@ class OptimizationJob(JobType):
             out[GAUSSIAN_ROUTE]['Opt'].append('ModRedundant')
             out[GAUSSIAN_CONSTRAINTS] = []
 
+            if 'atoms' in self.constraints:
+                for atom in self.constraints['atoms']:
+                    ndx = self.structure.atoms.index(atom) + 1
+                    out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
+
             if 'bonds' in self.constraints:
                 for constraint in self.constraints['bonds']:
                     atom1, atom2 = constraint
@@ -195,22 +200,37 @@ class OptimizationJob(JobType):
 
 class FrequencyJob(JobType):
     """frequnecy job"""
-    def __init__(self, temperature=298.15):
+    def __init__(self, numerical=False, temperature=298.15):
         """temperature in K for thermochem info that gets printed in output file"""
         super().__init__()
+        self.numerical = numerical
         self.temperature = temperature
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE"""
-        return {GAUSSIAN_ROUTE:{'Freq':['temperature=%.2f' % self.temperature]}}
+        out = {GAUSSIAN_ROUTE:{'Freq':['temperature=%.2f' % self.temperature]}}
+        if self.numerical:
+            out[GAUSSIAN_ROUTE]['Freq'].append('Numerical')
+
+        return out
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
-        return {ORCA_ROUTE:['Freq'], ORCA_BLOCKS:{'freq':['Temp    %.2f' % self.temperature]}}
+        out = {ORCA_BLOCKS:{'freq':['Temp    %.2f' % self.temperature]}}
+        if self.numerical:
+            out[ORCA_ROUTE] = ['NumFreq']
+        else:
+            out[ORCA_ROUTE] = ['Freq']
+
+        return out
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
-        return {PSI4_JOB:{'frequencies':[]}, PSI4_SETTINGS:{'T': ["%.2f" % self.temperature]}}
+        out = {PSI4_JOB:{'frequencies':[]}, PSI4_SETTINGS:{'T': ["%.2f" % self.temperature]}}
+        if self.numerical:
+            out[PSI4_JOB]['frequencies'].append('dertype="gradient"')
+
+        return out
 
 
 class SinglePointJob(JobType):

@@ -1,6 +1,6 @@
 import re
 
-from AaronTools.theory import GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE
+from AaronTools.theory import GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS
 
 
 class IntegrationGrid:
@@ -50,8 +50,8 @@ class IntegrationGrid:
             match = re.match('\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)', self.name)
             match_digit = re.match('-?\d+?', self.name)
             if match:
-                r = match.group(0)
-                a = match.group(1)
+                r = int(match.group(1))
+                a = int(match.group(2))
                 return({GAUSSIAN_ROUTE:{"Integral":["grid=%i%03i" % (r, a)]}}, None)
             elif match_digit:
                 return({GAUSSIAN_ROUTE:{"Integral":["grid=%s" % self.name]}}, None)
@@ -60,9 +60,41 @@ class IntegrationGrid:
 
     def get_orca(self):
         """translates grid to something ORCA accepts
-        current just returns tuple(dict(ORCA_ROUTE:[self.name]), None)"""
-        #TODO: allow '(r, a)'
-        return ({ORCA_ROUTE:[self.name, "Final%s" % self.name]}, None)
+        returns tuple(dict(ORCA_ROUTE:[self.name]), None) or tuple(dict(ORCA_BLOCKS:{'method':[str]}), None)"""
+        if self.name.lower() == "ultrafine":
+            return ({ORCA_BLOCKS:{'method':['AngularGrid     Lebedev590', \
+                                            #I did not check how close this IntAcc gets to the gaussian grids
+                                            'IntAcc          4.0', \
+                                           ]}},\
+                     "approximating UltraFineGrid")
+        elif self.name.lower() == "finegrid":
+            return ({ORCA_BLOCKS:{'method':['AngularGrid     Lebedev302', \
+                                            'IntAcc          4.0', \
+                                           ]}},\
+                     "approximating FineGrid")
+        elif self.name.lower() == "superfinegrid":
+            #radial is 175 for 1st row, 250 for later rows
+            return ({ORCA_ROUTE:["Grid7", "FinalGrid7"]}, "could not set SuperFineGrid equivalent - using largest ORCA grid keyword")
+
+        elif 'grid' in self.name.lower():
+            #orca grid keyword
+            return ({ORCA_ROUTE:[self.name, "Final%s" % self.name]}, None)
+
+
+        else:
+            #grid format may be (int, int)
+            match = re.match('\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)', self.name)
+            if match:
+                r = int(match.group(1))
+                a = int(match.group(2))
+                int_acc = -((r / -5) + 6 - 8) / 3
+                return ({ORCA_BLOCKS:{'method':['AngularGrid     Lebedev%i' % a, \
+                                                'IntAcc          %.1f' % int_acc, \
+                                               ]}},\
+                        None)
+            
+            else:
+                raise RuntimeError("could not determine acceptable Psi4 grid settings for %s" % self.name)
 
     def get_psi4(self):
         """returns ({PSI4_SETTINGS:{'dft_radial_points':['n'], 'dft_spherical_points':['m']}}, warning)"""
@@ -75,7 +107,6 @@ class IntegrationGrid:
             return ({PSI4_SETTINGS:{'dft_radial_points':['250'], 'dft_spherical_points':['974']}}, "Approximating Gaussian SuperFineGrid")
 
         #uses radial from K-Kr as specified in ORCA 4.2.1 manual (section 9.3)
-        #XXX: there's probably IOp's that can get closer
         elif self.name.lower() == "grid2":
             return ({PSI4_SETTINGS:{'dft_radial_points':['45'], 'dft_spherical_points':['110']}}, "Approximating ORCA Grid 2")
         elif self.name.lower() == "grid3":
@@ -91,11 +122,10 @@ class IntegrationGrid:
 
         else:
             #grid format may be (int, int)
-            #or just int
             match = re.match('\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)', self.name)
             if match:
-                r = match.group(0)
-                a = match.group(1)
+                r = int(match.group(1))
+                a = int(match.group(2))
                 return({PSI4_SETTINGS:{'dft_radial_points':[r], 'dft_spherical_points':[a]}}, None)
             
             else:

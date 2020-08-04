@@ -1,4 +1,4 @@
-KNOWN_SEMI_EMPIRICAL = ["AM1", "PM3", "PM6", "PM7", "HF-3c"]
+KNOWN_SEMI_EMPIRICAL = ["AM1", "PM3", "PM6", "PM7", "HF-3C"]
 
 class Functional:
     """functional object

@@ -76,9 +76,12 @@ class FileWriter:
 
         :geom: the Geometry to use
         :style: the file type style to generate
-            Currently supported options: xyz, com
+            Currently supported options: xyz, com, inp, in
         :append: for *.xyz, append geometry to the same file
-        :options: for *.com files, the computational options
+        :outfile: output destination - default is 
+                  [geometry name] + [extension] or [geometry name] + [step] + [extension]
+                  if outfile is False, no output file will be written, but the contents will be returned
+        :theory: for com, inp, and in files, an object with a get_header and get_footer method
         """
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))
@@ -91,37 +94,31 @@ class FileWriter:
         if style.lower() == "xyz":
             out = cls.write_xyz(geom, append, outfile)
         elif style.lower() == "com":
-            if "theory" in kwargs and "step" in kwargs:
-                step = kwargs["step"]
+            if "theory" in kwargs:
                 theory = kwargs["theory"]
-                del kwargs["step"]
                 del kwargs["theory"]
-                out = cls.write_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_com(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
+                    "when writing 'com' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "inp":
-            if "theory" in kwargs and "step" in kwargs:
-                step = kwargs["step"]
+            if "theory" in kwargs:
                 theory = kwargs["theory"]
-                del kwargs["step"]
                 del kwargs["theory"]
-                out = cls.write_inp(geom, step, theory, outfile, **kwargs)
+                out = cls.write_inp(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
+                    "when writing 'inp' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "in":
-            if "theory" in kwargs and "step" in kwargs:
-                step = kwargs["step"]
+            if "theory" in kwargs:
                 theory = kwargs["theory"]
-                del kwargs["step"]
                 del kwargs["theory"]
-                out = cls.write_in(geom, step, theory, outfile, **kwargs)
+                out = cls.write_in(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing com files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory()), step=int/float()"
+                    "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
 
         return out
@@ -150,7 +147,7 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, step, theory, outfile=None, **kwargs):
+    def write_com(cls, geom, theory, outfile=None, **kwargs):
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
         fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
@@ -161,17 +158,20 @@ class FileWriter:
                 break
 
         # get file content string
-        s = theory.make_header(geom, step, **kwargs)
+        s = theory.make_header(geom, **kwargs)
         for atom in geom.atoms:
             if has_frozen:
                 s += fmt.format(atom.element, -atom.flag, *atom.coords)
             else:
                 s += fmt.format(atom.element, *atom.coords)
-        s += theory.make_footer(geom, step)
+        s += theory.make_footer(geom, **kwargs)
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            fname = "{}.{}.com".format(geom.name, step2str(step))
+            if 'step' in kwargs:
+                fname = "{}.{}.com".format(geom.name, step2str(kwargs['step']))
+            else:
+                fname = "{}.com".format(geom.name)
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
@@ -183,9 +183,9 @@ class FileWriter:
         return
 
     @classmethod
-    def write_inp(cls, geom, step, theory, outfile=None, **kwargs):
-        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
-        s = theory.make_header(geom, step, form='orca', **kwargs)
+    def write_inp(cls, geom, theory, outfile=None, **kwargs):
+        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
+        s = theory.make_header(geom, style='orca', **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
@@ -193,7 +193,10 @@ class FileWriter:
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            fname = "{}.{}.com".format(geom.name, step2str(step))
+            if 'step' in kwargs:
+                fname = "{}.{}.inp".format(geom.name, step2str(kwargs['step']))
+            else:
+                fname = "{}.inp".format(geom.name)
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
@@ -203,17 +206,20 @@ class FileWriter:
                 f.write(s)
 
     @classmethod
-    def write_in(cls, geom, step, theory, outfile=None, **kwargs):
-        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
-        s = theory.make_header(geom, step, form='psi4', **kwargs)
+    def write_in(cls, geom, theory, outfile=None, **kwargs):
+        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
+        s = theory.make_header(geom, style='psi4', **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
-        s += theory.make_footer(geom, step, form='psi4', **kwargs)
+        s += theory.make_footer(geom, style='psi4', **kwargs)
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            fname = "{}.{}.com".format(geom.name, step2str(step))
+            if 'step' in kwargs:
+                fname = "{}.{}.in".format(geom.name, step2str(kwargs['step']))
+            else:
+                fname = "{}.in".format(geom.name)
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
@@ -470,7 +476,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, form="dat"
+                        freq_str, hpmodes=False, style="dat"
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -632,7 +638,7 @@ class FileReader:
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, form="out"
+                        freq_str, hpmodes=False, style="out"
                     )
 
                 elif line.startswith("Temperature"):
@@ -1006,7 +1012,7 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = np.array(forcek)
 
-    def __init__(self, data, hpmodes=None, form="log"):
+    def __init__(self, data, hpmodes=None, style="log"):
         """
         :data: should either be a str containing the lines of the output file
             with frequency information, or a list of Data objects
@@ -1038,11 +1044,11 @@ class Frequency:
         if hpmodes and num_head != 2:
             warn("Log file damaged, cannot get frequencies")
             return
-        if form == "log":
+        if style == "log":
             self.parse_lines(lines, hpmodes)
-        elif form == "out":
+        elif style == "out":
             self.parse_orca_lines(lines, hpmodes)
-        elif form == "dat":
+        elif style == "dat":
             self.parse_psi4_lines(lines, hpmodes)
         else:
             raise RuntimeError("no frequency parser for %s files" % form)

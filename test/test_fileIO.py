@@ -118,13 +118,15 @@ class TestFileReader(TestWithTimer):
         self.assertEqual(test.other, ref2)
 
     def test_write_com(self):
+        """write gaussian input file"""
         #this compares the exact string, not things like RMSD or dictionaries
         #if it fails, someone may have added a column of whitespace or something
         geom = Geometry(self.small_mol)
        
         ref = """#n PBE1PBE/gen EmpiricalDispersion=GD3BJ opt=VeryTight freq=(hpmodes,noraman)
 
-step 0.0
+comment line 1
+comment line 2
 
 0 1
 C      -1.976960    -2.327180     0.001260
@@ -162,13 +164,109 @@ def2TZVP
 
         kw_dict = {GAUSSIAN_ROUTE: {"opt": ['VeryTight'], \
                                     "freq": ['hpmodes', 'noraman'], \
-                   }
-        }
+                                   }, \
+                   GAUSSIAN_COMMENT: ['comment line 1', 'comment line 2'], \
+                  }
 
-        test = FileWriter.write_com(geom, step=0.0, theory=theory, other_kw_dict=kw_dict, outfile=False)
+        test = FileWriter.write_com(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
+
+    
+    def test_write_inp(self):
+        """write orca input file"""
+        #like gaussian input files, this compares exact output
+
+        geom = Geometry(self.small_mol)
+
+
+        ref = """#comment line 1
+#comment line 2
+! PBE0 D3BJ def2-SVP
+%basis
+    newGTO            C  "def2-TZVP" end
+end
+
+*xyz 0 1
+C    -1.976960  -2.327180   0.001260
+C    -2.368140  -1.295540   0.855180
+C    -1.671360  -0.087350   0.854400
+C    -0.582100   0.089190   0.000260
+C    -0.190770  -0.942410  -0.853090
+C    -0.888480  -2.150560  -0.852890
+H    -3.226790  -1.434830   1.527900
+H    -1.980020   0.726060   1.526990
+H     0.667660  -0.803580  -1.526360
+H    -0.579920  -2.963600  -1.525850
+Cl    0.296990   1.613920  -0.000370
+N    -2.736890  -3.643570   0.001880
+O    -2.078230  -4.682300   0.002890
+O    -3.965790  -3.592630   0.001340
+*
+
+"""
+
+        theory = Theory(charge=0, \
+                        multiplicity=1, \
+                        functional=Functional("PBE0", False), \
+                        basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
+                        empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
+                 )
+
+        kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
+
+        test = FileWriter.write_inp(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
+
+        for line1, line2 in zip(test.splitlines(), ref.splitlines()):
+            self.assertEqual(line1.strip(), line2.strip())
+
+    def test_write_in(self):
+        """write psi4 input file"""
+        #like gaussian input files, this compares exact output
+
+        geom = Geometry(self.small_mol)
+
+        ref = """#comment line 1
+#comment line 2
+basis {
+    assign    def2-SVP
+    assign  C def2-TZVP
+}
+
+molecule {
+ 0 1
+C    -1.976960  -2.327180   0.001260
+C    -2.368140  -1.295540   0.855180
+C    -1.671360  -0.087350   0.854400
+C    -0.582100   0.089190   0.000260
+C    -0.190770  -0.942410  -0.853090
+C    -0.888480  -2.150560  -0.852890
+H    -3.226790  -1.434830   1.527900
+H    -1.980020   0.726060   1.526990
+H     0.667660  -0.803580  -1.526360
+H    -0.579920  -2.963600  -1.525850
+Cl    0.296990   1.613920  -0.000370
+N    -2.736890  -3.643570   0.001880
+O    -2.078230  -4.682300   0.002890
+O    -3.965790  -3.592630   0.001340
+}
+"""
+
+        theory = Theory(charge=0, \
+                        multiplicity=1, \
+                        functional=Functional("PBE0", False), \
+                        basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
+                        empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
+                 )
+
+        kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
+
+        test = FileWriter.write_in(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
+
+        for line1, line2 in zip(test.splitlines(), ref.splitlines()):
+            self.assertEqual(line1.strip(), line2.strip())
+
 
 
 if __name__ == "__main__":
