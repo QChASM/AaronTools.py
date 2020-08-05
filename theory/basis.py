@@ -6,6 +6,8 @@ from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, \
                               \
                               GAUSSIAN_ROUTE, GAUSSIAN_GEN_BASIS, GAUSSIAN_GEN_ECP
 
+from AaronTools.finders import AnyTransitionMetal, AnyNonTransitionMetal
+
 class BasisSet:
     """used to more easily get basis set info for writing input files"""
     ORCA_AUX = ["C", "J", "JK", "CABS", "OptRI CABS"]
@@ -16,7 +18,7 @@ class BasisSet:
         ecp: list(ECP) or None"""
         if isinstance(basis, str):
             #TODO: make Basis(elements=['all' or 'tm' or 'not tm']) do things
-            basis = [Basis(basis, ['all'])]
+            basis = [Basis(basis)]
         elif isinstance(basis, Basis):
             basis = [basis]
 
@@ -31,7 +33,16 @@ class BasisSet:
                 elements.extend(basis.elements)
             
         return elements
-    
+
+    def refresh_elements(self, geometry):
+        if self.basis is not None:
+            for basis in self.basis:
+                basis.refresh_elements(geometry)
+
+        if self.ecp is not None:
+            for ecp in self.ecp:
+                ecp.refresh_elements(geometry)
+
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""
         info = {}
@@ -409,7 +420,8 @@ class BasisSet:
 
 
 class Basis:
-    def __init__(self, name, elements, aux_type=None, user_defined=False):
+    default_elements = [AnyTransitionMetal(), AnyNonTransitionMetal()]
+    def __init__(self, name, elements=None, aux_type=None, user_defined=False):
         """
         name         -   basis set base name (e.g. 6-31G)
         elements     -   list of element symbols the basis set applies to
@@ -417,8 +429,23 @@ class Basis:
         user_defined -   file containing basis info/False for builtin basis sets
         """
         self.name = name
-        #TODO: allow elements to be 'all', 'tm', or 'not tm'
-        self.elements = elements
+        
+        if elements is None:
+            self.elements = []
+            self.ele_selection = self.default_elements
+        elif elements == 'all':
+            self.elements = []
+            self.ele_selection = [AnyTransitionMetal(), AnyNonTransitionMetal()]
+        elif elements == 'tm':
+            self.elements = []
+            self.ele_selection = AnyTransitionMetal()
+        elif elements == '!tm':
+            self.elements = []
+            self.ele_selection = AnyNonTransitionMetal()
+        elif elements is not None:
+            self.elements = elements
+            self.ele_selection = elements
+
         self.aux_type = aux_type
         self.user_defined = user_defined
 
@@ -430,6 +457,11 @@ class Basis:
             return False
         
         return self.get_basis_name() == other.get_basis_name()
+
+    def refresh_elements(self, geometry):
+        atoms = geometry.find(self.ele_selection)
+        elements = set([atom.element for atom in atoms])
+        self.elements = elements
 
     def get_basis_name(self):
         """returns basis set name"""
@@ -468,6 +500,7 @@ class Basis:
 
 class ECP(Basis):
     """ECP - aux info will be ignored"""
+    default_elements = AnyTransitionMetal()
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         

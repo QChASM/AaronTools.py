@@ -72,11 +72,12 @@ class Theory:
     ACCEPTED_INIT_KW = ['geometry', \
                         'memory', \
                         'processors', \
-                        'charge', \
-                        'multiplicity', \
                         'job_types']
 
-    def __init__(self, functional=None, basis=None, empirical_dispersion=None, grid=None, **kw):
+    def __init__(self, charge=0, multiplicity=1, functional=None, basis=None, empirical_dispersion=None, grid=None, **kw):
+        self.charge = charge
+        self.multiplicity = multiplicity
+
         for key in self.ACCEPTED_INIT_KW:
             if key in kw:
                 self.__setattr__(key, kw[key])
@@ -115,6 +116,8 @@ class Theory:
         kwargs: keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
 
         self.geometry = geom
+        if self.basis is not None:
+            self.basis.refresh_elements(self.geometry)
 
         other_kw_dict = {}
         for kw in kwargs:
@@ -139,6 +142,8 @@ class Theory:
         form: str, gaussian or psi4
         kwargs: keys are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
+        if self.basis is not None:
+            self.basis.refresh_elements(geom)
         
         other_kw_dict = {}
         for kw in kwargs:
