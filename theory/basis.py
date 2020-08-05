@@ -168,7 +168,7 @@ class BasisSet:
                         
                                 info[ORCA_BLOCKS]['basis'].append(s)
 
-                    elif basis.aux_type == "C":
+                    elif basis.aux_type.upper() == "C":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 s = "%s/C" % Basis.get_orca(basis.get_basis_name())
@@ -191,7 +191,7 @@ class BasisSet:
                                             
                                 info[ORCA_BLOCKS]['basis'].append(s)
                     
-                    elif basis.aux_type == "J":
+                    elif basis.aux_type.upper() == "J":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 s = "%s/J" % Basis.get_orca(basis.get_basis_name())
@@ -214,7 +214,7 @@ class BasisSet:
 
                                 info[ORCA_BLOCKS]['basis'].append(s)
 
-                    elif basis.aux_type == "JK":
+                    elif basis.aux_type.upper() == "JK":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 s = "%s/JK" % Basis.get_orca(basis.get_basis_name())
@@ -237,7 +237,7 @@ class BasisSet:
                                 
                                 info[ORCA_BLOCKS]['basis'].append(s)
 
-                    elif basis.aux_type == "CABS":
+                    elif basis.aux_type.upper() == "CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 s = "%s-CABS" % Basis.get_orca(basis.get_basis_name())
@@ -260,7 +260,7 @@ class BasisSet:
                                 
                                 info[ORCA_BLOCKS]['basis'].append(s)
 
-                    elif basis.aux_type == "OptRI CABS":
+                    elif basis.aux_type.upper() == "OPTRI CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 s = "%s-OptRI" % Basis.get_orca(basis.get_basis_name())
@@ -318,35 +318,32 @@ class BasisSet:
                         s += "basis {\n"
                         s += "    assign    %s\n" % Basis.get_psi4(basis.get_basis_name())
                         
-                    elif basis.aux_type == "JK":
-                        if sapt:
-                            s4 = "df_basis_sapt {\n"
-                        else:
-                            s4 = "df_basis_scf {\n"
-                        s4 += "    assign %s-jkfit\n" % Basis.get_psi4(basis.get_basis_name())
+                    elif basis.aux_type.upper() == "JK":
+                        s4 = "df_basis_scf {\n"
+                        s4 += "    assign    %s-jkfit\n" % Basis.get_psi4(basis.get_basis_name())
                     
-                    elif basis.aux_type == "RI":
+                    elif basis.aux_type.upper() == "RI":
                         s2 = "df_basis_%s {\n"
                         if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
-                            s2 += "    assign %s-rifit\n" % Basis.get_psi4(basis.get_basis_name())
+                            s2 += "    assign    %s-rifit\n" % Basis.get_psi4(basis.get_basis_name())
                         else:
-                            s2 += "    assign %s-ri\n" % Basis.get_psi4(basis.get_basis_name())
+                            s2 += "    assign    %s-ri\n" % Basis.get_psi4(basis.get_basis_name())
 
                 else:
                     if basis.aux_type is None or basis.user_defined:
                         for ele in basis.elements:
-                            s += "    assign %2s %s\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
+                            s += "    assign %-2s %s\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                     
-                    elif basis.aux_type == "JK":
+                    elif basis.aux_type.upper() == "JK":
                         for ele in basis.elements:
-                            s2 += "    assign %2s %s-jkfit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
+                            s4 += "    assign %-2s %s-jkfit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                             
-                    elif basis.aux_type == "RI":
+                    elif basis.aux_type.upper() == "RI":
                         for ele in basis.elements:
                             if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
-                                s2 += "    assign %2s %s-rifit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
+                                s2 += "    assign %-2s %s-rifit\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                             else:
-                                s2 += "    assign %2s %s-ri\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
+                                s2 += "    assign %-2s %s-ri\n" % (ele, Basis.get_psi4(basis.get_basis_name()))
                                     
             if any(basis.user_defined for basis in self.basis):
                 s3 = ""

@@ -3,7 +3,7 @@
 from AaronTools.utils.utils import combine_dicts
 from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, ORCA_COORDINATES, ORCA_COMMENT, \
                               \
-                              PSI4_SETTINGS, PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, \
+                              PSI4_SETTINGS, PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, PSI4_BEFORE_JOB, \
                               PSI4_COMMENT, PSI4_COORDINATES, PSI4_JOB, PSI4_OPTKING, \
                               \
                               GAUSSIAN_PRE_ROUTE, GAUSSIAN_ROUTE, GAUSSIAN_COORDINATES, \
@@ -44,8 +44,8 @@ class Theory:
     memory                  -   allocated memory (GB)
     processors              -   allocated cores
 
-    methods that construct headers and footers require 'other_kw_dict'
-    keys of other_kw_dict are ORCA_*, PSI4_*, or GAUSSIAN_* (imported from AaronTools.theory)
+    methods that construct headers and footers can specify some keyword arguments
+    keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (imported from AaronTools.theory)
     ORCA_ROUTE: list(str)
     ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
     ORCA_COORDINATES: ignored
@@ -108,42 +108,53 @@ class Theory:
             
             self.empirical_dispersion = empirical_dispersion
 
-    def make_header(self, geom, step=None, style='gaussian', other_kw_dict={}, **kwargs):
+    def make_header(self, geom, style='gaussian', **kwargs):
         """geom: Geometry
         step: float
         form: str, gaussian, orca, or psi4
-        other_kw_dict: dict, keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
+        kwargs: keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
 
         self.geometry = geom
 
+        other_kw_dict = {}
+        for kw in kwargs:
+            if kw.startswith('PSI4_') or kw.startswith('ORCA_') or kw.startswith('GAUSSIAN_'):
+                new_kw = eval(kw)
+                other_kw_dict[new_kw] = kwargs[kw]
+            else:
+                other_kw_dict[kw] = kwargs[kw]
+
         if style == "gaussian":
-            if step is not None:
-                other_kw_dict[GAUSSIAN_COMMENT] = ["step %.1f" % step]
-            return self.get_gaussian_header(other_kw_dict)
+            return self.get_gaussian_header(**other_kw_dict)
         
         elif style == "orca":
-            if step is not None:
-                other_kw_dict[ORCA_COMMENT] = ["step %.1f" % step]
-            return self.get_orca_header(other_kw_dict)
+            return self.get_orca_header(**other_kw_dict)
         
         elif style == "psi4":
-            if step is not None:
-                other_kw_dict[PSI4_COMMENT] = ["step %.1f" % step]
-            return self.get_psi4_header(other_kw_dict)
+            return self.get_psi4_header(**other_kw_dict)
     
-    def make_footer(self, geom, step=None, style='gaussian', other_kw_dict={}):
+    def make_footer(self, geom, style='gaussian', **kwargs):
         """geom: Geometry
         step: float (ignored)
         form: str, gaussian or psi4
-        other_kw_dict: dict, keys are GAUSSIAN_*, ORCA_*, or PSI4_*
+        kwargs: keys are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
+        
+        other_kw_dict = {}
+        for kw in kwargs:
+            if kw.startswith('PSI4_') or kw.startswith('ORCA_') or kw.startswith('GAUSSIAN_'):
+                new_kw = eval(kw)
+                other_kw_dict[new_kw] = kwargs[kw]
+            else:
+                other_kw_dict[kw] = kwargs[kw]
+
         if style == "gaussian":
-            return self.get_gaussian_footer(other_kw_dict)
+            return self.get_gaussian_footer(**other_kw_dict)
 
         elif style == "psi4":
-            return self.get_psi4_footer(other_kw_dict)
+            return self.get_psi4_footer(**other_kw_dict)
 
-    def get_gaussian_header(self, other_kw_dict, return_warnings=False):
+    def get_gaussian_header(self, return_warnings=False, **other_kw_dict):
         """write Gaussian09/16 input file header (up to charge mult)
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
@@ -259,8 +270,9 @@ class Theory:
             return s
 
 
-    def get_gaussian_footer(self, other_kw_dict, return_warnings=False):
+    def get_gaussian_footer(self, return_warnings=False, **other_kw_dict):
         """write footer of gaussian input file"""
+        
         if self.job_types is not None:
             for job in self.job_types:
                 job_dict = job.get_gaussian()
@@ -317,7 +329,7 @@ class Theory:
         else:
             return s
 
-    def get_orca_header(self, other_kw_dict, return_warnings=False):
+    def get_orca_header(self, return_warnings=False, **other_kw_dict):
         """get ORCA input file header
         other_kw_dict is a dictionary with file positions (using ORCA_*)
         corresponding to options/keywords
@@ -423,7 +435,7 @@ class Theory:
         else:
             return s
 
-    def get_psi4_header(self, other_kw_dict, return_warnings=False):
+    def get_psi4_header(self, return_warnings=False, **other_kw_dict):
         """write Psi4 input file
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
@@ -518,8 +530,9 @@ class Theory:
         else:
             return s
 
-    def get_psi4_footer(self, other_kw_dict, return_warnings=False):
+    def get_psi4_footer(self, return_warnings=False, **other_kw_dict):
         """get psi4 footer"""
+        
         if self.job_types is not None:
             for job in self.job_types:
                 job_dict = job.get_psi4()
@@ -558,6 +571,15 @@ class Theory:
         if self.empirical_dispersion is not None:
             functional += self.empirical_dispersion.get_psi4()[0]
 
+        #after job stuff - replace $FUNCTIONAL with functional
+        if PSI4_BEFORE_JOB in other_kw_dict:
+            for opt in other_kw_dict[PSI4_BEFORE_JOB]:
+                if "$FUNCTIONAL" in opt:
+                    opt = opt.replace("$FUNCTIONAL", "'%s'" % functional)
+
+                s += opt
+                s += '\n'
+        
         #for each job, start with nrg = f('functional'
         #unless return_wfn=True, then do nrg, wfn = f('functional'
         if PSI4_JOB in other_kw_dict:

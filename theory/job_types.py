@@ -39,7 +39,7 @@ class OptimizationJob(JobType):
 
         self.ts = transition_state
         self.constraints = constraints
-        self.structure = geom
+        self.geometry = geom
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE, GAUSSIAN_CONSTRAINTS"""
@@ -54,31 +54,31 @@ class OptimizationJob(JobType):
 
             if 'atoms' in self.constraints:
                 for atom in self.constraints['atoms']:
-                    ndx = self.structure.atoms.index(atom) + 1
+                    ndx = self.geometry.atoms.index(atom) + 1
                     out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
 
             if 'bonds' in self.constraints:
                 for constraint in self.constraints['bonds']:
                     atom1, atom2 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
+                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx2 = self.geometry.atoms.index(atom2) + 1
                     out[GAUSSIAN_CONSTRAINTS].append("B %2i %2i F" % (ndx1, ndx2))
 
             if 'angles' in self.constraints:
                 for constraint in self.constraints['angles']:
                     atom1, atom2, atom3 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
-                    ndx3 = self.structure.atoms.index(atom3) + 1
+                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx3 = self.geometry.atoms.index(atom3) + 1
                     out[GAUSSIAN_CONSTRAINTS].append("A %2i %2i %2i F" % (ndx1, ndx2, ndx3))
 
             if 'torsions' in self.constraints:
                 for constraint in self.constraints['torsions']:
                     atom1, atom2, atom3, atom4 = constraint
-                    ndx1 = self.structure.atoms.index(atom1) + 1
-                    ndx2 = self.structure.atoms.index(atom2) + 1
-                    ndx3 = self.structure.atoms.index(atom3) + 1
-                    ndx4 = self.structure.atoms.index(atom4) + 1
+                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx4 = self.geometry.atoms.index(atom4) + 1
                     out[GAUSSIAN_CONSTRAINTS].append("D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4))
 
         return out
@@ -97,34 +97,34 @@ class OptimizationJob(JobType):
             if 'atoms' in self.constraints:
                 for constraint in self.constraints['atoms']:
                     atom1 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
+                    ndx1 = self.geometry.atoms.index(atom1)
                     s = "    {C %2i C}" % (ndx1)
                     out[ORCA_BLOCKS]['geom'].append(s)
 
             if 'bonds' in self.constraints:
                 for constraint in self.constraints['bonds']:
                     atom1, atom2 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
                     s = "    {B %2i %2i C}" % (ndx1, ndx2)
                     out[ORCA_BLOCKS]['geom'].append(s)
 
             if 'angles' in self.constraints:
                 for constraint in self.constraints['angles']:
                     atom1, atom2, atom3 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
-                    ndx3 = self.structure.atoms.index(atom3)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx3 = self.geometry.atoms.index(atom3)
                     s = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
                     out[ORCA_BLOCKS]['geom'].append(s)
             
             if 'torsions' in self.constraints:
                 for constraint in self.constraints['torsions']:
                     atom1, atom2, atom3, atom4 = constraint
-                    ndx1 = self.structure.atoms.index(atom1)
-                    ndx2 = self.structure.atoms.index(atom2)
-                    ndx3 = self.structure.atoms.index(atom3)
-                    ndx4 = self.structure.atoms.index(atom4)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx3 = self.geometry.atoms.index(atom3)
+                    ndx4 = self.geometry.atoms.index(atom4)
                     s = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
                     out[ORCA_BLOCKS]['geom'].append(s)
 
@@ -144,10 +144,10 @@ class OptimizationJob(JobType):
             out[PSI4_OPTKING] = {}
             if 'atoms' in self.constraints:
                 s = ""
-                if len(self.constraints['atoms']) > 0 and self.structure is not None:
+                if len(self.constraints['atoms']) > 0 and self.geometry is not None:
                     s += "freeze_list = \"\"\"\n"
                     for atom in self.constraints['atoms']:
-                        s += "    %2i xyz\n" % (self.structure.atoms.index(atom) + 1)
+                        s += "    %2i xyz\n" % (self.geometry.atoms.index(atom) + 1)
     
                     s += "\"\"\"\n"
                     s += "    \n"
@@ -157,39 +157,39 @@ class OptimizationJob(JobType):
                 out[PSI4_OPTKING]['frozen_cartesian'] = ['$freeze_list']
 
             if 'bonds' in self.constraints:
-                if len(self.constraints['bonds']) > 0 and self.structure is not None:
+                if len(self.constraints['bonds']) > 0 and self.geometry is not None:
                     s = "(\"\n"
                     for bond in self.constraints['bonds']:
                         atom1, atom2 = bond
-                        s += "        %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                    self.structure.atoms.index(atom2) + 1)
+                        s += "        %2i %2i\n" % (self.geometry.atoms.index(atom1) + 1, \
+                                                    self.geometry.atoms.index(atom2) + 1)
 
                     s += "    \")\n"
 
                     out[PSI4_OPTKING]['frozen_distance'] = [s]
 
             if 'angles' in self.constraints:
-                if len(self.constraints['angles']) > 0 and self.structure is not None:
+                if len(self.constraints['angles']) > 0 and self.geometry is not None:
                     s = "(\"\n"
                     for angle in self.constraints['angles']:
                         atom1, atom2, atom3 = angle
-                        s += "        %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                        self.structure.atoms.index(atom2) + 1, \
-                                                        self.structure.atoms.index(atom3) + 1)
+                        s += "        %2i %2i %2i\n" % (self.geometry.atoms.index(atom1) + 1, \
+                                                        self.geometry.atoms.index(atom2) + 1, \
+                                                        self.geometry.atoms.index(atom3) + 1)
 
                     s += "    \")\n"
                     
                     out[PSI4_OPTKING]['frozen_bend'] = [s]
 
             if 'torsions' in self.constraints:
-                if len(self.constraints['torsions']) > 0 and self.structure is not None:
+                if len(self.constraints['torsions']) > 0 and self.geometry is not None:
                     s += '(\"\n'
                     for torsion in self.constraints['torsions']:
                         atom1, atom2, atom3, atom4 = torsion
-                        s += "        %2i %2i %2i %2i\n" % (self.structure.atoms.index(atom1) + 1, \
-                                                            self.structure.atoms.index(atom2) + 1, \
-                                                            self.structure.atoms.index(atom3) + 1, \
-                                                            self.structure.atoms.index(atom4) + 1)
+                        s += "        %2i %2i %2i %2i\n" % (self.geometry.atoms.index(atom1) + 1, \
+                                                            self.geometry.atoms.index(atom2) + 1, \
+                                                            self.geometry.atoms.index(atom3) + 1, \
+                                                            self.geometry.atoms.index(atom4) + 1)
 
                     s += "    \")\n"
                     

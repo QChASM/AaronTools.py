@@ -87,7 +87,7 @@ class IntegrationGrid:
             if match:
                 r = int(match.group(1))
                 a = int(match.group(2))
-                int_acc = -((r / -5) + 6 - 8) / 3
+                int_acc = -((r / -5) + 2 - 8) / 3
                 return ({ORCA_BLOCKS:{'method':['AngularGrid     Lebedev%i' % a, \
                                                 'IntAcc          %.1f' % int_acc, \
                                                ]}},\

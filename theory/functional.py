@@ -13,7 +13,7 @@ class Functional:
 
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""
-        if self.name.lower() == "ωb97x-d":
+        if self.name.lower() == "ωb97x-d" or self.name.lower() == "wb97x-d":
             return ("wB97XD", None)
         elif self.name == "Gaussian's B3LYP":
             return ("B3LYP", None)

@@ -168,7 +168,7 @@ def2TZVP
                    GAUSSIAN_COMMENT: ['comment line 1', 'comment line 2'], \
                   }
 
-        test = FileWriter.write_com(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
+        test = FileWriter.write_com(geom, theory=theory, outfile=False, **kw_dict)
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
@@ -216,7 +216,7 @@ O    -3.965790  -3.592630   0.001340
 
         kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
 
-        test = FileWriter.write_inp(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
+        test = FileWriter.write_inp(geom, theory=theory, outfile=False, **kw_dict)
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
@@ -231,7 +231,7 @@ O    -3.965790  -3.592630   0.001340
 #comment line 2
 basis {
     assign    def2-SVP
-    assign  C def2-TZVP
+    assign C  def2-TZVP
 }
 
 molecule {
@@ -262,7 +262,7 @@ O    -3.965790  -3.592630   0.001340
 
         kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
 
-        test = FileWriter.write_in(geom, theory=theory, other_kw_dict=kw_dict, outfile=False)
+        test = FileWriter.write_in(geom, theory=theory, outfile=False, **kw_dict)
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())

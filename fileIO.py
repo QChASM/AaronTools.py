@@ -389,6 +389,9 @@ class FileReader:
                 line = line.strip()
                 atom_info = line.split()
                 element = atom_info[0]
+                #might be a ghost atom - like for sapt
+                if 'Gh' in element:
+                    element = element.strip('Gh(').strip(')')
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 rv += [Atom(element=element, coords=coords, name=str(i))]
                 mass += float(atom_info[-1])
