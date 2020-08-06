@@ -173,7 +173,7 @@ class Geometry:
         for atom in targets:
             atom.tags.add(tag)
 
-    def write(self, name=None, style="xyz", *args, **kwargs):
+    def write(self, name=None, *args, **kwargs):
         """
         Write geometry to a file
 
@@ -191,7 +191,7 @@ class Geometry:
         tmp = self.name
         if name is not None:
             self.name = name
-        out = FileWriter.write_file(self, style, *args, **kwargs)
+        out = FileWriter.write_file(self, *args, **kwargs)
         self.name = tmp
         if out is not None:
             return out

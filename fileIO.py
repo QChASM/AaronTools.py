@@ -69,20 +69,32 @@ def str2step(step_str):
 class FileWriter:
     @classmethod
     def write_file(
-        cls, geom, style="xyz", append=False, outfile=None, *args, **kwargs
+        cls, geom, style=None, append=False, outfile=None, *args, **kwargs
     ):
         """
         Writes file from geometry in the specified style
 
         :geom: the Geometry to use
         :style: the file type style to generate
-            Currently supported options: xyz, com, inp, in
+            Currently supported options: xyz (default), com, inp, in
+            if outfile has one of these extensions, default is that style
         :append: for *.xyz, append geometry to the same file
         :outfile: output destination - default is 
                   [geometry name] + [extension] or [geometry name] + [step] + [extension]
                   if outfile is False, no output file will be written, but the contents will be returned
         :theory: for com, inp, and in files, an object with a get_header and get_footer method
         """
+        if isinstance(outfile, str) and style is None:
+            print('2')
+            name, ext = os.path.splitext(outfile)
+            style = ext[1:]
+
+        elif style is None:
+            print('1')
+            style = "xyz"
+
+        print(style, outfile)
+
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))
 
