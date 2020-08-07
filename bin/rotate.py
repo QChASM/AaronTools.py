@@ -204,7 +204,6 @@ for f in args.infile:
         R = np.dot(xyz.T, xyz)
         u, s, vh = np.linalg.svd(R, compute_uv=True)
         vector = u[:,-1]
-        print(vector)
         if center is None:
             warn("center set to the centroid of atoms %s; using --center/-c none will override this" % args.perp)
             center = geom.COM(args.perp)

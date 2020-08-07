@@ -123,7 +123,7 @@ class TestFileReader(TestWithTimer):
         #if it fails, someone may have added a column of whitespace or something
         geom = Geometry(self.small_mol)
        
-        ref = """#n PBE1PBE/gen EmpiricalDispersion=GD3BJ opt=VeryTight freq=(hpmodes,noraman)
+        ref = """#n PBE1PBE/gen freq=(temperature=298.15,HPModes,NoRaman) opt=VeryTight EmpiricalDispersion=GD3BJ scrf=(SMD,solvent=dichloromethane)
 
 comment line 1
 comment line 2
@@ -157,13 +157,15 @@ def2TZVP
 
         theory = Theory(charge=0, \
                         multiplicity=1, \
-                        functional=Functional("PBE0", False), \
+                        method="PBE0", \
                         basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
+                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
+                        solvent=ImplicitSolvent("SMD", "dichloromethane"), \
+                        job_type=[FrequencyJob(), OptimizationJob()], \
                  )
 
         kw_dict = {GAUSSIAN_ROUTE: {"opt": ['VeryTight'], \
-                                    "freq": ['hpmodes', 'noraman'], \
+                                    "freq": ['HPModes', 'NoRaman'], \
                                    }, \
                    GAUSSIAN_COMMENT: ['comment line 1', 'comment line 2'], \
                   }
@@ -183,9 +185,15 @@ def2TZVP
 
         ref = """#comment line 1
 #comment line 2
-! PBE0 D3BJ def2-SVP
+! PBE0 D3BJ CPCM(dichloromethane) def2-SVP Freq Opt
+%cpcm
+    smd    true
+end
 %basis
     newGTO            C  "def2-TZVP" end
+end
+%freq
+    Temp    298.15
 end
 
 *xyz 0 1
@@ -209,9 +217,11 @@ O    -3.965790  -3.592630   0.001340
 
         theory = Theory(charge=0, \
                         multiplicity=1, \
-                        functional=Functional("PBE0", False), \
+                        method="PBE0", \
                         basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
+                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
+                        solvent=ImplicitSolvent("SMD", "dichloromethane"), \
+                        job_type=[FrequencyJob(), OptimizationJob()], \
                  )
 
         kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
@@ -251,18 +261,28 @@ N    -2.736890  -3.643570   0.001880
 O    -2.078230  -4.682300   0.002890
 O    -3.965790  -3.592630   0.001340
 }
+
+set {
+    T                       298.15
+}
+
+nrg = frequencies('PBE0-d3bj')
+nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
 """
 
         theory = Theory(charge=0, \
                         multiplicity=1, \
-                        functional=Functional("PBE0", False), \
+                        method="PBE0", \
                         basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("Becke-Johnson damped Grimme D3"), \
+                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
+                        job_type=[FrequencyJob(), OptimizationJob()], \
                  )
 
-        kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
+        kw_dict = {PSI4_COMMENT: ['comment line 1', 'comment line 2'], PSI4_JOB:{'optimize':['return_wfn=True']}}
 
         test = FileWriter.write_in(geom, theory=theory, outfile=False, **kw_dict)
+
+        self.assertEqual(test.splitlines(), ref.splitlines())
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())

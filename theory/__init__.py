@@ -27,5 +27,5 @@ from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.grid import IntegrationGrid
-from AaronTools.theory.functional import Functional
+from AaronTools.theory.method import Method
 from AaronTools.theory.job_types import *

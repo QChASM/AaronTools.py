@@ -1,20 +1,20 @@
-from AaronTools.theory import GAUSSIAN_ROUTE
+from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE
 
 class EmpiricalDispersion:
     """try to keep emerpical dispersion keywords and settings consistent across file types"""
     def __init__(self, name):
         """name can be (availability may vary):
-            Grimme D2
-            Zero-damped Grimme D3
-            Becke-Johnson damped Grimme D3
-            Becke-Johnson damped modified Grimme D3
-            Petersson-Frisch
-            Grimme D4
-            Chai & Head-Gordon
-            Nonlocal Approximation
-            Pernal, Podeszwa, Patkowski, & Szalewicz
-            Podeszwa, Katarzyna, Patkowski, & Szalewicz
-            Řezác, Greenwell, & Beran
+            Grimme D2 (or D2, -D2, GD2)
+            Zero-damped Grimme D3 (or D3, -D3, GD3)
+            Becke-Johnson damped Grimme D3 (or D3BJ, -D3BJ, GD3BJ)
+            Becke-Johnson damped modified Grimme D3 (or B3MBJ, -D3MBJ)
+            Petersson-Frisch (or PFD)
+            Grimme D4 (or D4, -D4, GD4)
+            Chai & Head-Gordon (or CHG, -CHG)
+            Nonlocal Approximation (or NL, NLA, -NL)
+            Pernal, Podeszwa, Patkowski, & Szalewicz (or DAS2009, -DAS2009)
+            Podeszwa, Katarzyna, Patkowski, & Szalewicz (or DAS2010, -DAS2010)
+            Řezác, Greenwell, & Beran (or DMP2)
         
         or simply the keyword for the input file type you are using"""
         
@@ -31,13 +31,13 @@ class EmpiricalDispersion:
         Grimme D4
         undampened Grimme D3"""
         
-        if self.name == "Grimme D2":
+        if any(self.name.upper() == name for name in ["GRIMME D2", "GD2", "D2", "-D2"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD2"]}}, None)
-        elif self.name == "Zero-damped Grimme D3":
+        elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3"]}}, None)
-        elif self.name == "Becke-Johnson damped Grimme D3":
+        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3BJ"]}}, None)
-        elif self.name == "Petersson-Frisch":
+        elif any(self.name.upper() == name for name in ["PETERSSON-FRISCH", "PFD"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["PFD"]}}, None)
             
         #dispersions in ORCA but not Gaussian
@@ -54,16 +54,16 @@ class EmpiricalDispersion:
         Zero-damped Grimme D3
         Becke-Johnson damped Grimme D3
         Grimme D4"""
-        if self.name == "Grimme D2":
-            return ("D2", None)
-        elif self.name == "Zero-damped Grimme D3":
-            return ("D3", None)
-        elif self.name == "Becke-Johnson damped Grimme D3":
-            return ("D3BJ", None)
-        elif self.name == "Grimme D4":
-            return ("D4", None)
+        if any(self.name.upper() == name for name in ["GRIMME D2", "GD2", "D2", "-D2"]):
+            return ({ORCA_ROUTE:["D2"]}, None)
+        elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
+            return ({ORCA_ROUTE:["D3"]}, None)
+        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
+            return ({ORCA_ROUTE:["D3BJ"]}, None)
+        elif any(self.name.upper() == name for name in ["GRIMME D4", "GD4", "D4", "-D4"]):
+            return ({ORCA_ROUTE:["D4"]}, None)
         else:
-            return (self.name, "unrecognized emperical dispersion: %s" % self.name)
+            return ({ORCA_ROUTE:[self.name]}, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_psi4(self):
         """Acceptable keywords for Psi4 are:
@@ -76,25 +76,25 @@ class EmpiricalDispersion:
         Pernal, Podeszwa, Patkowski, & Szalewicz
         Podeszwa, Katarzyna, Patkowski, & Szalewicz
         Řezác, Greenwell, & Beran"""
-        if self.name == "Grimme D1":
+        if any(self.name.upper() == name for name in ["GRIMME D1", "GD1", "D1", "-D1"]):
             return ("-d1", None)        
-        if self.name == "Grimme D2":
+        elif any(self.name.upper() == name for name in ["GRIMME D2", "GD2", "D2", "-D2"]):
             return ("-d2", None)
-        elif self.name == "Zero-damped Grimme D3":
+        elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
             return ("-d3", None)
-        elif self.name == "Becke-Johnson damped Grimme D3":
+        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ("-d3bj", None)
-        elif self.name == "Becke-Johnson damped modified Grimme D3":
+        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED MODIFEID GRIMME D3", "GD3MBJ", "D3MBJ", "-D3MBJ"]):
             return ("-d3mbj", None)
-        elif self.name == "Chai & Head-Gordon":
+        elif any(self.name.upper() == name for name in ["Chai & Head-Gordon", "CHG", "-CHG"]):
             return ("-chg", None)
-        elif self.name == "Nonlocal Approximation":
+        elif any(self.name.upper() == name for name in ["NONLOCAL APPROXIMATION", "NL", "NLA", "-NL"]):
             return ("-nl", None)
-        elif self.name == "Pernal, Podeszwa, Patkowski, & Szalewicz":
+        elif any(self.name.upper() == name for name in ["Pernal, Podeszwa, Patkowski, & Szalewicz", "DAS2009", "-DAS2009"]):
             return ("-das2009", None)        
-        elif self.name == "Podeszwa, Katarzyna, Patkowski, & Szalewicz":
+        elif any(self.name.upper() == name for name in ["Podeszwa, Katarzyna, Patkowski, & Szalewicz", "DAS2010", "-DAS2010"]):
             return ("-das2010", None)        
-        elif self.name == "Řezác, Greenwell, & Beran":
+        elif any(self.name.upper() == name for name in ["Řezác, Greenwell, & Beran", "DMP2"]):
             return ("dmp2", None)
         else:
             return (self.name, "unrecognized emperical dispersion: %s" % self.name)

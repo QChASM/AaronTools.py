@@ -1,3 +1,5 @@
+from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE, ORCA_BLOCKS
+
 class ImplicitSolvent:
     """this isn't really used
     solvents should be added by directly using other_kw_dict"""
@@ -186,25 +188,271 @@ class ImplicitSolvent:
                                "Xylene-mixture", 
                                "Z-1,2-DiChloroEthene"]
 
-    KNOWN_ORCA_SOLVENTS = ["Water",
-                           "Acetonitrile", 
-                           "Acetone", 
-                           "Ammonia", 
-                           "Ethanol", 
-                           "Methanol", 
-                           "CH2Cl2", 
-                           "CCl4", 
-                           "DMF", 
-                           "DMSO", 
-                           "Pyridine", 
-                           "THF", 
-                           "Chloroform", 
-                           "Hexane", 
-                           "Benzene", 
-                           "CycloHexane",
-                           "Octanol", 
-                           "Toluene"]
+    KNOWN_ORCA_CPCM_SOLVENTS = ["Water",
+                                "Acetonitrile", 
+                                "Acetone", 
+                                "Ammonia", 
+                                "Ethanol", 
+                                "Methanol", 
+                                "CH2Cl2", 
+                                "CCl4", 
+                                "DMF", 
+                                "DMSO", 
+                                "Pyridine", 
+                                "THF", 
+                                "Chloroform", 
+                                "Hexane", 
+                                "Benzene", 
+                                "CycloHexane",
+                                "Octanol", 
+                                "Toluene"]
+
+    KNOWN_ORCA_SMD_SOLVENTS = ["1,1,1-TRICHLOROETHANE",
+                               "CYCLOPENTANE",
+                               "1,1,2-TRICHLOROETHANE",
+                               "CYCLOPENTANOL",
+                               "1,2,4-TRIMETHYLBENZENE",
+                               "CYCLOPENTANONE",
+                               "1,2-DIBROMOETHANE",
+                               "DECALIN (CIS/TRANS MIXTURE)",
+                               "1,2-DICHLOROETHANE",
+                               "CIS-DECALIN",
+                               "1,2-ETHANEDIOL",
+                               "N-DECANE",
+                               "1,4-DIOXANE",
+                               "DIBROMOMETHANE",
+                               "1-BROMO-2-METHYLPROPANE",
+                               "DIBUTYLETHER",
+                               "1-BROMOOCTANE",
+                               "O-DICHLOROBENZENE",
+                               "1-BROMOPENTANE",
+                               "E-1,2-DICHLOROETHENE",
+                               "1-BROMOPROPANE",
+                               "Z-1,2-DICHLOROETHENE",
+                               "1-BUTANOL",
+                               "DICHLOROMETHANE",
+                               "1-CHLOROHEXANE",
+                               "DIETHYL ETHER",
+                               "1-CHLOROPENTANE",
+                               "DIETHYL SULFIDE",
+                               "1-CHLOROPROPANE",
+                               "DIETHYLAMINE",
+                               "1-DECANOL",
+                               "DIIODOMETHANE",
+                               "1-FLUOROOCTANE",
+                               "DIISOPROPYL ETHER",
+                               "1-HEPTANOL",
+                               "CIS-1,2-DIMETHYLCYCLOHEXANE",
+                               "1-HEXANOL",
+                               "DIMETHYL DISULFIDE",
+                               "1-HEXENE",
+                               "N,N-DIMETHYLACETAMIDE",
+                               "1-HEXYNE",
+                               "N,N-DIMETHYLFORMAMIDE",
+                               "DMF",
+                               "1-IODOBUTANE",
+                               "DIMETHYLSULFOXIDE",
+                               "DMSO",
+                               "1-IODOHEXADECANE",
+                               "DIPHENYLETHER",
+                               "1-IODOPENTANE",
+                               "DIPROPYLAMINE",
+                               "1-IODOPROPANE",
+                               "N-DODECANE",
+                               "1-NITROPROPANE",
+                               "ETHANETHIOL",
+                               "1-NONANOL",
+                               "ETHANOL",
+                               "1-OCTANOL",
+                               "ETHYL ETHANOATE",
+                               "1-PENTANOL",
+                               "ETHYL METHANOATE",
+                               "1-PENTENE",
+                               "ETHYL PHENYL ETHER",
+                               "1-PROPANOL",
+                               "ETHYLBENZENE",
+                               "2,2,2-TRIFLUOROETHANOL",
+                               "FLUOROBENZENE",
+                               "2,2,4-TRIMETHYLPENTANE",
+                               "FORMAMIDE",
+                               "2,4-DIMETHYLPENTANE",
+                               "FORMIC ACID",
+                               "2,4-DIMETHYLPYRIDINE",
+                               "N-HEPTANE",
+                               "2,6-DIMETHYLPYRIDINE",
+                               "N-HEXADECANE",
+                               "2-BROMOPROPANE",
+                               "N-HEXANE",
+                               "2-BUTANOL",
+                               "HEXANOIC ACID",
+                               "2-CHLOROBUTANE",
+                               "IODOBENZENE",
+                               "2-HEPTANONE",
+                               "IODOETHANE",
+                               "2-HEXANONE",
+                               "IODOMETHANE",
+                               "2-METHOXYETHANOL",
+                               "ISOPROPYLBENZENE",
+                               "2-METHYL-1-PROPANOL",
+                               "P-ISOPROPYLTOLUENE",
+                               "2-METHYL-2-PROPANOL",
+                               "MESITYLENE",
+                               "2-METHYLPENTANE",
+                               "METHANOL",
+                               "2-METHYLPYRIDINE",
+                               "METHYL BENZOATE",
+                               "2-NITROPROPANE",
+                               "METHYL BUTANOATE",
+                               "2-OCTANONE",
+                               "METHYL ETHANOATE",
+                               "2-PENTANONE",
+                               "METHYL METHANOATE",
+                               "2-PROPANOL",
+                               "METHYL PROPANOATE",
+                               "2-PROPEN-1-OL",
+                               "N-METHYLANILINE",
+                               "E-2-PENTENE",
+                               "METHYLCYCLOHEXANE",
+                               "3-METHYLPYRIDINE",
+                               "N-METHYLFORMAMIDE (E/Z MIXTURE)",
+                               "3-PENTANONE",
+                               "NITROBENZENE",
+                               "PhNO2",
+                               "4-HEPTANONE",
+                               "NITROETHANE",
+                               "4-METHYL-2-PENTANONE",
+                               "NITROMETHANE",
+                               "MeNO2",
+                               "4-METHYLPYRIDINE",
+                               "O-NITROTOLUENE",
+                               "5-NONANONE",
+                               "N-NONANE",
+                               "ACETIC ACID",
+                               "N-OCTANE",
+                               "ACETONE",
+                               "N-PENTADECANE",
+                               "ACETONITRILE",
+                               "MeCN",
+                               "PENTANAL",
+                               "ACETOPHENONE",
+                               "N-PENTANE",
+                               "ANILINE",
+                               "PENTANOIC ACID",
+                               "ANISOLE",
+                               "PENTYL ETHANOATE",
+                               "BENZALDEHYDE",
+                               "PENTYLAMINE",
+                               "BENZENE",
+                               "PERFLUOROBENZENE",
+                               "BENZONITRILE",
+                               "PROPANAL",
+                               "BENZYL ALCOHOL",
+                               "PROPANOIC ACID",
+                               "BROMOBENZENE",
+                               "PROPANONITRILE",
+                               "BROMOETHANE",
+                               "PROPYL ETHANOATE",
+                               "BROMOFORM",
+                               "PROPYLAMINE",
+                               "BUTANAL",
+                               "PYRIDINE",
+                               "BUTANOIC ACID",
+                               "TETRACHLOROETHENE",
+                               "BUTANONE",
+                               "TETRAHYDROFURAN",
+                               "THF",
+                               "BUTANONITRILE",
+                               "TETRAHYDROTHIOPHENE-S,S-DIOXIDE",
+                               "BUTYL ETHANOATE",
+                               "TETRALIN",
+                               "BUTYLAMINE",
+                               "THIOPHENE",
+                               "N-BUTYLBENZENE",
+                               "THIOPHENOL",
+                               "SEC-BUTYLBENZENE",
+                               "TOLUENE",
+                               "TERT-BUTYLBENZENE",
+                               "TRANS-DECALIN",
+                               "CARBON DISULFIDE",
+                               "TRIBUTYLPHOSPHATE",
+                               "CARBON TETRACHLORIDE",
+                               "CCl4",
+                               "TRICHLOROETHENE",
+                               "CHLOROBENZENE",
+                               "TRIETHYLAMINE",
+                               "CHLOROFORM",
+                               "N-UNDECANE",
+                               "A-CHLOROTOLUENE",
+                               "WATER",
+                               "O-CHLOROTOLUENE",
+                               "XYLENE (MIXTURE)",
+                               "M-CRESOL",
+                               "M-XYLENE",
+                               "O-CRESOL",
+                               "O-XYLENE",
+                               "CYCLOHEXANE",
+                               "P-XYLENE",
+                               "CYCLOHEXANONE"]
 
     def __init__(self, name, solvent):
         self.name = name
         self.solvent = solvent
+
+    def get_gaussian(self):
+        #need to check if solvent model is available
+        if not any(self.name.upper() == model for model in ["SMD", "CPCM", "PCM", "DIPOLE", "IPCM", "ISODENSITY", "IEFPCM", "SCIPCM"]):
+            raise RuntimeError("solvent model is not available in ORCA: %s\nuse one of: %s" \
+                               % (self.name, " ".join(["SMD", "CPCM", "PCM", "DIPOLE", "IPCM", "ISODENSITY", "IEFPCM", "SCIPCM"])))
+
+        #check some orca solvent keywords and switch to gaussian ones
+        solvent = self.solvent
+        if solvent.lower() == "chcl2":
+            solvent = "DiChloroMethane"
+        elif solvent.lower() == "ccl4":
+            solvent = "CarbonTetraChloride"
+        elif solvent.lower() == "THF":
+            solvent = "TetraHydroFuran"
+        else:
+            if not any(solvent.lower() == gaussian_sol.lower() for gaussian_sol in self.KNOWN_GAUSSIAN_SOLVENTS):
+                raise RuntimeError("solvent is unknown to Gaussian: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS" % solvent)
+        
+        #route option: scrf(model,solvent=solvent name)
+        return {GAUSSIAN_ROUTE:{'scrf':[self.name, "solvent=%s" % solvent]}}
+
+    def get_orca(self):
+        if not any(self.name.upper() == model for model in ["SMD", "CPCM", "C-PCM", "PCM"]):
+            raise RuntimeError("solvent model is not available in ORCA: %s\nuse CPCM or SMD" % self.name)
+
+        out = {}
+        cpcm = True
+        #route option: CPCM(solvent name)
+        #if using smd, add block %cpcm smd true end
+        if self.name.upper() == "SMD":
+            cpcm = False
+            out[ORCA_BLOCKS] = {'cpcm':['smd    true']}
+
+        solvent = self.solvent
+        #orca has different solvents for cpcm and smd...
+        #check both lists, might be able to switch a gaussian keyword to the correct orca one
+        if cpcm:
+            if solvent.lower() == "dichloromethane":
+                solvent = "CH2Cl2"
+            elif solvent.lower() == "carbontetrachloride":
+                solvent = "CCl4"
+            elif solvent.lower() == "tetrahydrofuran":
+                solvent = "THF"
+            else:
+                if not any(solvent.lower() == orca_sol.lower() for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS):
+                    raise RuntimeError("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS" % solvent)
+        
+        else:
+            #TODO: look for gaussian/orca pcm solvent names that need to change
+            if not any(solvent.lower() == orca_sol.lower() for orca_sol in self.KNOWN_ORCA_SMD_SOLVENTS):
+                raise RuntimeError("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS" % solvent)
+
+        out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
+
+        return out
+
+    def get_psi4(self):
+        raise NotImplementedError("ImplicitSolvent cannot generate Psi4 solvent settings yet")

@@ -13,18 +13,9 @@ from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, ORCA_COORDINATES, ORCA_CO
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
 from .basis import BasisSet
-from .functional import Functional, KNOWN_SEMI_EMPIRICAL
+from .method import Method, KNOWN_SEMI_EMPIRICAL
+from .job_types import JobType
 
-def probable_job_order(word):
-    """sorts job keywords so that the job is other settings -> opt -> freq -> sp"""
-    if word.lower() in ['energy', 'sp']:
-        return 9003
-    elif word.lower().startswith('opt'):
-        return 9001
-    elif word.lower().startswith('freq') or word.lower().startswith('numfreq'):
-        return 9002
-    else:
-        return 0
 
 class Theory:
     """a Theory object can be used to create an input file for different QM software
@@ -34,9 +25,9 @@ class Theory:
     geometry                -   AaronTools Geometry 
     charge                  -   total charge
     multiplicity            -   electronic multiplicity
-    job_types               -   list(JobType)
+    job_type                -   JobType or list(JobType) (must all be unique types)
 
-    functional              -   Functional object (or str - Functional instance will be created)
+    method                  -   Method object (or str - Method instance will be created)
     basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(kw)))
     empirical_dispersion    -   EmpiricalDispersion object (or str)
     grid                    -   IntegrationGrid object (or str)
@@ -53,10 +44,10 @@ class Theory:
 
     PSI4_SETTINGS: dict(setting_name: [value])
     PSI4_BEFORE_GEOM: list(str)
-    PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with functional name
+    PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with method name
     PSI4_COMMENT: list(str)
     PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
-    PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ functional))
+    PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ method))
     PSI4_OPTKING: dict(setting_name: [value])
 
     GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
@@ -72,9 +63,10 @@ class Theory:
     ACCEPTED_INIT_KW = ['geometry', \
                         'memory', \
                         'processors', \
-                        'job_types']
+                        'job_type', \
+                        'solvent']
 
-    def __init__(self, charge=0, multiplicity=1, functional=None, basis=None, empirical_dispersion=None, grid=None, **kw):
+    def __init__(self, charge=0, multiplicity=1, method=None, basis=None, empirical_dispersion=None, grid=None, **kw):
         self.charge = charge
         self.multiplicity = multiplicity
 
@@ -84,30 +76,39 @@ class Theory:
             else:
                 self.__setattr__(key, None)
 
-            #if functional, basis, etc aren't the expected classes, make them so
-            if functional is not None:
-                if not isinstance(functional, Functional):
-                    functional = Functional(functional, functional.upper() in KNOWN_SEMI_EMPIRICAL)
+        #if method, basis, etc aren't the expected classes, make them so
+        if method is not None:
+            if not isinstance(method, Method):
+                method = Method(method, method.upper() in KNOWN_SEMI_EMPIRICAL)
             
-            self.functional = functional
+        self.method = method
 
-            if grid is not None:
-                if not isinstance(grid, IntegrationGrid):
-                    grid = IntegrationGrid(grid)
+        if grid is not None:
+            if not isinstance(grid, IntegrationGrid):
+                grid = IntegrationGrid(grid)
             
-            self.grid = grid
+        self.grid = grid
 
-            if basis is not None:
-                if not isinstance(basis, BasisSet):
-                    basis = BasisSet(basis)
+        if basis is not None:
+            if not isinstance(basis, BasisSet):
+                basis = BasisSet(basis)
             
-            self.basis = basis
+        self.basis = basis
 
-            if empirical_dispersion is not None:
-                if not isinstance(empirical_dispersion, EmpiricalDispersion):
-                    empirical_dispersion = EmpiricalDispersion(empirical_dispersion)
+        if empirical_dispersion is not None:
+            if not isinstance(empirical_dispersion, EmpiricalDispersion):
+                empirical_dispersion = EmpiricalDispersion(empirical_dispersion)
             
-            self.empirical_dispersion = empirical_dispersion
+        self.empirical_dispersion = empirical_dispersion
+
+        if self.job_type is not None:
+            if isinstance(self.job_type, JobType):
+                self.job_type = [self.job_type]
+
+            for i, job1 in enumerate(self.job_type):
+                for job2 in self.job_type[i+1:]:
+                    if type(job1) is type(job2):
+                        raise TypeError("cannot run multiple jobs of the same type: %s, %s" % (str(job1), str(job2)))
 
     def make_header(self, geom, style='gaussian', **kwargs):
         """geom: Geometry
@@ -124,6 +125,29 @@ class Theory:
             if kw.startswith('PSI4_') or kw.startswith('ORCA_') or kw.startswith('GAUSSIAN_'):
                 new_kw = eval(kw)
                 other_kw_dict[new_kw] = kwargs[kw]
+            
+            elif hasattr(self, kw):
+                if kw == "method":
+                    self.method = Method(kwargs[kw])
+                
+                elif kw == "basis":
+                    self.basis = BasisSet(kwargs[kw])
+                
+                elif kw == "grid":
+                    self.grid = IntegrationGrid(kwargs[kw])
+                
+                elif kw == "empirical_dispersion":
+                    self.grid = EmpiricalDispersion(kwargs[kw])
+                
+                elif kw == "job_type":
+                    if isinstance(kwargs[kw], JobType):
+                        self.job_type = [kwargs[kw]]
+                    else:
+                        self.job_type = kwargs[kw]
+                
+                elif kw in self.ACCEPTED_INIT_KW:
+                    self.setattr(kw, kwargs[kw])
+
             else:
                 other_kw_dict[kw] = kwargs[kw]
 
@@ -150,6 +174,29 @@ class Theory:
             if kw.startswith('PSI4_') or kw.startswith('ORCA_') or kw.startswith('GAUSSIAN_'):
                 new_kw = eval(kw)
                 other_kw_dict[new_kw] = kwargs[kw]
+            
+            elif hasattr(self, kw):
+                if kw == "method":
+                    self.method = Method(kwargs[kw])
+                
+                elif kw == "basis":
+                    self.basis = BasisSet(kwargs[kw])
+                
+                elif kw == "grid":
+                    self.grid = IntegrationGrid(kwargs[kw])
+                
+                elif kw == "empirical_dispersion":
+                    self.grid = EmpiricalDispersion(kwargs[kw])
+                
+                elif kw == "job_type":
+                    if isinstance(kwargs[kw], JobType):
+                        self.job_type = [kwargs[kw]]
+                    else:
+                        self.job_type = kwargs[kw]
+                
+                elif kw in self.ACCEPTED_INIT_KW:
+                    self.setattr(kw, kwargs[kw])
+
             else:
                 other_kw_dict[kw] = kwargs[kw]
 
@@ -165,10 +212,10 @@ class Theory:
         corresponding to options/keywords
         returns warnings if a certain feature is not available in Gaussian"""
 
-        if self.job_types is not None:
-            for job in self.job_types:
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
                 job_dict = job.get_gaussian()
-                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         warnings = []
         s = ""
@@ -189,14 +236,14 @@ class Theory:
                 if not s.endswith('\n'):
                     s += '\n'
 
-        #start route line with functional
+        #start route line with method
         s += "#n "
-        if self.functional is not None:
-            func, warning = self.functional.get_gaussian()
+        if self.method is not None:
+            func, warning = self.method.get_gaussian()
             if warning is not None:
                 warnings.append(warning)
             s += "%s" % func
-            if not self.functional.is_semiempirical and self.basis is not None:
+            if not self.method.is_semiempirical and self.basis is not None:
                 basis_info = self.basis.get_gaussian_basis_info()
                 if self.geometry is not None:
                     #check basis elements to make sure no element is in two basis sets or left out of any
@@ -223,12 +270,18 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
+        #add implicit solvent
+        if self.solvent is not None:
+            solvent_info = self.solvent.get_gaussian()
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
         #add other route options
         #only one option can be specfied
         #e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
         if GAUSSIAN_ROUTE in other_kw_dict.keys():
             #reverse order b/c then freq comes after opt
-            for option in sorted(other_kw_dict[GAUSSIAN_ROUTE].keys(), key=probable_job_order):
+            #for option in sorted(other_kw_dict[GAUSSIAN_ROUTE].keys(), key=probable_job_order):
+            for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
                 known_opts = []
                 s += option
                 if len(other_kw_dict[GAUSSIAN_ROUTE][option]) > 1 or \
@@ -278,17 +331,22 @@ class Theory:
     def get_gaussian_footer(self, return_warnings=False, **other_kw_dict):
         """write footer of gaussian input file"""
         
-        if self.job_types is not None:
-            for job in self.job_types:
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
                 job_dict = job.get_gaussian()
-                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        #add implicit solvent
+        if self.solvent is not None:
+            solvent_info = self.solvent.get_gaussian()
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         s = ""
         warnings = []
 
-        #if functional is not semi emperical, basis set might be gen or genecp
+        #if method is not semi emperical, basis set might be gen or genecp
         #get basis info (will be written after constraints)
-        if self.functional is not None and not self.functional.is_semiempirical and self.basis is not None:
+        if self.method is not None and not self.method.is_semiempirical and self.basis is not None:
             basis_info = self.basis.get_gaussian_basis_info()
             basis_elements = self.basis.elements_in_basis
             #check if any element is in multiple basis sets
@@ -309,7 +367,7 @@ class Theory:
             s += '\n'
 
         #write gen info
-        if self.functional is not None and not self.functional.is_semiempirical:
+        if self.method is not None and not self.method.is_semiempirical:
             if GAUSSIAN_GEN_BASIS in basis_info:
                 s += basis_info[GAUSSIAN_GEN_BASIS]
             
@@ -342,15 +400,15 @@ class Theory:
         returns str of header content
         if return_warnings, returns str, list(warning)"""
         
-        if self.job_types is not None:
-            for job in self.job_types:
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
                 job_dict = job.get_orca()
-                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         warnings = []
 
-        #if functional isn't semi-empirical, get basis info to write later
-        if not self.functional.is_semiempirical:
+        #if method isn't semi-empirical, get basis info to write later
+        if not self.method.is_semiempirical:
             basis_info = self.basis.get_orca_basis_info()
             if self.geometry is not None:
                 struc_elements = set([atom.element for atom in self.geometry.atoms])
@@ -362,7 +420,7 @@ class Theory:
         else:
             basis_info = {}
 
-        combined_dict = combine_dicts(other_kw_dict, basis_info)
+        other_kw_dict = combine_dicts(basis_info, other_kw_dict)
 
         #get grid info
         if self.grid is not None:
@@ -370,24 +428,29 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
-            if any('finalgrid' in x.lower() for x in combined_dict[ORCA_ROUTE]):
+            if any('finalgrid' in x.lower() for x in other_kw_dict[ORCA_ROUTE]):
                 grid_info[ORCA_ROUTE].pop(1)
 
-            combined_dict = combine_dicts(combined_dict, grid_info)
+            other_kw_dict = combine_dicts(grid_info, other_kw_dict)
+
+        #add implicit solvent
+        if self.solvent is not None:
+            solvent_info = self.solvent.get_orca()
+            other_kw_dict = combine_dicts(solvent_info, other_kw_dict)
 
         #start building input file header
         s = ""
 
         #comment
-        if ORCA_COMMENT in combined_dict:
-            for comment in combined_dict[ORCA_COMMENT]:
+        if ORCA_COMMENT in other_kw_dict:
+            for comment in other_kw_dict[ORCA_COMMENT]:
                 for line in comment.split('\n'):
                     s += "#%s\n" % line
 
         s += "!"
-        #functional
-        if self.functional is not None:
-            func, warning = self.functional.get_orca()
+        #method
+        if self.method is not None:
+            func, warning = self.method.get_orca()
             if warning is not None:
                 warnings.append(warning)
             s += " %s" % func
@@ -402,14 +465,14 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
-            s += "%s" % dispersion
+            other_kw_dict = combine_dicts(dispersion, other_kw_dict)
 
         #add other route options
-        if ORCA_ROUTE in combined_dict:
+        if ORCA_ROUTE in other_kw_dict:
             if not s.endswith(' '):
                 s += " "
                 
-                s += " ".join(combined_dict[ORCA_ROUTE])
+            s += " ".join(other_kw_dict[ORCA_ROUTE])
 
         s += "\n"
 
@@ -422,11 +485,11 @@ class Theory:
                 s += "%%MaxCore %i\n" % (int(1000 * self.memory / self.processors))
 
         #add other blocks
-        if ORCA_BLOCKS in combined_dict:
-            for kw in combined_dict[ORCA_BLOCKS]:
-                if any(len(x) > 0 for x in combined_dict[ORCA_BLOCKS][kw]):
+        if ORCA_BLOCKS in other_kw_dict:
+            for kw in other_kw_dict[ORCA_BLOCKS]:
+                if any(len(x) > 0 for x in other_kw_dict[ORCA_BLOCKS][kw]):
                     s += "%%%s\n" % kw
-                    for opt in combined_dict[ORCA_BLOCKS][kw]:
+                    for opt in other_kw_dict[ORCA_BLOCKS][kw]:
                         s += "    %s\n" % opt
                     s += "end\n"
 
@@ -446,16 +509,21 @@ class Theory:
         corresponding to options/keywords
         returns file content and warnings e.g. if a certain feature is not available in Psi4"""
 
-        if self.job_types is not None:
-            for job in self.job_types:
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
                 job_dict = job.get_psi4()
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
         warnings = []
 
-        #get basis info if functional is not semi empirical
-        if not self.functional.is_semiempirical:
-            basis_info = self.basis.get_psi4_basis_info('sapt' in self.functional.get_psi4()[0].lower())
+        #add implicit solvent
+        if self.solvent is not None:
+            solvent_info = self.solvent.get_psi4()
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        #get basis info if method is not semi empirical
+        if not self.method.is_semiempirical:
+            basis_info = self.basis.get_psi4_basis_info('sapt' in self.method.get_psi4()[0].lower())
             if self.geometry is not None:
                 struc_elements = set([atom.element for atom in self.geometry.atoms])
 
@@ -464,26 +532,26 @@ class Theory:
                     warnings.append(warning)
 
             #aux basis sets might have a '%s' b/c the keyword to apply them depends on
-            #the functional - replace %s with the appropriate thing for the functional
+            #the method - replace %s with the appropriate thing for the method
             for key in basis_info:
                 for i in range(0, len(basis_info[key])):
                     if "%s" in basis_info[key][i]:
-                        if 'cc' in self.functional.name.lower():
+                        if 'cc' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "cc")
 
-                        elif 'dct' in self.functional.name.lower():
+                        elif 'dct' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "dct")
 
-                        elif 'mp2' in self.functional.name.lower():
+                        elif 'mp2' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "mp2")
 
-                        elif 'sapt' in self.functional.name.lower():
+                        elif 'sapt' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "sapt")
 
-                        elif 'scf' in self.functional.name.lower():
+                        elif 'scf' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "scf")
 
-                        elif 'ci' in self.functional.name.lower():
+                        elif 'ci' in self.method.name.lower():
                             basis_info[key][i] = basis_info[key][i].replace("%s", "mcscf")
 
         else:
@@ -508,7 +576,7 @@ class Theory:
         if self.memory is not None:
             s += "memory %i GB\n" % self.memory
 
-        #before geometry options e.g. basis {} or building a dft functional
+        #before geometry options e.g. basis {} or building a dft method
         if PSI4_BEFORE_GEOM in combined_dict:
             if len(combined_dict[PSI4_BEFORE_GEOM]) > 0:
                 for opt in combined_dict[PSI4_BEFORE_GEOM]:
@@ -538,10 +606,15 @@ class Theory:
     def get_psi4_footer(self, return_warnings=False, **other_kw_dict):
         """get psi4 footer"""
         
-        if self.job_types is not None:
-            for job in self.job_types:
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
                 job_dict = job.get_psi4()
-                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        #add implicit solvent
+        if self.solvent is not None:
+            solvent_info = self.solvent.get_psi4()
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         s = "}\n\n"
         warnings = []
@@ -571,29 +644,30 @@ class Theory:
 
             s += "}\n\n"
 
-        #functional is functional name + dispersion if there is dispersion
-        functional = self.functional.get_psi4()[0]
+        #method is method name + dispersion if there is dispersion
+        method = self.method.get_psi4()[0]
         if self.empirical_dispersion is not None:
-            functional += self.empirical_dispersion.get_psi4()[0]
+            method += self.empirical_dispersion.get_psi4()[0]
 
-        #after job stuff - replace $FUNCTIONAL with functional
+        #after job stuff - replace $FUNCTIONAL with method
         if PSI4_BEFORE_JOB in other_kw_dict:
             for opt in other_kw_dict[PSI4_BEFORE_JOB]:
                 if "$FUNCTIONAL" in opt:
-                    opt = opt.replace("$FUNCTIONAL", "'%s'" % functional)
+                    opt = opt.replace("$FUNCTIONAL", "'%s'" % method)
 
                 s += opt
                 s += '\n'
         
-        #for each job, start with nrg = f('functional'
-        #unless return_wfn=True, then do nrg, wfn = f('functional'
+        #for each job, start with nrg = f('method'
+        #unless return_wfn=True, then do nrg, wfn = f('method'
         if PSI4_JOB in other_kw_dict:
-            for func in sorted(other_kw_dict[PSI4_JOB].keys(), key=probable_job_order):
+            #for func in sorted(other_kw_dict[PSI4_JOB].keys(), key=probable_job_order):
+            for func in other_kw_dict[PSI4_JOB].keys():
                 if any(['return_wfn' in kwarg and ('True' in kwarg or 'on' in kwarg) \
                         for kwarg in other_kw_dict[PSI4_JOB][func]]):
-                    s += "nrg, wfn = %s('%s'" % (func, functional)
+                    s += "nrg, wfn = %s('%s'" % (func, method)
                 else:
-                    s += "nrg = %s('%s'" % (func, functional)
+                    s += "nrg = %s('%s'" % (func, method)
                 
                 known_kw = []
                 for kw in other_kw_dict[PSI4_JOB][func]:
@@ -601,15 +675,15 @@ class Theory:
                     if key not in known_kw:
                         known_kw.append(key)
                         s += ", "
-                        s += kw.replace("$FUNCTIONAL", "'%s'" % functional)
+                        s += kw.replace("$FUNCTIONAL", "'%s'" % method)
                 
                 s += ")\n"
 
-        #after job stuff - replace $FUNCTIONAL with functional
+        #after job stuff - replace $FUNCTIONAL with method
         if PSI4_AFTER_JOB in other_kw_dict:
             for opt in other_kw_dict[PSI4_AFTER_JOB]:
                 if "$FUNCTIONAL" in opt:
-                    opt = opt.replace("$FUNCTIONAL", "'%s'" % functional)
+                    opt = opt.replace("$FUNCTIONAL", "'%s'" % method)
 
                 s += opt
                 s += '\n'

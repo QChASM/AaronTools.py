@@ -4,6 +4,8 @@ import numpy as np
 
 import AaronTools.atoms as Atoms
 
+from collections import OrderedDict
+
 
 def progress_bar(this, max_num, name=None, width=50):
     if name is None:
@@ -171,7 +173,7 @@ def combine_dicts(d1, d2, case_sensitive=False):
     """
     #TODO
     #accept any number of input dicts
-    out = {}
+    out = OrderedDict()
     case_keys_1 = list(d1.keys())
     case_keys_2 = list(d2.keys())
     if case_sensitive:

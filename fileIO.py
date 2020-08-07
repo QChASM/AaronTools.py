@@ -85,15 +85,11 @@ class FileWriter:
         :theory: for com, inp, and in files, an object with a get_header and get_footer method
         """
         if isinstance(outfile, str) and style is None:
-            print('2')
             name, ext = os.path.splitext(outfile)
             style = ext[1:]
 
         elif style is None:
-            print('1')
             style = "xyz"
-
-        print(style, outfile)
 
         if style.lower() not in write_types:
             raise NotImplementedError(file_type_err.format(style))

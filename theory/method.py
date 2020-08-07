@@ -1,6 +1,6 @@
 KNOWN_SEMI_EMPIRICAL = ["AM1", "PM3", "PM6", "PM7", "HF-3C"]
 
-class Functional:
+class Method:
     """functional object
     used to ensure the proper keyword is used
     e.g.
