@@ -400,8 +400,9 @@ class ImplicitSolvent:
 
     def get_gaussian(self):
         #need to check if solvent model is available
+        warnings = []
         if not any(self.name.upper() == model for model in ["SMD", "CPCM", "PCM", "DIPOLE", "IPCM", "ISODENSITY", "IEFPCM", "SCIPCM"]):
-            raise RuntimeError("solvent model is not available in ORCA: %s\nuse one of: %s" \
+            warnings.append("solvent model is not available in ORCA: %s\nuse one of: %s" \
                                % (self.name, " ".join(["SMD", "CPCM", "PCM", "DIPOLE", "IPCM", "ISODENSITY", "IEFPCM", "SCIPCM"])))
 
         #check some orca solvent keywords and switch to gaussian ones
@@ -414,14 +415,16 @@ class ImplicitSolvent:
             solvent = "TetraHydroFuran"
         else:
             if not any(solvent.lower() == gaussian_sol.lower() for gaussian_sol in self.KNOWN_GAUSSIAN_SOLVENTS):
-                raise RuntimeError("solvent is unknown to Gaussian: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS" % solvent)
+                warnings.append("solvent is unknown to Gaussian: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS" % solvent)
         
         #route option: scrf(model,solvent=solvent name)
-        return {GAUSSIAN_ROUTE:{'scrf':[self.name, "solvent=%s" % solvent]}}
+        return ({GAUSSIAN_ROUTE:{'scrf':[self.name, "solvent=%s" % solvent]}}, warnings)
 
     def get_orca(self):
         if not any(self.name.upper() == model for model in ["SMD", "CPCM", "C-PCM", "PCM"]):
-            raise RuntimeError("solvent model is not available in ORCA: %s\nuse CPCM or SMD" % self.name)
+            warnings.append("solvent model is not available in ORCA: %s\nuse CPCM or SMD" % self.name)
+
+        warnings = []
 
         out = {}
         cpcm = True
@@ -443,16 +446,16 @@ class ImplicitSolvent:
                 solvent = "THF"
             else:
                 if not any(solvent.lower() == orca_sol.lower() for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS):
-                    raise RuntimeError("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS" % solvent)
+                    warnings.append("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS" % solvent)
         
         else:
             #TODO: look for gaussian/orca pcm solvent names that need to change
             if not any(solvent.lower() == orca_sol.lower() for orca_sol in self.KNOWN_ORCA_SMD_SOLVENTS):
-                raise RuntimeError("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS" % solvent)
+                warnings.append("solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS" % solvent)
 
         out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
 
-        return out
+        return (out, warnings)
 
     def get_psi4(self):
         raise NotImplementedError("ImplicitSolvent cannot generate Psi4 solvent settings yet")

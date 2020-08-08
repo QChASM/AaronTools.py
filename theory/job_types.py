@@ -27,19 +27,19 @@ class JobType:
 
 class OptimizationJob(JobType):
     """optimization job"""
-    def __init__(self, transition_state=False, constraints=None, geom=None):
+    def __init__(self, transition_state=False, constraints=None, geometry=None):
         """use transition_state=True to do a TS optimization
         constraints - dict with 'atoms', 'bonds', 'angles' and 'torsions' as keys
                       constraints['atoms']: list(Atom) - atoms to constrain
                       constraints['bonds']: list(list(Atom, len=2)) - distances to constrain
                       constraints['angles']: list(list(Atom, len=3)) - 1-3 angles to constrain
                       constraints['torsions']: list(list(Atom, len=4)) - dihedral angles to constrain
-        geom        - Geoemtry, required if using constraints"""
+        geometry    - Geoemtry, will be set when using an AaronTools FileWriter"""
         super().__init__()
 
         self.ts = transition_state
         self.constraints = constraints
-        self.geometry = geom
+        self.geometry = geometry
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE, GAUSSIAN_CONSTRAINTS"""
