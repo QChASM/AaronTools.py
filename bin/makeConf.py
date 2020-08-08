@@ -12,7 +12,7 @@ from AaronTools.finders import BondedTo
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 
-makeconf_parser = argparse.ArgumentParser(description='replace an atom or substituent with another', \
+makeconf_parser = argparse.ArgumentParser(description='generate rotamers for substituents using a hierarchical method', \
     formatter_class=argparse.RawTextHelpFormatter)
 makeconf_parser.add_argument('infile', metavar='input file', \
                             type=str, \
@@ -70,14 +70,15 @@ makeconf_parser.add_argument('-o', '--output-destination', \
 
 args = makeconf_parser.parse_args()
 
-#Tony: Let's only print rotatable subs (ie, ones with more than one conformer)
 if args.list_avail:
     s = ""
     for i, name in enumerate(sorted(Substituent.list())):
-        s += "%-20s" % name
-        #if (i + 1) % 3 == 0:
-        if (i + 1) % 1 == 0:
-            s += '\n'
+        sub = Substituent(name)
+        if sub.conf_num > 1:
+            s += "%-20s" % name
+            #if (i + 1) % 3 == 0:
+            if (i + 1) % 1 == 0:
+                s += '\n'
 
     print(s.strip())
     exit(0)
@@ -151,23 +152,27 @@ for infile in args.infile:
             s += '\n'
         continue
 
+    #imagine conformers as a number
+    #each place in that number is in base conf_num
+    #we determine what to rotate by adding one (starting from 0) and 
+    #subtracting the previous number
     conformers = []
     rotations = []
     for sub in substituents:
         conformers.append(sub.conf_num)
         rotations.append(sub.conf_angle)
-    
+   
     mod_array = []
     for i in range(0, len(rotations)):
         mod_array.append(1)
-        for j in range(i + 1, len(rotations)):
+        for j in range(0, i):
             mod_array[i] *= conformers[j]
 
     prev_conf = 0
     for conf in range(0, int(prod(conformers))):
         for i, sub in enumerate(substituents):
-            rot = int( (conf - 1) / mod_array[i]) % conformers[i]
-            rot -= int( (prev_conf - 1) / mod_array[i]) % conformers[i]
+            rot = int( conf / mod_array[i]) % conformers[i]
+            rot -= int( prev_conf / mod_array[i]) % conformers[i]
             angle = rotations[i] * rot
             if angle != 0:
                 sub_atom = sub.find_exact(BondedTo(sub.end))[0]

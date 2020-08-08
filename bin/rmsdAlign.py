@@ -46,7 +46,6 @@ rmsd_parser.add_argument('-if', '--input-format', \
 
 rmsd_parser.add_argument('-r', '--reference' ,\
                         type=str, \
-                        nargs=1, \
                         default=None, \
                         dest='ref', \
                         help="reference structure")
@@ -73,11 +72,26 @@ rmsd_parser.add_argument('-rt', '--ref-targets',\
                         metavar='targets', \
                         help='target atoms on reference (1-indexed)')
 
-rmsd_parser.add_argument('-v', '--value', \
+output_options = rmsd_parser.add_argument_group('output options')
+output_format = output_options.add_mutually_exclusive_group(required=False)
+output_format.add_argument('-v', '--value', \
                           action='store_true', \
                           required=False, \
                           dest='value_only', \
                           help='print RMSD only')
+
+output_format.add_argument('-csv', '--comma-seperated', \
+                            action='store_true', \
+                            required=False, \
+                            dest='csv', \
+                            help='print output in CSV format')
+
+output_options.add_argument('-d', '--delimiter', \
+                        type=str, \
+                        default='comma', \
+                        dest='delimiter', \
+                        choices=['comma', 'semicolon', 'tab', 'space'], \
+                        help="CSV delimiter")
 
 rmsd_parser.add_argument('-s', '--sort', \
                           action='store_true', \
@@ -91,10 +105,9 @@ rmsd_parser.add_argument('-n', '--non-hydrogen', \
                           dest='heavy', \
                           help='ignore hydrogen atoms')
 
-rmsd_parser.add_argument('-o', '--output', \
+output_options.add_argument('-o', '--output', \
                         type=str, \
-                        nargs=1, \
-                        default=[False], \
+                        default=False, \
                         required=False, \
                         dest='outfile', \
                         help='output destination\nDefault: stdout')
@@ -102,13 +115,32 @@ rmsd_parser.add_argument('-o', '--output', \
 args = rmsd_parser.parse_args()
 
 if args.ref is not None:
-    ref_geom = Geometry(args.ref[0])
+    ref_geom = Geometry(args.ref)
 else:
     rmsd_parser.print_help()
     raise RuntimeError("reference geometry was not specified")
 
 if bool(args.in_target) ^ bool(args.ref_target):
     warn("targets may need to be specified for both input and reference")
+
+if args.csv:
+    if args.delimiter == 'comma':
+        delim = ','
+    elif args.delimiter == 'space':
+        delim = ' '
+    elif args.delimiter == 'semicolon':
+        delim = ';'
+    elif args.delimiter == 'tab':
+        delim = '\t'
+
+    header = delim.join(['reference', 'geometry', 'RMSD'])
+
+    if args.outfile:
+        with open(args.outfile, 'w') as f:
+            f.write(header + '\n')
+    else:
+        print(header)
+    
 
 for f in args.infile:
     if isinstance(f, str):
@@ -133,15 +165,23 @@ for f in args.infile:
 
     geom.comment = "rmsd = %f" % rmsd
 
-    if not args.value_only:
-        s = geom.write(append=True, outfile=args.outfile[0])
-        if not args.outfile[0]:
+    if not args.value_only and not args.csv:
+        s = geom.write(append=True, outfile=args.outfile)
+        if not args.outfile:
             print(s)
 
-    else:
-        if args.outfile[0]:
-            with open(args.outfile[0], 'a') as f:
+    elif args.value_only:
+        if args.outfile:
+            with open(args.outfile, 'a') as f:
                 f.write("%f\n" % rmsd)
 
         else:
             print("%f" % rmsd)
+
+    elif args.csv:
+        s = delim.join([ref_geom.name, geom.name, "%f" % rmsd])
+        if args.outfile:
+            with open(args.outfile, 'a') as f:
+                f.write(s + '\n')
+        else:
+            print(s)

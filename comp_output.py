@@ -88,6 +88,10 @@ class CompOutput:
 
         if self.frequency:
             self.grimme_g = self.calc_Grimme_G()
+            #recalculate ZPVE b/c our constants and the ones in various programs
+            #might be slightly different
+            self.ZPVE = self.calc_zpe()
+            self.E_ZPVE = self.energy + self.ZPVE
 
     def get_progress(self):
         rv = ""
@@ -104,6 +108,13 @@ class CompOutput:
             )
 
         return rv.rstrip()
+
+    def calc_zpe(self):
+        """returns ZPVE correction"""
+        hc = PHYSICAL.PLANCK * PHYSICAL.SPEED_OF_LIGHT / UNIT.HART_TO_JOULE
+        vib = sum(self.frequency.real_frequencies)
+        zpve =  0.5 * hc * vib
+        return zpve
 
     def therm_corr(self, temperature=None, v0=100, method="RRHO"):
         """returns thermal correction to energy, enthalpy correction to energy, and entropy
@@ -129,7 +140,7 @@ class CompOutput:
         freqs = self.frequency.real_frequencies
 
         vib_unit_convert = (
-            PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANK / PHYSICAL.KB
+            PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANCK / PHYSICAL.KB
         )
         vibtemps = [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
         if method == "QHARM":
@@ -141,11 +152,11 @@ class CompOutput:
         else:
             harm_vibtemps = vibtemps
 
-        Bav = PHYSICAL.PLANK ** 2 / (24 * np.pi ** 2 * PHYSICAL.KB)
+        Bav = PHYSICAL.PLANCK ** 2 / (24 * np.pi ** 2 * PHYSICAL.KB)
         Bav *= sum([1 / r for r in rot])
 
         # Translational
-        qt = 2 * np.pi * mass * PHYSICAL.KB * T / (PHYSICAL.PLANK ** 2)
+        qt = 2 * np.pi * mass * PHYSICAL.KB * T / (PHYSICAL.PLANCK ** 2)
         qt = qt ** (3 / 2)
         qt *= PHYSICAL.KB * T / PHYSICAL.STANDARD_PRESSURE
         St = PHYSICAL.GAS_CONSTANT * (np.log(qt) + (5 / 2))
@@ -182,7 +193,7 @@ class CompOutput:
             if method == "QHARM":
                 Sv += Sv_T
             else:
-                mu = PHYSICAL.PLANK
+                mu = PHYSICAL.PLANCK
                 mu /= 8 * np.pi ** 2 * freqs[i] * PHYSICAL.SPEED_OF_LIGHT
                 mu = mu * Bav / (mu + Bav)
                 Sr_eff = 1 / 2 + np.log(
@@ -192,7 +203,7 @@ class CompOutput:
                         * mu
                         * PHYSICAL.KB
                         * T
-                        / PHYSICAL.PLANK ** 2
+                        / PHYSICAL.PLANCK ** 2
                     )
                 )
                 if method == self.QUASI_RRHO:
@@ -369,6 +380,6 @@ class CompOutput:
         principal_inertia *= UNIT.AMU_TO_KG * 1e-20
 
         #rotational constants in Hz
-        rot_consts = [PHYSICAL.PLANK/(8*np.pi**2 * moment) for moment in principal_inertia]
+        rot_consts = [PHYSICAL.PLANCK/(8*np.pi**2 * moment) for moment in principal_inertia]
 
-        self.rotational_temperature = [ PHYSICAL.PLANK * const / PHYSICAL.KB for const in rot_consts]
+        self.rotational_temperature = [ PHYSICAL.PLANCK * const / PHYSICAL.KB for const in rot_consts]

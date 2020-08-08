@@ -474,7 +474,7 @@ class FileReader:
                     self.other["rotational_temperature"] = [
                         x
                         * PHYSICAL.SPEED_OF_LIGHT
-                        * PHYSICAL.PLANK
+                        * PHYSICAL.PLANCK
                         / PHYSICAL.KB
                         for x in self.other["rotational_temperature"]
                     ]
@@ -691,7 +691,7 @@ class FileReader:
                     self.other["rotational_temperature"] = [
                         x
                         * PHYSICAL.SPEED_OF_LIGHT
-                        * PHYSICAL.PLANK
+                        * PHYSICAL.PLANCK
                         / PHYSICAL.KB
                         for x in self.other["rotational_temperature"]
                     ]
@@ -830,7 +830,7 @@ class FileReader:
             if "Rotational constants (GHZ):" in line:
                 rot = float_num.findall(line)
                 rot = [
-                    float(r) * PHYSICAL.PLANK * (10 ** 9) / PHYSICAL.KB
+                    float(r) * PHYSICAL.PLANCK * (10 ** 9) / PHYSICAL.KB
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot

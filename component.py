@@ -251,23 +251,7 @@ class Component(Geometry):
         if self.substituents is None:
             self.detect_backbone()
 
-        # minimize torsion for each substituent
-        increment = 30
-        for i, sub in enumerate(sorted(self.substituents, reverse=True)):
-            if i > len(self.substituents):
-                increment = 5
-            axis = sub.atoms[0].bond(sub.end)
-            center = sub.end
-            self.minimize_torsion(
-                sub.atoms, axis, center, geom, increment=increment
-            )
-            if all_frags:
-                for frag, a, b in self.get_frag_list(
-                    targets=sub.atoms, max_order=1
-                ):
-                    axis = a.bond(b)
-                    center = b.coords
-                    self.minimize_torsion(frag, axis, center, geom)
+        return super().minimize_sub_torsion(geom, all_frags)
 
     def sub_rotate(self, start, angle=None):
         start = self.find_exact(start)[0]

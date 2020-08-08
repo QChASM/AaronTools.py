@@ -356,6 +356,10 @@ class Theory:
                 if basis_warning is not None:
                     warnings.append(basis_warning)
 
+        elif self.method is not None and not self.method.is_semiempirical and self.basis is None:
+            basis_info = {}
+            warnings.append('no basis specfied')
+
         s += "\n"
 
         #bond, angle, and torsion constraints

@@ -15,6 +15,8 @@ class TestFinder(TestWithTimer):
     chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
     chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
     chiral_mol_2 = os.path.join(prefix, "test_files", "chiral_centers_2.xyz")
+    chiral_mol_3 = os.path.join(prefix, "test_files", "chiral_centers_3.xyz")
+    chiral_mol_4 = os.path.join(prefix, "test_files", "chiral_centers_4.xyz")
 
     def test_BondsFrom(self):
         # test to see if interpolated geometry is correct
@@ -125,6 +127,14 @@ class TestFinder(TestWithTimer):
         out = mol.find(ChiralCenters())
         self.assertTrue(all([atom in mol.find('1,4') for atom in out]))
 
+        #chiral centers in rings
+        mol = Geometry(self.chiral_mol_3)
+        out = mol.find(ChiralCenters())
+        self.assertTrue(all([atom in mol.find('17,18') for atom in out]))
+
+        mol = Geometry(self.chiral_mol_4)
+        out = mol.find(ChiralCenters())
+        self.assertTrue(all([atom in mol.find('9,17,18') for atom in out]))
 
 
 def suite():

@@ -403,9 +403,6 @@ class Geometry:
                 else:
                     new_tags[a] = [sub.name]
             
-            print(sub.name)
-            print(sub.write(outfile=False))
-
             # save substituent
             self.substituents += [sub]
 
@@ -1686,6 +1683,34 @@ class Geometry:
                 "`fix` must be 0, 1, or 4 (supplied: {})".format(fix)
             )
 
+    def minimize_sub_torsion(self, geom=None, all_frags=False):
+        """rotate substituents to try to minimize LJ potential
+        geom: calculate LJ potential between self and another geometry-like
+              object, instead of just within self
+        all_frags: minimize rotatable bonds on substituents
+        """
+        # minimize torsion for each substituent
+
+        if not hasattr(self, "substituents") or self.substituents is None:
+            self.detect_substituents()
+
+        increment = 30
+        for i, sub in enumerate(sorted(self.substituents, reverse=True)):
+            if i > len(self.substituents):
+                increment = 5
+            axis = sub.atoms[0].bond(sub.end)
+            center = sub.end
+            self.minimize_torsion(
+                sub.atoms, axis, center, geom, increment=increment
+            )
+            if all_frags:
+                for frag, a, b in self.get_frag_list(
+                    targets=sub.atoms, max_order=1
+                ):
+                    axis = a.bond(b)
+                    center = b.coords
+                    self.minimize_torsion(frag, axis, center, geom)
+
     def minimize_torsion(self, targets, axis, center, geom=None, increment=5):
         """
         Rotate :targets: to minimize the LJ potential
@@ -1728,7 +1753,11 @@ class Geometry:
         if end provided, this is the atom where the substituent is attached
         if end==None, replace the smallest fragment containing `target`
         """
+        from AaronTools.substituent import Substituent
         # set up substituent object
+        if not isinstance(sub, Substituent):
+            sub = Substituent(sub)
+        
         sub.refresh_connected()
 
         # determine target and atoms defining connection bond
@@ -1809,13 +1838,27 @@ class Geometry:
         if refresh_ranks:
             self.refresh_ranks()
 
-    def shortest_path(self, atom1, atom2):
+        if not hasattr(self, "substituents") or self.substituents is None:
+            self.substituents = []
+
+        self.substituents.append(sub)
+
+    def shortest_path(self, atom1, atom2, avoid=None):
         """
         Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
+        avoid: atoms to avoid on the path 
         """
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
-        path = utils.shortest_path(self, a1, a2)
+        if avoid is None:
+            path = utils.shortest_path(self, a1, a2)
+        else:
+            avoid = self.find(avoid)
+            graph = [
+                [self.atoms.index(j) for j in i.connected if j in self.atoms and j not in avoid]
+                for i in self.atoms
+            ]
+            path = utils.shortest_path(graph, a1, a2)
         if not path:
             raise LookupError(
                 "could not determine best path between {} and {}".format(
@@ -1912,7 +1955,7 @@ class Geometry:
         targets = self.find(targets)
 
         # find a path between the targets
-        walk = self.short_walk(*targets)
+        walk = self.shortest_path(*targets)
         if len(ring_fragment.end) != len(walk):
             ring_fragment.find_end(len(walk), start=ring_fragment.end)
 
@@ -1936,59 +1979,6 @@ class Geometry:
                     len(walk),
                 )
             )
-
-    def short_walk(self, atom1, atom2, avoid=None):
-        """try to find the shortest path between atom1 and atom2
-        avoid - atoms to not including in this path
-        returns the list of atoms on this path, including atom1 and atom2"""
-        a1 = self.find(atom1)[0]
-        a2 = self.find(atom2)[0]
-        if avoid is None:
-            avoid = []
-        else:
-            avoid = self.find(avoid)
-        l = [a1]
-        start = a1
-        max_iter = len(self.atoms)
-        i = 0
-        while start != a2:
-            #look at all atoms connected to start and find the one
-            #that is most in the direction of atom2
-            i += 1
-            if i > max_iter:
-                raise LookupError(
-                    "could not determine best path between %s and %s"
-                    % (str(atom1), str(atom2))
-                )
-            v1 = start.bond(a2)
-            max_overlap = None
-            new_start = None
-            for atom in start.connected:
-                if atom not in l and atom not in avoid and atom in self.atoms:
-                    v2 = start.bond(atom)
-                    overlap = np.dot(v1, v2)
-                    if max_overlap is None or overlap > max_overlap:
-                        new_start = atom
-                        max_overlap = overlap
-
-            if new_start is None:
-                #no unavoidable atom was found on start - this is a dead end
-                #go back 
-                l.remove(start)
-                avoid.append(start)
-                if len(l) > 1:
-                    start = l[-1]
-                else:
-                    #we came all the way back to atom1 - no path can be found
-                    raise LookupError(
-                        "could not determine best path between %s and %s"
-                        % (str(atom1), str(atom2))
-                    )
-            else:
-                l.append(new_start)
-                start = new_start
-
-        return l
 
     def change_element(
         self, target, new_element, adjust_bonds=False, adjust_hydrogens=False

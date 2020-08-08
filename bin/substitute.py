@@ -41,6 +41,14 @@ substitute_parser.add_argument('-s', '--substitute', metavar='n=substituent', \
                             "n is the 1-indexed position of the starting position of the\n" + \
                             "substituent you are replacing")
 
+substitute_parser.add_argument('-m', '--minimize', \
+                                action='store_const', \
+                                const=True, \
+                                default=False, \
+                                required=False, \
+                                dest='mini', \
+                                help='rotate substituents to try to minimize LJ energy')
+
 substitute_parser.add_argument('-o', '--output', \
                             nargs=1, \
                             type=str, \
@@ -93,6 +101,9 @@ for infile in args.infile:
             geom.substitute(sub, target)
 
             geom.refresh_connected()
+
+    if args.mini:
+        geom.minimize_sub_torsion()
 
     s = geom.write(append=False, outfile=args.outfile[0]) 
     if not args.outfile[0]:

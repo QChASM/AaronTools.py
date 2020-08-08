@@ -11,6 +11,8 @@ from subprocess import Popen, PIPE
 
 from io import StringIO
 
+from glob import glob
+
 import AaronTools
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, FileWriter
@@ -63,6 +65,12 @@ class TestCLS(TestWithTimer):
 
     opt_file_1 = os.path.join(prefix, "test_files", "opt_running.log")
 
+    make_conf_1 = os.path.join(prefix, "test_files", "R-Quinox-tBu3.xyz")
+    make_conf_ref_1 = sorted(glob(os.path.join(prefix, "ref_files", "make_conf_cls", "*.xyz")))
+    
+    change_chir_1 = os.path.join(prefix, "test_files", "chiral_ring.xyz")
+    change_chir_ref_1 = sorted(glob(os.path.join(prefix, "ref_files", "change_chirality_cls", "*.xyz")))
+
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
 
     def test_environment(self):
@@ -82,7 +90,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         angle = float(out)
         self.assertTrue(is_close(angle, 124.752, 10 ** -2))
@@ -97,7 +106,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         angle = float(out)
         self.assertTrue(is_close(angle, 1.3952, 10 ** -2))
@@ -112,7 +122,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         dihedral = float(out)
         self.assertTrue(is_close(dihedral, 45.023740, 10 ** -5))
@@ -129,8 +140,7 @@ class TestCLS(TestWithTimer):
         out, err = proc.communicate()
 
         if len(err) != 0:
-            print(err)
-        self.assertTrue(len(err) == 0)
+            raise RuntimeError(err)
 
         rmsd = float(out)
         self.assertTrue(is_close(rmsd, 0, 10 ** -5))
@@ -146,8 +156,7 @@ class TestCLS(TestWithTimer):
         out, err = proc.communicate()
 
         if len(err) != 0:
-            print(err)
-        self.assertTrue(len(err) == 0)
+            raise RuntimeError(err)
 
         rmsd = float(out)
         self.assertTrue(rmsd < 0.1)
@@ -164,7 +173,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -183,7 +193,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -199,7 +210,8 @@ class TestCLS(TestWithTimer):
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         ref = """electronic energy of test_files/normal.log = -1856.018658 Eh
     ZPE               = -1855.474686 Eh  (dZPE = 0.543972)
@@ -231,7 +243,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         out_list = out.decode('utf-8').splitlines()
         self.assertTrue(out_list[0][-16:] == ref_list[0][-16:])
@@ -247,7 +260,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         ref_csv = """E,ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),dZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
 -1856.018658,-1855.474686,-1855.440616,-1855.538017,-1855.532805,-1855.532510,0.543972,0.578042,0.480642,0.485854,0.486148,test_files/normal.log,test_files/normal.log"""
@@ -267,7 +281,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         out_list = out.decode('utf-8').splitlines()
         ref_list = ref_csv.splitlines()
@@ -286,7 +301,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         out_list = out.decode('utf-8').splitlines()
         ref_list = ref_csv.splitlines()
@@ -308,7 +324,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -326,7 +343,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -344,7 +362,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -362,7 +381,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -380,7 +400,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -398,7 +419,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -420,7 +442,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -439,7 +462,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -459,7 +483,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -479,7 +504,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Geometry(fr)
@@ -498,7 +524,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode('utf-8')))
         mol = Catalyst(fr)
@@ -519,13 +546,71 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         mol = Geometry('traj-0.xyz')
         os.remove('traj-0.xyz')
         rmsd = mol.RMSD(ref, align=True, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
     
+    def test_makeConf(self):
+        """test makeConf.py"""
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "makeConf.py"), \
+                TestCLS.make_conf_1]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')), get_all=True)
+
+        for step, ref in zip(fr.all_geom, self.make_conf_ref_1):
+            geom = None
+            for item in step:
+                if isinstance(item, list) and all(isinstance(a, Atom) for a in item):
+                    geom = Geometry(item)
+
+            if geom is None:
+                raise RuntimeError("an output is missing atoms")
+
+            ref_geom = Geometry(ref)
+            rmsd = ref_geom.RMSD(geom)
+            self.assertTrue(rmsd < rmsd_tol(ref_geom))
+    
+    def test_changeChirality(self):
+        """test changeChirality.py"""
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "changeChirality.py"), \
+                TestCLS.change_chir_1, '--diastereomers']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        fr = FileReader(("out", "xyz", out.decode('utf-8')), get_all=True)
+
+        for step, ref in zip(fr.all_geom, self.change_chir_ref_1):
+            geom = None
+            for item in step:
+                if isinstance(item, list) and all(isinstance(a, Atom) for a in item):
+                    geom = Geometry(item)
+
+            if geom is None:
+                raise RuntimeError("an output is missing atoms")
+
+
+            ref_geom = Geometry(ref)
+            rmsd = ref_geom.RMSD(geom)
+            self.assertTrue(rmsd < rmsd_tol(ref_geom))
+
     def test_grabStatus(self):
         """test grabStatus.py"""
 
@@ -537,7 +622,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        self.assertTrue(len(err) == 0)
+        if len(err) != 0:
+            raise RuntimeError(err)
 
         ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
             test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""

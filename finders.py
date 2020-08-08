@@ -269,8 +269,12 @@ class ChiralCentres(Finder):
     for rings, looks for a set of unique canonical ranks for atoms that 
     are all the same number of bonds away from one atom"""
     #IUPAC spelling 
-    def __init__(self):
+    def __init__(self, cip_only=False):
+        """cip_only: bool - if True, do not identify chiral centers that are chiral because they
+                            are connected to multiple chiral fragments with the same chirality
+        """
         super().__init__()
+        self.cip = cip_only
 
     def __repr__(self):
         return "chiral centers"
@@ -332,7 +336,7 @@ class ChiralCentres(Finder):
                            
                         for a, b in zip(sorted(frag1), sorted(frag2)):
                             # and other chiral atoms
-                            if a in matching_atoms and b in matching_atoms:
+                            if not self.cip and a in matching_atoms and b in matching_atoms:
                                 #use RMSD to see if they have the same handedness
                                 a_connected = sorted(a.connected)
                                 b_connected = sorted(b.connected)
@@ -366,6 +370,22 @@ class ChiralCentres(Finder):
                                     if all([nbonds_ranks.count(r) == 1 for r in nbonds_ranks]):
                                         same = False
                                         acceptable_nbonds = False
+                                    elif not self.cip:
+                                        #need to find things in the ring that are chiral b/c of other chiral centers
+                                        for i, atom1 in enumerate(atoms_within_nbonds):
+                                            for j, atom2 in enumerate(atoms_within_nbonds[i+1:]):
+                                                k = j + i + 1
+                                                if nbonds_ranks[i] == nbonds_ranks[k]:
+                                                    a_connected = sorted(atom1.connected)
+                                                    b_connected = sorted(atom2.connected)
+                                                    a_targets = [atom1] + list(a_connected)
+                                                    b_targets = [atom2] + list(b_connected)
+                                                    if geometry.RMSD(geometry, targets=a_targets, ref_targets=b_targets, sort=False, align=False) < 0.1:
+                                                        same = False
+                                                        break
+                                        if not same:
+                                            break
+
                                     n_bonds += 1
                                 except LookupError:
                                     acceptable_nbonds = False
