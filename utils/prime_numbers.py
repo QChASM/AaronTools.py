@@ -5,11 +5,12 @@ import sys
 
 from os import path, makedirs
 from math import sqrt
+from AaronTools.const import AARONLIB
 
 class Primes:
     primes = [2, 3]
     clean = False
-    cache = path.dirname(__file__) + "/cache/primes.dat"
+    cache = path.join(AARONLIB,"cache", "primes.dat")
     def __init__(self, clean=False, cache=None):
         Primes.clean = clean
         if cache is not None:
@@ -36,19 +37,24 @@ class Primes:
         # then start generating new ones
         q = cls.primes[-1] + 2
         while True:
-            for p in cls.primes:
-                if p > sqrt(q):
-                    q += 2
-                    cls.primes += [q]
-                    cls.store_prime(q)
-                    yield q
+            a = sqrt(q)
+            for p in cls.primes[1:]:
                 if q % p == 0:
                     q += 2
                     break
+
+                if p > a:
+                    cls.primes += [q]
+                    cls.store_prime(q)
+                    yield q
+                    q += 2
+                    break
+
             else:
                 cls.primes += [q]
                 cls.store_prime(q)
                 yield q
+                q += 2
 
     @classmethod
     def store_prime(cls, p):

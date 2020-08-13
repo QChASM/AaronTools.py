@@ -65,7 +65,7 @@ changechiral_parser.add_argument('-o', '--output-destination', \
                             dest='outfile', \
                             help='output destination\n' +
                                  '$i in the filename will be replaced with a number\n' + \
-                                 'if a directory is given, default is \'diasteriomer-$i.xyz\' in that directory\n' + \
+                                 'if a directory is given, default is \'diastereomer-$i.xyz\' in that directory\n' + \
                                  'Default: stdout')
 
 args = changechiral_parser.parse_args()

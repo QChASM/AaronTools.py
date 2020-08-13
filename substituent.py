@@ -26,9 +26,7 @@ class Substituent(Geometry):
 
     AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
     BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
-    CACHE_FILE = os.path.join(
-        os.path.dirname(__file__), "cache", "substituents"
-    )
+    CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
 
     try:
         with open(CACHE_FILE) as f:
