@@ -31,6 +31,7 @@ class Theory:
     basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(kw)))
     empirical_dispersion    -   EmpiricalDispersion object (or str)
     grid                    -   IntegrationGrid object (or str)
+    solvent                 -   ImplicitSolvent object
     
     memory                  -   allocated memory (GB)
     processors              -   allocated cores
@@ -214,6 +215,9 @@ class Theory:
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+                    
                 job_dict = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
@@ -247,7 +251,7 @@ class Theory:
                 basis_info = self.basis.get_gaussian_basis_info()
                 if self.geometry is not None:
                     #check basis elements to make sure no element is in two basis sets or left out of any
-                    basis_warning = self.basis.check_for_elements([atom.element for atom in self.geometry.atoms])
+                    basis_warning = self.basis.check_for_elements(self.geometry)
                     if basis_warning is not None:
                         warnings.append(warning)
     
@@ -272,7 +276,8 @@ class Theory:
 
         #add implicit solvent
         if self.solvent is not None:
-            solvent_info = self.solvent.get_gaussian()
+            solvent_info, warning = self.solvent.get_gaussian()
+            warnings.extend(warning)
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         #add other route options
@@ -327,18 +332,20 @@ class Theory:
         else:
             return s
 
-
     def get_gaussian_footer(self, return_warnings=False, **other_kw_dict):
         """write footer of gaussian input file"""
         
         if self.job_type is not None:
             for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+                    
                 job_dict = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         #add implicit solvent
         if self.solvent is not None:
-            solvent_info = self.solvent.get_gaussian()
+            solvent_info, warning = self.solvent.get_gaussian()
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         s = ""
@@ -349,12 +356,6 @@ class Theory:
         if self.method is not None and not self.method.is_semiempirical and self.basis is not None:
             basis_info = self.basis.get_gaussian_basis_info()
             basis_elements = self.basis.elements_in_basis
-            #check if any element is in multiple basis sets
-            #check to make sure all elements have a basis set
-            if self.geometry is not None:
-                basis_warning = self.basis.check_for_elements([atom.element for atom in self.geometry.atoms])
-                if basis_warning is not None:
-                    warnings.append(basis_warning)
 
         elif self.method is not None and not self.method.is_semiempirical and self.basis is None:
             basis_info = {}
@@ -406,6 +407,9 @@ class Theory:
         
         if self.job_type is not None:
             for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+                    
                 job_dict = job.get_orca()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
@@ -414,10 +418,8 @@ class Theory:
         #if method isn't semi-empirical, get basis info to write later
         if not self.method.is_semiempirical:
             basis_info = self.basis.get_orca_basis_info()
-            if self.geometry is not None:
-                struc_elements = set([atom.element for atom in self.geometry.atoms])
-            
-                warning = self.basis.check_for_elements(struc_elements)
+            if self.geometry is not None:          
+                warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
                     warnings.append(warning)
 
@@ -439,7 +441,8 @@ class Theory:
 
         #add implicit solvent
         if self.solvent is not None:
-            solvent_info = self.solvent.get_orca()
+            solvent_info, warning = self.solvent.get_orca()
+            warnings.extend(warning)
             other_kw_dict = combine_dicts(solvent_info, other_kw_dict)
 
         #start building input file header
@@ -515,6 +518,9 @@ class Theory:
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+                    
                 job_dict = job.get_psi4()
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
@@ -522,16 +528,15 @@ class Theory:
 
         #add implicit solvent
         if self.solvent is not None:
-            solvent_info = self.solvent.get_psi4()
+            solvent_info, warning = self.solvent.get_psi4()
+            warnings.extend(warning)
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         #get basis info if method is not semi empirical
         if not self.method.is_semiempirical:
             basis_info = self.basis.get_psi4_basis_info('sapt' in self.method.get_psi4()[0].lower())
             if self.geometry is not None:
-                struc_elements = set([atom.element for atom in self.geometry.atoms])
-
-                warning = self.basis.check_for_elements(struc_elements)
+                warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
                     warnings.append(warning)
 
@@ -592,9 +597,9 @@ class Theory:
         s += "molecule {\n"
         s += "%2i %i\n" % (self.charge, self.multiplicity)
         if PSI4_COORDINATES in combined_dict:
-            for kw in combined_dict[self.PSI4_COORDINATES]:
-                if len(combined_dict[self.PSI4_COORDINATES][kw]) > 0:
-                    opt = combined_dict[self.PSI4_COORDINATES][kw][0]
+            for kw in combined_dict[PSI4_COORDINATES]:
+                if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
+                    opt = combined_dict[PSI4_COORDINATES][kw][0]
                     if 'pubchem' in kw.lower() and not kw.strip().endswith(':'):
                         kw = kw.strip() + ':'
                     s += "%s %s\n" % (kw.strip(), opt)
@@ -612,12 +617,15 @@ class Theory:
         
         if self.job_type is not None:
             for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+                    
                 job_dict = job.get_psi4()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         #add implicit solvent
         if self.solvent is not None:
-            solvent_info = self.solvent.get_psi4()
+            solvent_info, warning = self.solvent.get_psi4()
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         s = "}\n\n"
@@ -665,7 +673,6 @@ class Theory:
         #for each job, start with nrg = f('method'
         #unless return_wfn=True, then do nrg, wfn = f('method'
         if PSI4_JOB in other_kw_dict:
-            #for func in sorted(other_kw_dict[PSI4_JOB].keys(), key=probable_job_order):
             for func in other_kw_dict[PSI4_JOB].keys():
                 if any(['return_wfn' in kwarg and ('True' in kwarg or 'on' in kwarg) \
                         for kwarg in other_kw_dict[PSI4_JOB][func]]):
