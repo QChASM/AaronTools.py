@@ -523,6 +523,7 @@ class Theory:
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
         warnings = []
+        use_bohr = False
 
         #add implicit solvent
         if self.solvent is not None:
@@ -596,19 +597,24 @@ class Theory:
         s += "%2i %i\n" % (self.charge, self.multiplicity)
         if PSI4_COORDINATES in combined_dict:
             for kw in combined_dict[PSI4_COORDINATES]:
+                if 'pubchem' in kw.lower():
+                    self.structure = None
                 if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
                     opt = combined_dict[PSI4_COORDINATES][kw][0]
                     if 'pubchem' in kw.lower() and not kw.strip().endswith(':'):
                         kw = kw.strip() + ':'
                     s += "%s %s\n" % (kw.strip(), opt)
-                
+                    if kw == 'units':
+                        if opt.lower() in ['bohr', 'au', 'a.u.']:
+                            use_bohr = True
+                            
                 else:
                     s += "%s\n" % kw
 
         if return_warnings:
-            return s, warnings
+            return s, use_bohr, warnings
         else:
-            return s
+            return s, use_bohr
 
     def get_psi4_footer(self, return_warnings=False, **other_kw_dict):
         """get psi4 footer"""

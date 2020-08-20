@@ -216,9 +216,12 @@ class FileWriter:
     @classmethod
     def write_in(cls, geom, theory, outfile=None, **kwargs):
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
-        s = theory.make_header(geom, style='psi4', **kwargs)
+        s, use_bohr = theory.make_header(geom, style='psi4', **kwargs)
         for atom in geom.atoms:
-            s += fmt.format(atom.element, *atom.coords)
+            coords = atom.coords
+            if use_bohr:
+                coords /= UNIT.A0_TO_BOHR
+            s += fmt.format(atom.element, *coords)
 
         s += theory.make_footer(geom, style='psi4', **kwargs)
 
