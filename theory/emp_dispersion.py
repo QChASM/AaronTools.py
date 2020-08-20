@@ -35,7 +35,7 @@ class EmpiricalDispersion:
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD2"]}}, None)
         elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3"]}}, None)
-        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
+        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3BJ"]}}, None)
         elif any(self.name.upper() == name for name in ["PETERSSON-FRISCH", "PFD"]):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["PFD"]}}, None)
@@ -58,7 +58,7 @@ class EmpiricalDispersion:
             return ({ORCA_ROUTE:["D2"]}, None)
         elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
             return ({ORCA_ROUTE:["D3"]}, None)
-        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
+        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ({ORCA_ROUTE:["D3BJ"]}, None)
         elif any(self.name.upper() == name for name in ["GRIMME D4", "GD4", "D4", "-D4"]):
             return ({ORCA_ROUTE:["D4"]}, None)
@@ -82,9 +82,9 @@ class EmpiricalDispersion:
             return ("-d2", None)
         elif any(self.name.upper() == name for name in ["ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"]):
             return ("-d3", None)
-        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
+        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ("-d3bj", None)
-        elif any(self.name.upper() == name for name in ["BECK-JOHNSON DAMPED MODIFEID GRIMME D3", "GD3MBJ", "D3MBJ", "-D3MBJ"]):
+        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED MODIFEID GRIMME D3", "GD3MBJ", "D3MBJ", "-D3MBJ"]):
             return ("-d3mbj", None)
         elif any(self.name.upper() == name for name in ["Chai & Head-Gordon", "CHG", "-CHG"]):
             return ("-chg", None)
