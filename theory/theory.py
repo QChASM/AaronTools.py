@@ -21,11 +21,11 @@ class Theory:
     """a Theory object can be used to create an input file for different QM software
     The creation of a Theory object does not depend on the specific QM software - that is determined when the file is written
     attribute names are the same as initialization keywords
-    valid initialization key words are:
+    valid initialization keywords are:
     geometry                -   AaronTools Geometry 
     charge                  -   total charge
     multiplicity            -   electronic multiplicity
-    job_type                -   JobType or list(JobType) (must all be unique types)
+    job_type                -   JobType or list(JobType) 
 
     method                  -   Method object (or str - Method instance will be created)
     basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(kw)))
@@ -37,7 +37,7 @@ class Theory:
     processors              -   allocated cores
 
     methods that construct headers and footers can specify some keyword arguments
-    keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (imported from AaronTools.theory)
+    keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (from AaronTools.theory)
     ORCA_ROUTE: list(str)
     ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
     ORCA_COORDINATES: ignored
@@ -113,8 +113,7 @@ class Theory:
 
     def make_header(self, geom, style='gaussian', **kwargs):
         """geom: Geometry
-        step: float
-        form: str, gaussian, orca, or psi4
+        style: str, gaussian, orca, or psi4
         kwargs: keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
 
         self.geometry = geom
@@ -163,8 +162,7 @@ class Theory:
     
     def make_footer(self, geom, style='gaussian', **kwargs):
         """geom: Geometry
-        step: float (ignored)
-        form: str, gaussian or psi4
+        style: str, gaussian or psi4
         kwargs: keys are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
         if self.basis is not None:
@@ -703,5 +701,3 @@ class Theory:
             return s, warnings
         else:
             return s
-
-

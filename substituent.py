@@ -9,9 +9,10 @@ from warnings import warn
 
 import numpy as np
 
-from AaronTools.const import AARONLIB, QCHASM, VDW_RADII
+from AaronTools.const import AARONLIB, QCHASM, VDW_RADII, BONDI_RADII
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
+from AaronTools.utils.utils import proj, rotation_matrix
 
 
 class Substituent(Geometry):
@@ -239,12 +240,15 @@ class Substituent(Geometry):
 
         return found
 
-    def sterimol(self, parameter='L', return_vector=False):
+    def sterimol(self, parameter='L', return_vector=False, radii='bondi'):
         """returns sterimol parameter value for the specified parameter
         return_vector: bool/returns tuple(vector start, vector end) instead
         parameter (str) can be:
             'L'
+            'B1'
             'B5'
+        radii: 'bondi' - Bondi vdW radii
+               'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
         """
         if self.end is None:
             raise RuntimeError("cannot calculate sterimol values for substituents without end")
@@ -254,18 +258,26 @@ class Substituent(Geometry):
         atom1 = self.find(BondedTo(self.end))[0]
         atom2 = self.end
 
-        print(atom1.name, atom2.name)
+        #print(atom1.name, atom2.name)
 
         L_axis = atom2.bond(atom1)
         L_axis /= np.linalg.norm(L_axis)
+
+        if radii.lower() == 'bondi':
+            radii_dict = BONDI_RADII
+        elif radii.lower() == 'umn':
+            radii_dict = VDW_RADII
+        elif isinstance(radii, dict):
+            radii_dict = radii
 
         param_value = None
         vector = None
         
         for atom in self.atoms:
+            #if len(self.atoms) > 1 and atom is atom1:
+            #    continue
+
             test_v = atom2.bond(atom)
-            test_L = np.dot(test_v, L_axis) - atom1.dist(atom2) + \
-                     VDW_RADII[atom1.element] + VDW_RADII[atom.element]
             
             if parameter == 'L':
                 test_L = np.dot(test_v, L_axis) - atom1.dist(atom2) + \
@@ -276,28 +288,186 @@ class Substituent(Geometry):
                     vector = (start, start + param_value * L_axis)
 
             elif parameter == 'B1':
+                #if len(self.atoms) > 1 and atom is atom1:
+                #    continue
+
+                r1 = radii_dict[atom.element]
                 b = np.dot(test_v, L_axis)
                 test_B1_v = test_v - (b * L_axis)
-                test_B1 = np.linalg.norm(test_B1_v) + VDW_RADII[atom.element]
-                if (param_value is None or test_B1 < param_value) and \
-                   (len(self.atoms) == 1 or atom is not atom1):
-                    param_value = test_B1
-                    start = atom.coords - test_B1_v
+                test_B1 = np.linalg.norm(test_B1_v) + r1
+                obstructed = False
+                if param_value is None or test_B1 < param_value:
+                    #check to see if this atom's B1 is obstructed by another atom
                     if np.linalg.norm(test_B1_v) > 3*np.finfo(float).eps:
-                        perp_vec = test_B1_v
+                        perp_vec = test_B1_v / np.linalg.norm(test_B1_v)
+                   
+                        for a2 in self.atoms:
+                            r2 = radii_dict[a2.element]
+                            if atom is a2:
+                                continue
+
+                            test_u = atom2.bond(a2)
+                            u = np.dot(test_u, L_axis)
+                            u_v = test_u - (u * L_axis)
+                            d = np.linalg.norm(u_v - test_B1_v)
+                            if r2 - d > r1:
+                                #atom is completely in the shadow of a2
+                                obstructed = True
+                                #print(atom.name, 'completely obstructed by', a2.name)
+                                break
+    
+                            elif np.linalg.norm(u_v) + r2 < test_B1:
+                                #a2 is closer to the L axis than atom
+                                #print(atom.name, 'farther than', a2.name)
+                                continue
+                                
+                            #elif np.linalg.norm(u_v) < 3*np.finfo(float).eps:
+                            #    #this atom is close to the L axis
+                            #    #if it is the 'B1 atom', we'll find out when we check it
+                            #    #but we don't need to check against it
+                            #    continue
+        
+                            else:
+                                # if the atom is far enough from the L axis, check if the B1 is 
+                                # blocked by another atom
+                                # - see if the vector perpendicular to the L axis that points towards
+                                #   the atom is between the vectors from the L axis tangent to
+                                #   the VDW shadow of another atom
+                                #   if it is between the tangent vectors, then this atom is obstructed
+                                #   and does not define the minimum width
+                                p_v = test_B1 * perp_vec / np.linalg.norm(test_B1)
+                                u_n = u_v / np.linalg.norm(u_v)
+                                r_v = r2 * np.cross(u_n, L_axis)
+                                tan1 = u_v + r_v
+                                tan2 = u_v - r_v
+   
+                                a1p = np.linalg.norm(p_v)
+                                b1p = np.linalg.norm(tan1)
+                                c1p = np.linalg.norm(p_v - tan1)
+                                
+                                a2p = np.linalg.norm(p_v)
+                                b2p = np.linalg.norm(tan2)
+                                c2p = np.linalg.norm(p_v - tan2)
+                                
+                                a12 = np.linalg.norm(tan1)
+                                b12 = np.linalg.norm(tan2)
+                                c12 = np.linalg.norm(tan2 - tan1)
+
+                                t1p = np.arccos((c1p**2 - a1p**2 - b1p**2) / (-2*a1p*b1p))
+                                t2p = np.arccos((c2p**2 - a2p**2 - b2p**2) / (-2*a2p*b2p))
+                                t12 = np.arccos((c12**2 - a12**2 - b12**2) / (-2*a12*b12))
+                                
+                                if abs(t1p + t2p - t12) < 1e-3:
+                                    #print(atom.name, 'partially obstructed by', a2.name)
+                                    obstructed = True
+                                    break
+                                #else:
+                                    #print(atom.name, 'unobstructed by', a2.name)
+                                    #print(t1p, t2p, t12, tan1, tan2, test_B1*perp_vec)
+                                    
+
+                    # if the atom is close to the L axis, scan angles and check the same thing as above
                     else:
                         v_n = test_v / np.linalg.norm(test_v)
                         perp_vec = v_n[::-1]
                         perp_vec -= np.dot(v_n, perp_vec) * v_n
-                    
-                    end = start + test_B1 * (perp_vec / np.linalg.norm(perp_vec))
-                    
-                    vector = (start, end)
+                        start_angle = None
+                        end_angle = None
+                  
+                        #go two full circles
+                        for angle in np.linspace(0, 4*np.pi, num=720):
+                            partially_obstructed = False
+                            m = rotation_matrix(angle, L_axis)
+                            p_v = np.dot(m, perp_vec)
+                            p_v /= np.linalg.norm(p_v)
+                            p_v = test_B1 * p_v
+                            for a2 in self.atoms:
+                                r2 = radii_dict[a2.element]
+                                if atom is a2:
+                                    continue
+    
+                                test_u = atom2.bond(a2)
+                                u = np.dot(test_u, L_axis)
+                                u_v = test_u - (u * L_axis)
+                                d = np.linalg.norm(u_v - test_B1_v)
+                                if r2 - d > r1:
+                                    #atom is completely in the shadow of a2
+                                    obstructed = True
+                                    #print(atom.name, 'completely obstructed by', a2.name)
+                                    break
+    
+                                elif np.linalg.norm(u_v) + r2 - test_B1 < 1e-2:
+                                    #a2 is closer to the L axis than atom
+                                    #print(atom.name, 'farther than', a2.name, 'at angle', angle)
+                                    continue
+                                
+                                u_n = u_v / np.linalg.norm(u_v)
+                                r_v = r2 * np.cross(u_n, L_axis)
+                                tan1 = u_v + r_v
+                                tan2 = u_v - r_v
+   
+                                a1p = np.linalg.norm(p_v)
+                                b1p = np.linalg.norm(tan1)
+                                c1p = np.linalg.norm(p_v - tan1)
+                                
+                                a2p = np.linalg.norm(p_v)
+                                b2p = np.linalg.norm(tan2)
+                                c2p = np.linalg.norm(p_v - tan2)
+                                
+                                a12 = np.linalg.norm(tan1)
+                                b12 = np.linalg.norm(tan2)
+                                c12 = np.linalg.norm(tan2 - tan1)
+
+                                t1p = np.arccos((c1p**2 - a1p**2 - b1p**2) / (-2*a1p*b1p))
+                                t2p = np.arccos((c2p**2 - a2p**2 - b2p**2) / (-2*a2p*b2p))
+                                t12 = np.arccos((c12**2 - a12**2 - b12**2) / (-2*a12*b12))
+                               
+                                #print(t1p, t2p, t12, t1p + t2p)
+
+                                if abs(t1p + t2p - t12) < 1e-3:
+                                    partially_obstructed = True
+                                    #print(atom.name, 'obstructed by', a2.name, 'at angle', angle)
+                                    #we might have found and opening, but if it's too small,
+                                    #it's not really a usable opening
+                                    #must have an arc length > 1 A
+                                    if start_angle is not None and end_angle is None:
+                                        if (angle - start_angle) * r1 < 0.9:
+                                            #print('< 1 A gap between', start_angle, angle, (angle-start_angle) * r1)
+                                            start_angle = None
+                                        else:
+                                            end_angle = angle
+                                    break
+                                        
+                            else:
+                                if not partially_obstructed and start_angle is None:
+                                    #print(atom.name, 'not obstructed at angle', angle)
+                                    start_angle = angle
+                                elif end_angle is not None:
+                                    break
+    
+                            if obstructed:
+                                break
+
+                        #print(atom.name, 'finished scanning', start_angle, end_angle, angle)
+                        if start_angle is None or (start_angle != 0 and end_angle is None):
+                            obstructed = True
+                        else:
+                            if end_angle is None:
+                                end_angle = start_angle + np.pi
+                            m = rotation_matrix(0.5 * (start_angle + end_angle), L_axis)
+                            perp_vec = np.dot(m, perp_vec)
+
+                    if not obstructed:
+                        #print('new B1 atom', atom.name)
+                        start = atom.coords - test_B1_v
+                        end = start + test_B1 * (perp_vec / np.linalg.norm(perp_vec))
+                        vector = (start, end)
+                        param_value = test_B1
 
             elif parameter == 'B5':
                 b = np.dot(test_v, L_axis)
                 test_B5_v = test_v - (b * L_axis)
-                test_B5 = np.linalg.norm(test_B5_v) + VDW_RADII[atom.element]
+                test_B5 = np.linalg.norm(test_B5_v) + radii_dict[atom.element]
                 if param_value is None or test_B5 > param_value:
                     param_value = test_B5
                     start = atom.coords - test_B5_v

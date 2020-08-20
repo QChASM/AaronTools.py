@@ -22,6 +22,11 @@ def progress_bar(this, max_num, name=None, width=50):
 def clean_progress_bar(width=50):
     print(" " * 2 * width, end="\r")
 
+def proj(v, u):
+    """projection of u into v"""
+    numerator = np.dot(u, v)
+    denominator = np.linalg.norm(v)**2
+    return numerator * v / denominator
 
 def quat_matrix(pt1, pt2):
     """ build quaternion matrix from pt1 and pt2 """
@@ -369,3 +374,29 @@ def trim_leaves(graph, _removed=[]):
         graph, _removed = trim_leaves(graph, _removed)
 
     return graph, set(_removed)
+    
+def rotation_matrix(theta, axis):
+    """rotation matrix for rotating theta radians about axis"""
+    #I've only tested this for rotations in R3
+    if np.linalg.norm(axis) == 0:
+        axis = [1, 0, 0]
+    axis = axis/np.linalg.norm(axis)
+    dim=len(axis)
+    M=np.dot(np.transpose([axis]),[axis])
+    M=[[i*(1-np.cos(theta)) for i in m] for m in M]
+    I=np.identity(dim)
+    Cos=[[np.cos(theta)*i for i in ii] for ii in I]
+    Sin=np.zeros((dim,dim))
+    for i in range(0,dim):
+        for j in range(0,dim):
+            if i != j:
+                if (i+j) % 2 !=0:
+                    p=1
+                else:
+                    p=-1
+                if i > j:
+                    p=-p
+                Sin[i][j]=p*np.sin(theta)*axis[dim-(i+j)]
+     
+    return np.array([[M[i][j]+Cos[i][j]+Sin[i][j] for i in range(0,dim)] for j in range(0,dim)])
+

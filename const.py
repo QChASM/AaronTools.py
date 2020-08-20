@@ -1329,6 +1329,7 @@ ATOM_TYPES = [
 
 #main group vdw radii from doi 10.1021/jp8111556
 #transition metals from doi 10.1023/A:1011625728803 (crystal radii)
+#transition metals are indented a bit more than the rest
 VDW_RADII = { 
  'H': 1.10,
  'He': 1.40,
@@ -1406,6 +1407,30 @@ VDW_RADII = {
  'Ra': 2.83, 
  'X' : 0,
 }
+
+#doi 10.1021/j100785a001
+BONDI_RADII = {
+    'H' : 1.20, 
+    'He': 1.40, 
+    'C' : 1.70, 
+    'N' : 1.55,
+    'O' : 1.52,
+    'F' : 1.47,
+    'Ne': 1.54, 
+    'Si': 2.10, 
+    'P' : 1.80, 
+    'S' : 1.80, 
+    'Cl': 1.75, 
+    'Ar': 1.88, 
+    'As': 1.85, 
+    'Se': 1.90, 
+    'Br': 1.85, 
+    'Kr': 2.02,
+    'Te': 2.06, 
+    'I' : 1.98, 
+    'Xe': 2.16,
+}
+
 
 class PHYSICAL:
     # Physical constants

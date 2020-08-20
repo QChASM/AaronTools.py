@@ -639,6 +639,36 @@ thermochemistry from test_files/normal.log at 298.00 K:
             #print(ref_item, test_item)
             self.assertTrue(ref_item == test_item)
 
+    def test_substituentSterimol(self):
+        """test substituentSterimol.py"""
+
+        args = [sys.executable, \
+                os.path.join(self.aarontools_bin, "substituentSterimol.py"), \
+                TestCLS.benzene, '-t', '1', '-a' '12']
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        ref = """B1      B5      L       file
+        1.70    3.36    6.68    test_files/benzene.xyz
+
+        """
+
+        ref_lines = ref.splitlines()
+        ref_status_line = ref_lines[1]
+
+        lines = out.decode('utf-8').splitlines()
+        test_line = lines[1]
+
+        #don't include filename in test b/c that will be different
+        for ref_item, test_item in zip(ref_status_line.split()[:3], test_line.split()[:3]):
+            if ref_item != test_item:
+                print(ref_item, test_item)
+            self.assertTrue(ref_item == test_item)
+
     
 def suite():
     suite = unittest.TestSuite()
