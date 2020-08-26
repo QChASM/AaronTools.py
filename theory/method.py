@@ -45,8 +45,9 @@ class Method:
         elif self.name == "Gaussian's B3LYP":
             return ("B3LYP/G", None)
         elif self.name.upper() == "M06-L":
-            #why does M06-2X get a hyphen but not M06-L? 
-            return ("M06L", None)
+            return ("M06L", None)        
+        elif self.name.upper() == "M06-2X":
+            return ("M062X", None)
         elif self.name.upper() == "PBE1PBE":
             return ("PBE0", None)
        
