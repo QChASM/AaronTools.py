@@ -23,7 +23,7 @@ sterimol_parser.add_argument('-if', '--input-format', \
                                 dest='input_format', \
                                 help="file format of input\nxyz is assumed if input is stdin")
 
-sterimol_parser.add_argument('-t', '--targets', \
+sterimol_parser.add_argument('-s', '--substituent-atom', \
                             type=str, \
                             required=True, \
                             dest='targets', \
@@ -31,7 +31,7 @@ sterimol_parser.add_argument('-t', '--targets', \
                             "1-indexed position of the starting position of the\n" + \
                             "substituent of which you are calculating sterimol\nparameters")
 
-sterimol_parser.add_argument('-a', '--avoid', \
+sterimol_parser.add_argument('-a', '--attached-to', \
                             type=str, \
                             required=True, \
                             dest='avoid', \

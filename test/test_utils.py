@@ -6,7 +6,7 @@ from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 from AaronTools.utils import utils
 
 
-class TestCatalyst(TestWithTimer):
+class TestUtils(TestWithTimer):
     def test_same_cycle(self):
         graph = [[1, 2], [0, 2], [0, 1, 3], [2]]
         print(graph)
@@ -36,7 +36,7 @@ class TestCatalyst(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCatalyst("test_same_cycle"))
+    suite.addTest(TestUtils("test_same_cycle"))
     return suite
 
 

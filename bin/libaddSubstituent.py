@@ -24,14 +24,14 @@ libaddsub_parser.add_argument('-n', '--name', \
                                 help="""Name of substituent being added to the library
 if no name is given, the substituent will be printed to STDOUT""")
 
-libaddsub_parser.add_argument('-t', '--target', \
+libaddsub_parser.add_argument('-s', '--substituent-atom', \
                                 type=str, \
                                 nargs=1, \
                                 required=True, \
                                 dest='target', \
                                 help='substituent atom connected to the rest of the molecule (1-indexed)')
 
-libaddsub_parser.add_argument('-a', '--avoid', \
+libaddsub_parser.add_argument('-a', '--attached-to', \
                                 type=str, \
                                 nargs=1, \
                                 required=True, \

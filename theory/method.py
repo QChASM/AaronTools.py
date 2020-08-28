@@ -50,9 +50,6 @@ class Method:
             return ("M062X", None)
         elif self.name.upper() == "PBE1PBE":
             return ("PBE0", None)
-       
-        elif self.name.upper() == 'M062X':
-            return ('M06-2X', None)
 
         else:
             return self.name.replace('ω', 'w'), None

@@ -512,7 +512,6 @@ thermochemistry from test_files/normal.log at 298.00 K:
         rmsd = mol.RMSD(ref3, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref3))
 
-
     def test_mapLigand(self):
         """test mapLigand.py"""
         ref = Catalyst(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
@@ -644,7 +643,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "substituentSterimol.py"), \
-                TestCLS.benzene, '-t', '1', '-a' '12']
+                TestCLS.benzene, '-s', '1', '-a' '12']
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()

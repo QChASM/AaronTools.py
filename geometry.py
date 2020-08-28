@@ -816,7 +816,7 @@ class Geometry:
         self,
         start=None,
         targets=None,
-        canonical=False,
+        canonical=True,
         heavy_only=False,
         refresh_ranks=False,
     ):
@@ -1951,6 +1951,10 @@ class Geometry:
             rv = np.cross(v1, v2)
 
             ring.rotate(rv, ra, center=ring.end[0])
+
+        from AaronTools.ring import Ring
+        if not isinstance(ring_fragment, Ring):
+            ring_fragment = Ring(ring_fragment)
 
         targets = self.find(targets)
 
