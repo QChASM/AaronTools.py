@@ -218,7 +218,7 @@ class FileWriter:
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
         s, use_bohr = theory.make_header(geom, style='psi4', **kwargs)
         for atom in geom.atoms:
-            coords = atom.coords
+            coords = atom.coords.copy()
             if use_bohr:
                 coords /= UNIT.A0_TO_BOHR
             s += fmt.format(atom.element, *coords)

@@ -316,7 +316,7 @@ class Substituent(Geometry):
                                 #print(atom.name, 'completely obstructed by', a2.name)
                                 break
     
-                            elif np.linalg.norm(u_v) + r2 < test_B1:
+                            elif np.linalg.norm(u_v) + r2 - test_B1 < 1e-3:
                                 #a2 is closer to the L axis than atom
                                 #print(atom.name, 'farther than', a2.name)
                                 continue

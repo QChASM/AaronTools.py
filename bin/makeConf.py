@@ -127,9 +127,9 @@ for infile in args.infile:
     for a, subname in zip(target_list, explicit_subnames):
         for atom in a:
             for bonded_atom in atom.connected:
-                frag = geom.get_fragment(bonded_atom, atom)
+                frag = geom.get_fragment(atom, bonded_atom)
                 try:
-                    sub = Substituent(frag, end=atom)
+                    sub = Substituent(frag, end=bonded_atom)
                     if sub.name == subname:
                         substituents.append(sub)
 
@@ -154,8 +154,8 @@ for infile in args.infile:
 
     #imagine conformers as a number
     #each place in that number is in base conf_num
-    #we determine what to rotate by adding one (starting from 0) and 
-    #subtracting the previous number
+    #we determine what to rotate by adding one (starting from 0) and subtracting the 
+    #previous number
     conformers = []
     rotations = []
     for sub in substituents:

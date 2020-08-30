@@ -18,7 +18,6 @@ class BasisSet:
         """basis: list(Basis), Basis, str, or None
         ecp: list(ECP) or None"""
         if isinstance(basis, str):
-            #TODO: make Basis(elements=['all' or 'tm' or 'not tm']) do things
             basis = [Basis(basis)]
         elif isinstance(basis, Basis):
             basis = [basis]
@@ -476,7 +475,7 @@ class Basis:
                     else:
                         ele_selection.append(AnyTransitionMetal())
                         ele_selection.append(AnyNonTransitionMetal())
-                elif ele.lower() == 'tm':
+                elif ele.lower() == 'tm' and ele != "Tm":
                     if not_any:
                         ele_selection.append(AnyNonTransitionMetal())
                     else:
