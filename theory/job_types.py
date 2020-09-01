@@ -93,7 +93,7 @@ class OptimizationJob(JobType):
         if self.constraints is not None and \
            any(len(self.constraints[key]) > 0 for key in self.constraints.keys()):
             
-            out[ORCA_BLOCKS] = {'geom':[]}
+            out[ORCA_BLOCKS] = {'geom':["Constraints"]}
             if 'atoms' in self.constraints:
                 for constraint in self.constraints['atoms']:
                     atom1 = constraint
