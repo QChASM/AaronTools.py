@@ -2,14 +2,15 @@
 
 """Generates prime numbers"""
 import sys
-
-from os import path, makedirs
 from math import sqrt
+from os import makedirs, path
+
 
 class Primes:
     primes = [2, 3]
     clean = False
     cache = path.dirname(__file__) + "/cache/primes.dat"
+
     def __init__(self, clean=False, cache=None):
         Primes.clean = clean
         if cache is not None:
@@ -18,8 +19,8 @@ class Primes:
             dir, cache_file = path.split(Primes.cache)
             if not path.exists(dir):
                 makedirs(dir)
-            
-            with open(Primes.cache, 'w') as f:
+
+            with open(Primes.cache, "w") as f:
                 f.writelines([str(i) + "\n" for i in Primes.primes])
             f.close()
 
@@ -38,7 +39,9 @@ class Primes:
         while True:
             for p in cls.primes:
                 if p > sqrt(q):
-                    q += 2
+                    if q == cls.primes[-1]:
+                        q += 2
+                        break
                     cls.primes += [q]
                     cls.store_prime(q)
                     yield q
@@ -52,8 +55,8 @@ class Primes:
 
     @classmethod
     def store_prime(cls, p):
-        with open(cls.cache, 'a') as f:
-            if hasattr(p, '__iter__'):
+        with open(cls.cache, "a") as f:
+            if hasattr(p, "__iter__"):
                 f.writelines([str(i) + "\n" for i in p])
             else:
                 f.write(str(p) + "\n")
@@ -70,5 +73,5 @@ class Primes:
 
 
 if __name__ == "__main__":
-    Primes()
+    Primes(clean=True)
     print(Primes.list(int(sys.argv[1])))

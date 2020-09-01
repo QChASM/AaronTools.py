@@ -165,11 +165,12 @@ class Atom:
 
     def __repr__(self):
         s = ""
-        s += "{:>3s}  ".format(self.element)
+        s += "{:>3s} ".format(self.element)
         for c in self.coords:
-            s += "{: 13.8f} ".format(c)
-        s += " {: 2d}  ".format(-1 if self.flag else 0)
-        s += "{}".format(self.name)
+            s += " {: 13.8f}".format(c)
+        s += "  {: 2d}".format(-1 if self.flag else 0)
+        s += " {:>4s}".format(self.name)
+        s += " ({:d})".format(self._rank) if self._rank is not None else ""
         return s
 
     def _set_radii(self):

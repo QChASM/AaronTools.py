@@ -31,7 +31,6 @@ class Component(Geometry):
         tag=None,
         to_center=None,
         key_atoms=None,
-        refresh_connected=True,
     ):
         """
         comp is either a file, a geometry, or an atom list
@@ -55,7 +54,7 @@ class Component(Geometry):
                 raise FileNotFoundError(
                     "Cannot find ligand in library:", structure
                 )
-        super().__init__(structure, name, comment, refresh_connected)
+        super().__init__(structure, name, comment)
 
         if tag is not None:
             for a in self.atoms:
@@ -98,7 +97,6 @@ class Component(Geometry):
         return Component(rv)
 
     def rebuild(self):
-        self.refresh_ranks()
         sub_atoms = []
         for sub in sorted(self.substituents):
             tmp = [sub.atoms[0]]
@@ -122,7 +120,6 @@ class Component(Geometry):
         """
         if not isinstance(sub, Substituent):
             sub = Substituent(sub)
-
         super().substitute(sub, target, attached_to)
         self.detect_backbone(to_center=self.backbone)
         self.rebuild()

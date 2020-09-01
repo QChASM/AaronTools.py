@@ -4,7 +4,6 @@ import unittest
 from copy import copy
 
 import numpy as np
-
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.geometry import Geometry
@@ -64,6 +63,17 @@ class TestGeometry(TestWithTimer):
     benz_Ph_Cl = os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
     Et_NO2 = os.path.join(prefix, "test_files/Et_1-NO2.xyz")
     cat = os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
+
+    tm_simple = os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
+    tm_multi = os.path.join(prefix, "test_files/catalysts/tm_multi-lig.xyz")
+    org_1 = os.path.join(prefix, "test_files/catalysts/org_1.xyz")
+    org_tri = os.path.join(prefix, "test_files/catalysts/org_tri.xyz")
+    ptco4 = os.path.join(prefix, "test_files", "ptco4.xyz")
+    catalysts = [tm_simple, tm_multi, org_1, org_tri, ptco4]
+
+    monodentate = os.path.join(prefix, "test_files/ligands/ACN.xyz")
+    bidentate = os.path.join(prefix, "test_files/ligands/S-tBu-BOX.xyz")
+    tridentate = os.path.join(prefix, "test_files/ligands/squaramide.xyz")
 
     def test_init(self):
         ref = FileReader(TestGeometry.benz_NO2_Cl)
@@ -135,22 +145,15 @@ class TestGeometry(TestWithTimer):
     def test_add_sub_iter_len(self):
         ref = Geometry(TestGeometry.benz_OH_Cl)
         mol = Geometry(TestGeometry.benzene)
+        mol.debug = True
         OH = ref.find(["12", "13"])
         Cl = ref.find(["11"])
         mol -= mol.find(["11", "12"])
-        mol += OH
         mol += Cl
+        mol += OH
         mol.refresh_connected()
-        self.assertEqual(len(mol), len(ref))
-        for a, b in zip(sorted(mol), sorted(ref)):
-            self.assertTrue(a.element == b.element)
-        self.assertTrue(
-            is_close(
-                np.stack([a.coords for a in sorted(mol)]),
-                np.stack([a.coords for a in sorted(ref)]),
-                tol=10 ** -2,
-            )
-        )
+        mol.refresh_ranks()
+        self.assertTrue(validate(mol, ref, thresh="loose"))
 
     def test_find_atom(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
@@ -215,7 +218,7 @@ class TestGeometry(TestWithTimer):
 
     def test_canonical_rank(self):
         pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
-        pentane_rank = [0, 2, 4, 3, 1]
+        pentane_rank = [1, 3, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 
@@ -369,6 +372,31 @@ class TestGeometry(TestWithTimer):
         cat.change_distance(cat.atoms[1], cat.atoms[2], dist=0.5, adjust=True)
         rv = cat.examine_constraints()
         self.assertSequenceEqual(rv, [(0, 1, 1), (1, 2, -1)])
+
+    def test_detect_components(self):
+        test = {}
+        for cat in TestGeometry.catalysts:
+            cat = Catalyst(cat)
+            for comp in cat.components:
+                test[os.path.basename(comp.name)] = sorted(
+                    [int(float(c)) for c in comp]
+                )
+
+        with open(
+            os.path.join(prefix, "ref_files/detect_components.json")
+        ) as f:
+            ref = json.load(f)
+        self.assertDictEqual(test, ref)
+
+    def test_fix_comment(self):
+        cat = TestGeometry.tm_simple.copy()
+        self.assertEqual(
+            cat.comment, "C:34 K:1,2 L:35-93 F:1-2;1-13;1-34;2-34;13-34"
+        )
+        cat.substitute("Me", "4")
+        self.assertEqual(
+            cat.comment, "C:37 K:1,2 L:38-96 F:1-2;1-16;1-37;2-37;16-37"
+        )
 
     # geometry measurement
     def test_angle(self):
@@ -599,13 +627,12 @@ class TestGeometry(TestWithTimer):
         ref1 = Geometry(TestGeometry.naphthalene)
         mol1 = mol.copy()
         mol1.ring_substitute(["7", "8"], Ring("benzene"))
-        rmsd = mol1.RMSD(ref1, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
+        self.assertTrue(validate(mol1, ref1, thresh="loose"))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
         mol2.ring_substitute(["7", "8"], Ring("cyclohexane-chair.1"))
-        rmsd = mol2.RMSD(ref2, align=True)
+        rmsd = mol2.RMSD(ref2, align=True, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 
         mol3 = Geometry(TestGeometry.naphthalene)
@@ -614,7 +641,7 @@ class TestGeometry(TestWithTimer):
         targets2 = mol3.find(["10", "16"])
         mol3.ring_substitute(targets1, Ring("benzene"))
         mol3.ring_substitute(targets2, Ring("benzene"))
-        rmsd = mol3.RMSD(ref3, align=True)
+        rmsd = mol3.RMSD(ref3, align=True, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
     def test_change_element(self):
@@ -625,10 +652,87 @@ class TestGeometry(TestWithTimer):
         rmsd = mol.RMSD(ref, align=True)
         self.assertTrue(rmsd < rmsd_tol(ref))
 
+    def test_map_ligand(self):
+        monodentate = Component(TestGeometry.monodentate)
+        tridentate = Component(TestGeometry.tridentate)
+
+        """
+        #TODO: get a reference file for this
+        # two monodentate -> bidentate
+        ptco4 = TestGeometry.ptco4.copy()
+        ptco4.map_ligand('EDA', ["3", "5"])
+        """
+
+        # bidentate -> monodentate, none
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
+        tm_simple = Catalyst(TestGeometry.tm_simple)
+        tm_simple.map_ligand(monodentate, ["35"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, heavy_only=True, thresh="loose", debug=True
+            )
+        )
+
+        # bidentate -> two monodentate
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
+        tm_simple = Catalyst(TestGeometry.tm_simple)
+        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+            )
+        )
+
+        # bidentate -> bidentate
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_3.xyz"))
+        tm_simple = Catalyst(TestGeometry.tm_simple)
+        tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+            )
+        )
+
+        # tridentate -> tridentate
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_4.xyz"))
+        org_tri = Catalyst(TestGeometry.org_tri)
+        org_tri.map_ligand(tridentate, ["30", "28", "58"])
+        self.assertTrue(
+            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+        )
+
+        # tridentate -> monodentate + bidentate -> tridentate
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        org_tri = Catalyst(TestGeometry.org_tri)
+        org_tri.map_ligand(["EDA", "ACN"], ["30", "28", "58"])
+        self.assertTrue(
+            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+        )
+
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_7.xyz"))
+        org_tri = Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        org_tri.map_ligand(tridentate, ["33", "34", "25"])
+        self.assertTrue(
+            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+        )
+
+        # bidentate -> two bulky monodentate
+        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_5.xyz"))
+        tm_simple = Catalyst(TestGeometry.tm_simple)
+        tm_simple.map_ligand(["iPr-NC3C"] * 2, ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+            )
+        )
+
 
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(TestGeometry("test_canonical_rank"))
+    suite.addTest(TestGeometry("test_detect_components"))
+    suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_fix_comment"))
     return suite
 
 
