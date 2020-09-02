@@ -2,6 +2,7 @@ import re
 import numpy as np
 
 from AaronTools.fileIO import FileReader
+from AaronTools.finders import BondedTo
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
@@ -109,7 +110,7 @@ def substituent_from_string(name, form='smiles'):
 
     #get the atom bonded to this H
     #also move the atom on H to the front of the atoms list to have the expected connectivity
-    bonded_atom = next(iter(added_H.connected))
+    bonded_atom = geom.find(BondedTo(added_H))[0]
     geom.atoms = [bonded_atom] + [atom for atom in geom.atoms if atom != bonded_atom]
 
     #align the H-atom bond with the x-axis to have the expected orientation
