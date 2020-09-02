@@ -142,7 +142,7 @@ class OptimizationJob(JobType):
         #constraints
         if self.constraints is not None and any([len(self.constraints[key]) > 0 for key in self.constraints.keys()]):
             out[PSI4_OPTKING] = {}
-            if 'atoms' in self.constraints:
+            if 'atoms' in self.constraints and len(self.constraints['atoms']) > 0:
                 s = ""
                 if len(self.constraints['atoms']) > 0 and self.geometry is not None:
                     s += "freeze_list = \"\"\"\n"
