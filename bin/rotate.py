@@ -185,7 +185,7 @@ for f in args.infile:
         vector = a1.bond(a2)
         if center is None:
             warn("center set to the coordinates of atom %s; using --center/-c none will override this" % a1.name)
-            center = a1.coords
+            center = a1
     
     elif args.axis is not None:
         vector = np.zeros(3)
@@ -210,7 +210,7 @@ for f in args.infile:
 
     if args.center is not None and args.center.lower() == 'none':
         center = None
-    
+   
     rotated_geoms = []
     for i in range(0, args.num):
         geom.rotate(vector, args.angle, targets=targets, center=center)
