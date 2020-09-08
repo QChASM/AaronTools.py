@@ -46,7 +46,7 @@ makeconf_parser.add_argument('-if', '--input-format', \
 
 makeconf_parser.add_argument('-s', '--substituent', metavar='(n=substituent|substituent name)', \
                             type=str, \
-                            nargs='*', \
+                            action='append', \
                             default=[], \
                             required=False, \
                             dest='substituents', \

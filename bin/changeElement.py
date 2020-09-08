@@ -35,7 +35,7 @@ element_parser.add_argument('-if', '--input-format', \
 element_parser.add_argument('-e', '--element', \
                             metavar='target=element', \
                             type=str, \
-                            nargs='*', \
+                            action='append', \
                             required=True, \
                             dest='targets', \
                             help='')

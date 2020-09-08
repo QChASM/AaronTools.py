@@ -33,7 +33,7 @@ substitute_parser.add_argument('-if', '--input-format', \
 
 substitute_parser.add_argument('-s', '--substitute', metavar='n=substituent', \
                             type=str, \
-                            nargs='*', \
+                            action='append', \
                             default=None, \
                             required=False, \
                             dest='substitutions', \

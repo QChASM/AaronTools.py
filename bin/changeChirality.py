@@ -37,11 +37,11 @@ changechiral_parser.add_argument('-if', '--input-format', \
 
 changechiral_parser.add_argument('-t', '--targets', \
                             type=str, \
-                            nargs='*', \
-                            default=[], \
+                            default=None, \
+                            action='append', \
                             required=False, \
                             dest='targets', \
-                            help="chiral centers to invert\n" + \
+                            help="comma- or hyphen-seperated list of chiral centers to invert (1-indexed)\n" + \
                             "Chiral centers must have at least two fragments not in a ring\n" + \
                             "Detected chiral centers are atoms that:\n" + \
                             "    - have > 2 bonds\n" + \
@@ -87,7 +87,7 @@ for infile in args.infile:
     geom = Geometry(f)
 
     target_list = []
-    if len(args.targets) == 0:
+    if args.targets is None:
         try:
             target_list = geom.find(ChiralCenters())
         except LookupError as e:

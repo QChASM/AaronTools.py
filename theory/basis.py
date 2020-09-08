@@ -55,7 +55,7 @@ class BasisSet:
             if all([basis == self.basis[0] for basis in self.basis]) and not self.basis[0].user_defined and self.ecp is None:
                 info[GAUSSIAN_ROUTE] = "/%s" % Basis.get_gaussian(self.basis[0].name)
             else:
-                if self.ecp is None:
+                if self.ecp is None or all(len(ecp.elements) == 0 for ecp in self.ecp):
                     info[GAUSSIAN_ROUTE] = "/gen"
                 else:
                     info[GAUSSIAN_ROUTE] = "/genecp"

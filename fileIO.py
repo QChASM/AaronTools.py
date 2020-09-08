@@ -770,18 +770,17 @@ class FileReader:
         found_archive = False
         n = 1
         route = None
-        route_read = False
         while line != "":
             #route
             #we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
             ##B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
             #pmodes,noraman,temperature=313.15)
-            if line.strip().startswith('#') and not route_read:
-                route = line.strip()
-            elif not route_read and route is not None and not '----' in line:
-                route += line.strip()
-            elif not route_read and route is not None and '----' in line:
-                route_read = True
+            if line.strip().startswith('#') and route is None:
+                route = ""
+                while '------' not in line:
+                    route += line.strip()
+                    n += 1
+                    line = f.readline()
             # archive entry
             if line.strip().startswith("1\\1\\"):
                 found_archive = True

@@ -168,7 +168,7 @@ class TestCLS(TestWithTimer):
         args = [sys.executable, \
                 os.path.join(self.aarontools_bin, "substitute.py"), \
                 TestCLS.benzene, \
-                "-s", "12=NO2", "11=Cl"]
+                "-s", "12=NO2", "-s", "11=Cl"]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
