@@ -113,7 +113,7 @@ class Substituent(Geometry):
             self.atoms = from_file.atoms
             if targets is not None:
                 self.atoms = self.find(targets)
-            self.refresh_connected(rank=False)
+            self.refresh_connected()
 
             # set conformer info
             conf_info = re.search("CF:(\d+),(\d+)", self.comment)

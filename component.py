@@ -31,7 +31,6 @@ class Component(Geometry):
         tag=None,
         to_center=None,
         key_atoms=None,
-        refresh_connected=True,
     ):
         """
         comp is either a file, a geometry, or an atom list
@@ -55,7 +54,7 @@ class Component(Geometry):
                 raise FileNotFoundError(
                     "Cannot find ligand in library:", structure
                 )
-        super().__init__(structure, name, comment, refresh_connected)
+        super().__init__(structure, name, comment)
 
         if tag is not None:
             for a in self.atoms:
@@ -98,7 +97,6 @@ class Component(Geometry):
         return Component(rv)
 
     def rebuild(self):
-        self.refresh_ranks()
         sub_atoms = []
         for sub in sorted(self.substituents):
             tmp = [sub.atoms[0]]
@@ -114,18 +112,39 @@ class Component(Geometry):
         self.backbone = sorted(self.backbone)
         self.atoms = self.backbone + sub_atoms
 
-    def substitute(self, sub, target, attached_to=None):
+    def get_frag_list(self, targets=None, max_order=None):
         """
-        substitutes fragment containing `target` with substituent `sub`
-        if end provided, this is the atom where the substituent is attached
-        if end==None, replace the smallest fragment containing `target`
+        find fragments connected by only one bond
+        (both fragments contain no overlapping atoms)
         """
-        if not isinstance(sub, Substituent):
-            sub = Substituent(sub)
+        if targets:
+            atoms = self.find(targets)
+        else:
+            atoms = self.atoms
+        frag_list = []
+        for i, a in enumerate(atoms[:-1]):
+            for b in atoms[i + 1 :]:
+                if b not in a.connected:
+                    continue
 
-        super().substitute(sub, target, attached_to)
-        self.detect_backbone(to_center=self.backbone)
-        self.rebuild()
+                frag_a = self.get_fragment(a, b)
+                frag_b = self.get_fragment(b, a)
+                if sorted(frag_a) == sorted(frag_b):
+                    continue
+
+                if len(frag_a) == 1 and frag_a[0].element == "H":
+                    continue
+                if len(frag_b) == 1 and frag_b[0].element == "H":
+                    continue
+
+                if max_order is not None and a.bond_order(b) > max_order:
+                    continue
+
+                if (frag_a, a, b) not in frag_list:
+                    frag_list += [(frag_a, a, b)]
+                if (frag_b, b, a) not in frag_list:
+                    frag_list += [(frag_b, b, a)]
+        return frag_list
 
     def detect_backbone(self, to_center=None):
         """

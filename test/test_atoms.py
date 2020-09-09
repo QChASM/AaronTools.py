@@ -4,7 +4,6 @@ import random
 import unittest
 
 import numpy as np
-
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix
@@ -140,7 +139,7 @@ class TestAtoms(TestWithTimer):
         atom = Atom("H", [0, 0, 0], True, "1", ["test"])
         s = str(atom)
         self.assertEqual(
-            s, "  H     0.00000000    0.00000000    0.00000000  -1  1"
+            s, "  H     0.00000000    0.00000000    0.00000000  -1    1"
         )
 
     def test_set_radii(self):

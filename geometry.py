@@ -12,7 +12,7 @@ import numpy as np
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
-from AaronTools.const import D_CUTOFF, ELEMENTS
+from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.finders import Finder
 from AaronTools.utils.prime_numbers import Primes
@@ -32,9 +32,7 @@ class Geometry:
 
     Primes()
 
-    def __init__(
-        self, structure="", name="", comment="", refresh_connected=True
-    ):
+    def __init__(self, structure="", name="", comment="", components=None):
         """
         :structure: can be a Geometry(), a FileReader(), a file name, or a
             list of atoms
@@ -42,8 +40,12 @@ class Geometry:
         self.name = name
         self.comment = comment
         self.atoms = []
+        self.center = None
+        self.components = components
         self.other = {}
         self._iter_idx = None
+
+        self.debug = False
 
         if isinstance(structure, Geometry):
             # new from geometry
@@ -66,8 +68,8 @@ class Geometry:
             else:
                 # list of atoms supplied
                 self.atoms = structure
-                if refresh_connected:
-                    self.refresh_connected()
+                self.refresh_connected()
+                self.refresh_ranks()
                 return
         else:
             return
@@ -76,9 +78,9 @@ class Geometry:
         self.name = from_file.name
         self.comment = from_file.comment
         self.atoms = from_file.atoms
-        if refresh_connected:
-            self.other = self.parse_comment()
-            self.refresh_connected()
+        self.other = self.parse_comment()
+        self.refresh_connected()
+        self.refresh_ranks()
         return
 
     # attribute access
@@ -208,7 +210,9 @@ class Geometry:
         if comment is None:
             comment = self.comment
         atoms = self._fix_connectivity(atoms)
-        return Geometry(atoms, name, comment, refresh_connected=False)
+        if hasattr(self, "components") and self.components is not None:
+            self.fix_comment()
+        return Geometry(atoms, name, comment)
 
     def parse_comment(self):
         """
@@ -248,21 +252,27 @@ class Geometry:
                 rv["center"] += [a]
 
         # ligand
-        match = re.search("L:([0-9-,]+)", self.comment)
+        match = re.search("L:([0-9;,-]+)", self.comment)
         if match is not None:
             rv["ligand"] = []
-            match = match.group(1).split(",")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split("-")
-                for i in range(int(m[0]) - 1, int(m[1])):
-                    try:
-                        a = self.atoms[i]
-                    except IndexError:
+            match = match.group(1).split(";")
+            for submatch in match:
+                tmp = []
+                for m in submatch.split(","):
+                    if m == "":
                         continue
-                    a.add_tag("ligand")
-                    rv["ligand"] += [a]
+                    if "-" not in m:
+                        a = self.atoms[int(m) - 1]
+                        tmp += [a]
+                        continue
+                    m = m.split("-")
+                    for i in range(int(m[0]) - 1, int(m[1])):
+                        try:
+                            a = self.atoms[i]
+                        except IndexError:
+                            continue
+                        tmp += [a]
+                rv["ligand"] += [tmp]
 
         # key atoms
         match = re.search("K:([0-9,;]+)", self.comment)
@@ -279,6 +289,72 @@ class Geometry:
                     rv["key_atoms"] += [int(i) - 1]
         self.other = rv
         return rv
+
+    def fix_comment(self):
+        if not hasattr(self, "components"):
+            return
+        elif self.components is None:
+            self.detect_components()
+        new_comment = ""
+        # center
+        if self.center:
+            new_comment += "C:"
+            for c in self.center:
+                new_comment += "{},".format(self.atoms.index(c) + 1)
+            else:
+                new_comment = new_comment[:-1]
+
+        # key atoms
+        new_comment += " K:"
+        for frag in sorted(self.components):
+            tmp = ""
+            for key in sorted(frag.key_atoms):
+                tmp += "{},".format(self.atoms.index(key) + 1)
+            if tmp:
+                new_comment += tmp[:-1] + ";"
+        if new_comment[-3:] == " K:":
+            new_comment = new_comment[:-3]
+        else:
+            new_comment = new_comment[:-1]
+
+        # constrained bonds
+        constrained = self.get_constraints()
+        if constrained:
+            new_comment += " F:"
+            for cons in constrained:
+                ids = [cons[0] + 1]
+                ids += [cons[1] + 1]
+                new_comment += "{}-{};".format(*sorted(ids))
+            else:
+                new_comment = new_comment[:-1]
+
+        # components
+        if self.components:
+            new_comment += " L:"
+            for lig in sorted(self.components):
+                ids = sorted([1 + self.atoms.index(a) for a in lig])
+                tmp = []
+                for i in ids:
+                    if i == ids[0]:
+                        tmp = [i]
+                        continue
+                    if i == tmp[-1] + 1:
+                        tmp += [i]
+                    elif len(tmp) == 1:
+                        new_comment += "{},".format(tmp[0])
+                        tmp = [i]
+                    else:
+                        new_comment += "{}-{},".format(tmp[0], tmp[-1])
+                        tmp = [i]
+                if len(tmp) == 1:
+                    new_comment += "{},".format(tmp[0])
+                else:
+                    new_comment += "{}-{},".format(tmp[0], tmp[-1])
+                new_comment = new_comment[:-1] + ";"
+            new_comment = new_comment[:-1]
+
+        # save new comment (original comment still in self.other)
+        self.comment = new_comment
 
     def _flag(self, flag, targets=None):
         """
@@ -338,13 +414,13 @@ class Geometry:
             atoms = self.atoms
         frag_list = []
         for i, a in enumerate(atoms[:-1]):
-            for b in atoms[i+1:]:
+            for b in atoms[i + 1 :]:
                 if b not in a.connected:
                     continue
 
                 frag_a = self.get_fragment(a, b)
                 frag_b = self.get_fragment(b, a)
-                
+
                 if sorted(frag_a) == sorted(frag_b):
                     continue
 
@@ -361,20 +437,20 @@ class Geometry:
                 if (frag_b, b, a) not in frag_list:
                     frag_list += [(frag_b, b, a)]
         return frag_list
-    
+
     def detect_substituents(self):
         """sets self.substituents to a list of substituents"""
         from AaronTools.substituent import Substituent
-        #TODO: allow detection of specific substituents only
+
+        # TODO: allow detection of specific substituents only
         #       -check fragment length and elements against
         #        that of the specified substituent
-        
-        #copy-pasted from Component.detect_backbone, but 
-        #removed stuff that refers to the center/backbone
+        # copy-pasted from Component.detect_backbone, but
+        # removed stuff that refers to the center/backbone
 
         if not hasattr(self, "substituents") or self.substituents is None:
             self.substituents = []
-        
+
         frag_list = self.get_frag_list()
 
         new_tags = {}  # hold atom tag options until assignment determined
@@ -390,8 +466,8 @@ class Geometry:
                 sub = Substituent(frag, end=end)
             except LookupError:
                 continue
-           
-            #substituents with more than half of self's atoms are ignored
+
+            # substituents with more than half of self's atoms are ignored
             if len(frag) > len(self.atoms) - len(frag):
                 continue
             # save atoms and tags if found
@@ -402,7 +478,7 @@ class Geometry:
                     new_tags[a] += [sub.name]
                 else:
                     new_tags[a] = [sub.name]
-            
+
             # save substituent
             self.substituents += [sub]
 
@@ -440,19 +516,19 @@ class Geometry:
 
         def _find(arg):
             """ find a single atom """
-            #print(arg)
+            # print(arg)
             if isinstance(arg, Atom):
-                #print('atom')
+                # print('atom')
                 return [arg]
-            
+
             rv = []
             if isinstance(arg, Finder):
-                #print('finder')
+                # print('finder')
                 rv += arg.get_matching_atoms(self.atoms, self)
-            
+
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
-                #print('name')
+                # print('name')
                 test_name = arg.replace(".", "\.")
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
                 test_name = re.compile("^" + test_name + "$")
@@ -462,7 +538,7 @@ class Geometry:
                         rv += [a]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
-                #print('comma list')
+                # print('comma list')
                 list_style = arg.split(",")
                 if len(list_style) > 1:
                     for i in list_style:
@@ -476,17 +552,17 @@ class Geometry:
                 and len(arg.split("-")) > 1
                 and not re.search("[A-Za-z]", arg)
             ):
-                #print('range list')
+                # print('range list')
                 rv += _find_between(arg)
 
             elif isinstance(arg, str) and arg in ELEMENTS:
-                #print('element')
+                # print('element')
                 # this is an element
                 for a in self.atoms:
                     if a.element == arg:
                         rv += [a]
             else:
-                #print('tag')
+                # print('tag')
                 # this is a tag
                 for a in self.atoms:
                     if arg in a.tags:
@@ -609,7 +685,7 @@ class Geometry:
                 a.connected.add(atoms[c])
         return atoms
 
-    def refresh_connected(self, threshold=None, rank=True):
+    def refresh_connected(self, threshold=None):
         """
         reset connected atoms
         atoms are connected if their distance from each other is less than
@@ -628,39 +704,11 @@ class Geometry:
                     a.connected.add(b)
                     b.connected.add(a)
 
-        # get ranks
-        if rank:
-            self.refresh_ranks()
-
     def refresh_ranks(self):
         rank = self.canonical_rank()
         for a, r in zip(self.atoms, rank):
             a._rank = r
         return
-
-    def get_principle_axes(self, mass_weight=True):
-        """
-        Return: [principal moments], [principle axes]
-        """
-        COM = self.COM(mass_weight=mass_weight)
-        I_CM = np.zeros((3, 3))
-        for a in self:
-            if mass_weight:
-                mass = a.mass()
-            else:
-                mass = 1
-            coords = a.coords - COM
-            I_CM[0, 0] += mass * (coords[1] ** 2 + coords[2] ** 2)
-            I_CM[1, 1] += mass * (coords[0] ** 2 + coords[2] ** 2)
-            I_CM[2, 2] += mass * (coords[0] ** 2 + coords[1] ** 2)
-            I_CM[0, 1] -= mass * (coords[0] * coords[1])
-            I_CM[0, 2] -= mass * (coords[0] * coords[2])
-            I_CM[1, 2] -= mass * (coords[1] * coords[2])
-        I_CM[1, 0] = I_CM[0, 1]
-        I_CM[2, 0] = I_CM[0, 2]
-        I_CM[2, 1] = I_CM[1, 2]
-
-        return np.linalg.eigh(I_CM)
 
     def canonical_rank(self, heavy_only=False, break_ties=True, update=True):
         """
@@ -712,6 +760,46 @@ class Geometry:
                 rv = np.arctan2(det, dot)
                 return round(rv, 1)
 
+            def get_start(connected, center, norm):
+                # if we can, use the COM of tied atoms as reference 0-deg
+                start = self.COM(targets=[atoms[c] for c in connected])
+                start -= center
+                if np.linalg.norm(np.cross(start, norm)) > 1e-2:
+                    return start
+                # if there's one atom that is closest/farthest to center,
+                # use that as start
+                start_min = None, None
+                start_max = None, None
+                for c in connected:
+                    dist = np.linalg.norm(atoms[c].coords - center)
+                    if start_min[0] is None or dist < start_min[1]:
+                        start_min = [c], dist
+                    elif dist == start_min[1]:
+                        start_min = start_min[0] + [c], dist
+                    if start_max[0] is None or dist < start_max[1]:
+                        start_max = [c], dist
+                    elif dist == start_max[1]:
+                        start_max = start_max[0] + [c], dist
+                if len(start_min[0]) == 1:
+                    start = atoms[start_min[0][0]].coords - center
+                    return start
+                if len(start_max[0]) == 1:
+                    start = atoms[start_max[0][0]].coords - center
+                    return start
+                # otherwise, try to use COM of equally close/far atoms
+                if len(start_min[0]) < len(connected):
+                    start = self.COM(targets=[atoms[c] for c in start_min[0]])
+                    start -= center
+                    if np.linalg.norm(np.cross(start, norm)) > 1e-2:
+                        return start
+                if len(start_max[0]) < len(connected):
+                    start = self.COM(targets=[atoms[c] for c in start_max[0]])
+                    start -= center
+                    if np.linalg.norm(np.cross(start, norm)) > 1e-2:
+                        return start
+                # if all else fails, just use the first atom I guess...
+                return atoms[connected[0]].coords - center
+
             partitions = {}
             for i, rank in enumerate(ranks):
                 partitions.setdefault(rank, {})
@@ -719,6 +807,13 @@ class Geometry:
                 partitions[rank][rank] += [i]
 
             new_partitions = partitions.copy()
+            center = list(filter(lambda x: "center" in x.tags, self))
+            if center:
+                center = self.COM(targets=center)
+            else:
+                center = self.COM()
+            # norm = self.get_principle_axes()
+            # norm = norm[1][:, 0] - center
             for rank, rank_dict in partitions.items():
                 idx_list = rank_dict[rank]
                 if len(idx_list) == 1:
@@ -739,25 +834,14 @@ class Geometry:
                             groups.setdefault(k, set([i]))
                             groups[k] |= set([j])
                 # atoms in each group sorted in counter clockwise order
-                # around axis between shared atom and COM
+                # around axis centered at shared atom and orthogonal to COM
                 for shared_idx, connected in groups.items():
-                    shared = atoms[shared_idx]
                     connected = sorted(connected)
-                    center = self.COM()
-                    norm = shared.coords - center
-                    start_idx = None
-                    min_dist = None
+                    start = atoms[shared_idx].coords - center
+                    norm = np.cross(start, center)
+                    angles = {}
                     for c in connected:
-                        this = np.linalg.norm(atoms[c].coords - self.COM())
-                        if min_dist is None or this < min_dist:
-                            min_dist = this
-                            start_idx = c
-                    start = atoms[start_idx].coords - shared.coords
-                    angles = {0: [start_idx]}
-                    for c in connected:
-                        if c == start_idx:
-                            continue
-                        this = atoms[c].coords - shared.coords
+                        this = atoms[c].coords - center
                         angle = get_angle(start, this, norm)
                         angles.setdefault(angle, [])
                         angles[angle] += [c]
@@ -765,8 +849,8 @@ class Geometry:
                         new_partitions[rank].setdefault(rank + i, [])
                         new_partitions[rank][rank + i] += angles[angle]
                         for idx in angles[angle]:
-                            new_partitions[rank][rank].remove(idx)
-                    break
+                            if idx in new_partitions[rank][rank]:
+                                new_partitions[rank][rank].remove(idx)
             return update_ranks(ranks, new_partitions)
 
         # rank all atoms the same initially
@@ -816,9 +900,7 @@ class Geometry:
         self,
         start=None,
         targets=None,
-        canonical=True,
         heavy_only=False,
-        refresh_ranks=False,
     ):
         """
         Returns:
@@ -832,9 +914,6 @@ class Geometry:
             should come first)
         """
 
-        if refresh_ranks:
-            self.refresh_ranks()
-
         if not targets:
             targets = self.atoms
         else:
@@ -845,13 +924,13 @@ class Geometry:
 
         # get starting atom
         if not start:
-            order = [sorted(targets, reverse=not canonical)[0]]
+            order = [sorted(targets)[0]]
         else:
-            order = sorted(self.find(start), reverse=not canonical)
-        start = sorted(order, reverse=not canonical)
+            order = sorted(self.find(start))
+        start = sorted(order)
         stack = []
         for s in start:
-            stack += sorted(s.connected, reverse=not canonical)
+            stack += sorted(s.connected)
         atoms_left = set(targets) - set(order) - set(stack)
         while len(stack) > 0:
             this = stack.pop()
@@ -862,13 +941,519 @@ class Geometry:
             order += [this]
             connected = this.connected & atoms_left
             atoms_left -= set(connected)
-            stack += sorted(connected, reverse=not canonical)
+            stack += sorted(connected)
 
             if len(stack) == 0 and len(atoms_left) > 0:
-                stack += [sorted(atoms_left, reverse=not canonical)[0]]
+                stack += [sorted(atoms_left)[0]]
                 atoms_left -= set(stack)
 
         return order, non_targets
+
+    def rebuild(self):
+        atoms = []
+        if self.components:
+            if self.center:
+                atoms += self.center
+            for comp in sorted(self.components):
+                comp.rebuild()
+                atoms += comp.atoms
+            self.atoms = atoms
+        self.fix_comment()
+        self.refresh_ranks()
+
+    def detect_components(self, debug=False):
+        self.components = []
+        self.center = []
+
+        # get center
+        for a in self.atoms:
+            if a.element in TMETAL.keys():
+                # detect transition metal center
+                if a not in self.center:
+                    self.center += [a]
+                a.add_tag("center")
+            if "center" in a.tags:
+                # center provided by comment line in xyz file
+                if a not in self.center:
+                    self.center += [a]
+
+        # label key atoms:
+        for i, a in enumerate(self.atoms):
+            if "key_atoms" not in self.other:
+                break
+            if i in self.other["key_atoms"]:
+                a.add_tag("key")
+        else:
+            del self.other["key_atoms"]
+
+        # get components
+        self.components = self.detect_fragments(self.atoms)
+        # rename
+        for i, frag in enumerate(self.components):
+            name = self.name + ".{:g}".format(
+                min([float(a.name) for a in frag])
+            )
+            self.components[i] = AaronTools.component.Component(frag, name)
+        self.rebuild()
+        return
+
+    def detect_fragments(self, targets, avoid=None):
+        """
+        Returns a list of Geometries in which the connection to other
+        atoms in the larger geometry must go through the center atoms
+        eg: L1--C--L2 will give two fragments, L1 and L2
+            (  /
+            L1/
+        """
+
+        def add_tags(frag):
+            for f in frag:
+                found.add(f)
+                for c in self.center:
+                    if f in c.connected:
+                        f.add_tag("key")
+
+        if avoid is None and self.center:
+            avoid = self.center
+        found = set([])
+        rv = []
+
+        if "ligand" in self.other:
+            for ligand in self.other["ligand"]:
+                frag = set(self.find(ligand))
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
+                found.union(frag)
+
+        for a in targets:
+            if a in found:
+                continue
+            if avoid:
+                if a in avoid:
+                    continue
+                frag = set(self.get_fragment(a, avoid))
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
+                found.union(frag)
+            else:
+                frag = set([a])
+                queue = a.connected.copy()
+                while queue:
+                    this = queue.pop()
+                    if this in frag:
+                        continue
+                    frag.add(this)
+                    queue = queue.union(this.connected)
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
+                found = found.union(frag)
+        return rv
+
+    def shortest_path(self, atom1, atom2):
+        """
+        Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
+        """
+        a1 = self.find(atom1)[0]
+        a2 = self.find(atom2)[0]
+        path = utils.shortest_path(self, a1, a2)
+        if not path:
+            raise LookupError(
+                "could not determine best path between {} and {}".format(
+                    atom1, atom2
+                )
+            )
+        return [self.atoms[i] for i in path]
+
+    def short_walk(self, atom1, atom2, avoid=None):
+        """try to find the shortest path between atom1 and atom2"""
+        a1 = self.find(atom1)[0]
+        a2 = self.find(atom2)[0]
+        if avoid is None:
+            avoid = []
+        else:
+            avoid = self.find(avoid)
+        l = [a1]
+        start = a1
+        max_iter = len(self.atoms)
+        i = 0
+        while start != a2:
+            i += 1
+            if i > max_iter:
+                raise LookupError(
+                    "could not determine best path between %s and %s"
+                    % (str(atom1), str(atom2))
+                )
+            v1 = start.bond(a2)
+            max_overlap = None
+            new_start = None
+            for atom in start.connected:
+                if atom not in l and atom not in avoid and atom in self.atoms:
+                    v2 = start.bond(atom)
+                    overlap = np.dot(v1, v2)
+                    if max_overlap is None or overlap > max_overlap:
+                        new_start = atom
+                        max_overlap = overlap
+
+            if new_start is None:
+                l.remove(start)
+                avoid.append(start)
+                if len(l) > 1:
+                    start = l[-1]
+                else:
+                    raise RuntimeError(
+                        "could not determine bet path between %s and %s"
+                        % (str(atom1), str(atom2))
+                    )
+            else:
+                l.append(new_start)
+                start = new_start
+
+        return l
+
+    @classmethod
+    def from_string(cls, name, form="smiles"):
+        """get structure from string
+        form=iupac -> iupac to smiles from opsin API
+                       --> form=smiles
+        form=smiles -> structure from cactvs API"""
+
+        accepted_forms = ["iupac", "smiles"]
+
+        if form not in accepted_forms:
+            raise NotImplementedError(
+                "cannot create substituent given %s; use one of %s" % form,
+                str(accepted_forms),
+            )
+
+        if form == "smiles":
+            smiles = name
+        elif form == "iupac":
+            # opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode("utf8")
+            except HTTPError:
+                raise RuntimeError(
+                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
+                    % name
+                )
+
+        url_sd = (
+            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
+            % smiles
+        )
+        s_sd = urlopen(url_sd).read().decode("utf8")
+        f = FileReader((name, "sd", s_sd))
+        return Geometry(f)
+
+    # geometry measurement
+    def bond(self, a1, a2):
+        """ takes two atoms and returns the bond vector """
+        a1, a2 = self.find_exact(a1, a2)
+        return a1.bond(a2)
+
+    def angle(self, a1, a2, a3=None):
+        """returns a1-a2-a3 angle"""
+        a1, a2, a3 = self.find_exact(a1, a2, a3)
+        return a2.angle(a1, a3)
+
+    def dihedral(self, a1, a2, a3, a4):
+        """measures dihedral angle of a1 and a4 with respect to a2-a3 bond"""
+        a1, a2, a3, a4 = self.find_exact(a1, a2, a3, a4)
+
+        b12 = a1.bond(a2)
+        b23 = a2.bond(a3)
+        b34 = a3.bond(a4)
+
+        dihedral = np.cross(np.cross(b12, b23), np.cross(b23, b34))
+        dihedral = np.dot(dihedral, b23) / np.linalg.norm(b23)
+        dihedral = np.arctan2(
+            dihedral, np.dot(np.cross(b12, b23), np.cross(b23, b34))
+        )
+
+        return dihedral
+
+    def COM(self, targets=None, heavy_only=False, mass_weight=True):
+        """
+        calculates center of mass of the target atoms
+        returns a vector from the origin to the center of mass
+        parameters:
+            targets (list) - the atoms to use in calculation (defaults to all)
+            heavy_only (bool) - exclude hydrogens (defaults to False)
+        """
+        # get targets
+        if targets:
+            targets = self.find(targets)
+        else:
+            targets = self.atoms
+        # screen hydrogens if necessary
+        if heavy_only:
+            targets = [a for a in targets if a.element != "H"]
+
+        # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
+        total_mass = 0
+        center = np.array([0, 0, 0], dtype=np.float)
+        for t in targets:
+            if mass_weight:
+                total_mass += t.mass()
+                center += t.mass() * t.coords
+            else:
+                center += t.coords
+
+        if mass_weight and total_mass:
+            return center / total_mass
+        return center / len(targets)
+
+    def RMSD(
+        self,
+        ref,
+        align=False,
+        heavy_only=False,
+        sort=False,
+        targets=None,
+        ref_targets=None,
+        debug=False,
+    ):
+        """
+        calculates the RMSD between two geometries
+        Returns: rmsd (float)
+
+        :ref: (Geometry) the geometry to compare to
+        :align: (bool) if True (default), align self to other;
+            if False, just calculate the RMSD
+        :heavy_only: (bool) only use heavy atoms (default False)
+        :targets: (list) the atoms in `self` to use in calculation
+        :ref_targets: (list) the atoms in the reference geometry to use
+        :sort: (bool) canonical sorting of atoms before comparing
+        :longsort: (bool) use a more expensive but better sorting method
+            (only use for small molecules!)
+        :debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
+        """
+
+        def _RMSD(ref, other):
+            """
+            ref and other are lists of atoms
+            returns rmsd, angle, vector
+                rmsd (float)
+                angle (float) angle to rotate by
+                vector (np.array(float)) the rotation axis
+            """
+            matrix = np.zeros((4, 4), dtype=np.float64)
+            for i, a in enumerate(ref):
+                pt1 = a.coords
+                try:
+                    pt2 = other[i].coords
+                except IndexError:
+                    break
+                matrix += utils.quat_matrix(pt2, pt1)
+
+            eigenval, eigenvec = np.linalg.eigh(matrix)
+            val = eigenval[0]
+            vec = eigenvec.T[0]
+
+            if val > 0:
+                # val is the SD
+                rmsd = np.sqrt(val / len(ref))
+            else:
+                # negative numbers that are basically zero, like -1e-16
+                rmsd = 0
+
+            # sometimes it freaks out if the coordinates are right on
+            # top of each other and gives overly large rmsd/rotation
+            # I think this is a numpy precision problem, may want to
+            # try scipy.linalg to see if that helps?
+            tmp = sum(
+                [
+                    np.linalg.norm(a.coords - b.coords) ** 2
+                    for a, b in zip(ref, other)
+                ]
+            )
+            tmp = np.sqrt(tmp / len(ref))
+            if tmp < rmsd:
+                rmsd = tmp
+                vec = np.array([0, 0, 0])
+            return rmsd, vec
+
+        def get_orders(obj, targets):
+            """ get orders starting at different atoms """
+            # try just regular canonical ordering
+            obj.refresh_ranks()
+            orders = [obj.reorder(targets=targets, canonical=False)[0]]
+            return orders
+
+        # get target atoms
+        tmp = targets
+        if targets is not None:
+            targets = self.find(targets)
+        else:
+            targets = self.atoms
+        if ref_targets is not None:
+            ref_targets = ref.find(ref_targets)
+        elif tmp is not None:
+            ref_targets = ref.find(tmp)
+        else:
+            ref_targets = ref.atoms
+
+        # screen out hydrogens if heavy_only requested
+        if heavy_only:
+            targets = [a for a in targets if a.element != "H"]
+            ref_targets = [a for a in ref_targets if a.element != "H"]
+
+        this = Geometry([t.copy() for t in targets])
+        ref = Geometry([r.copy() for r in ref_targets])
+        # align center of mass to origin
+        com = this.COM()
+        ref_com = ref.COM()
+
+        this.coord_shift(-com)
+        ref.coord_shift(-ref_com)
+
+        # try current ordering
+        min_rmsd = _RMSD(ref.atoms, this.atoms)
+        # try canonical ordering
+        if sort:
+            this.atoms = this.reorder()[0]
+            ref.atoms = ref.reorder()[0]
+            res = _RMSD(ref.atoms, this.atoms)
+            if res[0] < min_rmsd[0]:
+                min_rmsd = res
+        rmsd, vec = min_rmsd
+
+        # return rmsd
+        if not align:
+            if debug:
+                return this, ref, rmsd
+            else:
+                return rmsd
+        # or update geometry and return rmsd
+        self.coord_shift(-com)
+        if np.linalg.norm(vec) > 0:
+            self.rotate(vec)
+        self.coord_shift(ref_com)
+        if debug:
+            return this, ref, rmsd
+        else:
+            return rmsd
+
+    def get_near(self, ref, dist, by_bond=False, include_ref=False):
+        """
+        Returns: list of atoms within a distance or number of bonds of a
+            reference point, line, plane, atom, or list of atoms
+
+        :ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
+            (eg: ['*', '*', 0]), atom, or list of atoms
+        :dist: the distance threshold or number of bonds away threshold, is an
+            inclusive upper bound (uses `this <= dist`)
+        :by_bond: if true, `dist` is interpreted as the number of bonds away
+            instead of distance in angstroms
+            NOTE: by_bond=True means that ref must be an atom or list of atoms
+        :include_ref: if Atom or list(Atom) given as ref, include these in the
+            returned list, (default=False, do not include ref in returned list)
+        """
+        if dist < 0:
+            raise ValueError(
+                "Distance or number of bonds threshold must be positive"
+            )
+        if not hasattr(ref, "iter") and isinstance(ref, Atom):
+            ref = [ref]
+        rv = []
+
+        # find atoms within number of bonds away
+        if by_bond:
+            dist_err = "by_bond=True only applicable for integer bonds away"
+            ref_err = (
+                "by_bond=True only applicable for ref of type Atom() or "
+                "list(Atom())"
+            )
+            if int(dist) != dist:
+                raise ValueError(dist_err)
+            for r in ref:
+                if not isinstance(r, Atom):
+                    raise TypeError(ref_err)
+            stack = set(ref)
+            rv = set([])
+            while dist > 0:
+                dist -= 1
+                new_stack = set([])
+                for s in stack:
+                    rv = rv.union(s.connected)
+                    new_stack = new_stack.union(s.connected)
+                stack = new_stack
+            if not include_ref:
+                rv = rv - set(ref)
+            return sorted(rv)
+
+        # find atoms within distance
+        if isinstance(ref, Atom):
+            ref = [ref.coords]
+        elif isinstance(ref, list):
+            new_ref = []
+            just_nums = []
+            for r in ref:
+                if isinstance(r, Atom):
+                    new_ref += [r.coords]
+                elif isinstance(r, list):
+                    new_ref += [r]
+                else:
+                    just_nums += [r]
+            if len(just_nums) % 3 != 0:
+                raise ValueError(
+                    "coordinates (or wildcards) must be passed in sets of "
+                    "three: [x, y, z]"
+                )
+            else:
+                while len(just_nums) > 0:
+                    new_ref += [just_nums[-3:]]
+                    just_nums = just_nums[:-3]
+        mask = [False, False, False]
+        for r in new_ref:
+            for i, x in enumerate(r):
+                if x == "*":
+                    mask[i] = True
+                    r[i] = 0
+            for a in self.atoms:
+                coords = a.coords.copy()
+                for i, x in enumerate(mask):
+                    if x:
+                        coords[i] = 0
+                if np.linalg.norm(np.array(r, dtype=float) - coords) <= dist:
+                    rv += [a]
+        if not include_ref:
+            for r in ref:
+                if isinstance(r, Atom) and r in rv:
+                    rv.remove(r)
+        return rv
+
+    def get_principle_axes(self, mass_weight=True, center=None):
+        """
+        Return: [principal moments], [principle axes]
+        """
+        if center is None:
+            COM = self.COM(mass_weight=mass_weight)
+        else:
+            COM = center
+        I_CM = np.zeros((3, 3))
+        for a in self:
+            if mass_weight:
+                mass = a.mass()
+            else:
+                mass = 1
+            coords = a.coords - COM
+            I_CM[0, 0] += mass * (coords[1] ** 2 + coords[2] ** 2)
+            I_CM[1, 1] += mass * (coords[0] ** 2 + coords[2] ** 2)
+            I_CM[2, 2] += mass * (coords[0] ** 2 + coords[1] ** 2)
+            I_CM[0, 1] -= mass * (coords[0] * coords[1])
+            I_CM[0, 2] -= mass * (coords[0] * coords[2])
+            I_CM[1, 2] -= mass * (coords[1] * coords[2])
+        I_CM[1, 0] = I_CM[0, 1]
+        I_CM[2, 0] = I_CM[0, 2]
+        I_CM[2, 1] = I_CM[1, 2]
+
+        return np.linalg.eigh(I_CM)
 
     def LJ_energy(self, other=None):
         """
@@ -972,313 +1557,6 @@ class Geometry:
                     formed.add(tuple(sorted([s.name, c.name])))
         return broken, formed
 
-    # geometry measurement
-    def bond(self, a1, a2):
-        """ takes two atoms and returns the bond vector """
-        a1, a2 = self.find_exact(a1, a2)
-        return a1.bond(a2)
-
-    def angle(self, a1, a2, a3=None):
-        """returns a1-a2-a3 angle"""
-        a1, a2, a3 = self.find_exact(a1, a2, a3)
-        return a2.angle(a1, a3)
-
-    def dihedral(self, a1, a2, a3, a4):
-        """measures dihedral angle of a1 and a4 with respect to a2-a3 bond"""
-        a1, a2, a3, a4 = self.find_exact(a1, a2, a3, a4)
-
-        b12 = a1.bond(a2)
-        b23 = a2.bond(a3)
-        b34 = a3.bond(a4)
-
-        dihedral = np.cross(np.cross(b12, b23), np.cross(b23, b34))
-        dihedral = np.dot(dihedral, b23) / np.linalg.norm(b23)
-        dihedral = np.arctan2(
-            dihedral, np.dot(np.cross(b12, b23), np.cross(b23, b34))
-        )
-
-        return dihedral
-
-    def COM(self, targets=None, heavy_only=False, mass_weight=False):
-        """
-        calculates center of mass of the target atoms
-        returns a vector from the origin to the center of mass
-        parameters:
-            targets (list) - the atoms to use in calculation (defaults to all)
-            heavy_only (bool) - exclude hydrogens (defaults to False)
-        """
-        # get targets
-        if targets is not None:
-            targets = self.find(targets)
-        else:
-            targets = self.atoms
-        # screen hydrogens if necessary
-        if heavy_only:
-            targets = [a for a in targets if a.element != "H"]
-
-        # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
-        total_mass = 0
-        center = np.array([0, 0, 0], dtype=np.float)
-        for t in targets:
-            if mass_weight:
-                total_mass += t.mass()
-                center += t.mass() * t.coords
-            else:
-                center += t.coords
-
-        if mass_weight:
-            return center / total_mass
-        return center / len(targets)
-
-    def RMSD(
-        self,
-        ref,
-        align=False,
-        heavy_only=False,
-        sort=False,
-        targets=None,
-        ref_targets=None,
-        debug=False,
-    ):
-        """
-        calculates the RMSD between two geometries
-        Returns: rmsd (float)
-
-        :ref: (Geometry) the geometry to compare to
-        :align: (bool) if True (default), align self to other;
-            if False, just calculate the RMSD
-        :heavy_only: (bool) only use heavy atoms (default False)
-        :targets: (list) the atoms in `self` to use in calculation
-        :ref_targets: (list) the atoms in the reference geometry to use
-        :sort: (bool) canonical sorting of atoms before comparing
-        :longsort: (bool) use a more expensive but better sorting method
-            (only use for small molecules!)
-        :debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
-        """
-
-        def _RMSD(ref, other):
-            """
-            ref and other are lists of atoms
-            returns rmsd, angle, vector
-                rmsd (float)
-                angle (float) angle to rotate by
-                vector (np.array(float)) the rotation axis
-            """
-            matrix = np.zeros((4, 4), dtype=np.float64)
-            for i, a in enumerate(ref):
-                pt1 = a.coords
-                try:
-                    pt2 = other[i].coords
-                except IndexError:
-                    break
-                matrix += utils.quat_matrix(pt2, pt1)
-
-            eigenval, eigenvec = np.linalg.eigh(matrix)
-            val = eigenval[0]
-            vec = eigenvec.T[0]
-
-            if val > 0:
-                # val is the SD
-                rmsd = np.sqrt(val / len(ref))
-            else:
-                # negative numbers that are basically zero, like -1e-16
-                rmsd = 0
-
-            # sometimes it freaks out if the coordinates are right on
-            # top of each other and gives overly large rmsd/rotation
-            # I think this is a numpy precision problem, may want to
-            # try scipy.linalg to see if that helps?
-            tmp = sum(
-                [
-                    np.linalg.norm(a.coords - b.coords) ** 2
-                    for a, b in zip(ref, other)
-                ]
-            )
-            tmp = np.sqrt(tmp / len(ref))
-            if tmp < rmsd:
-                rmsd = tmp
-                vec = np.array([0, 0, 0])
-            return rmsd, vec
-
-        def get_orders(obj, targets):
-            """ get orders starting at different atoms """
-            # try just regular canonical ordering
-            obj.refresh_ranks()
-            orders = [obj.reorder(targets=targets, canonical=False)[0]]
-            if not longsort:
-                return orders
-            else:
-                # This way might be better, as there could be canonical ties,
-                # but it gets really costly really fast.
-                order = orders[0]
-                swap = []
-                tmp = set([])
-                for i, o in enumerate(order):
-                    if i == 0:
-                        last_rank = order[0]._rank
-                        continue
-                    if o._rank == last_rank:
-                        tmp.add(i - 1)
-                        tmp.add(i)
-                    elif tmp:
-                        swap += [tmp.copy()]
-                        tmp = set([])
-                    last_rank = o._rank
-                pairs = []
-                for n in range(1, len(swap) + 1):
-                    for to_swap in itertools.combinations(swap, n):
-                        for s in to_swap:
-                            for pair in itertools.combinations(list(s), 2):
-                                pairs += [pair]
-                for i, j in pairs:
-                    tmp = order.copy()
-                    tmp[i], tmp[j] = tmp[j], tmp[i]
-                    orders += [tmp]
-                return orders
-
-        # get target atoms
-        tmp = targets
-        if targets is not None:
-            targets = self.find(targets)
-        else:
-            targets = self.atoms
-        if ref_targets is not None:
-            ref_targets = ref.find(ref_targets)
-        elif tmp is not None:
-            ref_targets = ref.find(tmp)
-        else:
-            ref_targets = ref.atoms
-
-        # screen out hydrogens if heavy_only requested
-        if heavy_only:
-            targets = [a for a in targets if a.element != "H"]
-            ref_targets = [a for a in ref_targets if a.element != "H"]
-
-        this = Geometry([t.copy() for t in targets])
-        ref = Geometry([r.copy() for r in ref_targets])
-        # align center of mass to origin
-        com = this.COM()
-        ref_com = ref.COM()
-
-        this.coord_shift(-com)
-        ref.coord_shift(-ref_com)
-
-        # try current ordering
-        min_rmsd = _RMSD(ref.atoms, this.atoms)
-        # try canonical ordering
-        if sort:
-            targets = this.reorder()[0]
-            ref_targets = ref.reorder()[0]
-            res = _RMSD(ref_targets, targets)
-            if res[0] < min_rmsd[0]:
-                min_rmsd = res
-        rmsd, vec = min_rmsd
-
-        # return rmsd
-        if not align:
-            if debug:
-                return Geometry(targets), Geometry(ref_targets), rmsd
-            else:
-                return rmsd
-        # or update geometry and return rmsd
-        self.coord_shift(-com)
-        if np.linalg.norm(vec) > 0:
-            self.rotate(vec)
-        self.coord_shift(ref_com)
-        if debug:
-            return Geometry(targets), Geometry(ref_targets), rmsd
-        else:
-            return rmsd
-
-    def get_near(self, ref, dist, by_bond=False, include_ref=False):
-        """
-        Returns: list of atoms within a distance or number of bonds of a
-            reference point, line, plane, atom, or list of atoms
-
-        :ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
-            (eg: ['*', '*', 0]), atom, or list of atoms
-        :dist: the distance threshold or number of bonds away threshold, is an
-            inclusive upper bound (uses `this <= dist`)
-        :by_bond: if true, `dist` is interpreted as the number of bonds away
-            instead of distance in angstroms
-            NOTE: by_bond=True means that ref must be an atom or list of atoms
-        :include_ref: if Atom or list(Atom) given as ref, include these in the
-            returned list, (default=False, do not include ref in returned list)
-        """
-        if dist < 0:
-            raise ValueError(
-                "Distance or number of bonds threshold must be positive"
-            )
-        if not hasattr(ref, "iter") and isinstance(ref, Atom):
-            ref = [ref]
-        rv = []
-
-        # find atoms within number of bonds away
-        if by_bond:
-            dist_err = "by_bond=True only applicable for integer bonds away"
-            ref_err = (
-                "by_bond=True only applicable for ref of type Atom() or "
-                "list(Atom())"
-            )
-            if int(dist) != dist:
-                raise ValueError(dist_err)
-            for r in ref:
-                if not isinstance(r, Atom):
-                    raise TypeError(ref_err)
-            stack = set(ref)
-            rv = set([])
-            while dist > 0:
-                dist -= 1
-                new_stack = set([])
-                for s in stack:
-                    rv = rv.union(s.connected)
-                    new_stack = new_stack.union(s.connected)
-                stack = new_stack
-            if not include_ref:
-                rv = rv - set(ref)
-            return sorted(rv)
-
-        # find atoms within distance
-        if isinstance(ref, Atom):
-            ref = [ref.coords]
-        elif isinstance(ref, list):
-            new_ref = []
-            just_nums = []
-            for r in ref:
-                if isinstance(r, Atom):
-                    new_ref += [r.coords]
-                elif isinstance(r, list):
-                    new_ref += [r]
-                else:
-                    just_nums += [r]
-            if len(just_nums) % 3 != 0:
-                raise ValueError(
-                    "coordinates (or wildcards) must be passed in sets of "
-                    "three: [x, y, z]"
-                )
-            else:
-                while len(just_nums) > 0:
-                    new_ref += [just_nums[-3:]]
-                    just_nums = just_nums[:-3]
-        mask = [False, False, False]
-        for r in new_ref:
-            for i, x in enumerate(r):
-                if x == "*":
-                    mask[i] = True
-                    r[i] = 0
-            for a in self.atoms:
-                coords = a.coords.copy()
-                for i, x in enumerate(mask):
-                    if x:
-                        coords[i] = 0
-                if np.linalg.norm(np.array(r, dtype=float) - coords) <= dist:
-                    rv += [a]
-        if not include_ref:
-            for r in ref:
-                if isinstance(r, Atom) and r in rv:
-                    rv.remove(r)
-        return rv
-
     # geometry manipulation
     def update_geometry(self, structure):
         """
@@ -1309,20 +1587,27 @@ class Geometry:
 
     def get_all_connected(self, target):
         """returns a list of all elements on the target atom's monomer"""
+
         def _get_all_connected(geom, target, avoid):
             atoms = [target]
             for atom in target.connected:
                 if atom not in avoid:
                     new_avoid = avoid + [target]
-                    atoms.extend([x for x in _get_all_connected(geom, atom, new_avoid) if x not in atoms])
+                    atoms.extend(
+                        [
+                            x
+                            for x in _get_all_connected(geom, atom, new_avoid)
+                            if x not in atoms
+                        ]
+                    )
 
             return atoms
-        
+
         target = self.find(target)[0]
         atoms = _get_all_connected(self, target, [])
 
         return atoms
-    
+
     def get_fragment(
         self, start, stop=None, as_object=False, copy=False, biggest=False
     ):
@@ -1342,7 +1627,7 @@ class Geometry:
         start = self.find(start)
         if stop is None:
             best = None
-            for stop in start[0].connected:
+            for stop in itertools.chain(*[s.connected for s in start]):
                 frag = self.get_fragment(start, stop, as_object, copy)
                 if (
                     best is None
@@ -1747,26 +2032,35 @@ class Geometry:
 
         return
 
-    def substitute(self, sub, target, attached_to=None, refresh_ranks=True):
+    def substitute(self, sub, target, attached_to=None, minimize=True):
         """
         substitutes fragment containing `target` with substituent `sub`
         if end provided, this is the atom where the substituent is attached
         if end==None, replace the smallest fragment containing `target`
         """
-        from AaronTools.substituent import Substituent
+        if not isinstance(sub, AaronTools.substituent.Substituent):
+            sub = AaronTools.substituent.Substituent(sub)
         # set up substituent object
         if not isinstance(sub, Substituent):
             sub = Substituent(sub)
-        
-        sub.refresh_connected()
 
+        sub.refresh_connected()
         # determine target and atoms defining connection bond
         target = self.find(target)
+
+        # if we have components, do the substitution to the component
+        # otherwise, just do it on self
+        geom = self
+        if hasattr(self, "components") and self.components is not None:
+            for comp in self.components:
+                if target in comp:
+                    geom = comp
+                    break
 
         # attached_to is provided or is the atom giving the
         # smallest target fragment
         if attached_to is not None:
-            attached_to = self.find_exact(attached_to)
+            attached_to = geom.find_exact(attached_to)
         else:
             smallest_frag = None
             smallest_attached_to = None
@@ -1776,7 +2070,7 @@ class Geometry:
                 attached_to = attached_to | (t.connected - set(target))
             # find smallest fragment
             for e in attached_to:
-                frag = self.get_fragment(target, e)
+                frag = geom.get_fragment(target, e)
                 if smallest_frag is None or len(frag) < len(smallest_frag):
                     smallest_frag = frag
                     smallest_attached_to = e
@@ -1803,12 +2097,12 @@ class Geometry:
         #   sub_attach will eventually be sub.atoms[0]
         # move attached_to to the origin
         shift = attached_to.coords.copy()
-        self.coord_shift(-1 * shift)
+        geom.coord_shift(-1 * shift)
         # align substituent to current bond
-        bond = self.bond(attached_to, sub_attach)
+        bond = geom.bond(attached_to, sub_attach)
         sub.align_to_bond(bond)
         # shift geometry back and shift substituent to appropriate place
-        self.coord_shift(shift)
+        geom.coord_shift(shift)
         sub.coord_shift(shift)
 
         # tag and update name for sub atoms
@@ -1820,23 +2114,50 @@ class Geometry:
                 s.name = sub_attach.name
 
         # add first atom of new substituent where the target atom was
-        self.atoms.insert(self.atoms.index(target[0]), sub.atoms[0])
+        geom.atoms.insert(geom.atoms.index(target[0]), sub.atoms[0])
         # remove old substituent
-        self.remove_fragment(target, attached_to, add_H=False)
-        self -= target
+        geom.remove_fragment(target, attached_to, add_H=False)
+        geom -= target
         attached_to.connected.discard(sub_attach)
 
-        # fix connections (in lieu of self.refresh_connected(), since clashing may occur)
+        # fix connections (in lieu of geom.refresh_connected(), since clashing may occur)
         attached_to.connected.add(sub.atoms[0])
         sub.atoms[0].connected.add(attached_to)
 
         # add the rest of the new substituent at the end
-        self += sub.atoms[1:]
+        geom += sub.atoms[1:]
         # fix bond distance
-        self.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
-        # refresh ranks (since we didn't do self.refresh_connected())
-        if refresh_ranks:
-            self.refresh_ranks()
+        geom.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
+
+        # clean up changes
+        if isinstance(geom, AaronTools.component.Component):
+            self.substituents += [sub]
+            self.detect_backbone(to_center=self.backbone)
+            self.rebuild()
+        self.refresh_ranks()
+        if minimize:
+            self.minimize()
+        return sub
+
+    def find_substituent(self, start, for_confs=False):
+        """
+        Finds a substituent based on a given atom (matches start==sub.atoms[0])
+
+        :start: the first atom of the subsituent, where it connects to sub.end
+        :for_confs: if true(default), only consider substituents that need to
+            be rotated to generate conformers
+        """
+        start = self.find(start)[0]
+        for sub in self.get_substituents(for_confs):
+            if sub.atoms[0] == start:
+                return sub
+        else:
+            if for_confs:
+                for sub in self.get_substituents(for_confs=not for_confs):
+                    if sub.atoms[0] == start:
+                        return None
+            msg = "Could not find substituent starting at atom {}."
+            raise LookupError(msg.format(start.name))
 
         if not hasattr(self, "substituents") or self.substituents is None:
             self.substituents = []
@@ -1846,7 +2167,7 @@ class Geometry:
     def shortest_path(self, atom1, atom2, avoid=None):
         """
         Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
-        avoid: atoms to avoid on the path 
+        avoid: atoms to avoid on the path
         """
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
@@ -1855,7 +2176,11 @@ class Geometry:
         else:
             avoid = self.find(avoid)
             graph = [
-                [self.atoms.index(j) for j in i.connected if j in self.atoms and j not in avoid]
+                [
+                    self.atoms.index(j)
+                    for j in i.connected
+                    if j in self.atoms and j not in avoid
+                ]
                 for i in self.atoms
             ]
             path = utils.shortest_path(graph, a1, a2)
@@ -1867,13 +2192,32 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
+    def get_substituents(self, for_confs=True):
+        """
+        Returns list of all substituents found on all components
+
+        :for_confs: if true (default), returns only substituents that need to
+            be rotated to generate conformers
+        """
+        rv = []
+        if self.components is None:
+            self.detect_components()
+        for comp in self.components:
+            if comp.substituents is None:
+                comp.detect_backbone()
+            for sub in comp.substituents:
+                if for_confs and (sub.conf_num is None or sub.conf_num <= 1):
+                    continue
+                rv += [sub]
+        return rv
+
     def ring_substitute(self, targets, ring_fragment):
         """take ring, reorient it, put it on self and replace targets with atoms
         on the ring fragment"""
 
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
-            #align ring's end to geom's walk
+            # align ring's end to geom's walk
             ring_fragment.RMSD(
                 geom,
                 align=True,
@@ -1894,13 +2238,12 @@ class Geometry:
 
             ring_fragment.end = walk[1:-1]
 
-            r = geom.remove_fragment(
-                [walk[0], walk[-1]], walk[1:-1], add_H=False
-            )
+            geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
             geom -= [walk[0], walk[-1]]
 
             geom.atoms.extend(ring_fragment.atoms)
             geom.refresh_connected()
+            geom.refresh_ranks()
 
         def ring_waddle(geom, targets, walk_end, ring):
             """adjusted the new bond lengths by moving the ring in a 'waddling' motion
@@ -1953,6 +2296,7 @@ class Geometry:
             ring.rotate(rv, ra, center=ring.end[0])
 
         from AaronTools.ring import Ring
+
         if not isinstance(ring_fragment, Ring):
             ring_fragment = Ring(ring_fragment)
 
@@ -1994,7 +2338,7 @@ class Geometry:
         adjust_hydrogens    - bool: try to add or remove hydrogens and guess how many
                                     hydrogens to add or remove
                               tuple(int, str): remove specified number of hydrogens and
-                                               set the geometry to the specified shape 
+                                               set the geometry to the specified shape
                                                (see Atom.get_shape for a list of shapes)
         """
 
@@ -2235,3 +2579,454 @@ class Geometry:
         self -= target
 
         self.refresh_connected()
+        self.refresh_ranks()
+
+    def map_ligand(self, ligands, old_keys, minimize=True):
+        """
+        Maps new ligand according to key_map
+        Parameters:
+        :ligand:    the name of a ligand in the ligand library
+        :old_keys:  the key atoms of the old ligand to map to
+        """
+
+        def get_rotation(old_axis, new_axis):
+            w = np.cross(old_axis, new_axis)
+            angle = np.dot(old_axis, new_axis)
+            angle /= np.linalg.norm(old_axis)
+            angle /= np.linalg.norm(new_axis)
+            # occasionally there will be some round-off errors,
+            # so let's fix those before we take arccos
+            if angle > 1 + 10 ** -12 or angle < -1 - 10 ** -12:
+                # and check to make sure we aren't covering something
+                # more senister up...
+                raise ValueError("Bad angle value for arccos():", angle)
+            elif angle > 1:
+                angle = 1.0
+            elif angle < -1:
+                angle = -1.0
+            angle = np.arccos(angle)
+            return w, -1 * angle
+
+        def map_1_key(self, ligand, old_key, new_key):
+            # align new key to old key
+            shift = new_key.bond(old_key)
+            ligand.coord_shift(shift)
+            # rotate ligand
+            targets = old_key.connected - set(self.center)
+            old_axis = self.COM(targets=targets) - old_key.coords
+            new_axis = ligand.COM(targets=new_key.connected) - new_key.coords
+            w, angle = get_rotation(old_axis, new_axis)
+            ligand.rotate(w, angle, center=new_key)
+            return ligand
+
+        def map_2_key(old_ligand, ligand, old_keys, new_keys, rev_ang=False):
+
+            # align COM of key atoms
+            center = old_ligand.COM(targets=old_keys)
+            shift = center - ligand.COM(targets=new_keys)
+            ligand.coord_shift(shift)
+
+            # bend around key axis
+            old_walk = old_ligand.shortest_path(*old_keys)
+            if len(old_walk) == 2:
+                old_con = set([])
+                for k in old_keys:
+                    for c in k.connected:
+                        old_con.add(c)
+                old_vec = old_ligand.COM(targets=old_con) - center
+            else:
+                old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
+
+            new_walk = ligand.shortest_path(*new_keys)
+            if len(new_walk) == 2:
+                new_con = set([])
+                for k in new_keys:
+                    for c in k.connected:
+                        new_con.add(c)
+                new_vec = ligand.COM(targets=new_con) - center
+            else:
+                new_vec = ligand.COM(targets=new_walk[1:-1]) - center
+
+            w, angle = get_rotation(old_vec, new_vec)
+            if rev_ang:
+                angle = -angle
+            ligand.rotate(w, angle, center=center)
+
+            # rotate for best overlap
+            old_axis = old_keys[0].bond(old_keys[1])
+            new_axis = new_keys[0].bond(new_keys[1])
+            w, angle = get_rotation(old_axis, new_axis)
+            ligand.rotate(w, angle, center=center)
+
+        def map_rot_frag(frag, a, b, ligand, old_key, new_key):
+            old_vec = old_key.coords - b.coords
+            new_vec = new_key.coords - b.coords
+            axis, angle = get_rotation(old_vec, new_vec)
+            ligand.rotate(b.bond(a), -1 * angle, targets=frag, center=b.coords)
+
+            for c in new_key.connected:
+                con_frag = ligand.get_fragment(new_key, c)
+                if len(con_frag) > len(frag):
+                    continue
+                old_vec = self.COM(targets=old_key.connected)
+                old_vec -= old_key.coords
+                new_vec = ligand.COM(targets=new_key.connected)
+                new_vec -= new_key.coords
+                axis, angle = get_rotation(old_vec, new_vec)
+                ligand.rotate(
+                    c.bond(new_key),
+                    -1 * angle,
+                    targets=con_frag,
+                    center=new_key.coords,
+                )
+
+        def map_more_key(self, old_ligand, ligand, old_keys, new_keys):
+            # backbone fragments separated by rotatable bonds
+            frag_list = ligand.get_frag_list(max_order=1)
+            ligand.write("ligand")
+
+            # get key atoms on each side of rotatable bonds
+            key_count = {}
+            for frag, a, b in frag_list:
+                n_keys = []
+                for i in frag:
+                    if i not in ligand.key_atoms:
+                        continue
+                    n_keys += [i]
+                if len(n_keys) < 1 or len(n_keys) > 2:
+                    continue
+                if a in ligand.key_atoms or b in ligand.key_atoms:
+                    continue
+                if utils.same_cycle(ligand, a, b):
+                    continue
+                if len(n_keys) not in key_count:
+                    key_count[len(n_keys)] = [(frag, a, b)]
+                else:
+                    key_count[len(n_keys)] += [(frag, a, b)]
+
+            partial_map = False
+            mapped_frags = []
+            for k in sorted(key_count.keys(), reverse=True):
+                if k == 2 and not partial_map:
+                    frag, a, b = key_count[k][0]
+                    ok = []
+                    nk = []
+                    for i, n in enumerate(new_keys):
+                        if n not in frag:
+                            continue
+                        ok += [old_keys[i]]
+                        nk += [n]
+                    map_2_key(old_ligand, ligand, ok, nk)
+                    partial_map = True
+                    mapped_frags += [frag]
+                    continue
+                if k == 1 and not partial_map:
+                    frag, a, b = key_count[k][0]
+                    for i, n in enumerate(new_keys):
+                        if n not in frag:
+                            continue
+                        map_1_key(self, ligand, n, old_keys[i])
+                        partial_map = True
+                        mapped_frags += [frag]
+                        break
+                    continue
+                if k == 1 and partial_map:
+                    for frag, a, b in key_count[k]:
+                        for i, n in enumerate(new_keys):
+                            if n not in frag:
+                                continue
+                            map_rot_frag(frag, a, b, ligand, old_keys[i], n)
+                            mapped_frags += [frag]
+                            break
+            return
+
+        if not self.components:
+            self.detect_components()
+
+        # find old and new keys
+        old_keys = self.find(old_keys)
+        if isinstance(ligands, (str, Geometry)):
+            ligands = [ligands]
+        new_keys = []
+        for i, ligand in enumerate(ligands):
+            if not isinstance(ligand, AaronTools.component.Component):
+                ligand = AaronTools.component.Component(ligand)
+                ligands[i] = ligand
+            ligand.refresh_connected()
+            new_keys += ligand.key_atoms
+        if len(old_keys) != len(new_keys):
+            raise ValueError(
+                "Cannot map ligand. "
+                + "Differing number of key atoms. "
+                + "Old keys: "
+                + ",".join([i.name for i in old_keys])
+                + "; "
+                + "New keys: "
+                + ",".join([i.name for i in new_keys])
+            )
+
+        old_ligands = []
+        for k in old_keys:
+            for c in self.components:
+                if k in c.atoms:
+                    old_ligands += [c]
+        start = 0
+        end = None
+        for i, ligand in enumerate(ligands):
+            end = start + len(ligand.key_atoms)
+            if len(ligand.key_atoms) == 1:
+                map_1_key(self, ligand, old_keys[start], new_keys[start])
+            elif len(ligand.key_atoms) == 2:
+                map_2_key(
+                    old_ligands[start],
+                    ligand,
+                    old_keys[start:end],
+                    new_keys[start:end],
+                )
+            else:
+                map_more_key(
+                    self,
+                    old_ligands[start],
+                    ligand,
+                    old_keys[start:end],
+                    new_keys[start:end],
+                )
+
+            for a in ligand.atoms:
+                a.name = old_keys[start].name + "." + a.name
+                a.add_tag("ligand")
+            start = end
+
+        # remove old
+        for ol in old_ligands:
+            try:
+                self.components.remove(ol)
+            except ValueError:
+                continue
+            for atom in self.atoms:
+                if atom.connected & set(ol.atoms):
+                    atom.connected = atom.connected - set(ol.atoms)
+
+        # add new
+        for ligand in ligands:
+            self.components += [ligand]
+        self.rebuild()
+        # rotate monodentate to relieve clashing
+        for ligand in self.components:
+            if len(ligand.key_atoms) == 1:
+                targets = ligand.atoms
+                key = ligand.key_atoms[0]
+                if self.center:
+                    start = self.COM(self.center)
+                    end = key.coords
+                else:
+                    start = key.coords
+                    end = self.COM(key.connected)
+                axis = end - start
+                self.minimize_torsion(targets, axis, center=key, increment=8)
+        self.remove_clash()
+        if minimize:
+            self.minimize()
+        self.refresh_ranks()
+
+    def remove_clash(self, sub_list=None):
+        def get_clash(sub, scale):
+            """
+            Returns: np.array(bend_axis) if clash found, False otherwise
+            """
+            clashing = []
+            for atom in self.atoms:
+                if atom in sub.atoms or atom == sub.end:
+                    continue
+                threshold = atom._radii
+                for sub_atom in sub.atoms:
+                    threshold += sub_atom._radii
+                    threshold *= scale
+                    dist = atom.dist(sub_atom)
+                    if dist < threshold or dist < 0.8:
+                        clashing += [(atom, threshold - dist)]
+            if not clashing:
+                return False
+            rot_axis = sub.atoms[0].bond(sub.end)
+            vector = np.array([0, 0, 0], dtype=float)
+            for a, w in clashing:
+                vector += a.bond(sub.end) * w
+            bend_axis = np.cross(rot_axis, vector)
+            return bend_axis
+
+        bad_subs = []  # substituents for which releif not found
+        # bend_angles = [8, -16, 32, -48, 68, -88]
+        # bend_back = np.deg2rad(20)
+        bend_angles = [8, 8, 8, 5, 5, 5]
+        bend_back = []
+        rot_angles = [8, -16, 32, -48]
+        rot_back = np.deg2rad(16)
+        scale = 0.75  # for scaling distance threshold
+
+        if sub_list is None:
+            sub_list = sorted(self.get_substituents())
+            try_twice = True
+        else:
+            scale = 0.65
+            sub_list = sorted(sub_list, reverse=True)
+            try_twice = False
+
+        for i, b in enumerate(bend_angles):
+            bend_angles[i] = -np.deg2rad(b)
+        for i, r in enumerate(rot_angles):
+            rot_angles[i] = np.deg2rad(r)
+
+        for sub in sub_list:
+            b, r = 0, 0  # bend_angle, rot_angle index counters
+            bend_axis = get_clash(sub, scale)
+            if bend_axis is False:
+                continue
+            else:
+                # try just rotating first
+                while r < len(rot_angles):
+                    # try rotating
+                    if r < len(rot_angles):
+                        sub.sub_rotate(rot_angles[r])
+                        r += 1
+                    if get_clash(sub, scale) is False:
+                        break
+                else:
+                    sub.sub_rotate(rot_back)
+                    r = 0
+            bend_axis = get_clash(sub, scale)
+            while b < len(bend_angles) and bend_axis is not False:
+                bend_back += [bend_axis]
+                # try bending
+                if b < len(bend_angles):
+                    sub.rotate(bend_axis, bend_angles[b], center=sub.end)
+                    b += 1
+                bend_axis = get_clash(sub, scale)
+                if bend_axis is False:
+                    break
+                while r < len(rot_angles):
+                    # try rotating
+                    if r < len(rot_angles):
+                        sub.sub_rotate(rot_angles[r])
+                        r += 1
+                    if get_clash(sub, scale) is False:
+                        break
+                else:
+                    sub.sub_rotate(rot_back)
+                    r = 0
+            else:
+                # bend back to original if cannot automatically remove
+                # the clash, add to bad_sub list
+                bend_axis = get_clash(sub, scale)
+                if bend_axis is False:
+                    break
+                for bend_axis in bend_back:
+                    sub.rotate(bend_axis, -bend_angles[0], center=sub.end)
+                bad_subs += [sub]
+
+        # try a second time just in case other subs moved out of the way enough
+        # for the first subs encountered to work now
+        if try_twice and len(bad_subs) > 0:
+            bad_subs = self.remove_clash(bad_subs)
+        return bad_subs
+
+    def minimize(self):
+        """
+        Rotates substituents in each component to minimize LJ_energy.
+        Different from Component.minimize_sub_torsion() in that it minimizes
+        with respect to the entire catalyst instead of just the component
+        """
+        targets = {}
+        for sub in self.get_substituents(for_confs=True):
+            if len(sub.atoms):
+                continue
+            try:
+                targets[len(sub.atoms)] += [sub]
+            except KeyError:
+                targets[len(sub.atoms)] = [sub]
+
+        # minimize torsion for each substituent
+        # smallest to largest
+        for k in sorted(targets.keys()):
+            for sub in targets[k]:
+                axis = sub.atoms[0].bond(sub.end)
+                center = sub.end
+                self.minimize_torsion(sub.atoms, axis, center)
+
+    def next_conformer(self, conf_spec, skip_spec={}):
+        """
+        Generates the next possible conformer
+
+        :conf_spec: {sub_start_number: conf_number}
+        :skip_spec: {sub_start_number: [skip_numbers]}
+
+
+        Returns:
+            conf_spec if there are still more conformers
+            {} if there are no more conformers to generate
+        """
+        for start, conf_num in sorted(conf_spec.items()):
+            sub = self.find_substituent(start)
+            # skip conformer if signalled it's a repeat
+            skip = skip_spec.get(start, [])
+            if skip == "all" or conf_num == 0 or conf_num in skip:
+                if conf_num == sub.conf_num:
+                    conf_spec[start] = 1
+                else:
+                    conf_spec[start] += 1
+                continue
+            # reset conf if we hit max conf #
+            if conf_num == sub.conf_num:
+                sub.sub_rotate()
+                conf_spec[start] = 1
+                continue
+            # perform rotation
+            sub.sub_rotate()
+            conf_spec[start] += 1
+            self.remove_clash()
+            # continue if the same as cf1
+            angle = int(np.rad2deg((conf_spec[start] - 1) * sub.conf_angle))
+            if angle != 360 and angle != 0:
+                return conf_spec
+            else:
+                continue
+        else:
+            # we are done now
+            return {}
+
+    def make_conformer(self, conf_spec):
+        """
+        Returns:
+            conf_spec, True if conformer generated (allowed by conf_spec),
+            conf_spec, False if not allowed or invalid
+
+        :conf_spec: dictionary of the form
+            {sub_start_number: (conf_number, [skip_numbers])}
+        """
+        original = self.copy()
+        for start, conf_num in conf_spec.items():
+            current, skip = conf_spec[start]
+            # skip if flagged a repeat
+            if conf_num in skip or skip == "all":
+                self = original
+                return conf_spec, False
+            sub = self.find_substituent(start)
+            # validate conf_spec
+            if conf_num > sub.conf_num:
+                self = original
+                warn(
+                    "Bad conformer number given: {} {} > {}".format(
+                        sub.name, conf_num, sub.conf_num
+                    )
+                )
+                return conf_spec, False
+            if conf_num > current:
+                n_rot = conf_num - current - 1
+                for _ in range(n_rot):
+                    conf_spec[start][0] += 1
+                    sub.rotate()
+            elif conf_num < current:
+                n_rot = current - conf_num - 1
+                for _ in range(n_rot):
+                    conf_spec[start][0] -= 1
+                    sub.rotate(reverse=True)
+        return conf_spec, True
