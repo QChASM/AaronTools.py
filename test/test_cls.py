@@ -3,19 +3,13 @@
 import os
 import sys
 import unittest
-from copy import copy
 from glob import glob
-from io import StringIO
 from subprocess import PIPE, Popen
 
 import AaronTools
-import numpy as np
 from AaronTools.atoms import Atom
-from AaronTools.catalyst import Catalyst
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.ring import Ring
-from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 from AaronTools.test.test_geometry import is_close
 
@@ -612,7 +606,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
     def test_mapLigand(self):
         """test mapLigand.py"""
-        ref = Catalyst(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
 
         args = [
             sys.executable,
@@ -631,7 +625,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
             raise RuntimeError(err)
 
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
-        mol = Catalyst(fr)
+        mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
 
     def test_interpolate(self):

@@ -1052,13 +1052,26 @@ class Geometry:
                 found = found.union(frag)
         return rv
 
-    def shortest_path(self, atom1, atom2):
+    def shortest_path(self, atom1, atom2, avoid=None):
         """
         Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
+        avoid: atoms to avoid on the path
         """
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
-        path = utils.shortest_path(self, a1, a2)
+        if avoid is None:
+            path = utils.shortest_path(self, a1, a2)
+        else:
+            avoid = self.find(avoid)
+            graph = [
+                [
+                    self.atoms.index(j)
+                    for j in i.connected
+                    if j in self.atoms and j not in avoid
+                ]
+                for i in self.atoms
+            ]
+            path = utils.shortest_path(graph, a1, a2)
         if not path:
             raise LookupError(
                 "could not determine best path between {} and {}".format(
@@ -2040,9 +2053,6 @@ class Geometry:
         """
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
-        # set up substituent object
-        if not isinstance(sub, Substituent):
-            sub = Substituent(sub)
 
         sub.refresh_connected()
         # determine target and atoms defining connection bond
@@ -2163,34 +2173,6 @@ class Geometry:
             self.substituents = []
 
         self.substituents.append(sub)
-
-    def shortest_path(self, atom1, atom2, avoid=None):
-        """
-        Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
-        avoid: atoms to avoid on the path
-        """
-        a1 = self.find(atom1)[0]
-        a2 = self.find(atom2)[0]
-        if avoid is None:
-            path = utils.shortest_path(self, a1, a2)
-        else:
-            avoid = self.find(avoid)
-            graph = [
-                [
-                    self.atoms.index(j)
-                    for j in i.connected
-                    if j in self.atoms and j not in avoid
-                ]
-                for i in self.atoms
-            ]
-            path = utils.shortest_path(graph, a1, a2)
-        if not path:
-            raise LookupError(
-                "could not determine best path between {} and {}".format(
-                    atom1, atom2
-                )
-            )
-        return [self.atoms[i] for i in path]
 
     def get_substituents(self, for_confs=True):
         """
