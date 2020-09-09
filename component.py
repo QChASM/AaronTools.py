@@ -112,18 +112,6 @@ class Component(Geometry):
         self.backbone = sorted(self.backbone)
         self.atoms = self.backbone + sub_atoms
 
-    def substitute(self, sub, target, attached_to=None):
-        """
-        substitutes fragment containing `target` with substituent `sub`
-        if end provided, this is the atom where the substituent is attached
-        if end==None, replace the smallest fragment containing `target`
-        """
-        if not isinstance(sub, Substituent):
-            sub = Substituent(sub)
-        super().substitute(sub, target, attached_to)
-        self.detect_backbone(to_center=self.backbone)
-        self.rebuild()
-
     def get_frag_list(self, targets=None, max_order=None):
         """
         find fragments connected by only one bond

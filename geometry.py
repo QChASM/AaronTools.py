@@ -1872,9 +1872,7 @@ class Geometry:
 
         return
 
-    def substitute(
-        self, sub, target, attached_to=None, refresh_ranks=True, minimize=True
-    ):
+    def substitute(self, sub, target, attached_to=None, minimize=True):
         """
         substitutes fragment containing `target` with substituent `sub`
         if end provided, this is the atom where the substituent is attached
@@ -1970,8 +1968,9 @@ class Geometry:
 
         # clean up changes
         if isinstance(geom, AaronTools.component.Component):
+            self.substituents += [sub]
+            self.detect_backbone(to_center=self.backbone)
             self.rebuild()
-            self.detect_components()
         self.refresh_ranks()
         if minimize:
             self.minimize()
