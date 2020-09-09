@@ -12,11 +12,10 @@ import numpy as np
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
-from AaronTools.const import D_CUTOFF, ELEMENTS
+from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.utils.prime_numbers import Primes
 
-Component = AaronTools.component.Component
 COORD_THRESHOLD = 0.2
 
 
@@ -210,7 +209,8 @@ class Geometry:
         if comment is None:
             comment = self.comment
         atoms = self._fix_connectivity(atoms)
-        self.fix_comment()
+        if hasattr(self, "components") and self.components is not None:
+            self.fix_comment()
         return Geometry(atoms, name, comment)
 
     def parse_comment(self):
@@ -251,21 +251,27 @@ class Geometry:
                 rv["center"] += [a]
 
         # ligand
-        match = re.search("L:([0-9-,]+)", self.comment)
+        match = re.search("L:([0-9;,-]+)", self.comment)
         if match is not None:
             rv["ligand"] = []
-            match = match.group(1).split(",")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split("-")
-                for i in range(int(m[0]) - 1, int(m[1])):
-                    try:
-                        a = self.atoms[i]
-                    except IndexError:
+            match = match.group(1).split(";")
+            for submatch in match:
+                tmp = []
+                for m in submatch.split(","):
+                    if m == "":
                         continue
-                    a.add_tag("ligand")
-                    rv["ligand"] += [a]
+                    if "-" not in m:
+                        a = self.atoms[int(m) - 1]
+                        tmp += [a]
+                        continue
+                    m = m.split("-")
+                    for i in range(int(m[0]) - 1, int(m[1])):
+                        try:
+                            a = self.atoms[i]
+                        except IndexError:
+                            continue
+                        tmp += [a]
+                rv["ligand"] += [tmp]
 
         # key atoms
         match = re.search("K:([0-9,;]+)", self.comment)
@@ -284,6 +290,10 @@ class Geometry:
         return rv
 
     def fix_comment(self):
+        if not hasattr(self, "components"):
+            return
+        elif self.components is None:
+            self.detect_components()
         new_comment = ""
         # center
         if self.center:
@@ -295,9 +305,9 @@ class Geometry:
 
         # key atoms
         new_comment += " K:"
-        for frag in self.components:
+        for frag in sorted(self.components):
             tmp = ""
-            for key in frag.key_atoms:
+            for key in sorted(frag.key_atoms):
                 tmp += "{},".format(self.atoms.index(key) + 1)
             if tmp:
                 new_comment += tmp[:-1] + ";"
@@ -316,6 +326,31 @@ class Geometry:
                 new_comment += "{}-{};".format(*sorted(ids))
             else:
                 new_comment = new_comment[:-1]
+
+        # components
+        if self.components:
+            new_comment += " L:"
+            for lig in sorted(self.components):
+                ids = sorted([1 + self.atoms.index(a) for a in lig])
+                tmp = []
+                for i in ids:
+                    if i == ids[0]:
+                        tmp = [i]
+                        continue
+                    if i == tmp[-1] + 1:
+                        tmp += [i]
+                    elif len(tmp) == 1:
+                        new_comment += "{},".format(tmp[0])
+                        tmp = [i]
+                    else:
+                        new_comment += "{}-{},".format(tmp[0], tmp[-1])
+                        tmp = [i]
+                if len(tmp) == 1:
+                    new_comment += "{},".format(tmp[0])
+                else:
+                    new_comment += "{}-{},".format(tmp[0], tmp[-1])
+                new_comment = new_comment[:-1] + ";"
+            new_comment = new_comment[:-1]
 
         # save new comment (original comment still in self.other)
         self.comment = new_comment
@@ -849,7 +884,7 @@ class Geometry:
             name = self.name + ".{:g}".format(
                 min([float(a.name) for a in frag])
             )
-            self.components[i] = Component(frag, name)
+            self.components[i] = AaronTools.component.Component(frag, name)
         self.rebuild()
         return
 
@@ -861,15 +896,39 @@ class Geometry:
             (  /
             L1/
         """
+
+        def add_tags(frag):
+            for f in frag:
+                found.add(f)
+                for c in self.center:
+                    if f in c.connected:
+                        f.add_tag("key")
+
         if avoid is None and self.center:
             avoid = self.center
-
         found = set([])
         rv = []
+
+        if "ligand" in self.other:
+            for ligand in self.other["ligand"]:
+                frag = set(self.find(ligand))
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
+                found.union(frag)
+
         for a in targets:
             if a in found:
                 continue
-            if not avoid:
+            if avoid:
+                if a in avoid:
+                    continue
+                frag = set(self.get_fragment(a, avoid))
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
+                found.union(frag)
+            else:
                 frag = set([a])
                 queue = a.connected.copy()
                 while queue:
@@ -878,18 +937,10 @@ class Geometry:
                         continue
                     frag.add(this)
                     queue = queue.union(this.connected)
+                frag -= found
+                add_tags(frag)
+                rv += [sorted(frag)]
                 found = found.union(frag)
-                rv += [list(frag)]
-                continue
-            if a in avoid:
-                continue
-            frag = self.get_fragment(a, avoid)
-            for f in frag:
-                found.add(f)
-                for c in self.center:
-                    if f in c.connected:
-                        f.add_tag("key")
-            rv += [frag]
         return rv
 
     def shortest_path(self, atom1, atom2):
@@ -1123,36 +1174,7 @@ class Geometry:
             # try just regular canonical ordering
             obj.refresh_ranks()
             orders = [obj.reorder(targets=targets, canonical=False)[0]]
-            if not longsort:
-                return orders
-            else:
-                # This way might be better, as there could be canonical ties,
-                # but it gets really costly really fast.
-                order = orders[0]
-                swap = []
-                tmp = set([])
-                for i, o in enumerate(order):
-                    if i == 0:
-                        last_rank = order[0]._rank
-                        continue
-                    if o._rank == last_rank:
-                        tmp.add(i - 1)
-                        tmp.add(i)
-                    elif tmp:
-                        swap += [tmp.copy()]
-                        tmp = set([])
-                    last_rank = o._rank
-                pairs = []
-                for n in range(1, len(swap) + 1):
-                    for to_swap in itertools.combinations(swap, n):
-                        for s in to_swap:
-                            for pair in itertools.combinations(list(s), 2):
-                                pairs += [pair]
-                for i, j in pairs:
-                    tmp = order.copy()
-                    tmp[i], tmp[j] = tmp[j], tmp[i]
-                    orders += [tmp]
-                return orders
+            return orders
 
         # get target atoms
         tmp = targets
@@ -1858,8 +1880,8 @@ class Geometry:
         if end provided, this is the atom where the substituent is attached
         if end==None, replace the smallest fragment containing `target`
         """
-        if not isinstance(sub, Substituent):
-            sub = Substituent(sub)
+        if not isinstance(sub, AaronTools.substituent.Substituent):
+            sub = AaronTools.substituent.Substituent(sub)
         # set up substituent object
         sub.refresh_connected()
         # determine target and atoms defining connection bond
@@ -1868,10 +1890,11 @@ class Geometry:
         # if we have components, do the substitution to the component
         # otherwise, just do it on self
         geom = self
-        for comp in self.components:
-            if target in comp:
-                geom = comp
-                break
+        if hasattr(self, "components") and self.components is not None:
+            for comp in self.components:
+                if target in comp:
+                    geom = comp
+                    break
 
         # attached_to is provided or is the atom giving the
         # smallest target fragment
@@ -1946,7 +1969,7 @@ class Geometry:
         geom.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
 
         # clean up changes
-        if isinstance(geom, Component):
+        if isinstance(geom, AaronTools.component.Component):
             self.rebuild()
             self.detect_components()
         self.refresh_ranks()
@@ -2019,9 +2042,7 @@ class Geometry:
 
             ring_fragment.end = walk[1:-1]
 
-            r = geom.remove_fragment(
-                [walk[0], walk[-1]], walk[1:-1], add_H=False
-            )
+            geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
             geom -= [walk[0], walk[-1]]
 
             geom.atoms.extend(ring_fragment.atoms)
@@ -2523,8 +2544,8 @@ class Geometry:
             ligands = [ligands]
         new_keys = []
         for i, ligand in enumerate(ligands):
-            if not isinstance(ligand, Component):
-                ligand = Component(ligand)
+            if not isinstance(ligand, AaronTools.component.Component):
+                ligand = AaronTools.component.Component(ligand)
                 ligands[i] = ligand
             ligand.refresh_connected()
             new_keys += ligand.key_atoms

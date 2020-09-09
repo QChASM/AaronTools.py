@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import json
 import os
 import unittest
 from copy import copy
 
+import AaronTools
 import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, FileWriter
@@ -376,7 +378,8 @@ class TestGeometry(TestWithTimer):
     def test_detect_components(self):
         test = {}
         for cat in TestGeometry.catalysts:
-            cat = Catalyst(cat)
+            cat = Geometry(cat)
+            cat.detect_components()
             for comp in cat.components:
                 test[os.path.basename(comp.name)] = sorted(
                     [int(float(c)) for c in comp]
@@ -389,13 +392,16 @@ class TestGeometry(TestWithTimer):
         self.assertDictEqual(test, ref)
 
     def test_fix_comment(self):
-        cat = TestGeometry.tm_simple.copy()
+        cat = Geometry(TestGeometry.tm_simple)
+        cat.fix_comment()
         self.assertEqual(
-            cat.comment, "C:34 K:1,2 L:35-93 F:1-2;1-13;1-34;2-34;13-34"
+            cat.comment,
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
         )
         cat.substitute("Me", "4")
         self.assertEqual(
-            cat.comment, "C:37 K:1,2 L:38-96 F:1-2;1-16;1-37;2-37;16-37"
+            cat.comment,
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
         )
 
     # geometry measurement
@@ -618,8 +624,7 @@ class TestGeometry(TestWithTimer):
         mol.substitute(Substituent("NO2"), "12")
         mol.substitute(Substituent("Cl"), "11")
 
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        self.assertTrue(validate(mol, ref))
 
     def test_close_ring(self):
         mol = Geometry(TestGeometry.benzene)
@@ -653,8 +658,9 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(rmsd < rmsd_tol(ref))
 
     def test_map_ligand(self):
-        monodentate = Component(TestGeometry.monodentate)
-        tridentate = Component(TestGeometry.tridentate)
+        monodentate = AaronTools.component.Component(TestGeometry.monodentate)
+        tridentate = AaronTools.component.Component(TestGeometry.tridentate)
+        debug = False
 
         """
         #TODO: get a reference file for this
@@ -664,74 +670,79 @@ class TestGeometry(TestWithTimer):
         """
 
         # bidentate -> monodentate, none
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
-        tm_simple = Catalyst(TestGeometry.tm_simple)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand(monodentate, ["35"])
         self.assertTrue(
             validate(
-                tm_simple, ref, heavy_only=True, thresh="loose", debug=True
+                tm_simple, ref, heavy_only=True, thresh="loose", debug=debug
             )
         )
 
         # bidentate -> two monodentate
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
-        tm_simple = Catalyst(TestGeometry.tm_simple)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
         self.assertTrue(
             validate(
-                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
             )
         )
 
         # bidentate -> bidentate
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_3.xyz"))
-        tm_simple = Catalyst(TestGeometry.tm_simple)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_3.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
         self.assertTrue(
             validate(
-                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
             )
         )
 
         # tridentate -> tridentate
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_4.xyz"))
-        org_tri = Catalyst(TestGeometry.org_tri)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_4.xyz"))
+        org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
         self.assertTrue(
-            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
         )
 
         # tridentate -> monodentate + bidentate -> tridentate
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
-        org_tri = Catalyst(TestGeometry.org_tri)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(["EDA", "ACN"], ["30", "28", "58"])
         self.assertTrue(
-            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
         )
 
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_7.xyz"))
-        org_tri = Catalyst(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
-        org_tri.map_ligand(tridentate, ["33", "34", "25"])
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_7.xyz"))
+        org_tri = Geometry(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        org_tri.map_ligand(tridentate, ["10", "11", "2"])
         self.assertTrue(
-            validate(org_tri, ref, thresh="loose", heavy_only=True, debug=True)
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
         )
 
         # bidentate -> two bulky monodentate
-        ref = Catalyst(os.path.join(prefix, "ref_files/lig_map_5.xyz"))
-        tm_simple = Catalyst(TestGeometry.tm_simple)
+        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_5.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand(["iPr-NC3C"] * 2, ["35", "36"])
         self.assertTrue(
             validate(
-                tm_simple, ref, thresh="loose", heavy_only=True, debug=True
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
             )
         )
 
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_canonical_rank"))
+    # suite.addTest(TestGeometry("test_map_ligand"))
     suite.addTest(TestGeometry("test_detect_components"))
-    suite.addTest(TestGeometry("test_map_ligand"))
     suite.addTest(TestGeometry("test_fix_comment"))
     return suite
 
