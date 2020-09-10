@@ -1080,88 +1080,9 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
-    def short_walk(self, atom1, atom2, avoid=None):
-        """try to find the shortest path between atom1 and atom2"""
-        a1 = self.find(atom1)[0]
-        a2 = self.find(atom2)[0]
-        if avoid is None:
-            avoid = []
-        else:
-            avoid = self.find(avoid)
-        l = [a1]
-        start = a1
-        max_iter = len(self.atoms)
-        i = 0
-        while start != a2:
-            i += 1
-            if i > max_iter:
-                raise LookupError(
-                    "could not determine best path between %s and %s"
-                    % (str(atom1), str(atom2))
-                )
-            v1 = start.bond(a2)
-            max_overlap = None
-            new_start = None
-            for atom in start.connected:
-                if atom not in l and atom not in avoid and atom in self.atoms:
-                    v2 = start.bond(atom)
-                    overlap = np.dot(v1, v2)
-                    if max_overlap is None or overlap > max_overlap:
-                        new_start = atom
-                        max_overlap = overlap
-
-            if new_start is None:
-                l.remove(start)
-                avoid.append(start)
-                if len(l) > 1:
-                    start = l[-1]
-                else:
-                    raise RuntimeError(
-                        "could not determine bet path between %s and %s"
-                        % (str(atom1), str(atom2))
-                    )
-            else:
-                l.append(new_start)
-                start = new_start
-
-        return l
-
-    @classmethod
-    def from_string(cls, name, form="smiles"):
-        """get structure from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API"""
-
-        accepted_forms = ["iupac", "smiles"]
-
-        if form not in accepted_forms:
-            raise NotImplementedError(
-                "cannot create substituent given %s; use one of %s" % form,
-                str(accepted_forms),
-            )
-
-        if form == "smiles":
-            smiles = name
-        elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
-
-        url_sd = (
-            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-            % smiles
-        )
-        s_sd = urlopen(url_sd).read().decode("utf8")
-        f = FileReader((name, "sd", s_sd))
-        return Geometry(f)
+    #nothing in AaronTools refers to sort_walk anymore
+    short_walk = shortest_path
+    #from_string has been moved to utils.fetch
 
     # geometry measurement
     def bond(self, a1, a2):

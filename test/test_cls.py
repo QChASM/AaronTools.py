@@ -309,8 +309,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         out_list = out.decode("utf-8").splitlines()
         ref_list = ref_csv.splitlines()
 
-        out_list = out.decode("utf-8").split("\n")
-        ref_list = ref_csv.split("\n")
+        out_list = out.decode("utf-8").splitlines()
+        ref_list = ref_csv.splitlines()
 
         # test CSV with sp file
         args = [
