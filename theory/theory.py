@@ -219,6 +219,9 @@ class Theory:
                 job_dict = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
+        if GAUSSIAN_COMMENT not in other_kw_dict or len(other_kw_dict[GAUSSIAN_COMMENT]) == 0:
+            other_kw_dict[GAUSSIAN_COMMENT] = ['comment']
+
         warnings = []
         s = ""
 

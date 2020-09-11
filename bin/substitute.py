@@ -39,7 +39,10 @@ substitute_parser.add_argument('-s', '--substitute', metavar='n=substituent', \
                             dest='substitutions', \
                             help="substitution instructions \n" + \
                             "n is the 1-indexed position of the starting position of the\n" + \
-                            "substituent you are replacing")
+                            "substituent you are replacing\n" + \
+                            "a substituent name prefixed by iupac: or smiles: (e.g. iupac:acetyl\n" + \
+                            "or smiles:O=[N.]=O) will create the substituent from the\n" + \
+                            "corresponding identifier")
 
 substitute_parser.add_argument('-m', '--minimize', \
                                 action='store_const', \
@@ -95,7 +98,14 @@ for infile in args.infile:
         sub_name = '='.join(sub.split('=')[1:])
    
         for target in ndx_target:
-            sub = Substituent(sub_name)
+            if sub_name.lower().startswith("iupac:"):
+                sub_name = ":".join(sub_name.split(":")[1:])
+                sub = Substituent.from_string(sub_name, form="iupac")
+            elif sub_name.lower().startswith("smiles:"):
+                sub_name = ":".join(sub_name.split(":")[1:])
+                sub = Substituent.from_string(sub_name, form="smiles")
+            else:
+                sub = Substituent(sub_name)
 
             #replace old substituent with new substituent
             geom.substitute(sub, target)

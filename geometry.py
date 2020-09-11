@@ -79,7 +79,9 @@ class Geometry:
         self.comment = from_file.comment
         self.atoms = from_file.atoms
         self.other = self.parse_comment()
-        self.refresh_connected()
+        if from_file.file_type != "sd":
+            # sd files contain connectivity info
+            self.refresh_connected()
         self.refresh_ranks()
         return
 
@@ -100,6 +102,41 @@ class Geometry:
             rv[i] = a.coords[:]
         return rv
 
+    @classmethod
+    def from_string(cls, name, form='smiles'):
+        """get Geometry from string
+        form=iupac -> iupac to smiles from opsin API
+                       --> form=smiles
+        form=smiles -> structure from cactvs API"""
+    
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+
+        accepted_forms = ['iupac', 'smiles']
+
+        if form not in accepted_forms:
+            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
+
+        if form == 'smiles':
+            smiles = name
+        elif form == 'iupac':
+            #opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode('utf8')
+            except HTTPError:
+               raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
+    
+        # print(smiles)
+
+        url_sd = "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf" % smiles
+        # print(url_sd)
+        s_sd = urlopen(url_sd).read().decode('utf8')
+        f = FileReader((name, "sd", s_sd))
+        return cls(f)
+    
+    @property
     def elements(self):
         """ returns list of elements composing the atoms in the geometry """
         return [a.element for a in self.atoms]
@@ -1082,7 +1119,6 @@ class Geometry:
 
     #nothing in AaronTools refers to sort_walk anymore
     short_walk = shortest_path
-    #from_string has been moved to utils.fetch
 
     # geometry measurement
     def bond(self, a1, a2):
@@ -2933,3 +2969,4 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
+

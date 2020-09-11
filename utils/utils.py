@@ -374,7 +374,38 @@ def trim_leaves(graph, _removed=[]):
         graph, _removed = trim_leaves(graph, _removed)
 
     return graph, set(_removed)
-    
+
+def to_closing(s, p):
+    """returns the portion of string s from the beginning to the closing
+    paratheses or bracket denoted by p
+    p can be '(', '{', or '['
+    if the closing paratheses is not found, returns None instead"""
+    if p == '(':
+        q = ('(', ')')
+    elif p == '{':
+        q = ('{', '}')
+    elif p == '[':
+        q = ('[', ']')
+    else:
+        raise RuntimeError("p must be '(', '{', or '['")
+
+    out = ""
+    count = 0
+    for x in s:
+        if x == q[0]:
+            count += 1
+        elif x == q[1]:
+            count -= 1
+
+        out += x
+        if count == 0:
+            break
+
+    if count != 0:
+        return None
+    else:
+        return out
+
 def rotation_matrix(theta, axis):
     """rotation matrix for rotating theta radians about axis"""
     #I've only tested this for rotations in R3

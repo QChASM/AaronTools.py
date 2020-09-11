@@ -209,6 +209,27 @@ class TestCLS(TestWithTimer):
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
 
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "substitute.py"),
+            TestCLS.benzene,
+            "-s",
+            "12=smiles:O=[N.]=O",
+            "-s",
+            "11=iupac:chloro",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        fr = FileReader(("out", "xyz", out.decode("utf-8")))
+        mol = Geometry(fr)
+        self.assertTrue(validate(mol, ref, thresh=1e-1))
+
     def test_closeRing(self):
         """test closeRing.py"""
         ref1 = Geometry(TestCLS.naphthalene)
@@ -794,11 +815,14 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_grabStatus"))
+    suite.addTest(TestCLS("test_substitute"))
     return suite
 
 
-if __name__ == "__main__":
+ONLYSOME = False
+
+if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()
+    runner.run(suite())
+elif __name__ == "__main__":
     unittest.main()
-    # runner.run(suite())

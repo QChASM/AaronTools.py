@@ -126,7 +126,7 @@ class TestGeometry(TestWithTimer):
         coords = mol._stack_coords()
         self.assertEqual(coords.shape, (12, 3))
         # elements
-        elements = mol.elements()
+        elements = mol.elements
         self.assertEqual(len(elements), 12)
         self.assertEqual(elements[0], "C")
         # coords

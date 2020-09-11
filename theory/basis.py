@@ -447,7 +447,7 @@ class Basis:
                          False for builtin basis sets
         """
         self.name = name
-        
+       
         if elements is None:
             self.elements = []
             self.ele_selection = self.default_elements

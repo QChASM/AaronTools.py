@@ -53,8 +53,8 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
     :debug: print info useful for debugging
     """
     if debug:
-        ref.write("ref")
-        test.write("test")
+        print(ref.write("ref", outfile=False))
+        print(test.write("test", outfile=False))
 
     if thresh is None:
         thresh = rmsd_tol(ref)
