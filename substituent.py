@@ -251,9 +251,6 @@ class Substituent(Geometry):
             angle = np.pi
             geom.rotate(np.array([0., 1., 0.]), -angle)
 
-        for atom in geom.atoms:
-            print(atom)
-
         out = cls(
              [atom for atom in geom.atoms if atom != added_H], 
              conf_num=conf_num, 
