@@ -167,7 +167,7 @@ def add_dict(this, other, skip=[]):
             this[key] = val
     return this
 
-def combine_dicts(d1, d2, case_sensitive=False):
+def combine_dicts(d1, d2, case_sensitive=False, dict2_conditional=False):
     """combine dictionaries d1 and d2 to return a dictionary
     with keys d1.keys() + d2.keys()
     if a key is in d1 and d2, the items will be combined:
@@ -175,6 +175,7 @@ def combine_dicts(d1, d2, case_sensitive=False):
         otherwise, they are combined with '+'
         if case_sensitive=False, the key in the output will be the lowercase
         of the d1 key and d2 key (only for combined items)
+    dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
     """
     #TODO
     #accept any number of input dicts
@@ -204,10 +205,11 @@ def combine_dicts(d1, d2, case_sensitive=False):
                 out[key] = d1[case_key] + d2[key_2]
 
     #go through keys from d2
-    for case_key, key in zip(case_keys_2, keys_2):
-        #if it's only in d2, add item to out
-        if key in keys_2 and key not in keys_1:
-            out[case_key] = d2[case_key]
+    if not dict2_conditional:
+        for case_key, key in zip(case_keys_2, keys_2):
+            #if it's only in d2, add item to out
+            if key in keys_2 and key not in keys_1:
+                out[case_key] = d2[case_key]
 
     return out
 

@@ -4,7 +4,7 @@ import os
 import argparse
 import sys
 
-from AaronTools.catalyst import Catalyst
+from AaronTools.geometry import Geometry
 from AaronTools.component import Component
 
 libaddlig_parser = argparse.ArgumentParser(description='add a ligand to your personal library', \
@@ -29,13 +29,15 @@ args = libaddlig_parser.parse_args()
 name = args.name[0]
 infile = args.infile[0]
 
-cat = Catalyst(infile)
+cat = Geometry(infile)
+
+if cat.center is None:
+    cat.detect_components()
 
 #move center to origin
-if cat.center is not None:
-    cat.coord_shift(-cat.COM(targets=cat.center))
+cat.coord_shift(-cat.COM(targets=cat.center))
 
-ligands = cat.components['ligand']
+ligands = cat.components
 lig_index = 0
 
 #if there's multiple ligands, ask which one we should add

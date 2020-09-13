@@ -9,12 +9,14 @@ from AaronTools.theory import ORCA_ROUTE, ORCA_BLOCKS, \
 from AaronTools.finders import AnyTransitionMetal, AnyNonTransitionMetal, NotAny
 from AaronTools.const import ELEMENTS
 
+from warnings import warn
+
 class BasisSet:
     """used to more easily get basis set info for writing input files"""
     ORCA_AUX = ["C", "J", "JK", "CABS", "OptRI CABS"]
     PSI4_AUX = ["JK", "RI"]
 
-    def __init__(self, basis, ecp=None):
+    def __init__(self, basis=None, ecp=None):
         """basis: list(Basis), Basis, str, or None
         ecp: list(ECP) or None"""
         if isinstance(basis, str):
@@ -27,6 +29,7 @@ class BasisSet:
 
     @property
     def elements_in_basis(self):
+        """returns a list of elements in self's basis"""
         elements = []
         if self.basis is not None:
             for basis in self.basis:
@@ -34,7 +37,25 @@ class BasisSet:
             
         return elements
 
+    def add_ecp(self, ecp):
+        """add ecp to this BasisSet
+        ecp - ECP"""
+        if self.ecp is None:
+            self.ecp = []
+
+        self.ecp.append(ecp)
+
+    def add_basis(self, basis):
+        """add basis to this BasisSet
+        basis - Basis"""
+        if self.basis is None:
+            self.basis = []
+
+        self.basis.append(basis)
+
     def refresh_elements(self, geometry):
+        """evaluate element specifications for each basis and ecp to
+        make them compatible with the supplied geometry"""
         if self.basis is not None:
             for basis in self.basis:
                 basis.refresh_elements(geometry)

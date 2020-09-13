@@ -634,9 +634,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
             os.path.join(self.aarontools_bin, "mapLigand.py"),
             TestCLS.tm_simple,
             "-l",
-            "S-tBu-BOX",
-            "-k",
-            "35,36",
+            "35,36=S-tBu-BOX",
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
@@ -815,7 +813,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_substitute"))
+    suite.addTest(TestCLS("test_mapLigand"))
     return suite
 
 
