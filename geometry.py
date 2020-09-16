@@ -12,6 +12,7 @@ import numpy as np
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
+from AaronTools.config import Config
 from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.finders import Finder
@@ -82,6 +83,49 @@ class Geometry:
         self.refresh_connected()
         self.refresh_ranks()
         return
+
+    # class methods
+    @classmethod
+    def from_string(cls, name, form="smiles"):
+        """get structure from string
+        form=iupac -> iupac to smiles from opsin API
+                       --> form=smiles
+        form=smiles -> structure from cactvs API"""
+
+        accepted_forms = ["iupac", "smiles"]
+
+        if form not in accepted_forms:
+            raise NotImplementedError(
+                "cannot create substituent given %s; use one of %s" % form,
+                str(accepted_forms),
+            )
+
+        # escape special characters for url
+        if "#" in name:
+            name = name.replace("#", "%23")
+        if "?" in name:
+            name = name.replace("?", "%3F")
+        if form == "smiles":
+            smiles = name
+        elif form == "iupac":
+            # opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode("utf8")
+            except HTTPError:
+                raise RuntimeError(
+                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
+                    % name
+                )
+
+        url_sd = (
+            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
+            % smiles
+        )
+        s_sd = urlopen(url_sd).read().decode("utf8")
+        f = FileReader((name, "sd", s_sd))
+        return Geometry(f)
 
     # attribute access
     def _stack_coords(self, atoms=None):
@@ -361,11 +405,17 @@ class Geometry:
         freezes targets if <flag> is True,
         relaxes targets if <flag> is False
         """
+        if isinstance(targets, Config):
+            tmp = []
+            if "new" in targets["Substitutions"]:
+                tmp += targets["Substitution"]["new"].split()
+            if "new" in targets["Mapping"]:
+                tmp += targets["Mapping"]["new"].split()
+            targets = tmp
         if targets is not None:
             targets = self.find(targets)
         else:
             targets = self.atoms
-
         for a in targets:
             a.flag = flag
         return
@@ -383,7 +433,7 @@ class Geometry:
         self._flag(False, targets)
 
     def get_constraints(self, as_index=True):
-        rv = set([])
+        rv = {}
         for i, a in enumerate(self.atoms[:-1]):
             if not a.constraint:
                 continue
@@ -391,11 +441,11 @@ class Geometry:
                 for atom, dist in a.constraint:
                     if b == atom:
                         if as_index:
-                            rv.add((i, i + j, dist))
+                            rv[(i, i + j)] = dist
                         else:
-                            rv.add((a, b, dist))
+                            rv[(a, b)] = dist
                         break
-        return sorted(rv)
+        return rv
 
     def get_connectivity(self):
         rv = []
@@ -1126,43 +1176,6 @@ class Geometry:
 
         return l
 
-    @classmethod
-    def from_string(cls, name, form="smiles"):
-        """get structure from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API"""
-
-        accepted_forms = ["iupac", "smiles"]
-
-        if form not in accepted_forms:
-            raise NotImplementedError(
-                "cannot create substituent given %s; use one of %s" % form,
-                str(accepted_forms),
-            )
-
-        if form == "smiles":
-            smiles = name
-        elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
-
-        url_sd = (
-            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-            % smiles
-        )
-        s_sd = urlopen(url_sd).read().decode("utf8")
-        f = FileReader((name, "sd", s_sd))
-        return Geometry(f)
-
     # geometry measurement
     def bond(self, a1, a2):
         """ takes two atoms and returns the bond vector """
@@ -1732,6 +1745,8 @@ class Geometry:
         a1, a2 = self.find_exact(a1, a2)
 
         # determine new bond length
+        if isinstance(dist, str):
+            dist = float(dist)
         if dist is None:
             new_dist = a1._radii + a2._radii
         elif adjust:
