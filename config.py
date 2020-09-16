@@ -18,23 +18,21 @@ SECTIONS = ["DEFAULT", "HPC", "Job", "Substitution", "Mapping", "Reaction"]
 class Config(configparser.ConfigParser):
     """
     Reads configuration information from INI files found at:
-        $QCHASM/Aaron/.aaron.ini
+        $QCHASM/AaronTools/config.ini
         $AARONLIB/config.ini
         ./config.ini or /path/to/file supplied during initialization
-
-    Attributes:
-        -config:        the configuration as a configparser.ConfigParser() object
-        For convienience, configuration section information provided in:
-        -HPC
-        -job
-        -substitution
-        -mapping
-        -reaction
-        -default
+    Access to configuration information available using dictionary notation.
+        eg: self[`section_name`][`option_name`] returns `option_value`
+    See help(configparser.ConfigParser) for more information
     """
 
     def __init__(self, infile="config.ini", quiet=False, **kwargs):
-        configparser.ConfigParser.__init__(self, interpolation=None)
+        """
+        infile: the configuration file to read
+        quiet: prints helpful status information
+        **kwargs: passed to initialization of parent class
+        """
+        configparser.ConfigParser.__init__(self, interpolation=None, **kwargs)
         if not quiet:
             print("Reading configuration...")
         if infile is not None:
@@ -55,6 +53,14 @@ class Config(configparser.ConfigParser):
         return config
 
     def parse_functions(self):
+        """
+        Evaluates functions supplied in configuration file
+        Functions indicated by "%{...}"
+        Pulls in values of options indicated by $option_name
+        Eg:
+            ppn = 4
+            memory = %{ $ppn * 2 }GB --> memory = 8GB
+        """
         func_patt = re.compile("%{(.*?)}")
         attr_patt = re.compile("\$([a-zA-Z0-9_:]+)")
         for section in self._sections:
@@ -85,8 +91,11 @@ class Config(configparser.ConfigParser):
                     self[section][key] = val
 
     def read_config(self, infile, quiet):
+        """
+        Reads configuration information from `infile` after pulling defaults
+        """
         for filename in [
-            os.path.join(QCHASM, "Aaron/config.ini"),
+            os.path.join(QCHASM, "AaronTools/config.ini"),
             os.path.join(AARONLIB, "config.ini"),
             infile,
         ]:
@@ -105,6 +114,9 @@ class Config(configparser.ConfigParser):
                 self.read_string(contents)
 
     def get_theory(self, geometry):
+        """
+        Get the theory object according to configuration information
+        """
         theory = Theory(geometry=geometry, **dict(self["Job"].items()))
         # build ImplicitSolvent object
         if self["Job"].get("solvent") == "gas":
@@ -166,6 +178,24 @@ class Config(configparser.ConfigParser):
         return theory
 
     def _parse_includes(self):
+        """
+        Moves option values from subsections into parent section
+        Eg:
+            [Job]
+            include = Wheeler
+            ppn = 12
+            queue = batch
+
+            [Job.Wheeler]
+            nodes = 1
+            queue = wheeler_q
+
+            ^^^evaluates to:
+            [Job]
+            nodes = 1
+            ppn = 12
+            queue = wheeler_q
+        """
         for section in self._sections:
             # add requested subsections to parent section
             if self.has_option(section, "include"):
