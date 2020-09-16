@@ -9,6 +9,7 @@ import numpy as np
 
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
+from AaronTools.theory import *
 
 read_types = ["xyz", "log", "com", "sd", "out", "dat"]
 write_types = ["xyz", "com", "inp", "in"]
@@ -387,6 +388,11 @@ class FileReader:
         for line in lines[4 : 4 + natoms]:
             atom_info = line.split()
             self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+        
+        for line in lines[4 + natoms : 4 + natoms + nbonds]:
+            a1, a2 = [int(x)-1 for x in line.split()[0:2]]
+            self.atoms[a1].connected.add(self.atoms[a2])
+            self.atoms[a2].connected.add(self.atoms[a1])
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -912,6 +918,103 @@ class FileReader:
 
             line = f.readline()
             n += 1
+
+        if not just_geom:
+            if route is not None:
+                other_kwargs = {GAUSSIAN_ROUTE:{}}
+                route_spec = re.compile('(\w+)=?\((.*)\)')
+                method_and_basis = re.search("#([NnPpTt]\s+?)(\S+)|^#\s*?(\S+)", route)
+                if method_and_basis is not None:
+                    if method_and_basis.group(3):
+                        method_info = method_and_basis.group(3).split('/')
+                    else:
+                        method_info = method_and_basis.group(2).split('/')
+                    
+                    method = method_info[0]
+                    if len(method_info) > 1:
+                        basis = method_info[1]
+                    else:
+                        basis = None
+
+                    route_options = route.split()
+                    job_type = []
+                    for option in route_options:
+                        if option.startswith('#'):
+                            continue
+                        elif option.startswith(method):
+                            continue
+
+                        option_lower = option.lower()
+                        if option_lower.startswith('opt'):
+                            ts = False
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(',')
+                            elif option_lower.startswith('opt='):
+                                options = ''.join(option.split('=')[1:])
+                            else:
+                                job_type.append(OptimizationJob())
+                                continue
+                            
+                            other_kwargs[GAUSSIAN_ROUTE]['opt'] = []
+
+                            for opt in options:
+                                if opt.lower() == 'ts':
+                                    ts = True
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE]['opt'].append(opt)
+                            
+                            job_type.append(OptimizationJob(transition_state=ts))
+
+                        elif option_lower.startswith('freq'):
+                            temp = 298.15
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(',')
+                            elif option_lower.startswith('freq='):
+                                options = ''.join(option.split('=')[1:])
+                            else:
+                                job_type.append(FrequencyJob())
+                                continue
+                            
+                            other_kwargs[GAUSSIAN_ROUTE]['freq'] = []
+
+                            for opt in options:
+                                if opt.lower().startswith('temp'):
+                                    temp = float(opt.split('=')[1])
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE]['freq'].append(opt)
+                            
+                            job_type.append(FrequencyJob(temperature=temp))
+
+                        elif option_lower == 'sp':
+                            job_type.append(SinglePointJob())
+
+                        else:
+                            #TODO: parse grid and solvent
+                            match = route_spec.search(option)
+                            if match:
+                                keyword = match.group(1)
+                                options = match.group(2).split(',')
+                                other_kwargs[GAUSSIAN_ROUTE][keyword] = options
+                            elif '=' in option:
+                                keyword = option.split('=')[0]
+                                options = ''.join(option.split('=')[1:])
+                                other_kwargs[GAUSSIAN_ROUTE][keyword] = [options]
+                            else:
+                                other_kwargs[GAUSSIAN_ROUTE][option] = []
+                                continue
+                            
+                        theory = Theory(charge       = self.other['charge'], 
+                                        multiplicity = self.other['multiplicity'],
+                                        job_type     = job_type, 
+                                        basis        = basis,
+                                        method       = method
+                                 )
+
+                        self.other['theory'] = theory
+                        self.other['other_kwargs'] = other_kwargs
+                            
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)

@@ -140,10 +140,20 @@ class Theory:
                             % (str(job1), str(job2))
                         )
 
-    def make_header(self, geom=None, style="gaussian", **kwargs):
+    def make_header(
+        self, geom=None, style="gaussian", conditional_kwargs={}, **kwargs
+    ):
         """geom: Geometry
         style: str, gaussian, orca, or psi4
-        kwargs: keys are ORCA_*, PSI4_*, or GAUSSIAN_*"""
+        conditional_kwargs: dict - keys are ORCA_*, PSI4_*, or GAUSSIAN_*
+                            items in conditional_kwargs will only be added
+                            to the input if they would otherwise be preset
+                            e.g. if self.job_type is FrequencyJob and a Gaussian
+                            input file is being written, conditional_kwargs = {GAUSSIAN_ROUTE:{'opt':['noeigentest']}}
+                            will not add opt=noeigentest to the route
+                            but if it's an OptimizationJob, it will add opt=noeigentest
+        kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*"""
+
         if geom is not None:
             self.geometry = geom
         if self.basis is not None:
@@ -185,18 +195,27 @@ class Theory:
                 other_kw_dict[kw] = kwargs[kw]
 
         if style == "gaussian":
-            return self.get_gaussian_header(**other_kw_dict)
+            return self.get_gaussian_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
 
-        elif style == "orca":
-            return self.get_orca_header(**other_kw_dict)
+        if style == "orca":
+            return self.get_orca_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
 
-        elif style == "psi4":
-            return self.get_psi4_header(**other_kw_dict)
+        if style == "psi4":
+            return self.get_psi4_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
 
-    def make_footer(self, geom, style="gaussian", **kwargs):
+    def make_footer(
+        self, geom, style="gaussian", conditional_kwargs={}, **kwargs
+    ):
         """geom: Geometry
         style: str, gaussian or psi4
-        kwargs: keys are GAUSSIAN_*, ORCA_*, or PSI4_*
+        conditional_kwargs: dict, see make_header
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
         if self.basis is not None:
             self.basis.refresh_elements(geom)
@@ -237,17 +256,24 @@ class Theory:
                 other_kw_dict[kw] = kwargs[kw]
 
         if style == "gaussian":
-            return self.get_gaussian_footer(**other_kw_dict)
+            return self.get_gaussian_footer(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
 
         elif style == "psi4":
-            return self.get_psi4_footer(**other_kw_dict)
+            return self.get_psi4_footer(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
 
-    def get_gaussian_header(self, return_warnings=False, **other_kw_dict):
+    def get_gaussian_header(
+        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+    ):
         """write Gaussian09/16 input file header (up to charge mult)
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
         returns warnings if a certain feature is not available in Gaussian"""
 
+        warnings = []
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
@@ -256,7 +282,36 @@ class Theory:
                 job_dict = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
-        warnings = []
+        if (
+            GAUSSIAN_COMMENT not in other_kw_dict
+            or len(other_kw_dict[GAUSSIAN_COMMENT]) == 0
+        ):
+            other_kw_dict[GAUSSIAN_COMMENT] = ["comment"]
+
+        # add EmpiricalDispersion info
+        if self.empirical_dispersion is not None:
+            disp, warning = self.empirical_dispersion.get_gaussian()
+            other_kw_dict = combine_dicts(other_kw_dict, disp)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add Integral(grid=X)
+        if self.grid is not None:
+            grid, warning = self.grid.get_gaussian()
+            other_kw_dict = combine_dicts(other_kw_dict, grid)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_gaussian()
+            warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
         s = ""
 
         # processors, memory, and other link 0 stuff
@@ -298,26 +353,6 @@ class Theory:
                     s += "%s" % basis_info[GAUSSIAN_ROUTE]
 
             s += " "
-
-        # add EmpiricalDispersion info
-        if self.empirical_dispersion is not None:
-            disp, warning = self.empirical_dispersion.get_gaussian()
-            other_kw_dict = combine_dicts(other_kw_dict, disp)
-            if warning is not None:
-                warnings.append(warning)
-
-        # add Integral(grid=X)
-        if self.grid is not None:
-            grid, warning = self.grid.get_gaussian()
-            other_kw_dict = combine_dicts(other_kw_dict, grid)
-            if warning is not None:
-                warnings.append(warning)
-
-        # add implicit solvent
-        if self.solvent is not None:
-            solvent_info, warning = self.solvent.get_gaussian()
-            warnings.extend(warning)
-            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         # add other route options
         # only one option can be specfied
@@ -379,7 +414,9 @@ class Theory:
         else:
             return s
 
-    def get_gaussian_footer(self, return_warnings=False, **other_kw_dict):
+    def get_gaussian_footer(
+        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+    ):
         """write footer of gaussian input file"""
 
         if self.job_type is not None:
@@ -390,10 +427,9 @@ class Theory:
                 job_dict = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
-        # add implicit solvent
-        if self.solvent is not None:
-            solvent_info, warning = self.solvent.get_gaussian()
-            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
 
         s = ""
         warnings = []
@@ -444,15 +480,19 @@ class Theory:
 
             s += "\n"
 
+        s = s.rstrip()
+
         # new lines
-        s += "\n\n"
+        s += "\n\n\n"
 
         if return_warnings:
             return s, warnings
         else:
             return s
 
-    def get_orca_header(self, return_warnings=False, **other_kw_dict):
+    def get_orca_header(
+        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+    ):
         """get ORCA input file header
         other_kw_dict is a dictionary with file positions (using ORCA_*)
         corresponding to options/keywords
@@ -502,6 +542,18 @@ class Theory:
             warnings.extend(warning)
             other_kw_dict = combine_dicts(solvent_info, other_kw_dict)
 
+        # dispersion
+        if self.empirical_dispersion is not None:
+            dispersion, warning = self.empirical_dispersion.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+
+            other_kw_dict = combine_dicts(dispersion, other_kw_dict)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
         # start building input file header
         s = ""
 
@@ -518,18 +570,6 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
             s += " %s" % func
-
-        # dispersion
-        if self.empirical_dispersion is not None:
-            if not s.endswith(" "):
-                s += " "
-
-            # TODO make dispersion behave like grid, returning ({ORCA_ROUTE:['D2']}, None) or w/e
-            dispersion, warning = self.empirical_dispersion.get_orca()
-            if warning is not None:
-                warnings.append(warning)
-
-            other_kw_dict = combine_dicts(dispersion, other_kw_dict)
 
         # add other route options
         if ORCA_ROUTE in other_kw_dict:
@@ -569,7 +609,9 @@ class Theory:
         else:
             return s
 
-    def get_psi4_header(self, return_warnings=False, **other_kw_dict):
+    def get_psi4_header(
+        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+    ):
         """write Psi4 input file
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
@@ -642,6 +684,10 @@ class Theory:
 
         combined_dict = combine_dicts(other_kw_dict, basis_info)
 
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
         # start building input file header
         s = ""
 
@@ -692,7 +738,9 @@ class Theory:
         else:
             return s, use_bohr
 
-    def get_psi4_footer(self, return_warnings=False, **other_kw_dict):
+    def get_psi4_footer(
+        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+    ):
         """get psi4 footer"""
 
         if self.job_type is not None:
@@ -708,15 +756,19 @@ class Theory:
             solvent_info, warning = self.solvent.get_psi4()
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
-        s = "}\n\n"
-        warnings = []
-
         # grid
         if self.grid is not None:
             grid_info, warning = self.grid.get_psi4()
             if warning is not None:
                 warnings.append(warning)
             other_kw_dict = combine_dicts(other_kw_dict, grid_info)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        s = "}\n\n"
+        warnings = []
 
         # settings
         # a setting will only get added if its list has at least one item, but only the first item will be used

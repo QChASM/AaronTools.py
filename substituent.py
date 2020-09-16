@@ -141,6 +141,125 @@ class Substituent(Geometry):
                 return True
         return False
 
+    @classmethod
+    def from_string(cls, name, conf_num=None, conf_angle=None, form='smiles', debug=False):
+        """
+        creates a substituent from a string
+        name        str     identifier for substituent
+        conf_num    int     number of conformers expected for hierarchical conformer generation
+        conf_angle  int     angle between conformers
+        form        str     type of identifier (smiles, iupac)
+        """
+        #convert whatever format we're given to smiles
+        #then grab the structure from cactus site
+
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+        from AaronTools.finders import BondedTo
+
+        accepted_forms = ['iupac', 'smiles']
+
+        if form not in accepted_forms:
+            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
+
+        rad = re.compile('\[\S+?\]')
+        elements = re.compile('[A-Z][a-z]?')
+
+        if form == 'smiles':
+            smiles = name
+        elif form == 'iupac':
+            #opsin seems to be better at iupac names with radicals
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+
+            try:
+                smiles = urlopen(url_smi).read().decode('utf8')
+            except HTTPError:
+                raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
+
+        if debug:
+            print("radical smiles:", smiles)
+
+        #radical atom is the first atom in []
+        #charged atoms are also in []
+        my_rad = None
+        radicals = rad.findall(smiles)
+        if radicals:
+            for rad in radicals:
+                if '.' in rad:
+                    my_rad = rad
+                    break
+                elif '+' not in rad and '-' not in rad:
+                    my_rad = rad
+                    break
+
+        if my_rad is None:
+            if radicals:
+                warn("radical atom may be ambiguous, be sure to check output: %s" % smiles)
+                my_rad = radicals[0]
+            else:
+                raise RuntimeError("could not determine radical site on %s; radical site is expected to be in []" % smiles)
+
+        #construct a modified smiles string with (H) right after the radical center
+        #keep track of the position of this added H
+        pos1 = smiles.index(my_rad)
+        pos2 = smiles.index(my_rad)+len(my_rad)
+        previous_atoms = elements.findall(smiles[:pos1])
+        rad_pos = len(previous_atoms)
+        if '+' not in my_rad and '-' not in my_rad:
+            mod_smiles = smiles[:pos1] + re.sub(r'H\d+', '', my_rad[1:-1]) +'(H)' + smiles[pos2:]
+        else:
+            mod_smiles = smiles[:pos1] + my_rad[:-1].rstrip('H') + ']' + '(H)' + smiles[pos2:]
+   
+        mod_smiles = mod_smiles.replace('.', '')
+
+        #fix triple bond url
+        mod_smiles = mod_smiles.replace('#', '%23')
+
+        if debug:
+            print("modified smiles:", mod_smiles)
+            print("radical position:", rad_pos)
+
+        #grab structure from cactus
+        geom = Geometry.from_string(mod_smiles, form='smiles')
+
+        #the H we added is in the same position in the structure as in the smiles string
+        rad = geom.atoms[rad_pos]
+        added_H = [atom for atom in rad.connected if atom.element == 'H'][0]
+
+        #move the added H to the origin
+        geom.coord_shift(-added_H.coords)
+
+        #get the atom bonded to this H
+        #also move the atom on H to the front of the atoms list to have the expected connectivity
+        bonded_atom = geom.find(BondedTo(added_H))[0]
+        geom.atoms = [bonded_atom] + [atom for atom in geom.atoms if atom != bonded_atom]
+        bonded_atom.connected.discard(added_H)
+
+        #align the H-atom bond with the x-axis to have the expected orientation
+        bond = deepcopy(bonded_atom.coords)
+        bond /= np.linalg.norm(bond)
+        x_axis = np.array([1.0, 0.0, 0.0])
+        rot_axis = np.cross(x_axis, bond)
+        if abs(np.linalg.norm(rot_axis)) > np.finfo(float).eps:
+            rot_axis /= np.linalg.norm(rot_axis)
+            angle = np.arccos(np.dot(bond, x_axis))
+            geom.rotate(rot_axis, -angle)
+
+        else:
+            # if the bonded_atom is already on the x axis, we will instead
+            # rotate about the y axis by 180 degrees
+            angle = np.pi
+            geom.rotate(np.array([0., 1., 0.]), -angle)
+
+        out = cls(
+             [atom for atom in geom.atoms if atom != added_H], 
+             conf_num=conf_num, 
+             conf_angle=conf_angle,
+             detect=False,
+        )
+
+        return out
+    
     def copy(self, end=None):
         """
         creates a new copy of the geometry

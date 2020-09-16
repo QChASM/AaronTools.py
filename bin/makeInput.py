@@ -8,8 +8,9 @@ from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.const import ELEMENTS
 from AaronTools.theory import *
+from AaronTools.utils.utils import combine_dicts
 
-theory_parser = argparse.ArgumentParser(description='print structure in xyz format', \
+theory_parser = argparse.ArgumentParser(description='print Gaussian, ORCA, or Psi4 input file', \
     formatter_class=argparse.RawTextHelpFormatter)
 theory_parser.add_argument('infile', metavar='input file', \
                            type=str, \
@@ -62,9 +63,16 @@ theory_parser.add_argument('-mem', '--memory', \
                            dest='memory', \
                            default=None, \
                            required=False, \
-                           help='total memory in GB' + \
+                           help='total memory in GB\n' + \
                                 'Note: ORCA and Gaussian only use this to limit the storage-intensive\n' + \
                                 '      portions of the calculation (e.g. integrals, wavefunction info)')
+
+theory_parser.add_argument('-up', '--use-previous', \
+                            action='store_true', \
+                            default=False, \
+                            required=False, \
+                            dest='use_prev', \
+                            help='use settings that can be parsed from the input file')
 
 theory_options = theory_parser.add_argument_group('Theory options')
 theory_options.add_argument('-m', '--method', \
@@ -217,13 +225,15 @@ for f in args.infile:
 
 
 
-    if args.method is None:
+    if args.method is None and args.use_prev:
         if 'method' in infile.other:
             method = infile.other['method'].split('/')[0]
-        else:
-            raise RuntimeError("method was not determined from %s and was not specified with --method" % f)
-    else:
+        elif 'theory' in infile.other:
+            method = infile.other['theory'].method
+    elif args.method is not None:
         method = args.method
+    else:
+        raise RuntimeError("method was not determined from %s and was not specified with --method" % f)
 
 
 
@@ -248,12 +258,16 @@ for f in args.infile:
 
                 i += 1
 
-    else:
+    elif args.use_prev:
         if 'method' in infile.other:
             basis_sets = method.split('/')[-1]
+        elif 'theory' in infile.other:
+            basis_sets = infile.other['theory'].basis.basis
         else:
             basis_sets = None
 
+    else:
+        basis_sets = None
 
 
     if args.ecp is not None:
@@ -272,12 +286,18 @@ for f in args.infile:
             
                 i += 1
 
+    elif args.use_prev:
+        if 'theory' in infile.other:
+            ecps = infile.other['theory'].basis.ecp
+        else:
+            ecps = None
+
     else:
         ecps = None
 
 
 
-    if args.ecp is None and args.basis is None:
+    if ecps is None and basis_sets is None:
         basis_set = None
     else:
         basis_set = BasisSet(basis_sets, ecps)
@@ -294,49 +314,51 @@ for f in args.infile:
         solvent = None
 
 
-
     job_types = []
-    if args.optimize:
-        constraints = {}
-        if args.atoms is not None:
-            constraints['atoms'] = geom.find(args.atoms)
+    if not args.use_prev or (args.optimize or args.freq or args.energy):
+        if args.optimize:
+            constraints = {}
+            if args.atoms is not None:
+                constraints['atoms'] = geom.find(args.atoms)
 
-        if args.bonds is not None:
-            constraints['bonds'] = []
-            for bond in args.bonds:
-                bonded_atoms = geom.find(bond)
-                if len(bonded_atoms) != 2:
-                    raise RuntimeError("not exactly 2 atoms specified in a bond constraint\nuse the format --constrained-bonds 1,2 3,4")
-                constraints['bonds'].append(bonded_atoms)
-
-        if args.angles is not None:
-            constraints['angles'] = []
-            for angle in args.angle:
-                angle_atoms = geom.find(angle)
-                if len(angle_atoms) != 3:
-                    raise RuntimeError("not exactly 3 atoms specified in a angle constraint\nuse the format --constrained-bonds 1,2,3 4,5,6")
-                constraints['angles'].append(angle_atoms)
-
-        if args.torsions is not None:
-            constraints['torsions'] = []
-            for torsion in args.torsions:
-                torsion_atoms = geom.find(torsion)
-                if len(torsion_atoms) != 4:
-                    raise RuntimeError("not exactly 4 atoms specified in a torsion constraint\nuse the format --constrained-torsions 1,2,3,4 5,6,7,8")
-                constraints['torsions'].append(torsion_atoms)
-
-        if len(constraints.keys()) == 0:
-            constraints = None
-
-        job_types.append(OptimizationJob(transition_state=args.ts, constraints=constraints))
-
-
-    if args.freq:
-        job_types.append(FrequencyJob(numerical=args.numerical, temperature=args.temperature))
-
-    if args.energy:
-        job_types.append(SinglePointJob())
-
+            if args.bonds is not None:
+                constraints['bonds'] = []
+                for bond in args.bonds:
+                    bonded_atoms = geom.find(bond)
+                    if len(bonded_atoms) != 2:
+                        raise RuntimeError("not exactly 2 atoms specified in a bond constraint\nuse the format --constrained-bonds 1,2 3,4")
+                    constraints['bonds'].append(bonded_atoms)
+    
+            if args.angles is not None:
+                constraints['angles'] = []
+                for angle in args.angle:
+                    angle_atoms = geom.find(angle)
+                    if len(angle_atoms) != 3:
+                        raise RuntimeError("not exactly 3 atoms specified in a angle constraint\nuse the format --constrained-bonds 1,2,3 4,5,6")
+                    constraints['angles'].append(angle_atoms)
+    
+            if args.torsions is not None:
+                constraints['torsions'] = []
+                for torsion in args.torsions:
+                    torsion_atoms = geom.find(torsion)
+                    if len(torsion_atoms) != 4:
+                        raise RuntimeError("not exactly 4 atoms specified in a torsion constraint\nuse the format --constrained-torsions 1,2,3,4 5,6,7,8")
+                    constraints['torsions'].append(torsion_atoms)
+    
+            if len(constraints.keys()) == 0:
+                constraints = None
+    
+            job_types.append(OptimizationJob(transition_state=args.ts, constraints=constraints))
+    
+    
+        if args.freq:
+            job_types.append(FrequencyJob(numerical=args.numerical, temperature=args.temperature))
+    
+        if args.energy:
+            job_types.append(SinglePointJob())
+    
+    elif args.use_prev and 'theory' in infile.other:
+        job_types = infile.other['theory'].job_type
     
     if args.charge is None:
         if 'charge' in infile.other:
@@ -384,6 +406,9 @@ for f in args.infile:
             style = splitext(args.outfile)[-1]
         else:
             raise RuntimeError("file format must be specified if no output file is specified")
+
+    if args.use_prev and 'other_kwargs' in infile.other:
+        other_kwargs = combine_dicts(other_kwargs, infile.other['other_kwargs'])
 
     s = geom.write(append=True, outfile=args.outfile, style=style, theory=theory, **other_kwargs)
     if not args.outfile:

@@ -3,7 +3,6 @@ import json
 import numpy as np
 
 from AaronTools.atoms import Atom
-from AaronTools.catalyst import Catalyst
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
