@@ -916,7 +916,7 @@ class FileReader:
             if route is not None:
                 other_kwargs = {GAUSSIAN_ROUTE:{}}
                 route_spec = re.compile('(\w+)=?\((.*)\)')
-                method_and_basis = re.search("#([NnPpTt]\s+?)(\S+)|^#\s*?(\S+)", route)
+                method_and_basis = re.search("#([NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route)
                 if method_and_basis is not None:
                     if method_and_basis.group(3):
                         method_info = method_and_basis.group(3).split('/')
