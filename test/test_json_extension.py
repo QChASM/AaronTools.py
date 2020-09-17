@@ -5,7 +5,6 @@ import unittest
 
 import numpy as np
 
-from AaronTools.catalyst import Catalyst
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
@@ -189,7 +188,7 @@ class TestJSON(TestWithTimer):
         self.json_tester(lig, self.component_equal)
 
     def test_catalyst(self):
-        cat = Catalyst(TestJSON.cat)
+        cat = Geometry(TestJSON.cat)
         cat.fix_comment()
         cat.conf_num = 4
         self.json_tester(cat, self.catalyst_equal)

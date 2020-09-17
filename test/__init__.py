@@ -4,6 +4,8 @@ from os.path import dirname
 
 import numpy as np
 
+from AaronTools.geometry import Geometry
+
 prefix = dirname(__file__)
 
 
@@ -23,10 +25,8 @@ def rmsd_tol(geom, superTight=False, superLoose=False):
         if max_d is None or d > max_d:
             max_d = d
 
-    tolerance *= max_d * (2 + int(superLoose))
-
-    tolerance = tolerance ** (2 / (2 - int(superTight) + int(superLoose)))
-
+    tolerance *= max_d * (2 - int(superTight) + int(superLoose))
+    tolerance = tolerance ** (2 / (4 - int(superTight) + int(superLoose)))
     return tolerance
 
 
@@ -53,8 +53,8 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
     :debug: print info useful for debugging
     """
     if debug:
-        ref.write("ref")
-        test.write("test")
+        print(ref.write("ref", outfile=False))
+        print(test.write("test", outfile=False))
 
     if thresh is None:
         thresh = rmsd_tol(ref)
@@ -86,15 +86,14 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
                 print("elements don't match")
             return False
     # and RMSD should be below a threshold
-    rmsd = ref.RMSD(test, align=debug, heavy_only=heavy_only, sort=sort)
+    rmsd = ref.RMSD(
+        test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+    )
     if debug:
-        print("RMSD:", rmsd, "\tTHRESH:", thresh)
-        ref.refresh_ranks()
-        test.refresh_ranks()
-        ref.atoms = ref.reorder()[0]
-        test.atoms = test.reorder()[0]
-        ref.write("ref")
-        test.write("test")
+        print("RMSD:", rmsd[2], "\tTHRESH:", thresh)
+        rmsd[1].write("ref")
+        rmsd[0].write("test")
+        rmsd = rmsd[2]
     return rmsd < thresh
 
 

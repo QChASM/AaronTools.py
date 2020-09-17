@@ -9,6 +9,7 @@ import numpy as np
 
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
+from AaronTools.theory import *
 
 read_types = ["xyz", "log", "com", "sd", "out", "dat"]
 write_types = ["xyz", "com", "inp", "in"]
@@ -79,7 +80,7 @@ class FileWriter:
             Currently supported options: xyz (default), com, inp, in
             if outfile has one of these extensions, default is that style
         :append: for *.xyz, append geometry to the same file
-        :outfile: output destination - default is 
+        :outfile: output destination - default is
                   [geometry name] + [extension] or [geometry name] + [step] + [extension]
                   if outfile is False, no output file will be written, but the contents will be returned
         :theory: for com, inp, and in files, an object with a get_header and get_footer method
@@ -92,11 +93,15 @@ class FileWriter:
             style = "xyz"
 
         if style.lower() not in write_types:
-            raise NotImplementedError(file_type_err.format(style))
+            if style.lower() == "gaussian":
+                style = "com"
+            else:
+                raise NotImplementedError(file_type_err.format(style))
 
-        if outfile is None and \
-            os.path.dirname(geom.name) and not os.access(
-            os.path.dirname(geom.name), os.W_OK
+        if (
+            outfile is None
+            and os.path.dirname(geom.name)
+            and not os.access(os.path.dirname(geom.name), os.W_OK)
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
@@ -176,8 +181,8 @@ class FileWriter:
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            if 'step' in kwargs:
-                fname = "{}.{}.com".format(geom.name, step2str(kwargs['step']))
+            if "step" in kwargs:
+                fname = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
             else:
                 fname = "{}.com".format(geom.name)
             with open(fname, "w") as f:
@@ -193,16 +198,16 @@ class FileWriter:
     @classmethod
     def write_inp(cls, geom, theory, outfile=None, **kwargs):
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
-        s = theory.make_header(geom, style='orca', **kwargs)
+        s = theory.make_header(geom, style="orca", **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
-        s += '*\n'
+        s += "*\n"
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            if 'step' in kwargs:
-                fname = "{}.{}.inp".format(geom.name, step2str(kwargs['step']))
+            if "step" in kwargs:
+                fname = "{}.{}.inp".format(geom.name, step2str(kwargs["step"]))
             else:
                 fname = "{}.inp".format(geom.name)
             with open(fname, "w") as f:
@@ -216,19 +221,19 @@ class FileWriter:
     @classmethod
     def write_in(cls, geom, theory, outfile=None, **kwargs):
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
-        s, use_bohr = theory.make_header(geom, style='psi4', **kwargs)
+        s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
         for atom in geom.atoms:
             coords = atom.coords.copy()
             if use_bohr:
                 coords /= UNIT.A0_TO_BOHR
             s += fmt.format(atom.element, *coords)
 
-        s += theory.make_footer(geom, style='psi4', **kwargs)
+        s += theory.make_footer(geom, style="psi4", **kwargs)
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
-            if 'step' in kwargs:
-                fname = "{}.{}.in".format(geom.name, step2str(kwargs['step']))
+            if "step" in kwargs:
+                fname = "{}.{}.in".format(geom.name, step2str(kwargs["step"]))
             else:
                 fname = "{}.in".format(geom.name)
             with open(fname, "w") as f:
@@ -383,6 +388,11 @@ class FileReader:
         for line in lines[4 : 4 + natoms]:
             atom_info = line.split()
             self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+        
+        for line in lines[4 + natoms : 4 + natoms + nbonds]:
+            a1, a2 = [int(x)-1 for x in line.split()[0:2]]
+            self.atoms[a1].connected.add(self.atoms[a2])
+            self.atoms[a2].connected.add(self.atoms[a1])
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -400,9 +410,9 @@ class FileReader:
                 line = line.strip()
                 atom_info = line.split()
                 element = atom_info[0]
-                #might be a ghost atom - like for sapt
-                if 'Gh' in element:
-                    element = element.strip('Gh(').strip(')')
+                # might be a ghost atom - like for sapt
+                if "Gh" in element:
+                    element = element.strip("Gh(").strip(")")
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 rv += [Atom(element=element, coords=coords, name=str(i))]
                 mass += float(atom_info[-1])
@@ -416,15 +426,17 @@ class FileReader:
         n = 1
         read_geom = False
         while line != "":
-            if line.startswith('    Geometry (in Angstrom), charge'):
+            if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
-                    self.other['charge'] = int(line.split()[5].strip(','))
-                    self.other['multiplicity'] = int(line.split()[8].strip(':'))
+                    self.other["charge"] = int(line.split()[5].strip(","))
+                    self.other["multiplicity"] = int(
+                        line.split()[8].strip(":")
+                    )
 
-            elif line.strip() == 'SCF':
+            elif line.strip() == "SCF":
                 read_geom = True
-            
-            elif line.strip().startswith('Center') and read_geom:
+
+            elif line.strip().startswith("Center") and read_geom:
                 read_geom = False
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
@@ -444,33 +456,35 @@ class FileReader:
                 n += 1
                 continue
             else:
-                if line.strip().startswith('Total Energy ='):
+                if line.strip().startswith("Total Energy ="):
                     self.other["energy"] = float(line.split()[-1])
 
-                elif line.strip().startswith('Total E0'):
+                elif line.strip().startswith("Total E0"):
                     self.other["energy"] = float(line.split()[-2])
 
-                elif line.strip().startswith('Correction ZPE'):
+                elif line.strip().startswith("Correction ZPE"):
                     self.other["ZPVE"] = float(line.split()[-4])
 
-                elif line.strip().startswith('Total ZPE'):
-                    self.other['E_ZPVE'] = float(line.split()[-2])
+                elif line.strip().startswith("Total ZPE"):
+                    self.other["E_ZPVE"] = float(line.split()[-2])
 
-                elif line.strip().startswith('Total H, Enthalpy'):
-                    self.other['enthalpy'] = float(line.split()[-2])
+                elif line.strip().startswith("Total H, Enthalpy"):
+                    self.other["enthalpy"] = float(line.split()[-2])
 
-                elif line.strip().startswith('Total G, Free'):
-                    self.other['free_energy'] = float(line.split()[-2])
-                    self.other['temperature'] = float(line.split()[-4])
+                elif line.strip().startswith("Total G, Free"):
+                    self.other["free_energy"] = float(line.split()[-2])
+                    self.other["temperature"] = float(line.split()[-4])
 
-                elif 'symmetry no. =' in line:
-                    self.other['rotational_symmetry_number'] = int(
-                        line.split()[-1].strip(')')
+                elif "symmetry no. =" in line:
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-1].strip(")")
                     )
 
-                elif line.strip().startswith('Rotational constants:') and \
-                         line.strip().endswith('[cm^-1]') and \
-                         'rotational_temperature' not in self.other:
+                elif (
+                    line.strip().startswith("Rotational constants:")
+                    and line.strip().endswith("[cm^-1]")
+                    and "rotational_temperature" not in self.other
+                ):
                     self.other["rotational_temperature"] = [
                         float(x) for x in line.split()[-8:-1:3]
                     ]
@@ -482,9 +496,9 @@ class FileReader:
                         for x in self.other["rotational_temperature"]
                     ]
 
-                elif line.startswith('  Vibration '):
+                elif line.startswith("  Vibration "):
                     freq_str = ""
-                    while not line.strip().startswith('=='):
+                    while not line.strip().startswith("=="):
                         freq_str += line
                         line = f.readline()
                         n += 1
@@ -496,83 +510,83 @@ class FileReader:
                 elif PSI4_NORM_FINISH in line:
                     self.other["finished"] = True
 
-                elif line.startswith('    Convergence Criteria'):
-                    #for tolerances:
-                    #psi4 puts '*' next to converged values and 'o' in place of things that aren't monitored
+                elif line.startswith("    Convergence Criteria"):
+                    # for tolerances:
+                    # psi4 puts '*' next to converged values and 'o' in place of things that aren't monitored
                     grad = {}
-                    
+
                     dE_tol = line[24:38]
-                    if 'o' in dE_tol:
+                    if "o" in dE_tol:
                         dE_tol = None
                     else:
                         dE_tol = dE_tol.split()[0]
 
                     max_f_tol = line[38:52]
-                    if 'o' in max_f_tol:
+                    if "o" in max_f_tol:
                         max_f_tol = None
                     else:
                         max_f_tol = max_f_tol.split()[0]
-                    
+
                     rms_f_tol = line[52:66]
-                    if 'o' in rms_f_tol:
+                    if "o" in rms_f_tol:
                         rms_f_tol = None
                     else:
                         rms_f_tol = rms_f_tol.split()[0]
-                    
+
                     max_d_tol = line[66:80]
-                    if 'o' in max_d_tol:
+                    if "o" in max_d_tol:
                         max_d_tol = None
                     else:
                         max_d_tol = max_d_tol.split()[0]
-                    
+
                     rms_d_tol = line[80:94]
-                    if 'o' in rms_d_tol:
+                    if "o" in rms_d_tol:
                         rms_d_tol = None
                     else:
                         rms_d_tol = rms_d_tol.split()[0]
 
                     line = f.readline()
                     line = f.readline()
-                    n+= 2
-                    
-                    #for convergence:
-                    #psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
+                    n += 2
+
+                    # for convergence:
+                    # psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
                     if dE_tol is not None:
                         dE_conv = line[24:38]
                         dE = float(dE_conv.split()[0])
-                        grad['Delta E'] = {}
-                        grad['Delta E']['value'] = dE
-                        grad['Delta E']['converged'] = '*' in dE_conv
+                        grad["Delta E"] = {}
+                        grad["Delta E"]["value"] = dE
+                        grad["Delta E"]["converged"] = "*" in dE_conv
 
                     if max_f_tol is not None:
                         max_f_conv = line[38:52]
                         max_f = float(max_f_conv.split()[0])
-                        grad['Max Force'] = {}
-                        grad['Max Force']['value'] = max_f
-                        grad['Max Force']['converged'] = '*' in max_f_conv
+                        grad["Max Force"] = {}
+                        grad["Max Force"]["value"] = max_f
+                        grad["Max Force"]["converged"] = "*" in max_f_conv
 
                     if rms_f_tol is not None:
                         rms_f_conv = line[52:66]
                         rms_f = float(rms_f_conv.split()[0])
-                        grad['RMS Force'] = {}
-                        grad['RMS Force']['value'] = rms_f
-                        grad['RMS Force']['converged'] = '*' in rms_f_conv
+                        grad["RMS Force"] = {}
+                        grad["RMS Force"]["value"] = rms_f
+                        grad["RMS Force"]["converged"] = "*" in rms_f_conv
 
                     if max_d_tol is not None:
                         max_d_conv = line[66:80]
                         max_d = float(max_d_conv.split()[0])
-                        grad['Max Disp'] = {}
-                        grad['Max Disp']['value'] = max_d
-                        grad['Max Disp']['converged'] = '*' in max_d_conv
+                        grad["Max Disp"] = {}
+                        grad["Max Disp"]["value"] = max_d
+                        grad["Max Disp"]["converged"] = "*" in max_d_conv
 
                     if rms_d_tol is not None:
                         rms_d_conv = line[80:94]
                         rms_d = float(rms_d_conv.split()[0])
-                        grad['RMS Disp'] = {}
-                        grad['RMS Disp']['value'] = rms_d
-                        grad['RMS Disp']['converged'] = '*' in max_d_conv
+                        grad["RMS Disp"] = {}
+                        grad["RMS Disp"]["value"] = rms_d
+                        grad["RMS Disp"]["converged"] = "*" in max_d_conv
 
-                    self.other['gradient'] = grad
+                    self.other["gradient"] = grad
 
                 line = f.readline()
                 n += 1
@@ -582,8 +596,8 @@ class FileReader:
 
         def add_grad(grad, name, line):
             grad[name] = {}
-            grad[name]['value'] = line.split()[-3]
-            grad[name]['converged'] = line.split()[-1] == 'YES'
+            grad[name]["value"] = line.split()[-3]
+            grad[name]["converged"] = line.split()[-1] == "YES"
 
         def get_atoms(f, n):
             """parse atom info"""
@@ -624,8 +638,8 @@ class FileReader:
                 continue
             else:
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
-                    #if the wavefunction doesn't converge, ORCA prints a message next
-                    #to the energy so we can't use line.split()[-1]
+                    # if the wavefunction doesn't converge, ORCA prints a message next
+                    # to the energy so we can't use line.split()[-1]
                     self.other["energy"] = float(line.split()[4])
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
@@ -710,31 +724,30 @@ class FileReader:
                         line.split()[-2]
                     )
 
-                elif 'Geometry convergence' in line:
+                elif "Geometry convergence" in line:
                     grad = {}
                     self.skip_lines(f, 2)
                     n += 3
                     line = f.readline()
-                    while line and re.search('\w', line):
-                        if re.search('Energy\schange', line):
-                            add_grad(grad, 'Delta E', line)
-                        elif re.search('RMS\sgradient', line):
-                            add_grad(grad, 'RMS Force', line)
-                        elif re.search('MAX\sgradient', line):
-                            add_grad(grad, 'Max Force', line)
-                        elif re.search('RMS\sstep', line):
-                            add_grad(grad, 'RMS Disp', line)
-                        elif re.search('MAX\sstep', line):
-                            add_grad(grad, 'Max Disp', line)
+                    while line and re.search("\w", line):
+                        if re.search("Energy\schange", line):
+                            add_grad(grad, "Delta E", line)
+                        elif re.search("RMS\sgradient", line):
+                            add_grad(grad, "RMS Force", line)
+                        elif re.search("MAX\sgradient", line):
+                            add_grad(grad, "Max Force", line)
+                        elif re.search("RMS\sstep", line):
+                            add_grad(grad, "RMS Disp", line)
+                        elif re.search("MAX\sstep", line):
+                            add_grad(grad, "Max Disp", line)
 
                         line = f.readline()
                         n += 1
 
-                    self.other['gradient'] = grad
+                    self.other["gradient"] = grad
 
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
-
 
                 # TODO E_ZPVE
                 # TODO error
@@ -771,13 +784,13 @@ class FileReader:
         n = 1
         route = None
         while line != "":
-            #route
-            #we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
+            # route
+            # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
             ##B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
-            #pmodes,noraman,temperature=313.15)
-            if line.strip().startswith('#') and route is None:
+            # pmodes,noraman,temperature=313.15)
+            if line.strip().startswith("#") and route is None:
                 route = ""
-                while '------' not in line:
+                while "------" not in line:
                     route += line.strip()
                     n += 1
                     line = f.readline()
@@ -906,6 +919,103 @@ class FileReader:
             line = f.readline()
             n += 1
 
+        if not just_geom:
+            if route is not None:
+                other_kwargs = {GAUSSIAN_ROUTE:{}}
+                route_spec = re.compile('(\w+)=?\((.*)\)')
+                method_and_basis = re.search("#([NnPpTt]\s+?)(\S+)|^#\s*?(\S+)", route)
+                if method_and_basis is not None:
+                    if method_and_basis.group(3):
+                        method_info = method_and_basis.group(3).split('/')
+                    else:
+                        method_info = method_and_basis.group(2).split('/')
+                    
+                    method = method_info[0]
+                    if len(method_info) > 1:
+                        basis = method_info[1]
+                    else:
+                        basis = None
+
+                    route_options = route.split()
+                    job_type = []
+                    for option in route_options:
+                        if option.startswith('#'):
+                            continue
+                        elif option.startswith(method):
+                            continue
+
+                        option_lower = option.lower()
+                        if option_lower.startswith('opt'):
+                            ts = False
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(',')
+                            elif option_lower.startswith('opt='):
+                                options = ''.join(option.split('=')[1:])
+                            else:
+                                job_type.append(OptimizationJob())
+                                continue
+                            
+                            other_kwargs[GAUSSIAN_ROUTE]['opt'] = []
+
+                            for opt in options:
+                                if opt.lower() == 'ts':
+                                    ts = True
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE]['opt'].append(opt)
+                            
+                            job_type.append(OptimizationJob(transition_state=ts))
+
+                        elif option_lower.startswith('freq'):
+                            temp = 298.15
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(',')
+                            elif option_lower.startswith('freq='):
+                                options = ''.join(option.split('=')[1:])
+                            else:
+                                job_type.append(FrequencyJob())
+                                continue
+                            
+                            other_kwargs[GAUSSIAN_ROUTE]['freq'] = []
+
+                            for opt in options:
+                                if opt.lower().startswith('temp'):
+                                    temp = float(opt.split('=')[1])
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE]['freq'].append(opt)
+                            
+                            job_type.append(FrequencyJob(temperature=temp))
+
+                        elif option_lower == 'sp':
+                            job_type.append(SinglePointJob())
+
+                        else:
+                            #TODO: parse grid and solvent
+                            match = route_spec.search(option)
+                            if match:
+                                keyword = match.group(1)
+                                options = match.group(2).split(',')
+                                other_kwargs[GAUSSIAN_ROUTE][keyword] = options
+                            elif '=' in option:
+                                keyword = option.split('=')[0]
+                                options = ''.join(option.split('=')[1:])
+                                other_kwargs[GAUSSIAN_ROUTE][keyword] = [options]
+                            else:
+                                other_kwargs[GAUSSIAN_ROUTE][option] = []
+                                continue
+                            
+                        theory = Theory(charge       = self.other['charge'], 
+                                        multiplicity = self.other['multiplicity'],
+                                        job_type     = job_type, 
+                                        basis        = basis,
+                                        method       = method
+                                 )
+
+                        self.other['theory'] = theory
+                        self.other['other_kwargs'] = other_kwargs
+                            
+
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
 
@@ -945,7 +1055,7 @@ class FileReader:
                         "solvent=(\S+)\)", line
                     ).group(1)
                 if "scrf=" in line:
-                    #solvent model should be non-greedy b/c solvent name can have commas
+                    # solvent model should be non-greedy b/c solvent name can have commas
                     other["solvent_model"] = re.search(
                         "scrf=\((\S+?),", line
                     ).group(1)
@@ -954,22 +1064,24 @@ class FileReader:
                         "EmpiricalDispersion=(\S+)", line
                     ).group(1)
                 if "int=(grid" in line or "integral=(grid" in line.lower():
-                    other["grid"] = re.search("(?:int||Integral)=\(grid[(=](\S+?)\)", line).group(1)
-                #comments can be multiple lines long
-                #but there should be a blank line between the route and the comment
-                #and another between the comment and the charge+mult
+                    other["grid"] = re.search(
+                        "(?:int||Integral)=\(grid[(=](\S+?)\)", line
+                    ).group(1)
+                # comments can be multiple lines long
+                # but there should be a blank line between the route and the comment
+                # and another between the comment and the charge+mult
                 blank_lines = 0
                 while blank_lines < 2:
                     line = f.readline().strip()
                     if len(line) == 0:
                         blank_lines += 1
                     else:
-                        if 'comment' not in other:
-                            other['comment'] = ""
+                        if "comment" not in other:
+                            other["comment"] = ""
 
-                        other['comment'] += "%s\n" % line
-                
-                other['comment'] = other['comment'].strip()
+                        other["comment"] += "%s\n" % line
+
+                other["comment"] = other["comment"].strip()
                 line = f.readline()
                 if len(line.split()) > 1:
                     line = line.split()
@@ -1100,25 +1212,25 @@ class Frequency:
             elif read_displacement:
                 info = [float(x) for x in line.split()[2:]]
                 for i, mode in enumerate(modes):
-                    mode.append(info[3*i:3*(i+1)])
+                    mode.append(info[3 * i : 3 * (i + 1)])
 
-            elif line.strip().startswith('Vibration'):
+            elif line.strip().startswith("Vibration"):
                 nmodes = len(line.split()) - 1
 
-            elif line.strip().startswith('Freq'):
+            elif line.strip().startswith("Freq"):
                 freqs = [float(x) for x in line.split()[2:]]
                 for freq in freqs:
                     self.data.append(Frequency.Data(float(freq)))
 
-            elif line.strip().startswith('Force const'):
+            elif line.strip().startswith("Force const"):
                 force_consts = [float(x) for x in line.split()[3:]]
                 for i, data in enumerate(self.data[-nmodes:]):
                     data.forcek = force_consts[i]
 
-            elif line.strip().startswith('----'):
+            elif line.strip().startswith("----"):
                 read_displacement = True
                 modes = [[] for i in range(0, nmodes)]
-            
+
     def parse_orca_lines(self, lines, hpmodes):
         """parse lines of orca output related to frequency
         hpmodes is not currently used"""
@@ -1179,7 +1291,7 @@ class Frequency:
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        for t, line in enumerate(lines[intensity_start: -1]):
+        for t, line in enumerate(lines[intensity_start:-1]):
             ir_info = line.split()
             inten = float(ir_info[2])
             self.data[t].intensity = inten
