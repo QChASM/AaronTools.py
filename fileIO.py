@@ -1381,5 +1381,8 @@ class Frequency:
                 "intensity": data.intensity,
                 "vector": data.vector,
             }
-        self.lowest_frequency = self.data[0].frequency
+        if len(self.data) > 0:
+            self.lowest_frequency = self.data[0].frequency
+        else:
+            self.lowest_frequency = None
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False

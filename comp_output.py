@@ -136,6 +136,8 @@ class CompOutput:
         T = temperature if temperature is not None else self.temperature
         mass = self.mass
         sigmar = self.rotational_symmetry_number
+        if sigmar is None and len(self.geometry.atoms) == 1:
+            sigmar = 3
         mult = self.multiplicity
         freqs = self.frequency.real_frequencies
 
@@ -166,7 +168,11 @@ class CompOutput:
         Se = PHYSICAL.GAS_CONSTANT * (np.log(mult))
 
         # Rotational
-        if len(rot) == 3:
+        if all(r == np.inf for r in rot):
+            # atomic 
+            qr = 1
+            Sr = 0
+        elif len(rot) == 3:
             # non linear molecules
             qr = np.sqrt(np.pi) / sigmar
             qr *= T ** (3 / 2) / np.sqrt(rot[0] * rot[1] * rot[2])
@@ -180,7 +186,10 @@ class CompOutput:
             qr = 1
             Sr = 0
 
-        Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
+        if all(r == np.inf for r in rot):
+            Er = 0
+        else:
+            Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
 
         # Vibrational
         Ev = 0
