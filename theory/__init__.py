@@ -1,3 +1,29 @@
+"""
+methods that construct headers and footers can specify some keyword arguments
+keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (from AaronTools.theory)
+ORCA_ROUTE: list(str)
+ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
+ORCA_COORDINATES: ignored
+ORCA_COMMENT: list(str)
+
+PSI4_SETTINGS: dict(setting_name: [value])
+PSI4_BEFORE_GEOM: list(str)
+PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with method name
+PSI4_COMMENT: list(str)
+PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
+PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ method))
+PSI4_OPTKING: dict(setting_name: [value])
+
+GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
+GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
+GAUSSIAN_COORDINATES: ignored
+GAUSSIAN_CONSTRAINTS: list(str)
+GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
+GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
+GAUSSIAN_POST: list(str)
+GAUSSIAN_COMMENT: list(str)
+"""
+
 ORCA_ROUTE = "simple" # simple input
 ORCA_BLOCKS = "blocks" #blocks
 ORCA_COORDINATES = 3 #molecule (not used)

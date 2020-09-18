@@ -1,30 +1,30 @@
-"""placeholder stuff until Aaron.Theory is moved"""
+import re
 
 from AaronTools.theory import (
-    GAUSSIAN_COMMENT,
-    GAUSSIAN_CONSTRAINTS,
-    GAUSSIAN_COORDINATES,
-    GAUSSIAN_GEN_BASIS,
-    GAUSSIAN_GEN_ECP,
-    GAUSSIAN_POST,
-    GAUSSIAN_PRE_ROUTE,
-    GAUSSIAN_ROUTE,
-    ORCA_BLOCKS,
-    ORCA_COMMENT,
-    ORCA_COORDINATES,
-    ORCA_ROUTE,
-    PSI4_AFTER_JOB,
-    PSI4_BEFORE_GEOM,
-    PSI4_BEFORE_JOB,
-    PSI4_COMMENT,
-    PSI4_COORDINATES,
-    PSI4_JOB,
-    PSI4_OPTKING,
-    PSI4_SETTINGS,
+GAUSSIAN_COMMENT,
+GAUSSIAN_CONSTRAINTS,
+GAUSSIAN_COORDINATES,
+GAUSSIAN_GEN_BASIS,
+GAUSSIAN_GEN_ECP,
+GAUSSIAN_POST,
+GAUSSIAN_PRE_ROUTE,
+GAUSSIAN_ROUTE,
+ORCA_BLOCKS,
+ORCA_COMMENT,
+ORCA_COORDINATES,
+ORCA_ROUTE,
+PSI4_AFTER_JOB,
+PSI4_BEFORE_GEOM,
+PSI4_BEFORE_JOB,
+PSI4_COMMENT,
+PSI4_COORDINATES,
+PSI4_JOB,
+PSI4_OPTKING,
+PSI4_SETTINGS,
 )
 from AaronTools.utils.utils import combine_dicts
 
-from .basis import BasisSet
+from .basis import BasisSet, ECP
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
 from .job_types import JobType
@@ -32,7 +32,8 @@ from .method import KNOWN_SEMI_EMPIRICAL, Method
 
 
 class Theory:
-    """a Theory object can be used to create an input file for different QM software
+    """
+    A Theory object can be used to create an input file for different QM software.
     The creation of a Theory object does not depend on the specific QM software - that is determined when the file is written
     attribute names are the same as initialization keywords
     valid initialization keywords are:
@@ -43,36 +44,14 @@ class Theory:
 
     method                  -   Method object (or str - Method instance will be created)
     basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(kw)))
+    ecp                     -   str parsable by BasisSet.parse_basis_str (convenience for config stuff)
     empirical_dispersion    -   EmpiricalDispersion object (or str)
     grid                    -   IntegrationGrid object (or str)
     solvent                 -   ImplicitSolvent object
 
-    memory                  -   allocated memory (GB)
-    processors              -   allocated cores
-
-    methods that construct headers and footers can specify some keyword arguments
-    keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (from AaronTools.theory)
-    ORCA_ROUTE: list(str)
-    ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
-    ORCA_COORDINATES: ignored
-    ORCA_COMMENT: list(str)
-
-    PSI4_SETTINGS: dict(setting_name: [value])
-    PSI4_BEFORE_GEOM: list(str)
-    PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with method name
-    PSI4_COMMENT: list(str)
-    PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
-    PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ method))
-    PSI4_OPTKING: dict(setting_name: [value])
-
-    GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
-    GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
-    GAUSSIAN_COORDINATES: ignored
-    GAUSSIAN_CONSTRAINTS: list(str)
-    GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
-    GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
-    GAUSSIAN_POST: list(str)
-    GAUSSIAN_COMMENT: list(str)"""
+    memory                  -   int - allocated memory (GB)
+    processors              -   int - allocated cores
+    """
 
     ACCEPTED_INIT_KW = [
         "geometry",
@@ -88,12 +67,13 @@ class Theory:
         multiplicity=1,
         method=None,
         basis=None,
+        ecp=None,
         empirical_dispersion=None,
         grid=None,
         **kw
     ):
-        self.charge = charge
-        self.multiplicity = multiplicity
+        self.charge = int(charge)
+        self.multiplicity = int(multiplicity)
         self.geometry = None
         self.memory = None
         self.processors = None
@@ -105,6 +85,16 @@ class Theory:
                 self.__setattr__(key, kw[key])
             else:
                 self.__setattr__(key, None)
+
+        if isinstance(self.processors, str):
+            processors = re.search("(\d+)", self.processors)
+            if processors:
+                self.processors = processors.group(1)
+
+        if isinstance(self.memory, str):
+            memory = re.search("(\d+)", self.memory)
+            if memory:
+                self.memory = memory.group(1)
 
         # if method, basis, etc aren't the expected classes, make them so
         if method is not None:
@@ -121,6 +111,12 @@ class Theory:
             if not isinstance(basis, BasisSet):
                 basis = BasisSet(basis)
         self.basis = basis
+
+        if ecp is not None:
+            if self.basis is None:
+                self.basis = BasisSet(ecp=ecp)
+            else:
+                self.basis.ecp = BasisSet.parse_basis_str(ecp, cls=ECP)
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):
@@ -359,11 +355,18 @@ class Theory:
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
         if GAUSSIAN_ROUTE in other_kw_dict.keys():
-            # reverse order b/c then freq comes after opt
-            # for option in sorted(other_kw_dict[GAUSSIAN_ROUTE].keys(), key=probable_job_order):
             for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
                 known_opts = []
                 s += option
+                if option.lower() == "opt":
+                    # need to specified CalcFC for gaussian ts optimization
+                    if any(x.lower() == "ts" for x in other_kw_dict[GAUSSIAN_ROUTE][option]) and \
+                        not any(x.lower() in 
+                                ["calcfc", "readfc", "rcfc", "readcartesianfc"]
+                                for x in other_kw_dict[GAUSSIAN_ROUTE][option]
+                    ):
+                        other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
+                
                 if len(other_kw_dict[GAUSSIAN_ROUTE][option]) > 1 or (
                     len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
                     and (

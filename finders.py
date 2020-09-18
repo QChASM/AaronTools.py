@@ -12,12 +12,14 @@ class Finder:
 
 
 class BondsFrom(Finder):
-    """exact number of bonds from specified atom"""
-    def __init__(self, atom, number_of_bonds):
+    """exact number of bonds from specified atom
+    avoid: bonding path cannot pass through these atoms"""
+    def __init__(self, atom, number_of_bonds, avoid=None):
         super().__init__()
 
         self.central_atom = atom
         self.n_bonds = number_of_bonds
+        self.avoid = avoid
 
     def __repr__(self):
         return "atoms %i bonds of %s" % (self.n_bonds, self.central_atom)
@@ -27,7 +29,7 @@ class BondsFrom(Finder):
         matching_atoms = []
         for atom in atoms:
             try:
-                path = geometry.shortest_path(atom, self.central_atom)
+                path = geometry.shortest_path(atom, self.central_atom, avoid=self.avoid)
             except LookupError:
                 continue
 
@@ -269,12 +271,14 @@ class ChiralCentres(Finder):
     for rings, looks for a set of unique canonical ranks for atoms that 
     are all the same number of bonds away from one atom"""
     #IUPAC spelling 
-    def __init__(self, cip_only=False):
-        """cip_only: bool - if True, do not identify chiral centers that are chiral because they
+    def __init__(self, RS_only=False):
+        """RS_only: bool  - if True, do not identify chiral centers that are chiral because they
                             are connected to multiple chiral fragments with the same chirality
+                            this corresponds to R/S centers
+                            False will include r/s centers as well
         """
         super().__init__()
-        self.cip = cip_only
+        self.cip = RS_only
 
     def __repr__(self):
         return "chiral centers"
