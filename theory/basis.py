@@ -205,6 +205,9 @@ class BasisSet:
                 try:
                     aux_type = info[i+1]
                     i += 1
+                    if aux_type.lower() == "optri":
+                        aux_type += " %s" % info[i+1]
+                        i += 1
                 except:
                     raise RuntimeError("error while parsing basis set string: %s\nfound \"aux\", but no auxilliary type followed" % s)
             else:
