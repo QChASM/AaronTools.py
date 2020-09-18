@@ -56,7 +56,7 @@ class Config(configparser.ConfigParser):
         quiet: prints helpful status information
         **kwargs: passed to initialization of parent class
         """
-        configparser.ConfigParser.__init__(self, interpolation=None, **kwargs)
+        configparser.ConfigParser.__init__(self, interpolation=None, comment_prefixes=("#"), **kwargs)
         if not quiet:
             print("Reading configuration...")
         if infile is not None:
