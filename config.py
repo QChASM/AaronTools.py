@@ -192,9 +192,13 @@ class Config(configparser.ConfigParser):
             if value:
                 out[option] = {}
                 for v in value.split(";"):
-                    info = v.split()
-                    key = info[0]
-                    out[option][key] = info[1:]
+                    key = v.split()[0]
+                    if len(v.split()) > 1:
+                        info = v.split()[1].split(",")
+                    else:
+                        info = []
+
+                    out[option][key] = [x.strip() for x in info]
 
         for option in one_layer:
             value = self.get(section, option, fallback=False)
