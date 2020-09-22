@@ -408,7 +408,7 @@ class Theory:
         s += "\n"
 
         # charge mult
-        s += "%i %i\n" % (self.charge, self.multiplicity)
+        s += "%i %i\n" % (int(self.charge), int(self.multiplicity))
 
         if return_warnings:
             return s, warnings

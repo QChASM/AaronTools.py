@@ -43,6 +43,24 @@ class Config(configparser.ConfigParser):
                 self["DEFAULT"]["top_dir"] = os.path.dirname(
                     os.path.abspath(infile)
                 )
+        self._changes = {}
+        for section in ["Substitution", "Mapping"]:
+            if section not in self:
+                continue
+            self._changes[section] = {}
+            for key, val in self[section].items():
+                self._changes[section][key] = val
+
+    def __str__(self):
+        rv = ""
+        for section in self:
+            if "." in section:
+                continue
+            rv += "[{}]\n".format(section)
+            for option, value in self[section].items():
+                rv += "{} = {}\n".format(option, value)
+            rv += "\n"
+        return rv
 
     def copy(self):
         config = Config(infile=None, quiet=True)

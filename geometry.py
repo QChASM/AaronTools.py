@@ -1,6 +1,7 @@
 """For storing, manipulating, and measuring molecular structures"""
 import itertools
 import re
+import urllib
 from collections import deque
 from copy import deepcopy
 from urllib.error import HTTPError
@@ -98,20 +99,16 @@ class Geometry:
 
         if form not in accepted_forms:
             raise NotImplementedError(
-                "cannot create substituent given %s; use one of %s" % form,
+                "cannot create structure given %s; use one of %s" % form,
                 str(accepted_forms),
             )
 
-        # escape special characters for url
-        if "#" in name:
-            name = name.replace("#", "%23")
-        if "?" in name:
-            name = name.replace("?", "%3F")
+        urlsafe_name = urllib.parse.quote(name)
         if form == "smiles":
-            smiles = name
+            smiles = urlsafe_name
         elif form == "iupac":
             # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
+            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % urlsafe_name
 
             try:
                 smiles = urlopen(url_smi).read().decode("utf8")
@@ -145,40 +142,6 @@ class Geometry:
         for i, a in enumerate(atoms):
             rv[i] = a.coords[:]
         return rv
-
-    @classmethod
-    def from_string(cls, name, form='smiles'):
-        """get Geometry from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API"""
-
-        from urllib.request import urlopen
-        from urllib.error import HTTPError
-
-        accepted_forms = ['iupac', 'smiles']
-
-        if form not in accepted_forms:
-            raise NotImplementedError("cannot create substituent given %s; use one of %s" % form, str(accepted_forms))
-
-        if form == 'smiles':
-            smiles = name
-        elif form == 'iupac':
-            #opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode('utf8')
-            except HTTPError:
-               raise RuntimeError("%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down" % name)
-
-        # print(smiles)
-
-        url_sd = "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf" % smiles
-        # print(url_sd)
-        s_sd = urlopen(url_sd).read().decode('utf8')
-        f = FileReader((name, "sd", s_sd))
-        return cls(f)
 
     @property
     def elements(self):
@@ -1167,7 +1130,7 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
-    #nothing in AaronTools refers to sort_walk anymore
+    # nothing in AaronTools refers to sort_walk anymore
     short_walk = shortest_path
 
     # geometry measurement
@@ -3021,4 +2984,3 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
-
