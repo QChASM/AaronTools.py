@@ -4,7 +4,6 @@ import sys
 import argparse
 
 from AaronTools.geometry import Geometry
-from AaronTools.utils.fetch import from_string
 
 fetch_parser = argparse.ArgumentParser(description='print structure in xyz format', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -35,9 +34,9 @@ style.add_argument('-i', '--iupac', \
 args = fetch_parser.parse_args()
 
 if args.smiles is not None:
-    geom = from_string(args.smiles, form='smiles')
+    geom = Geometry.from_string(args.smiles, form='smiles')
 elif args.iupac is not None:
-    geom = from_string(args.iupac, form='iupac')
+    geom = Geometry.from_string(args.iupac, form='iupac')
 
 s = geom.write(append=True, outfile=args.outfile[0])
 if not args.outfile[0]:

@@ -317,41 +317,41 @@ class Atom:
         shape_name can be:
         linear 1
         linear 2
-        bent 2a (tetrahedral electron geometry w/ 2 bonds)
-        bent 2b (trigonal planar electron geometry w/ 2 bonds)
+        bent 2 planar (trigonal planar electron geometry w/ 2 bonds)
+        bent 2 tetrahedral (tetrahedral electron geometry w/ 2 bonds)
         trigonal planar
-        bent 3 (tetrahedral electron geometry w/ 3 bonds)
+        bent 3 tetrahedral (tetrahedral electron geometry w/ 3 bonds)
         t shaped
         tetrahedral
         sawhorse
         square planar
-        trigonal bipyramid
-        square pyramid
+        trigonal bipyramidal
+        square pyramidal
         octahedral
         """
         if shape_name == "linear 1":
             return cls.linear_shape()[0:2]
         elif shape_name == "linear 2":
             return cls.linear_shape()
-        elif shape_name == "bent 2a":
+        elif shape_name == "bent 2 tetrahedral":
             return cls.tetrahedral_shape()[0:3]
-        elif shape_name == "bent 2b":
+        elif shape_name == "bent 2 planar":
             return cls.trigonal_planar_shape()[0:3]
         elif shape_name == "trigonal planar":
             return cls.trigonal_planar_shape()
-        elif shape_name == "bent 3":
+        elif shape_name == "bent 3 tetrahedral":
             return cls.tetrahedral_shape()[0:4]
         elif shape_name == "t shaped":
             return cls.octahedral_shape()[0:4]
         elif shape_name == "tetrahedral":
             return cls.tetrahedral_shape()
         elif shape_name == "sawhorse":
-            return cls.trigonal_bipyramidal_shape()[0:5]
+            return cls.trigonal_bipyramidalal_shape()[0:5]
         elif shape_name == "square planar":
             return cls.octahedral_shape()[0:5]
-        elif shape_name == "trigonal bipyramidal":
-            return cls.trigonal_bipyramidal_shape()
-        elif shape_name == "square pyramid":
+        elif shape_name == "trigonal bipyramidalal":
+            return cls.trigonal_bipyramidalal_shape()
+        elif shape_name == "square pyramidal":
             return cls.octahedral_shape()[0:6]
         elif shape_name == "octahedral":
             return cls.octahedral_shape()
@@ -372,7 +372,7 @@ class Atom:
     @classmethod
     def trigonal_planar_shape(cls):
         """returns a list of 4 dummy atoms in a trigonal planar shape"""
-        positions = cls.trigonal_bipyramidal_shape()
+        positions = cls.trigonal_bipyramidalal_shape()
         return positions[:-2]
 
     @classmethod
@@ -396,7 +396,7 @@ class Atom:
         return [center, pos1, pos2, pos3, pos4]
 
     @classmethod
-    def trigonal_bipyramidal_shape(cls):
+    def trigonal_bipyramidalal_shape(cls):
         """returns a list of 6 dummy atoms in a trigonal bipryamidal shape"""
         center = Atom("X", np.zeros(3), name="0")
         angle = np.deg2rad(120)
@@ -448,13 +448,13 @@ class Atom:
             elif bond_change == -1:
                 return "linear 1"
 
-        elif old_shape == "bent 2a":
+        elif old_shape == "bent 2 tetrahedral":
             if bond_change == 1:
-                return "bent 3"
+                return "bent 3 tetrahedral"
             elif bond_change == -1:
                 return "linear 1"
 
-        elif old_shape == "bent 2b":
+        elif old_shape == "bent 2 planar":
             if bond_change == 1:
                 return "trigonal planar"
             elif bond_change == -1:
@@ -465,15 +465,15 @@ class Atom:
                 return "tetrahedral"
             elif bond_change == -1:
                 if new_connectivity == 4:
-                    return "bent 2a"
+                    return "bent 2 tetrahedral"
                 else:
-                    return "bent 2b"
+                    return "bent 2 planar"
 
-        elif old_shape == "bent 3":
+        elif old_shape == "bent 3 tetrahedral":
             if bond_change == 1:
                 return "tetrahedral"
             elif bond_change == -1:
-                return "bent 2a"
+                return "bent 2 tetrahedral"
 
         elif old_shape == "t shaped":
             if bond_change == 1:
@@ -486,17 +486,17 @@ class Atom:
 
         elif old_shape == "tetrahedral":
             if bond_change == 1:
-                return "trigonal bipyramid"
+                return "trigonal bipyramidal"
             elif bond_change == -1:
-                return "bent 3"
+                return "bent 3 tetrahedral"
 
         elif old_shape == "square planar":
             if bond_change == 1:
-                return "trigonal bipyramid"
+                return "trigonal bipyramidal"
             elif bond_change == -1:
                 return "t shaped"
 
-        elif old_shape == "trigonal bipyramid":
+        elif old_shape == "trigonal bipyramidal":
             if bond_change == 1:
                 return "octahedral"
             elif bond_change == -1:
@@ -524,12 +524,12 @@ class Atom:
 
         elif len(self.connected) == 2:
             try_shapes["linear 2"] = Atom.get_shape("linear 2")
-            try_shapes["bent 2a"] = Atom.get_shape("bent 2a")
-            try_shapes["bent 2b"] = Atom.get_shape("bent 2b")
+            try_shapes["bent 2 planar"] = Atom.get_shape("bent 2 planar")
+            try_shapes["bent 2 tetrahedral"] = Atom.get_shape("bent 2 tetrahedral")
 
         elif len(self.connected) == 3:
             try_shapes["trigonal planar"] = Atom.get_shape("trigonal planar")
-            try_shapes["bent 3"] = Atom.get_shape("bent 3")
+            try_shapes["bent 3 tetrahedral"] = Atom.get_shape("bent 3 tetrahedral")
             try_shapes["t shaped"] = Atom.get_shape("t shaped")
 
         elif len(self.connected) == 4:
@@ -538,10 +538,10 @@ class Atom:
             try_shapes["square planar"] = Atom.get_shape("square planar")
 
         elif len(self.connected) == 5:
-            try_shapes["trigonal bipyramid"] = Atom.get_shape(
-                "trigonal bipyramidal"
+            try_shapes["trigonal bipyramidal"] = Atom.get_shape(
+                "trigonal bipyramidalal"
             )
-            try_shapes["square pyramid"] = Atom.get_shape("square pyramid")
+            try_shapes["square pyramidal"] = Atom.get_shape("square pyramidal")
 
         elif len(self.connected) == 6:
             try_shapes["octahedral"] = Atom.get_shape("octahedral")

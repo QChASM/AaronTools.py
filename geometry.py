@@ -2017,11 +2017,12 @@ class Geometry:
 
         return
 
-    def substitute(self, sub, target, attached_to=None, minimize=True):
+    def substitute(self, sub, target, attached_to=None, minimize=False):
         """
         substitutes fragment containing `target` with substituent `sub`
-        if end provided, this is the atom where the substituent is attached
-        if end==None, replace the smallest fragment containing `target`
+        if attached_to is provided, this is the atom where the substituent is attached
+        if attached_to==None, replace the smallest fragment containing `target`
+        minimize - bool, rotate sub to lower LJ potential
         """
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
@@ -2118,7 +2119,7 @@ class Geometry:
             self.rebuild()
         self.refresh_ranks()
         if minimize:
-            self.minimize()
+            self.minimize_torsion(sub.atoms, bond, shift)
         return sub
 
     def find_substituent(self, start, for_confs=False):

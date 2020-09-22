@@ -1,11 +1,12 @@
-import AaronTools
 import os
 import re
 import subprocess
 import sys
 
+from AaronTools.const import AARONLIB
 from time import sleep
 from warnings import warn
+from jinja2 import Environment, FileSystemLoader
 
 USER = os.getenv('USER')
 QUEUE_TYPE = os.getenv('QUEUE_TYPE').upper()
@@ -43,8 +44,7 @@ class SubmitProcess:
         self.walltime = walltime
         self.processors = processors
         self.memory = memory
-        self.template = template
-        self.set_template()
+        self.set_template(template)
 
     @staticmethod
     def unfinished_jobs_in_dir(directory, retry=True):
@@ -167,23 +167,25 @@ class SubmitProcess:
 
                     return job_ids
 
-    def submit(self, wait=False):
+    def submit(self, wait=False, quiet=True):
         """submit job to the queue
         wait: bool/int - do not leave the function until any job in the directory 
                          finishes (polled every 5 minutes or 'wait' seconds)"""
    
         job_file = os.path.join(self.directory, self.name + '.job')
-        with open(self.template, 'r') as ref:
-            template_lines = ref.readlines()
+
+        opts = {
+            "name": self.name,
+            "walltime": self.walltime,
+            "processors": self.processors,
+            "memory": self.memory,
+        }
+
+
+        tm = self.template.render(**opts)
 
         with open(job_file, 'w') as f:
-            for line in template_lines:
-                line = line.replace('$JOB_NAME', self.name)
-                line = line.replace('$WALL_TIME', str(self.walltime))
-                line = line.replace('$N_PROCS', str(self.processors))
-                line = line.replace('$MEMORY', str(self.memory))
-
-                f.write(line)
+            f.write(tm)
 
         if QUEUE_TYPE == "LSF":
             args = ["bsub", "<", job_file]
@@ -205,6 +207,9 @@ class SubmitProcess:
             raise RuntimeError("error with submitting job %s: %s" 
                                % (self.name, self.submit_err.decode('utf-8')))
 
+        if not quiet:
+            print(self.submit_out.decode("utf-8").strip())
+
         if wait is not False:
             if wait is True:
                 wait_time = 30
@@ -212,42 +217,23 @@ class SubmitProcess:
                 wait_time = abs(wait)
 
             while len(self.unfinished_jobs_in_dir(self.directory)) != 0:
-                print(self.unfinished_jobs_in_dir(self.directory))
+                #print(self.unfinished_jobs_in_dir(self.directory))
                 sleep(wait_time)
 
         return
 
-    def set_template(self):
-        """set template is called when initializing a Job
-        sets the 'template' attribute to the specified template, if it exists
-        or grab 'psi4.job', 'orca.job', or 'gaussian.job' from the AaronTools directory"""
-        if self.template is None:
-            for d in [self.directory] + AaronTools.__path__:
-                fname = None
-                if self.exe == "in":
-                    fname = os.path.join(d, "psi4.job")
-                
-                elif self.exe == "inp":
-                    fname = os.path.join(d, "orca.job")
-                
-                elif self.exe == "com" or self.exe == "gjf":
-                    fname = os.path.join(d, "gaussian.job")
-                    
-                if fname is not None and os.path.exists(fname):
-                    self.template = fname
-                    break
-
-            if self.template is None:
-                raise FileNotFoundError("template job file was not found")
-
-        if not os.path.exists(self.template):
-            search_directories = sys.path
-            search_directories.append(self.directory)
-            for d in search_directories:
-                fname = os.path.exists(d, self.template)
-                if os.path.exists(fname):
-                    self.template = fname
-                    break
-            else: 
-                raise FileNotFoundError("template job file was not found")
-
+    def set_template(self, filename):
+        """
+        sets job template to filename
+        AARONLIB directories are searched
+        """
+        environment = Environment(loader=FileSystemLoader(AARONLIB))
+        if filename is None:
+            if self.exe == "com" or self.exe == "gjf":
+                filename = "Gaussian_template.txt"
+            elif self.exe == "inp":
+                filename = "ORCA_template.txt"
+            elif self.exe == "in":
+                filename = "Psi4_template.txt"
+            
+        self.template = environment.get_template(filename)

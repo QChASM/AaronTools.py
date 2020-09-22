@@ -742,8 +742,9 @@ class TestGeometry(TestWithTimer):
 def suite():
     suite = unittest.TestSuite()
     # suite.addTest(TestGeometry("test_map_ligand"))
-    suite.addTest(TestGeometry("test_detect_components"))
-    suite.addTest(TestGeometry("test_fix_comment"))
+    # suite.addTest(TestGeometry("test_detect_components"))
+    # suite.addTest(TestGeometry("test_fix_comment"))
+    suite.addTest(TestGeometry("test_substitute"))
     return suite
 
 
