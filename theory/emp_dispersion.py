@@ -84,17 +84,17 @@ class EmpiricalDispersion:
             return ("-d3", None)
         elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"]):
             return ("-d3bj", None)
-        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED MODIFEID GRIMME D3", "GD3MBJ", "D3MBJ", "-D3MBJ"]):
+        elif any(self.name.upper() == name for name in ["BECKE-JOHNSON DAMPED MODIFIED GRIMME D3", "GD3MBJ", "D3MBJ", "-D3MBJ"]):
             return ("-d3mbj", None)
-        elif any(self.name.upper() == name for name in ["Chai & Head-Gordon", "CHG", "-CHG"]):
+        elif any(self.name.upper() == name for name in ["CHAI & HEAD-GORDON", "CHG", "-CHG"]):
             return ("-chg", None)
         elif any(self.name.upper() == name for name in ["NONLOCAL APPROXIMATION", "NL", "NLA", "-NL"]):
             return ("-nl", None)
-        elif any(self.name.upper() == name for name in ["Pernal, Podeszwa, Patkowski, & Szalewicz", "DAS2009", "-DAS2009"]):
+        elif any(self.name.upper() == name for name in ["PERNAL, PODESZWA, PATKOWSKI, & SZALEWICZ", "DAS2009", "-DAS2009"]):
             return ("-das2009", None)        
-        elif any(self.name.upper() == name for name in ["Podeszwa, Katarzyna, Patkowski, & Szalewicz", "DAS2010", "-DAS2010"]):
+        elif any(self.name.upper() == name for name in ["PODESZWA, KATARZYNA, PATKOWSKI, & SZALEWICZ", "DAS2010", "-DAS2010"]):
             return ("-das2010", None)        
-        elif any(self.name.upper() == name for name in ["Řezác, Greenwell, & Beran", "DMP2"]):
+        elif any(self.name.upper() == name for name in ["ŘEZÁC, GREENWELL, & BERAN", "DMP2"]):
             return ("dmp2", None)
         else:
             return (self.name, "unrecognized emperical dispersion: %s" % self.name)
