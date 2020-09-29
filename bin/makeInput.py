@@ -403,7 +403,7 @@ for f in args.infile:
         style = 'in'
     else:
         if args.outfile:
-            style = splitext(args.outfile)[-1]
+            style = splitext(args.outfile)[-1].lstrip(".")
         else:
             raise RuntimeError("file format must be specified if no output file is specified")
 
