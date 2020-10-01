@@ -33,7 +33,7 @@ class Geometry:
 
     Primes()
 
-    def __init__(self, structure="", name="", comment="", components=None):
+    def __init__(self, structure="", name="", comment="", components=None, refresh_connected=True):
         """
         :structure: can be a Geometry(), a FileReader(), a file name, or a
             list of atoms
@@ -69,7 +69,10 @@ class Geometry:
             else:
                 # list of atoms supplied
                 self.atoms = structure
-                self.refresh_connected()
+                if refresh_connected:
+                    # SEQCROW sometimes uses refresh_connected=False to keep
+                    # the connectivity the same as what's on screen
+                    self.refresh_connected()
                 self.refresh_ranks()
                 return
         else:
@@ -80,8 +83,9 @@ class Geometry:
         self.comment = from_file.comment
         self.atoms = from_file.atoms
         self.other = self.parse_comment()
-        if from_file.file_type != "sd":
-            # sd files contain connectivity info
+        if refresh_connected:
+            # some file types contain connectivity info (e.g. sd) - might not want
+            # to overwrite that
             self.refresh_connected()
         self.refresh_ranks()
         return
