@@ -795,17 +795,24 @@ class Geometry:
                     a.connected.add(b)
                     b.connected.add(a)
 
-    def refresh_ranks(self):
-        rank = self.canonical_rank()
+    def refresh_ranks(self, invariant=False):
+        rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
             a._rank = r
         return
 
-    def canonical_rank(self, heavy_only=False, break_ties=True, update=True):
+    def canonical_rank(self, 
+                       heavy_only=False, 
+                       break_ties=True, 
+                       update=True,
+                       invariant=True
+    ):
         """
-        determin canonical ranking for atoms
-        (uses invariant described in 10.1021/ci00062a008 and algorithm described
-        in 10.1021/acs.jcim.5b00543)
+        determine canonical ranking for atoms
+        invariant: bool - if True, use invariant described in 10.1021/ci00062a008
+                          if False, use neighbor IDs
+        
+        algorithm described in 10.1021/acs.jcim.5b00543
         """
         primes = Primes.list(len(self.atoms))
         atoms = []
@@ -954,9 +961,12 @@ class Geometry:
         # partition and re-rank using invariants
         partitions = {}
         for i, a in enumerate(atoms):
-            a._invariant = a.get_invariant()
-            partitions.setdefault(a._invariant, [])
-            partitions[a._invariant] += [i]
+            if invariant:
+                id = a.get_invariant()
+            else:
+                id = a.get_neighbor_id()
+            partitions.setdefault(id, [])
+            partitions[id] += [i]
         new_rank = 0
         for key in sorted(partitions.keys()):
             idx_list = partitions[key]
@@ -998,11 +1008,6 @@ class Geometry:
             list(ordered_targets), list(non_targets)
 
         Depth-first reorder of atoms based on canonical ranking
-        if canonical is True (default):
-            starts at lowest canonical rank (use when invariance desired)
-        if canonical is False:
-            starts at highest canonical rank (use when more central atoms
-            should come first)
         """
 
         if not targets:
@@ -1253,8 +1258,6 @@ class Geometry:
         :targets: (list) the atoms in `self` to use in calculation
         :ref_targets: (list) the atoms in the reference geometry to use
         :sort: (bool) canonical sorting of atoms before comparing
-        :longsort: (bool) use a more expensive but better sorting method
-            (only use for small molecules!)
         :debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
         """
 
@@ -1301,13 +1304,6 @@ class Geometry:
                 rmsd = tmp
                 vec = np.array([0, 0, 0])
             return rmsd, vec
-
-        def get_orders(obj, targets):
-            """ get orders starting at different atoms """
-            # try just regular canonical ordering
-            obj.refresh_ranks()
-            orders = [obj.reorder(targets=targets, canonical=False)[0]]
-            return orders
 
         # get target atoms
         tmp = targets

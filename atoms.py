@@ -130,7 +130,7 @@ class Atom:
 
     def __lt__(self, other):
         """
-        sorts by canonical smiles rank, then by invariant, then by name
+        sorts by canonical smiles rank, then by neighbor ID, then by name
             more connections first
             then, more non-H bonds first
             then, higher atomic number first
@@ -211,7 +211,8 @@ class Atom:
         return
 
     def get_invariant(self):
-        """gets initial invariant
+        """
+        gets initial invariant
         (1) number of non-hydrogen connections (\d{1}): nconn
         (2) sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
         (3) atomic number (\d{3}): z
@@ -234,6 +235,27 @@ class Atom:
         return "{:01d}{:03d}{:03d}{:01d}".format(
             int(nconn), int(nB * 10), int(z), int(nH)
         )
+
+    def get_neighbor_id(self):
+        """
+        gets initial invariant based on self's element and the element of 
+        the atoms connected to self
+        """
+        # atomic number
+        z = ELEMENTS.index(self.element)
+        s = "%03i" % z
+        heavy = [ELEMENTS.index(x.element) for x in self.connected if x.element != "H"]
+        # number of non-hydrogen connections:
+        s += "%02i" % len(heavy)
+        # number of bonds with heavy atoms and their element
+        for h in sorted(set(heavy)):
+            s += "%03i" % h
+            s += "%02i" % heavy.count(h)
+        # number of connected hydrogens
+        nH = len(self.connected) - len(heavy)
+        s += "%02i" % nH
+
+        return s
 
     def copy(self):
         rv = Atom()
