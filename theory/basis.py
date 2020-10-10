@@ -148,10 +148,7 @@ class BasisSet:
         ecp: list(ECP) or None
         """
         if isinstance(basis, str):
-            if len(basis.split()) > 0:
-                basis = self.parse_basis_str(basis, cls=Basis)
-            else:
-                basis = [Basis(basis)]
+            basis = self.parse_basis_str(basis, cls=Basis)
         elif isinstance(basis, Basis):
             basis = [basis]
 

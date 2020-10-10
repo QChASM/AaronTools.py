@@ -270,7 +270,7 @@ class TestCLS(TestWithTimer):
             raise RuntimeError(err)
 
         ref = """electronic energy of test_files/normal.log = -1856.018658 Eh
-    ZPE               = -1855.474686 Eh  (dZPE = 0.543972)
+    E+ZPE             = -1855.474686 Eh  (ZPE = 0.543972)
 thermochemistry from test_files/normal.log at 298.00 K:
     H(RRHO)           = -1855.440616 Eh  (dH = 0.578042)
     G(RRHO)           = -1855.538017 Eh  (dG = 0.480642)
@@ -324,7 +324,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         if len(err) != 0:
             raise RuntimeError(err)
 
-        ref_csv = """E,ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),dZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
+        ref_csv = """E,E+ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),ZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
 -1856.018658,-1855.474686,-1855.440616,-1855.538017,-1855.532805,-1855.532510,0.543972,0.578042,0.480642,0.485854,0.486148,test_files/normal.log,test_files/normal.log"""
 
         out_list = out.decode("utf-8").splitlines()

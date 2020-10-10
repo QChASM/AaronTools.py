@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+#TODO: print temperature
+
 import sys
 import argparse
 import os
@@ -50,7 +52,8 @@ thermo_parser.add_argument('-t', '--temperature', \
                             default=None, \
                             required=False, \
                             dest='temp', \
-                            help='compute thermal corrections using the specified temperature (K)')
+                            help='compute thermal corrections using the specified temperature (K)\n' + \
+                                 'Default: value found in file or 298.15')
 
 thermo_parser.add_argument('-w0' , '--frequency-cutoff', \
                             type=float, \
@@ -93,8 +96,8 @@ if args.csv:
     elif args.delimiter == 'space':
         delim = ' '
         
-    output = delim.join(["E", "ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
-                         "dZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)", \
+    output = delim.join(["E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
+                         "ZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)", \
                          "SP_File", "Thermo_File"])
     output += '\n'
 else:
@@ -204,7 +207,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         output += "electronic energy of %s = %.6f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
                 nrg)
-        output += "    ZPE               = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
+        output += "    E+ZPE             = %.6f Eh  (ZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
         output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
         output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)

@@ -47,6 +47,8 @@ class TestFromString(TestWithTimer):
         self.assertTrue(validate(geom, ref, thresh="loose", heavy_only=True))
 
     def test_ring(self):
+        # sometimes this doesn't work b/c cactus decides to give a crap structure
+        # where all C-C bond lengths are 1 Angstrom
         ring = Ring.from_string("benzene", end_length=1, end_atom='C', form="iupac")
         ref = self.benzene
         self.assertTrue(validate(ring, ref, thresh="loose"))

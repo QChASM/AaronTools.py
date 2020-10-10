@@ -8,7 +8,22 @@ from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from warnings import warn
 
-element_parser = argparse.ArgumentParser(description='change and element and/or adjust the VSEPR geometry at a site', \
+vsepr_choices=["linear_1", 
+               "linear_2", 
+               "bent_2_planar", 
+               "bent_2_tetrahedral", 
+               "trigonal_planar", 
+               "bent_3_tetrahedral",
+               "t_shaped",
+               "tetrahedral",
+               "sawhorse",
+               "square_planar",
+               "trigonal_bipyriamidal",
+               "square_pyramidal",
+               "octahedral",
+]
+
+element_parser = argparse.ArgumentParser(description='change an element and/or adjust the VSEPR geometry', \
     formatter_class=argparse.RawTextHelpFormatter)
 element_parser.add_argument('infile', metavar='input file', \
                              type=str, \
@@ -59,12 +74,18 @@ element_parser.add_argument('-c', '--change-hydrogens', \
                                  'also be determined automatically.')
 
 element_parser.add_argument('-g', '--geometry', \
-                            nargs=1, \
                             type=str, \
-                            default=[None], \
+                            default=None, \
                             dest='geometry', \
                             required=False, \
-                            help='specify the geometry to use with the new element\nif the argument is not supplied, the geometry will remain the same as the previous element\'s')
+                            help="specify the geometry to use with the new element\n" + \
+                                 "if the argument is not supplied, the geometry will remain the same as\n" +\
+                                 "the previous element's, unless necessitated by an increase in hydrogens\n" + \
+                                 "Geometry can be:\n%s" % \
+                                     "".join( s + ", " if (sum(len(x) for x in vsepr_choices[:i])) % 40 < 21 else s + ",\n"
+                                     for i, s in enumerate(vsepr_choices)
+                                     ).strip().strip(","),
+                            )
 
 args = element_parser.parse_args()
 
@@ -72,7 +93,7 @@ fix_bonds = args.fix_bonds
 
 if args.change_hs is None:
     adjust_structure = True
-    if args.geometry[0] is not None:
+    if args.geometry is not None:
         warn("a geometry was specified, but geometry is determined automatically with the supplied arguments")
 else:
     if isinstance(args.change_hs, int):
@@ -80,7 +101,7 @@ else:
     else:
         adjust_hs = 0
 
-    new_vsepr = args.geometry[0]
+    new_vsepr = args.geometry.replace("_", " ")
 
     if adjust_hs == 0 and new_vsepr is None:
         adjust_structure = False

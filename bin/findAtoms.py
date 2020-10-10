@@ -152,7 +152,7 @@ find_parser.add_argument("-v", "--vsepr",
                               "shape can be:\n%s" % \
                               "".join( s + ", " if (sum(len(x) for x in vsepr_choices[:i])) % 40 < 21 else s + ",\n"
                                            for i, s in enumerate(vsepr_choices)
-                         ),
+                         ).strip().strip(","),
 )
 
 find_parser.add_argument("-nb", "--number-of-bonds",

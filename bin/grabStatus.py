@@ -8,7 +8,7 @@ from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
 
 
-stat_parser = argparse.ArgumentParser(description='move the structure along a normal mode', \
+stat_parser = argparse.ArgumentParser(description='prints status of optimization job', \
     formatter_class=argparse.RawTextHelpFormatter)
 stat_parser.add_argument('infile', metavar='input file', \
                             type=str, \
@@ -64,7 +64,9 @@ for f in args.infile:
         col = "%.2e/%s" % (float(co.gradient[crit]['value']), 'YES' if co.gradient[crit]['converged'] else 'NO')
         s += "  %14s" % col
 
-    if len(header_vals) == 0:
+    if co.error is not None and co.error != "UNKNOWN":
+        s += "  %s" % co.error
+    elif len(header_vals) == 0:
         s += "  no progress found"
     elif co.finished:
         s += "  finished"

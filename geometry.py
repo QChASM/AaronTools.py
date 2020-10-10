@@ -182,7 +182,7 @@ class Geometry:
         # print(url_sd)
         s_sd = urlopen(url_sd).read().decode('utf8')
         f = FileReader((name, "sd", s_sd))
-        return cls(f)
+        return cls(f, refresh_connected=False)
 
     @property
     def elements(self):
@@ -1246,6 +1246,8 @@ class Geometry:
         targets=None,
         ref_targets=None,
         debug=False,
+        weights=None,
+        ref_weights=None,
     ):
         """
         calculates the RMSD between two geometries
@@ -1259,6 +1261,8 @@ class Geometry:
         :ref_targets: (list) the atoms in the reference geometry to use
         :sort: (bool) canonical sorting of atoms before comparing
         :debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
+        :weights: (list(float)) weights to apply to targets
+        :ref_weights: (list(float)) weights to apply to ref_targets
         """
 
         def _RMSD(ref, other):
@@ -1325,6 +1329,14 @@ class Geometry:
 
         this = Geometry([t.copy() for t in targets])
         ref = Geometry([r.copy() for r in ref_targets])
+        if weights is not None:
+            for w, a in zip(weights, this.atoms):
+                a.coords *= w 
+
+        if ref_weights is not None:
+            for w, a in zip(ref_weights, ref.atoms):
+                a.coords *= w
+
         # align center of mass to origin
         com = this.COM()
         ref_com = ref.COM()
@@ -1341,6 +1353,7 @@ class Geometry:
             res = _RMSD(ref.atoms, this.atoms)
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
+
         rmsd, vec = min_rmsd
 
         # return rmsd
@@ -2334,6 +2347,47 @@ class Geometry:
                                                (see Atom.get_shape for a list of shapes)
         """
 
+        def get_corresponding_shape(target):
+            """returns shape object, but where atoms[1:] are ordered corresping to target.connected"""
+            best_positions = shape_object.atoms
+            min_rmsd = None
+            ref_weights = [target.mass()]
+            ref_weights.extend([sum([fa.mass() for fa in self.get_fragment(a, target)]) for a in target.connected])
+            #ref_weights.extend([a.mass() for a in target.connected])
+            for positions in itertools.permutations(
+                shape_object.atoms[1:], len(target.connected)
+            ):
+                full_positions = [shape_object.atoms[0]] + list(
+                    positions
+                )
+
+                # weights seem to help here
+                rmsd = shape_object.RMSD(
+                    self,
+                    targets=full_positions,
+                    ref_targets=[target, *target.connected],
+                    ref_weights=ref_weights, 
+                )
+
+                if min_rmsd is None or rmsd < min_rmsd:
+                    min_rmsd = rmsd
+                    best_positions = full_positions
+                    
+            out = Geometry(
+                      best_positions + [p for p in shape_object.atoms[1:] if p not in best_positions], 
+                      refresh_connected=False
+                  )
+            
+            # applying weights here hurts more than it helps
+            rmsd = out.RMSD(
+                self,
+                targets=best_positions,
+                ref_targets=[target, *target.connected],
+                align=True,
+            )
+
+            return out
+        
         target = self.find(target)
         if len(target) > 1:
             raise RuntimeError(
@@ -2427,6 +2481,7 @@ class Geometry:
             if new_shape != old_shape:
                 if change_Hs < 0:
                     # remove extra hydrogens
+                    shape_object = get_corresponding_shape(target)
                     removed_Hs = 1
                     while removed_Hs <= abs(change_Hs):
                         H_atom = [
@@ -2459,6 +2514,49 @@ class Geometry:
                 for frag in remove_frags:
                     if frag in frags:
                         frags.remove(frag)
+
+                # add Hs if needed
+                if change_Hs > 0:
+                    # determine which connected atom is occupying which position on the shape
+                    shape_object = get_corresponding_shape(target)
+                    
+                    shape_object.coord_shift(
+                        shape_object.atoms[0].bond(new_atom)
+                    )
+
+                    positions = []
+                    for atom in target.connected:
+                        v2 = new_atom.bond(atom)
+                        max_overlap = None
+                        position = None
+                        for i, pos in enumerate(shape_object.atoms[1:]):
+                            v1 = shape_object.atoms[0].bond(pos)
+                            if i in positions:
+                                continue
+
+                            d = np.dot(v1, v2)
+
+                            if max_overlap is None or d > max_overlap:
+                                max_overlap = d
+                                position = i
+
+                        positions.append(position)
+
+                    # add hydrogens to positions that are not occupied
+                    for open_position in [
+                        i + 1
+                        for i in range(0, len(shape_object.atoms[1:]))
+                        if i not in positions
+                    ]:
+                        # add one because the 0th "position" of the shape is the central atom
+                        H_atom = Atom(
+                            element="H",
+                            coords=shape_object.atoms[open_position].coords,
+                            name=str(len(self.atoms) + 1),
+                        )
+
+                        self.change_distance(new_atom, H_atom)
+                        self += H_atom
 
                 frags.sort(key=len, reverse=True)
                 # for each position on the new idealized geometry, find the fragment
@@ -2498,74 +2596,6 @@ class Geometry:
                     angle = np.arccos((c ** 2 - 2.0) / -2.0)
 
                     self.rotate(rv, angle, targets=frag, center=target)
-
-                # add Hs if needed
-                if change_Hs > 0:
-                    # determine which connected atom is occupying which position on the shape
-                    best_positions = None
-                    min_rmsd = None
-                    for positions in itertools.permutations(
-                        shape_object.atoms[1:], len(target.connected)
-                    ):
-                        full_positions = [shape_object.atoms[0]] + list(
-                            positions
-                        )
-
-                        rmsd = shape_object.RMSD(
-                            self,
-                            targets=full_positions,
-                            ref_targets=[target, *target.connected],
-                            align=True,
-                        )
-
-                        if min_rmsd is None or rmsd < min_rmsd:
-                            min_rmsd = rmsd
-                            best_positions = full_positions
-
-                    rmsd = shape_object.RMSD(
-                        self,
-                        targets=best_positions,
-                        ref_targets=[target, *target.connected],
-                        align=True,
-                    )
-
-                    shape_object.coord_shift(
-                        shape_object.atoms[0].bond(new_atom)
-                    )
-
-                    positions = []
-                    for atom in target.connected:
-                        v2 = new_atom.bond(atom)
-                        max_overlap = None
-                        position = None
-                        for i, pos in enumerate(shape_object.atoms[1:]):
-                            v1 = shape_object.atoms[0].bond(pos)
-                            if i in positions:
-                                continue
-
-                            d = np.dot(v1, v2)
-
-                            if max_overlap is None or d > max_overlap:
-                                max_overlap = d
-                                position = i
-
-                        positions.append(position)
-
-                    # add hydrogens to positions that are not occupied
-                    for open_position in [
-                        i + 1
-                        for i in range(0, len(shape_object.atoms[1:]))
-                        if i not in positions
-                    ]:
-                        # add one because the 0th "position" of the shape is the central atom
-                        H_atom = Atom(
-                            element="H",
-                            coords=shape_object.atoms[open_position].coords,
-                            name=str(len(self.atoms) + 1),
-                        )
-
-                        self.change_distance(new_atom, H_atom)
-                        self += H_atom
 
         self += new_atom
         self -= target
