@@ -87,7 +87,7 @@ class FileWriter:
         """
         if isinstance(outfile, str) and style is None:
             name, ext = os.path.splitext(outfile)
-            style = ext[1:]
+            style = ext.strip(".")
 
         elif style is None:
             style = "xyz"
@@ -95,6 +95,10 @@ class FileWriter:
         if style.lower() not in write_types:
             if style.lower() == "gaussian":
                 style = "com"
+            elif style.lower() == "orca":
+                style = "inp"
+            elif style.lower() == "psi4":
+                style = "in"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -951,7 +955,7 @@ class FileReader:
                             if match:
                                 options = match.group(2).split(',')
                             elif option_lower.startswith('opt='):
-                                options = ''.join(option.split('=')[1:])
+                                options = [''.join(option.split('=')[1:])]
                             else:
                                 job_type.append(OptimizationJob())
                                 continue
@@ -1327,8 +1331,9 @@ class Frequency:
             if "IR Inten" in line and (
                 (hpmodes and "---" in line) or (not hpmodes and "--" in line)
             ):
-                for i in float_num.findall(line):
-                    self.data[idx].intensity = float(i)
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].intensity = float(intensities[i])
                 continue
 
             if hpmodes:

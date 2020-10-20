@@ -286,14 +286,13 @@ class Config(configparser.ConfigParser):
         pop or opt options being added by the job type
         """
         # these need to be dicts
-        two_layer = [
-            GAUSSIAN_ROUTE,
-            GAUSSIAN_PRE_ROUTE,
-            ORCA_BLOCKS,
+        two_layer = [GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, ORCA_BLOCKS, PSI4_JOB]
+
+        # these need to be dicts, but can only have one value
+        two_layer_single_value = [
             PSI4_OPTKING,
             PSI4_SETTINGS,
             PSI4_COORDINATES,
-            PSI4_JOB,
         ]
 
         # these need to be lists
@@ -309,14 +308,14 @@ class Config(configparser.ConfigParser):
             PSI4_COMMENT,
         ]
 
-        # two layer options are separated by semicolons
+        # two layer options are separated by newline
         # individual options are split on white space, with the first defining the primary layer
         out = {}
         for option in two_layer:
             value = self[section].get(option, fallback=False)
             if value:
                 out[option] = {}
-                for v in value.split(";"):
+                for v in value.splitlines():
                     key = v.split()[0]
                     if len(v.split()) > 1:
                         info = v.split()[1].split(",")
@@ -325,10 +324,23 @@ class Config(configparser.ConfigParser):
 
                     out[option][key] = [x.strip() for x in info]
 
+        for option in two_layer_single_value:
+            value = self.get(section, option, fallback=False)
+            if value:
+                out[option] = {}
+                for v in value.splitlines():
+                    key = v.split()[0]
+                    if len(v.split()) > 1:
+                        info = [v.split()[1]]
+                    else:
+                        info = []
+
+                    out[option][key] = [x.strip() for x in info]
+
         for option in one_layer:
             value = self[section].get(option, fallback=False)
             if value:
-                out[option] = value.split(";")
+                out[option] = value.splitlines()
 
         return out
 

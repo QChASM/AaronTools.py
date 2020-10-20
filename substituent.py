@@ -471,7 +471,7 @@ class Substituent(Geometry):
                 obstructed = False
                 if param_value is None or test_B1 < param_value:
                     # check to see if this atom's B1 is obstructed by another atom
-                    if np.linalg.norm(test_B1_v) > 3 * np.finfo(float).eps:
+                    if np.linalg.norm(test_B1_v) > 1e-4:
                         perp_vec = test_B1_v / np.linalg.norm(test_B1_v)
 
                         for a2 in self.atoms:

@@ -372,8 +372,15 @@ class Theory:
                         x.lower() == "ts"
                         for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ) and not any(
-                        x.lower()
-                        in ["calcfc", "readfc", "rcfc", "readcartesianfc"]
+                        x.lower() == y
+                        for y in [
+                            "calcfc",
+                            "readfc",
+                            "rcfc",
+                            "readcartesianfc",
+                            "calcall",
+                            "calchffc",
+                        ]
                         for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ):
                         other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
