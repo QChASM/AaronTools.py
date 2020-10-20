@@ -361,7 +361,7 @@ class Theory:
                 if option.lower() == "opt":
                     # need to specified CalcFC for gaussian ts optimization
                     if any(x.lower() == "ts" for x in other_kw_dict[GAUSSIAN_ROUTE][option]) and \
-                        not any(x.lower() in 
+                        not any(x.lower() == y for y in 
                                 ["calcfc", "readfc", "rcfc", "readcartesianfc", "calcall", "calchffc"]
                                 for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ):

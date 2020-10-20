@@ -512,8 +512,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        self.assertTrue(validate(ref, mol, thresh="loose"))
 
     def test_rotate(self):
         """test rotate.py"""

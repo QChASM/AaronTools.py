@@ -662,8 +662,7 @@ class TestGeometry(TestWithTimer):
 
         ref = Geometry(TestGeometry.pyridine)
         mol.change_element("1", "N", adjust_hydrogens=True)
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        self.assertTrue(validate(mol, ref, thresh="loose"))
 
     def test_map_ligand(self):
         monodentate = AaronTools.component.Component(TestGeometry.monodentate)

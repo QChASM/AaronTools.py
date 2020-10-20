@@ -2347,46 +2347,68 @@ class Geometry:
                                                (see Atom.get_shape for a list of shapes)
         """
 
-        def get_corresponding_shape(target):
+        def get_corresponding_shape(target, shape_object, frags):
             """returns shape object, but where atoms[1:] are ordered corresping to target.connected"""
-            best_positions = shape_object.atoms
-            min_rmsd = None
-            ref_weights = [target.mass()]
-            ref_weights.extend([sum([fa.mass() for fa in self.get_fragment(a, target)]) for a in target.connected])
-            #ref_weights.extend([a.mass() for a in target.connected])
-            for positions in itertools.permutations(
-                shape_object.atoms[1:], len(target.connected)
-            ):
-                full_positions = [shape_object.atoms[0]] + list(
-                    positions
-                )
-
-                # weights seem to help here
-                rmsd = shape_object.RMSD(
-                    self,
-                    targets=full_positions,
-                    ref_targets=[target, *target.connected],
-                    ref_weights=ref_weights, 
-                )
-
-                if min_rmsd is None or rmsd < min_rmsd:
-                    min_rmsd = rmsd
-                    best_positions = full_positions
-                    
-            out = Geometry(
-                      best_positions + [p for p in shape_object.atoms[1:] if p not in best_positions], 
-                      refresh_connected=False
-                  )
+            shape_object.coord_shift(target.coords-shape_object.atoms[0].coords)
+            if len(frags) == 0:
+                return shape_object
             
-            # applying weights here hurts more than it helps
-            rmsd = out.RMSD(
-                self,
-                targets=best_positions,
-                ref_targets=[target, *target.connected],
-                align=True,
-            )
+            max_frag = sorted(frags, key=len, reverse=True)[0]
+            angle = target.angle(shape_object.atoms[1], max_frag[0])
+            v1 = target.bond(max_frag[0])
+            v2 = shape_object.atoms[0].bond(shape_object.atoms[1])
+            v1 /= np.linalg.norm(v1)
+            v2 /= np.linalg.norm(v2)
+            rv = np.cross(v1, v2)
 
-            return out
+            if abs(np.linalg.norm(rv)) < 10**-3 or abs(angle) < 10**-3:
+                if np.dot(v1, v2) == -1:
+                    rv = np.array([v1[2], v1[0], v1[1]])
+                    shape_object.rotate(rv, np.pi, center=target)
+                    angle = 0
+
+            if abs(np.linalg.norm(rv)) > 10**-3 and abs(angle) > 10**-3:
+                shape_object.rotate(rv, -angle, center=target)
+
+            rv = target.bond(shape_object.atoms[1])
+            min_dev = None
+            min_angle = 0
+            inc = 5
+            angle = 0
+            while angle < 360:
+                angle += inc
+                shape_object.rotate(rv, np.deg2rad(inc), center=target)
+                
+                previous_positions = [0]
+                dev = 0
+                for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                    if j == 0:
+                        continue
+                    v1 = target.bond(frag[0])
+                    max_overlap = None
+                    corresponding_position = None
+                    for i, position in enumerate(shape_object.atoms[1:]):
+                        if i in previous_positions:
+                            continue
+                        v2 = shape_object.atoms[0].bond(position)
+                        d = np.dot(v1, v2)
+                        if max_overlap is None or d > max_overlap:
+                            max_overlap = d
+                            corresponding_position = i
+                    
+                    if corresponding_position is None:
+                        continue
+                    
+                    previous_positions.append(corresponding_position)
+                    dev += (max_overlap - (np.linalg.norm(frag[0].coords) * np.linalg.norm(shape_object.atoms[corresponding_position + 1].coords)))**2
+                
+                if min_dev is None or dev < min_dev:
+                    min_dev = dev
+                    min_angle = angle
+            
+            shape_object.rotate(rv, np.deg2rad(min_angle), center=target)
+
+            return shape_object
         
         target = self.find(target)
         if len(target) > 1:
@@ -2397,14 +2419,10 @@ class Geometry:
         else:
             target = target[0]
 
+        # new_atom is only used to determine how many H's to add
         new_atom = Atom(
             element=new_element, name=target.name, coords=target.coords
         )
-
-        # fix bond lengths if requested
-        if adjust_bonds:
-            for atom in target.connected:
-                self.change_distance(new_atom, atom, adjust=1)
 
         if adjust_hydrogens is True:
             if hasattr(target, "_saturation") and hasattr(
@@ -2430,7 +2448,7 @@ class Geometry:
         else:
             change_Hs = 0
             new_shape = None
-
+        
         if change_Hs != 0 or new_shape is not None:
             # if we're removing hydrogens, check if we have enough to remove
             if change_Hs < 0:
@@ -2478,10 +2496,16 @@ class Geometry:
                     )
                 )
 
+            # get each branch off of the target atom
+            frags = [
+                self.get_fragment(atom, target)
+                for atom in target.connected
+            ]
+
             if new_shape != old_shape:
                 if change_Hs < 0:
                     # remove extra hydrogens
-                    shape_object = get_corresponding_shape(target)
+                    shape_object = get_corresponding_shape(target, shape_object, frags)
                     removed_Hs = 1
                     while removed_Hs <= abs(change_Hs):
                         H_atom = [
@@ -2491,42 +2515,31 @@ class Geometry:
                         ][0]
                         self -= H_atom
                         removed_Hs += 1
-
-                com = self.COM(target)
-
-                shape_object.coord_shift(com)
-
-                # get each branch off of the target atom
+                
                 frags = [
                     self.get_fragment(atom, target)
                     for atom in target.connected
                 ]
 
+                shape_object = get_corresponding_shape(target, shape_object, frags)
+            
                 # ring detection - remove ring fragments because those are more difficult to adjust
                 remove_frags = []
                 for i, frag1 in enumerate(frags):
-                    for frag2 in frags[i + 1 :]:
+                    for frag2 in frags[i + 1:]:
                         dups = [atom for atom in frag2 if atom in frag1]
                         if len(dups) != 0:
                             remove_frags.append(frag1)
                             remove_frags.append(frag2)
 
-                for frag in remove_frags:
-                    if frag in frags:
-                        frags.remove(frag)
-
                 # add Hs if needed
                 if change_Hs > 0:
                     # determine which connected atom is occupying which position on the shape
-                    shape_object = get_corresponding_shape(target)
-                    
-                    shape_object.coord_shift(
-                        shape_object.atoms[0].bond(new_atom)
-                    )
+                    shape_object = get_corresponding_shape(target, shape_object, frags)
 
                     positions = []
-                    for atom in target.connected:
-                        v2 = new_atom.bond(atom)
+                    for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                        v2 = target.bond(frag[0])
                         max_overlap = None
                         position = None
                         for i, pos in enumerate(shape_object.atoms[1:]):
@@ -2555,20 +2568,24 @@ class Geometry:
                             name=str(len(self.atoms) + 1),
                         )
 
-                        self.change_distance(new_atom, H_atom)
+                        self.change_distance(target, H_atom, fix=1)
                         self += H_atom
+                        target.connected.add(H_atom)
+                        H_atom.connected.add(target)
+                        frags.append([H_atom])
 
-                frags.sort(key=len, reverse=True)
                 # for each position on the new idealized geometry, find the fragment
                 # that corresponds to it the best
                 # reorient that fragment to match the idealized geometry
 
                 previous_positions = []
-                for j, frag in enumerate(frags):
+                for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                    if j == 0:
+                        continue
                     v1 = target.bond(frag[0])
                     max_overlap = None
                     corresponding_position = None
-                    for i, position in enumerate(shape_object.atoms[1:]):
+                    for i, position in enumerate(shape_object.atoms[2:]):
                         if i in previous_positions:
                             continue
                         v2 = shape_object.atoms[0].bond(position)
@@ -2576,11 +2593,9 @@ class Geometry:
                         if max_overlap is None or d > max_overlap:
                             max_overlap = d
                             corresponding_position = i
-
+                    
                     previous_positions.append(corresponding_position)
-
-                for j, frag in enumerate(frags):
-                    corresponding_position = previous_positions[j] + 1
+                    corresponding_position += 2
 
                     v1 = target.bond(frag[0])
                     v1 /= np.linalg.norm(v1)
@@ -2591,17 +2606,34 @@ class Geometry:
 
                     rv = np.cross(v1, v2)
 
+                    if np.linalg.norm(rv) < 10**-3:
+                        continue
+
                     c = np.linalg.norm(v1 - v2)
+
+                    if abs((c ** 2 - 2.0) / -2.0) > np.pi:
+                        continue
 
                     angle = np.arccos((c ** 2 - 2.0) / -2.0)
 
                     self.rotate(rv, angle, targets=frag, center=target)
 
-        self += new_atom
-        self -= target
-
-        self.refresh_connected()
         self.refresh_ranks()
+
+        target.element = new_element
+        
+        target._set_radii()
+        target._set_connectivity()
+        target._set_saturation()
+        
+        # fix bond lengths if requested
+        if adjust_bonds:
+            frags = [
+                self.get_fragment(atom, target)
+                for atom in target.connected
+            ]
+            for i, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                self.change_distance(target, frag[0], as_group=True, fix=2 if i == 0 else 1)
 
     def map_ligand(self, ligands, old_keys, minimize=True):
         """
