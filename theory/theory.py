@@ -160,7 +160,6 @@ class Theory:
             self.basis.refresh_elements(self.geometry)
 
         kwargs = combine_dicts(self.kwargs, kwargs)
-        print(kwargs)
 
         other_kw_dict = {}
         for kw in kwargs:
@@ -201,7 +200,6 @@ class Theory:
             rv = self.get_gaussian_header(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
-            print(rv)
             return rv
 
         elif style == "orca":
