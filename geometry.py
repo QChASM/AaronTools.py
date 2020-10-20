@@ -104,6 +104,7 @@ class Geometry:
             )
 
         urlsafe_name = urllib.parse.quote(name)
+        print(urlsafe_name)
         if form == "smiles":
             smiles = urlsafe_name
         elif form == "iupac":
@@ -148,6 +149,7 @@ class Geometry:
         """ returns list of elements composing the atoms in the geometry """
         return [a.element for a in self.atoms]
 
+    @property
     def coords(self, atoms=None):
         """
         returns N x 3 coordinate matrix for requested atoms
@@ -406,12 +408,12 @@ class Geometry:
         relaxes targets if <flag> is False
         """
         if isinstance(targets, Config):
-            tmp = []
-            if "new" in targets["Substitutions"]:
-                tmp += targets["Substitution"]["new"].split()
-            if "new" in targets["Mapping"]:
-                tmp += targets["Mapping"]["new"].split()
-            targets = tmp
+            if targets._changed_list is not None:
+                targets = targets._changed_list
+            else:
+                raise RuntimeError(
+                    "Substitutions/Mappings requested, but not performed"
+                )
         if targets is not None:
             targets = self.find(targets)
         else:
@@ -1541,6 +1543,14 @@ class Geometry:
         return broken, formed
 
     # geometry manipulation
+    def append_structure(self, structure):
+        if not isinstance(structure, Geometry):
+            structure = AaronTools.component.Component(structure)
+        if not self.components:
+            self.detect_components()
+        self.components += [structure]
+        self.rebuild()
+
     def update_geometry(self, structure):
         """
         Replace current coords with those from :structure:
@@ -1747,6 +1757,18 @@ class Geometry:
 
         return
 
+    def rotate_fragment(self, start, avoid, angle):
+        start = self.find(start)[0]
+        avoid = self.find(avoid)[0]
+        shift = start.coords
+        self.coord_shift(-shift)
+        self.rotate(
+            start.bond(avoid),
+            angle=angle * 180 / np.pi,
+            targets=self.get_fragment(start, avoid),
+        )
+        self.coord_shift(shift)
+
     def rotate(self, w, angle=None, targets=None, center=None):
         """
         rotates target atoms by an angle about an axis
@@ -1895,7 +1917,7 @@ class Geometry:
         """
         fix = kwargs.get("fix", 0)
         adjust = kwargs.get("adjust", False)
-        as_group = kwargs.get("as_group", False)
+        as_group = kwargs.get("as_group", True)
         radians = kwargs.get("radians", False)
         left_over = set(kwargs.keys()) - set(
             ["fix", "adjust", "as_group", "radians"]
@@ -1912,10 +1934,14 @@ class Geometry:
             as_group = True
             a2, a3 = self.find_exact(*args[:2])
             dihedral = args[2]
-            a1, a4 = (
-                next(iter(a2.connected - set([a3]))),
-                next(iter(a3.connected - set([a2]))),
-            )
+            try:
+                a1 = next(iter(a2.connected - set([a2, a3])))
+            except StopIteration:
+                a1 = next(iter(set(self.atoms) - set([a2, a3])))
+            try:
+                a4 = next(iter(a3.connected - set([a1, a2, a3])))
+            except StopIteration:
+                a4 = next(iter(set(self.atoms) - set([a1, a2, a3])))
         elif count != 5:
             raise TypeError(
                 "Number of atom arguments provided insufficient to define "
@@ -1940,6 +1966,14 @@ class Geometry:
             dihedral -= self.dihedral(a1, a2, a3, a4)
 
         # rotate fragments
+        if not a2_frag and not a3_frag:
+            raise RuntimeError(
+                "Cannot change dihedral, no fragments to target for rotation"
+            )
+        if not a2_frag and fix == 0:
+            fix = 1
+        if not a3_frag and fix == 0:
+            fix = 4
         if fix == 0:
             dihedral /= 2
             self.rotate(a2.bond(a3), -dihedral, a2_frag, center=a2)
@@ -2024,13 +2058,12 @@ class Geometry:
         if attached_to==None, replace the smallest fragment containing `target`
         minimize - bool, rotate sub to lower LJ potential
         """
+        # set up substituent
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
-
         sub.refresh_connected()
         # determine target and atoms defining connection bond
         target = self.find(target)
-
         # if we have components, do the substitution to the component
         # otherwise, just do it on self
         geom = self
@@ -2096,19 +2129,25 @@ class Geometry:
             else:
                 s.name = sub_attach.name
 
-        # add first atom of new substituent where the target atom was
-        geom.atoms.insert(geom.atoms.index(target[0]), sub.atoms[0])
+        # add first atoms of new substituent where the target atoms were
+        # add the rest of the new substituent at the end
+        old = geom.get_fragment(target, attached_to)
+        for i, a in enumerate(old):
+            if i == len(sub.atoms):
+                break
+            geom.atoms.insert(geom.atoms.index(old[i]), sub.atoms[i])
+            sub.atoms[i].name = old[i].name
+        else:
+            if len(sub.atoms) > len(old):
+                geom += sub.atoms[i + 1 :]
         # remove old substituent
-        geom.remove_fragment(target, attached_to, add_H=False)
-        geom -= target
+        geom -= old
         attached_to.connected.discard(sub_attach)
 
         # fix connections (in lieu of geom.refresh_connected(), since clashing may occur)
         attached_to.connected.add(sub.atoms[0])
         sub.atoms[0].connected.add(attached_to)
 
-        # add the rest of the new substituent at the end
-        geom += sub.atoms[1:]
         # fix bond distance
         geom.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
 
@@ -2765,6 +2804,7 @@ class Geometry:
         # add new
         for ligand in ligands:
             self.components += [ligand]
+        rv = ligands
         self.rebuild()
         # rotate monodentate to relieve clashing
         for ligand in self.components:
@@ -2783,6 +2823,7 @@ class Geometry:
         if minimize:
             self.minimize()
         self.refresh_ranks()
+        return rv
 
     def remove_clash(self, sub_list=None):
         def get_clash(sub, scale):

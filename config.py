@@ -1,10 +1,11 @@
 import configparser
+import itertools as it
 import os
 import re
 from copy import deepcopy
+from warnings import warn
 
 from AaronTools.const import AARONLIB, QCHASM
-from AaronTools.theory import Theory
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
     GAUSSIAN_CONSTRAINTS,
@@ -26,6 +27,7 @@ from AaronTools.theory import (
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import (
@@ -34,9 +36,29 @@ from AaronTools.theory.job_types import (
     SinglePointJob,
 )
 
-from warnings import warn
-
 SECTIONS = ["DEFAULT", "HPC", "Job", "Substitution", "Mapping", "Reaction"]
+THEORY_OPTIONS = [
+    "GAUSSIAN_COMMENT",
+    "GAUSSIAN_CONSTRAINTS",
+    "GAUSSIAN_COORDINATES",
+    "GAUSSIAN_GEN_BASIS",
+    "GAUSSIAN_GEN_ECP",
+    "GAUSSIAN_POST",
+    "GAUSSIAN_PRE_ROUTE",
+    "GAUSSIAN_ROUTE",
+    "ORCA_BLOCKS",
+    "ORCA_COMMENT",
+    "ORCA_COORDINATES",
+    "ORCA_ROUTE",
+    "PSI4_AFTER_JOB",
+    "PSI4_BEFORE_GEOM",
+    "PSI4_BEFORE_JOB",
+    "PSI4_COMMENT",
+    "PSI4_COORDINATES",
+    "PSI4_JOB",
+    "PSI4_OPTKING",
+    "PSI4_SETTINGS",
+]
 
 
 class Config(configparser.ConfigParser):
@@ -56,24 +78,103 @@ class Config(configparser.ConfigParser):
         quiet: prints helpful status information
         **kwargs: passed to initialization of parent class
         """
-        configparser.ConfigParser.__init__(self, interpolation=None, comment_prefixes=("#"), **kwargs)
+        configparser.ConfigParser.__init__(
+            self, interpolation=None, comment_prefixes=("#"), **kwargs
+        )
         if not quiet:
             print("Reading configuration...")
         if infile is not None:
             self.read_config(infile, quiet)
+            # enforce selective case sensitivity
+            for section in self:
+                if section in ["Substitution", "Mapping"]:
+                    continue
+                for option, value in self[section].items():
+                    if option.lower() != option:
+                        self[section][option.lower()] = value
+                        del self[section][option]
+            # handle included sections
             self._parse_includes()
             # set additional default values
             if "top_dir" not in self["DEFAULT"]:
                 self["DEFAULT"]["top_dir"] = os.path.dirname(
                     os.path.abspath(infile)
                 )
+            if "name" not in self["DEFAULT"]:
+                self["DEFAULT"]["name"] = ".".join(infile.split(".")[:-1])
+        # handle substitutions/mapping
         self._changes = {}
+        self._changed_list = []
+        self._parse_changes()
+        # for passing to Theory(*args, **kwargs)
+        self._args = []
+        self._kwargs = {}
+
+    def optionxform(self, option):
+        return str(option)
+
+    def _parse_changes(self):
         for section in ["Substitution", "Mapping"]:
             if section not in self:
                 continue
-            self._changes[section] = {}
             for key, val in self[section].items():
-                self._changes[section][key] = val
+                if key in self["DEFAULT"]:
+                    continue
+                if "=" not in val:
+                    val = [v.strip() for v in val.split(",")]
+                else:
+                    tmp = [v.strip() for v in val.split(";")]
+                    val = []
+                    for t in tmp:
+                        t = t.strip()
+                        if not t:
+                            continue
+                        elif "\n" in t:
+                            val += t.split("\n")
+                        else:
+                            val += [t]
+                    tmp = {}
+                    for v in val:
+                        v = v.strip().split("=")
+                        tmp[v[0].strip()] = v[1].strip()
+                    val = tmp
+                # handle request for all combinations
+                if key.startswith("&combination"):
+                    atoms = []
+                    subs = []
+                    # val <= { "2, 4": "H, CH3", "7, 9": "OH, NH2", .. }
+                    for k, v in val.items():
+                        atoms.append([i.strip() for i in k.split(",")])
+                        subs.append(
+                            [None] + [i.strip() for i in v.strip().split(",")]
+                        )
+                    # atoms = [ [2, 4],         [7, 9],      .. ]
+                    # subs  = [ [None, H, CH3], [None, OH, NH2], .. ]
+                    for combo in it.product(*[range(len(s)) for s in subs]):
+                        # combos = (0, 0,..), (0,.., 1),..(1,.. 0),..(1,.., 1),..
+                        if not any(combo):
+                            # skip if no substitutions
+                            continue
+                        name = []
+                        combo_key = []
+                        combo_val = []
+                        for i, p in enumerate(combo):
+                            # don't add subsitution if sub == None
+                            if subs[i][p] is None:
+                                continue
+                            name.append(subs[i][p])
+                            combo_key.append(",".join(atoms[i]))
+                            combo_val.append(subs[i][p])
+                        name = "_".join(name)
+                        self._changes[name] = (
+                            dict(zip(combo_key, combo_val)),
+                            section,
+                        )
+                else:
+                    if isinstance(val, list):
+                        val = {key: ",".join(val)}
+                        key = ""
+                    self._changes[key] = (val, section)
 
     def __str__(self):
         rv = ""
@@ -88,10 +189,18 @@ class Config(configparser.ConfigParser):
 
     def copy(self):
         config = Config(infile=None, quiet=True)
-        for attr in self.__dict__:
-            if attr in SECTIONS:
-                continue
-            config.__dict__[attr] = deepcopy(self.__dict__[attr])
+        for attr in self._sections:
+            config.add_section(attr)
+            for key, val in self[attr].items():
+                config[attr][key] = val
+        for attr in [
+            "_interpolation",
+            "_changes",
+            "_changed_list",
+            "_args",
+            "_kwargs",
+        ]:
+            config.__dict__[attr] = self.__dict__[attr]
         return config
 
     def parse_functions(self):
@@ -107,7 +216,7 @@ class Config(configparser.ConfigParser):
         attr_patt = re.compile("\$([a-zA-Z0-9_:]+)")
         for section in self._sections:
             # evaluate functions
-            for key, val in self.items(section):
+            for key, val in self[section].items():
                 for match in func_patt.findall(val):
                     eval_match = match
                     for attr in attr_patt.findall(match):
@@ -115,11 +224,7 @@ class Config(configparser.ConfigParser):
                             option, from_section = attr.split(":")
                         else:
                             option, from_section = attr, section
-                        option = self.get(from_section, option)
-                        try:
-                            option = re.search("\d+\.?\d*", option).group(0)
-                        except AttributeError:
-                            pass
+                        option = self[from_section][option]
                         eval_match = eval_match.replace("$" + attr, option, 1)
                     try:
                         eval_match = eval(eval_match)
@@ -129,6 +234,8 @@ class Config(configparser.ConfigParser):
                                 e.args[0], section, key, val, eval_match
                             )
                         )
+                    except (NameError, SyntaxError):
+                        eval_match = eval_match.strip()
                     val = val.replace("%{" + match + "}", str(eval_match))
                     self[section][key] = val
 
@@ -166,7 +273,7 @@ class Config(configparser.ConfigParser):
                 with open(filename) as f:
                     contents = "[DEFAULT]\n" + f.read()
                 self.read_string(contents)
-            
+
     def get_other_kwargs(self, section="Job"):
         """
         Returns dict() that can be unpacked and passed to Geometry.write along with a theory
@@ -174,19 +281,19 @@ class Config(configparser.ConfigParser):
         [Job]
         route = pop NBORead; opt MaxCycle=1000 NoEigenTest
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
-        
+
         this adds opt(MaxCycle=1000,NoEigenTest) pop=NBORead to the route with any other
         pop or opt options being added by the job type
         """
         # these need to be dicts
         two_layer = [
-            GAUSSIAN_ROUTE, 
-            GAUSSIAN_PRE_ROUTE, 
-            ORCA_BLOCKS, 
-            PSI4_OPTKING, 
-            PSI4_SETTINGS, 
-            PSI4_COORDINATES, 
-            PSI4_JOB
+            GAUSSIAN_ROUTE,
+            GAUSSIAN_PRE_ROUTE,
+            ORCA_BLOCKS,
+            PSI4_OPTKING,
+            PSI4_SETTINGS,
+            PSI4_COORDINATES,
+            PSI4_JOB,
         ]
 
         # these need to be lists
@@ -206,7 +313,7 @@ class Config(configparser.ConfigParser):
         # individual options are split on white space, with the first defining the primary layer
         out = {}
         for option in two_layer:
-            value = self.get(section, option, fallback=False)
+            value = self[section].get(option, fallback=False)
             if value:
                 out[option] = {}
                 for v in value.split(";"):
@@ -219,7 +326,7 @@ class Config(configparser.ConfigParser):
                     out[option][key] = [x.strip() for x in info]
 
         for option in one_layer:
-            value = self.get(section, option, fallback=False)
+            value = self[section].get(option, fallback=False)
             if value:
                 out[option] = value.split(";")
 
@@ -230,19 +337,29 @@ class Config(configparser.ConfigParser):
         Get the theory object according to configuration information
         """
         if not self.has_section(section):
-            warn("config has no \"%s\" section, switching to \"Job\"" % section)
+            warn('config has no "%s" section, switching to "Job"' % section)
             section = "Job"
 
-        theory = Theory(geometry=geometry, **dict(self[section].items()))
+        kwargs = {}
+        for key, val in self[section].items():
+            if key.upper() in THEORY_OPTIONS:
+                kwargs[key.upper()] = eval(val)
+            else:
+                kwargs[key] = val
+
+        theory = Theory(
+            *self._args, geometry=geometry, **self._kwargs, **kwargs
+        )
         # build ImplicitSolvent object
-        if self.get(section, "solvent", fallback="gas") == "gas":
+        if self[section].get("solvent", fallback="gas") == "gas":
             theory.solvent = None
-        elif self.get(section, "solvent"):
+        elif self[section]["solvent"]:
             theory.solvent = ImplicitSolvent(
-                self.get(section, "solvent"), self.get(section, "solvent_model")
+                self[section]["solvent"],
+                self[section]["solvent_model"],
             )
         # build JobType list
-        job_type = self.get(section, "type", fallback=False)
+        job_type = self[section].get("type", fallback=False)
         if job_type:
             theory.job_type = []
             job_type = job_type.split(".")
@@ -251,12 +368,22 @@ class Config(configparser.ConfigParser):
                 ts = False
                 if len(job_type) > 1:
                     if "change" in job_type[1]:
-                        geometry = geometry.copy()
-                        geometry.freeze(self)
-                    if "constrain" in job_type[1]:
+                        theory.geometry.freeze()
+                        theory.geometry.relax(self._changed_list)
+                    elif "constrain" in job_type[1]:
                         constraints = {}
-                        for con in list(eval(self["Geometry"]["constraints"])):
-                            con = tuple(geometry.find(str(c))[0] for c in con)
+                        try:
+                            con_list = re.findall(
+                                "\(.*?\)", self["Geometry"]["constraints"]
+                            )
+                        except KeyError:
+                            raise RuntimeError(
+                                "Constraints for forming/breaking bonds must be specified for TS search"
+                            )
+                        for con in con_list:
+                            con = tuple(
+                                geometry.find(str(c))[0] for c in eval(con)
+                            )
                             if len(con) == 1:
                                 constraints.setdefault("atoms", [])
                                 constraints["atoms"] += [con]
@@ -269,9 +396,9 @@ class Config(configparser.ConfigParser):
                             elif len(con) == 4:
                                 constraints.setdefault("torsions", [])
                                 constraints["torsions"] += [con]
-                    if "ts" in job_type[1]:
+                    elif "ts" == job_type[1]:
                         ts = True
-                
+
                 theory.job_type += [
                     OptimizationJob(
                         transition_state=ts,
@@ -280,15 +407,13 @@ class Config(configparser.ConfigParser):
                     )
                 ]
             if "freq" in job_type[0]:
-                if self.get(section, temperature, fallback=False):
+                if self[section].get("temperature", fallback=False):
                     theory.job_type += [
-                        FrequencyJob(
-                            temperature=self.get(section, "temperature")
-                        )
+                        FrequencyJob(temperature=self[section]["temperature"])
                     ]
                 else:
                     theory.job_type += [FrequencyJob()]
-            if "single-point" in job_type:
+            if "single-point" in job_type or "SP" in job_type:
                 theory.job_type += [SinglePointJob()]
         else:
             theory.job_type = [SinglePointJob()]
@@ -318,11 +443,11 @@ class Config(configparser.ConfigParser):
             # add requested subsections to parent section
             if self.has_option(section, "include"):
                 include_section = "{}.{}".format(
-                    section, self.get(section, "include")
+                    section, self[section]["include"]
                 )
-                for key, val in self.items(include_section):
-                    self.set(section, key, val)
+                for key, val in self[include_section].items():
+                    self[section][key] = val
             # handle non-default capitalization of default section
             if section.lower() == "default":
-                for key, val in self.items(section):
-                    self.set("DEFAULT", key, val)
+                for key, val in self[section].items():
+                    self["DEFAULT"][key] = val
