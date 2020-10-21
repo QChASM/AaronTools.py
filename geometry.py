@@ -204,6 +204,12 @@ class Geometry:
         return [a.element for a in self.atoms]
 
     @property
+    def coordinates(self):
+        """
+        array of coordinates (read only)
+        """
+        return self.coords()
+
     def coords(self, atoms=None):
         """
         returns N x 3 coordinate matrix for requested atoms
@@ -2290,13 +2296,15 @@ class Geometry:
 
                 ring_fragment -= atom
 
-            ring_fragment.end = walk[1:-1]
-
             geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
             geom -= [walk[0], walk[-1]]
-
+            
+            walk[1].connected.add(ring_fragment.end[0])
+            walk[-2].connected.add(ring_fragment.end[-1])
+            ring_fragment.end[-1].connected.add(walk[-2])
+            ring_fragment.end[0].connected.add(walk[1])
+            ring_fragment.end = walk[1:-1]
             geom.atoms.extend(ring_fragment.atoms)
-            geom.refresh_connected()
             geom.refresh_ranks()
 
         def ring_waddle(geom, targets, walk_end, ring):
@@ -2679,7 +2687,7 @@ class Geometry:
 
                     c = np.linalg.norm(v1 - v2)
 
-                    if abs((c ** 2 - 2.0) / -2.0) > np.pi:
+                    if abs((c ** 2 - 2.0) / -2.0) >= 1:
                         continue
 
                     angle = np.arccos((c ** 2 - 2.0) / -2.0)

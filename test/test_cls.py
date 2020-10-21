@@ -508,7 +508,9 @@ thermochemistry from test_files/normal.log at 298.00 K:
         out, err = proc.communicate()
 
         if len(err) != 0:
-            raise RuntimeError(err)
+            print(out.decode("utf-8"))
+            print(err.decode("utf-8"))
+            raise RuntimeError(err.decode("utf-8"))
 
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
@@ -812,7 +814,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_mapLigand"))
+    suite.addTest(TestCLS("test_changeElement"))
     return suite
 
 

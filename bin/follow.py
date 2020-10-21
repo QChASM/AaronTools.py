@@ -8,7 +8,7 @@ import argparse
 #from AaronTools.const import UNIT
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader
-from AaronTools.trajectory import Pathway
+from AaronTools.pathway import Pathway
 
 from warnings import warn
 
