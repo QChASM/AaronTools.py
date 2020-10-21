@@ -279,11 +279,18 @@ class Config(configparser.ConfigParser):
         Returns dict() that can be unpacked and passed to Geometry.write along with a theory
         Example:
         [Job]
-        route = pop NBORead; opt MaxCycle=1000 NoEigenTest
+        route = pop NBORead
+                opt MaxCycle=1000, NoEigenTest
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
 
         this adds opt(MaxCycle=1000,NoEigenTest) pop=NBORead to the route with any other
         pop or opt options being added by the job type
+        
+        'two-layer' options can also be specified as a python dictionary
+        the following is equivalent to the above example:
+        [Job]
+        route = {"pop":["NBORead"], "opt":["MaxCycle=1000", NoEigenTest"]}
+        end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
         """
         # these need to be dicts
         two_layer = [GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, ORCA_BLOCKS, PSI4_JOB]
@@ -308,39 +315,61 @@ class Config(configparser.ConfigParser):
             PSI4_COMMENT,
         ]
 
+        job_kwargs = [
+            "method",
+            "charge",
+            "multiplicity",
+            "type",
+            "basis",
+            "ecp",
+        ]
+
         # two layer options are separated by newline
         # individual options are split on white space, with the first defining the primary layer
         out = {}
         for option in two_layer:
             value = self[section].get(option, fallback=False)
             if value:
-                out[option] = {}
-                for v in value.splitlines():
-                    key = v.split()[0]
-                    if len(v.split()) > 1:
-                        info = v.split()[1].split(",")
-                    else:
-                        info = []
+                # if it's got brackets, it's probably a python-looking dictionary
+                # eval it instead of parsing
+                if "{" in value:
+                    out[option] = eval(value)
+                else:
+                    out[option] = {}
+                    for v in value.splitlines():
+                        key = v.split()[0]
+                        if len(v.split()) > 1:
+                            info = v.split()[1].split(",")
+                        else:
+                            info = []
 
-                    out[option][key] = [x.strip() for x in info]
+                        out[option][key] = [x.strip() for x in info]
 
         for option in two_layer_single_value:
             value = self.get(section, option, fallback=False)
             if value:
-                out[option] = {}
-                for v in value.splitlines():
-                    key = v.split()[0]
-                    if len(v.split()) > 1:
-                        info = [v.split()[1]]
-                    else:
-                        info = []
+                if "{" in value:
+                    out[option] = eval(value)
+                else:
+                    out[option] = {}
+                    for v in value.splitlines():
+                        key = v.split()[0]
+                        if len(v.split()) > 1:
+                            info = [v.split()[1]]
+                        else:
+                            info = []
 
-                    out[option][key] = [x.strip() for x in info]
+                        out[option][key] = [x.strip() for x in info]
 
         for option in one_layer:
             value = self[section].get(option, fallback=False)
             if value:
                 out[option] = value.splitlines()
+
+        for option in job_kwargs:
+            value = self[section].get(option, fallback=False)
+            if value:
+                out[option] = value
 
         return out
 
@@ -352,12 +381,13 @@ class Config(configparser.ConfigParser):
             warn('config has no "%s" section, switching to "Job"' % section)
             section = "Job"
 
-        kwargs = {}
-        for key, val in self[section].items():
-            if key.upper() in THEORY_OPTIONS:
-                kwargs[key.upper()] = eval(val)
-            else:
-                kwargs[key] = val
+        kwargs = self.get_other_kwargs(section=section)
+        # kwargs = {}
+        # for key, val in self[section].items():
+        #     if key.upper() in THEORY_OPTIONS:
+        #         kwargs[key.upper()] = eval(val)
+        #     else:
+        #         kwargs[key] = val
 
         theory = Theory(
             *self._args, geometry=geometry, **self._kwargs, **kwargs

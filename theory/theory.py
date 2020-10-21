@@ -88,7 +88,7 @@ class Theory:
             else:
                 self.__setattr__(key, None)
         self.kwargs = kw
-
+    
         if isinstance(self.processors, str):
             processors = re.search("(\d+)", self.processors)
             if processors:
@@ -223,6 +223,8 @@ class Theory:
         if self.basis is not None:
             self.basis.refresh_elements(geom)
 
+        kwargs = combine_dicts(self.kwargs, kwargs)
+        
         other_kw_dict = {}
         for kw in kwargs:
             if (
