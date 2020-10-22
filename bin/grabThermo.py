@@ -93,7 +93,7 @@ if args.csv:
     elif args.delimiter == 'space':
         delim = ' '
         
-    output = delim.join(["E", "ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
+    output = delim.join(["E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
                          "dZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)", \
                          "SP_File", "Thermo_File"])
     output += '\n'
@@ -204,7 +204,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         output += "electronic energy of %s = %.6f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
                 nrg)
-        output += "    ZPE               = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
+        output += "    E+ZPE             = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
         output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
         output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)
