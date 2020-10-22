@@ -302,11 +302,21 @@ class Atom:
         v1 = self.bond(a1)
         v2 = self.bond(a3)
         dot = np.dot(v1, v2)
-        return np.arccos(dot / (self.dist(a1) * self.dist(a3)))
+        # numpy is still unhappy with this sometimes
+        # every know and again, the changeElement cls test will "fail" b/c 
+        # numpy throws a warning here
+        if abs(dot / (self.dist(a1) * self.dist(a3))) >= 1:
+            return 0
+        else:
+            return np.arccos(dot / (self.dist(a1) * self.dist(a3)))
 
     def mass(self):
         """returns atomic mass"""
-        return MASS[self.element]
+        if self.element in MASS:
+            return MASS[self.element]
+        else:
+            warn("no mass for %s" % self.element)
+            return 0
 
     def rij(self, other):
         try:
@@ -337,6 +347,7 @@ class Atom:
     def get_shape(cls, shape_name):
         """returns dummy atoms in an idealized vsepr geometry
         shape_name can be:
+        point
         linear 1
         linear 2
         bent 2 planar (trigonal planar electron geometry w/ 2 bonds)
@@ -351,7 +362,9 @@ class Atom:
         square pyramidal
         octahedral
         """
-        if shape_name == "linear 1":
+        if shape_name == "point":
+            return cls.linear_shape()[0:1]
+        elif shape_name == "linear 1":
             return cls.linear_shape()[0:2]
         elif shape_name == "linear 2":
             return cls.linear_shape()
@@ -368,11 +381,11 @@ class Atom:
         elif shape_name == "tetrahedral":
             return cls.tetrahedral_shape()
         elif shape_name == "sawhorse":
-            return cls.trigonal_bipyramidalal_shape()[0:5]
+            return cls.trigonal_bipyramidal_shape()[0:5]
         elif shape_name == "square planar":
             return cls.octahedral_shape()[0:5]
-        elif shape_name == "trigonal bipyramidalal":
-            return cls.trigonal_bipyramidalal_shape()
+        elif shape_name == "trigonal bipyramidal":
+            return cls.trigonal_bipyramidal_shape()
         elif shape_name == "square pyramidal":
             return cls.octahedral_shape()[0:6]
         elif shape_name == "octahedral":
@@ -394,7 +407,7 @@ class Atom:
     @classmethod
     def trigonal_planar_shape(cls):
         """returns a list of 4 dummy atoms in a trigonal planar shape"""
-        positions = cls.trigonal_bipyramidalal_shape()
+        positions = cls.trigonal_bipyramidal_shape()
         return positions[:-2]
 
     @classmethod
@@ -418,7 +431,7 @@ class Atom:
         return [center, pos1, pos2, pos3, pos4]
 
     @classmethod
-    def trigonal_bipyramidalal_shape(cls):
+    def trigonal_bipyramidal_shape(cls):
         """returns a list of 6 dummy atoms in a trigonal bipryamidal shape"""
         center = Atom("X", np.zeros(3), name="0")
         angle = np.deg2rad(120)
@@ -455,7 +468,13 @@ class Atom:
         old_shape - :str: vsepr geometry name
         new_connectivity - :int: connectivity (see Atom._connectivity)
         bond_change - :int: +1 or -1, indicating that the number of bonds is changing by 1"""
-        if old_shape == "linear 1":
+        if old_shape == "point":
+            if bond_change == 1:
+                return "linear 1"
+            else:
+                return None
+        
+        elif old_shape == "linear 1":
             if bond_change == 1:
                 return "linear 2"
             elif bond_change == -1:
@@ -541,7 +560,10 @@ class Atom:
 
         # determine what geometries to try based on the number of bonded atoms
         try_shapes = {}
-        if len(self.connected) == 1:
+        if len(self.connected) == 0:
+            try_shapes["point"] = Atom.get_shape("point")
+        
+        elif len(self.connected) == 1:
             try_shapes["linear 1"] = Atom.get_shape("linear 1")
 
         elif len(self.connected) == 2:
@@ -561,7 +583,7 @@ class Atom:
 
         elif len(self.connected) == 5:
             try_shapes["trigonal bipyramidal"] = Atom.get_shape(
-                "trigonal bipyramidalal"
+                "trigonal bipyramidal"
             )
             try_shapes["square pyramidal"] = Atom.get_shape("square pyramidal")
 
@@ -574,7 +596,7 @@ class Atom:
         # make a copy of the atom and the atoms bonded to it
         # set each bond length to 1 to more easily compare to the
         # idealized shapes from Atom
-        adjusted_shape = [deepcopy(atom) for atom in [self, *self.connected]]
+        adjusted_shape = [atom.copy() for atom in [self, *self.connected]]
         for atom in adjusted_shape:
             atom.coords -= self.coords
 

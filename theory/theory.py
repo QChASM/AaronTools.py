@@ -1,30 +1,30 @@
 import re
 
 from AaronTools.theory import (
-GAUSSIAN_COMMENT,
-GAUSSIAN_CONSTRAINTS,
-GAUSSIAN_COORDINATES,
-GAUSSIAN_GEN_BASIS,
-GAUSSIAN_GEN_ECP,
-GAUSSIAN_POST,
-GAUSSIAN_PRE_ROUTE,
-GAUSSIAN_ROUTE,
-ORCA_BLOCKS,
-ORCA_COMMENT,
-ORCA_COORDINATES,
-ORCA_ROUTE,
-PSI4_AFTER_JOB,
-PSI4_BEFORE_GEOM,
-PSI4_BEFORE_JOB,
-PSI4_COMMENT,
-PSI4_COORDINATES,
-PSI4_JOB,
-PSI4_OPTKING,
-PSI4_SETTINGS,
+    GAUSSIAN_COMMENT,
+    GAUSSIAN_CONSTRAINTS,
+    GAUSSIAN_COORDINATES,
+    GAUSSIAN_GEN_BASIS,
+    GAUSSIAN_GEN_ECP,
+    GAUSSIAN_POST,
+    GAUSSIAN_PRE_ROUTE,
+    GAUSSIAN_ROUTE,
+    ORCA_BLOCKS,
+    ORCA_COMMENT,
+    ORCA_COORDINATES,
+    ORCA_ROUTE,
+    PSI4_AFTER_JOB,
+    PSI4_BEFORE_GEOM,
+    PSI4_BEFORE_JOB,
+    PSI4_COMMENT,
+    PSI4_COORDINATES,
+    PSI4_JOB,
+    PSI4_OPTKING,
+    PSI4_SETTINGS,
 )
 from AaronTools.utils.utils import combine_dicts
 
-from .basis import BasisSet, ECP
+from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
 from .job_types import JobType
@@ -79,13 +79,16 @@ class Theory:
         self.processors = None
         self.job_type = None
         self.solvent = None
+        self.kwargs = {}
 
         for key in self.ACCEPTED_INIT_KW:
             if key in kw:
                 self.__setattr__(key, kw[key])
+                del kw[key]
             else:
                 self.__setattr__(key, None)
-
+        self.kwargs = kw
+    
         if isinstance(self.processors, str):
             processors = re.search("(\d+)", self.processors)
             if processors:
@@ -156,6 +159,8 @@ class Theory:
         if self.basis is not None:
             self.basis.refresh_elements(self.geometry)
 
+        kwargs = combine_dicts(self.kwargs, kwargs)
+
         other_kw_dict = {}
         for kw in kwargs:
             if (
@@ -192,9 +197,10 @@ class Theory:
                 other_kw_dict[kw] = kwargs[kw]
 
         if style == "gaussian":
-            return self.get_gaussian_header(
+            rv = self.get_gaussian_header(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
+            return rv
 
         elif style == "orca":
             return self.get_orca_header(
@@ -217,6 +223,8 @@ class Theory:
         if self.basis is not None:
             self.basis.refresh_elements(geom)
 
+        kwargs = combine_dicts(self.kwargs, kwargs)
+        
         other_kw_dict = {}
         for kw in kwargs:
             if (
@@ -360,13 +368,23 @@ class Theory:
                 s += option
                 if option.lower() == "opt":
                     # need to specified CalcFC for gaussian ts optimization
-                    if any(x.lower() == "ts" for x in other_kw_dict[GAUSSIAN_ROUTE][option]) and \
-                        not any(x.lower() in 
-                                ["calcfc", "readfc", "rcfc", "readcartesianfc", "calcall", "calchffc"]
-                                for x in other_kw_dict[GAUSSIAN_ROUTE][option]
+                    if any(
+                        x.lower() == "ts"
+                        for x in other_kw_dict[GAUSSIAN_ROUTE][option]
+                    ) and not any(
+                        x.lower() == y
+                        for y in [
+                            "calcfc",
+                            "readfc",
+                            "rcfc",
+                            "readcartesianfc",
+                            "calcall",
+                            "calchffc",
+                        ]
+                        for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ):
                         other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
-                
+
                 if len(other_kw_dict[GAUSSIAN_ROUTE][option]) > 1 or (
                     len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
                     and (
@@ -411,7 +429,7 @@ class Theory:
         s += "\n"
 
         # charge mult
-        s += "%i %i\n" % (self.charge, self.multiplicity)
+        s += "%i %i\n" % (int(self.charge), int(self.multiplicity))
 
         if return_warnings:
             return s, warnings

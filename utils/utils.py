@@ -1,10 +1,10 @@
+import collections.abc
 import copy
-
-import numpy as np
+import re
+from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
-
-from collections import OrderedDict
+import numpy as np
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -22,11 +22,13 @@ def progress_bar(this, max_num, name=None, width=50):
 def clean_progress_bar(width=50):
     print(" " * 2 * width, end="\r")
 
+
 def proj(v, u):
     """projection of u into v"""
     numerator = np.dot(u, v)
-    denominator = np.linalg.norm(v)**2
+    denominator = np.linalg.norm(v) ** 2
     return numerator * v / denominator
+
 
 def quat_matrix(pt1, pt2):
     """ build quaternion matrix from pt1 and pt2 """
@@ -167,18 +169,44 @@ def add_dict(this, other, skip=[]):
             this[key] = val
     return this
 
-def combine_dicts(d1, d2, case_sensitive=False, dict2_conditional=False):
+
+def resolve_concatenation(*args):
+    seq = [isinstance(a, collections.abc.MutableSequence) for a in args]
+    if any(seq) and not all(seq):
+        rv = []
+        for i, s in enumerate(seq):
+            if s:
+                rv.extend(args[i])
+            else:
+                rv.append(args[i])
+        return rv
+    else:
+        err_msg = "Cannot concatenate" + " {}" * len(args)
+        raise TypeError(err_msg.format(*[type(a) for a in args]))
+
+
+def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
     """combine dictionaries d1 and d2 to return a dictionary
     with keys d1.keys() + d2.keys()
     if a key is in d1 and d2, the items will be combined:
         if they are both dictionaries, combine_dicts is called recursively
-        otherwise, they are combined with '+'
+        otherwise, d2[key] is appended to d1[key]
         if case_sensitive=False, the key in the output will be the lowercase
         of the d1 key and d2 key (only for combined items)
     dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
     """
-    #TODO
-    #accept any number of input dicts
+    d1 = args[0]
+    d2 = args[1:]
+    if len(d2) > 1:
+        d2 = combine_dicts(
+            d2[0],
+            *d2[1:],
+            case_sensitive=case_sensitive,
+            dict2_conditional=dict2_conditional
+        )
+    else:
+        d2 = d2[0]
+
     out = OrderedDict()
     case_keys_1 = list(d1.keys())
     case_keys_2 = list(d2.keys())
@@ -186,39 +214,49 @@ def combine_dicts(d1, d2, case_sensitive=False, dict2_conditional=False):
         keys_1 = case_keys_1
         keys_2 = case_keys_2
     else:
-        keys_1 = [key.lower() if isinstance(key, str) else key for key in case_keys_1]
-        keys_2 = [key.lower() if isinstance(key, str) else key for key in case_keys_2]
+        keys_1 = [
+            key.lower() if isinstance(key, str) else key for key in case_keys_1
+        ]
+        keys_2 = [
+            key.lower() if isinstance(key, str) else key for key in case_keys_2
+        ]
 
-    #go through keys from d1
+    # go through keys from d1
     for case_key, key in zip(case_keys_1, keys_1):
-        #if the key is only in d1, add the item to out
+        # if the key is only in d1, add the item to out
         if key in keys_1 and key not in keys_2:
             out[case_key] = d1[case_key]
-
-        #if the key is in both, combine the items
+        # if the key is in both, combine the items
         elif key in keys_1 and key in keys_2:
             key_2 = case_keys_2[keys_2.index(key)]
             if isinstance(d1[case_key], dict) and isinstance(d2[key_2], dict):
-                out[key] = combine_dicts(d1[case_key], d2[key_2], case_sensitive=case_sensitive)
-
+                out[key] = combine_dicts(
+                    d1[case_key],
+                    d2[key_2],
+                    case_sensitive=case_sensitive,
+                )
             else:
-                out[key] = d1[case_key] + d2[key_2]
+                try:
+                    out[key] = d1[case_key] + d2[key_2]
+                except TypeError:
+                    out[key] = resolve_concatenation(d1[case_key], d2[key_2])
 
-    #go through keys from d2
+    # go through keys from d2
     if not dict2_conditional:
         for case_key, key in zip(case_keys_2, keys_2):
-            #if it's only in d2, add item to out
+            # if it's only in d2, add item to out
             if key in keys_2 and key not in keys_1:
                 out[case_key] = d2[case_key]
 
     return out
 
+
 def integrate(fun, a, b, n=101):
     """numerical integration using Simpson's method
-     fun - function to integrate
-     a - integration starts at point a
-     b - integration stops at point b
-     n - number of points used for integration"""
+    fun - function to integrate
+    a - integration starts at point a
+    b - integration stops at point b
+    n - number of points used for integration"""
     import numpy as np
 
     dx = float(b - a) / (n - 1)
@@ -267,6 +305,7 @@ def same_cycle(graph, a, b):
     :a:, :b: indices in connectivity matrix/Geometry or Atoms in Geometry
     """
     from AaronTools.geometry import Geometry
+
     if isinstance(a, Atoms.Atom):
         a = graph.atoms.index(a)
     if isinstance(b, Atoms.Atom):
@@ -300,6 +339,7 @@ def shortest_path(graph, start, end):
     :end: the last atom or node index
     """
     from AaronTools.geometry import Geometry
+
     if isinstance(start, Atoms.Atom):
         start = graph.atoms.index(start)
     if isinstance(end, Atoms.Atom):
@@ -358,6 +398,7 @@ def shortest_path(graph, start, end):
 
 def trim_leaves(graph, _removed=[]):
     from AaronTools.geometry import Geometry
+
     if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
@@ -377,17 +418,18 @@ def trim_leaves(graph, _removed=[]):
 
     return graph, set(_removed)
 
+
 def to_closing(s, p):
     """returns the portion of string s from the beginning to the closing
     paratheses or bracket denoted by p
     p can be '(', '{', or '['
     if the closing paratheses is not found, returns None instead"""
-    if p == '(':
-        q = ('(', ')')
-    elif p == '{':
-        q = ('{', '}')
-    elif p == '[':
-        q = ('[', ']')
+    if p == "(":
+        q = ("(", ")")
+    elif p == "{":
+        q = ("{", "}")
+    elif p == "[":
+        q = ("[", "]")
     else:
         raise RuntimeError("p must be '(', '{', or '['")
 
@@ -408,28 +450,33 @@ def to_closing(s, p):
     else:
         return out
 
+
 def rotation_matrix(theta, axis):
     """rotation matrix for rotating theta radians about axis"""
-    #I've only tested this for rotations in R3
+    # I've only tested this for rotations in R3
     if np.linalg.norm(axis) == 0:
         axis = [1, 0, 0]
-    axis = axis/np.linalg.norm(axis)
-    dim=len(axis)
-    M=np.dot(np.transpose([axis]),[axis])
-    M=[[i*(1-np.cos(theta)) for i in m] for m in M]
-    I=np.identity(dim)
-    Cos=[[np.cos(theta)*i for i in ii] for ii in I]
-    Sin=np.zeros((dim,dim))
-    for i in range(0,dim):
-        for j in range(0,dim):
+    axis = axis / np.linalg.norm(axis)
+    dim = len(axis)
+    M = np.dot(np.transpose([axis]), [axis])
+    M = [[i * (1 - np.cos(theta)) for i in m] for m in M]
+    I = np.identity(dim)
+    Cos = [[np.cos(theta) * i for i in ii] for ii in I]
+    Sin = np.zeros((dim, dim))
+    for i in range(0, dim):
+        for j in range(0, dim):
             if i != j:
-                if (i+j) % 2 !=0:
-                    p=1
+                if (i + j) % 2 != 0:
+                    p = 1
                 else:
-                    p=-1
+                    p = -1
                 if i > j:
-                    p=-p
-                Sin[i][j]=p*np.sin(theta)*axis[dim-(i+j)]
-     
-    return np.array([[M[i][j]+Cos[i][j]+Sin[i][j] for i in range(0,dim)] for j in range(0,dim)])
+                    p = -p
+                Sin[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
 
+    return np.array(
+        [
+            [M[i][j] + Cos[i][j] + Sin[i][j] for i in range(0, dim)]
+            for j in range(0, dim)
+        ]
+    )

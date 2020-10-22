@@ -7,7 +7,7 @@ from numpy.linalg import inv
 
 from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol
-from AaronTools.trajectory import Pathway
+from AaronTools.pathway import Pathway
 
 
 class TestPathway(TestWithTimer):
