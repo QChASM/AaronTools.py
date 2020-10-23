@@ -1194,7 +1194,7 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
-    # nothing in AaronTools refers to sort_walk anymore
+    # nothing in AaronTools refers to short_walk anymore
     short_walk = shortest_path
 
     # geometry measurement
@@ -2020,6 +2020,8 @@ class Geometry:
         if as_group:
             a2_frag = self.get_fragment(a2, a3)[1:]
             a3_frag = self.get_fragment(a3, a2)[1:]
+            if any(atom in a2_frag for atom in a3_frag):
+                warn("changing dihedral that is in a ring:\n%s, %s" % (str(a2), str(a3)))
         else:
             a2_frag = [a1]
             a3_frag = [a4]

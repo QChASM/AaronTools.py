@@ -11,7 +11,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "sd", "out", "dat"]
+read_types = ["xyz", "log", "com", "sd", "out", "dat", "fchk"]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -309,7 +309,9 @@ class FileReader:
             elif self.file_type == "out":
                 self.read_orca_out(f, get_all, just_geom)
             elif self.file_type == "dat":
-                self.read_psi4_out(f, get_all, just_geom)
+                self.read_psi4_out(f, get_all, just_geom)            
+            elif self.file_type == "fchk":
+                self.read_fchk(f, just_geom)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -343,7 +345,9 @@ class FileReader:
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)
         elif self.file_type == "dat":
-            self.read_psi4_out(f, get_all, just_geom)
+            self.read_psi4_out(f, get_all, just_geom)        
+        elif self.file_type == "fchk":
+            self.read_fchk(f, just_geom)
 
         f.close()
 
@@ -591,6 +595,18 @@ class FileReader:
                         grad["RMS Disp"]["converged"] = "*" in max_d_conv
 
                     self.other["gradient"] = grad
+                
+                elif "Total Gradient" in line:
+                    gradient = np.zeros((len(self.atoms), 3))
+                    self.skip_lines(f, 2)
+                    n += 2
+                    for i in range(0, len(self.atoms)):
+                        n += 1
+                        line = f.readline()
+                        info = line.split()
+                        gradient[i] = np.array([float(x) for x in info[1:]])
+                    
+                    self.other["forces"] = -gradient
 
                 line = f.readline()
                 n += 1
@@ -645,6 +661,18 @@ class FileReader:
                     # if the wavefunction doesn't converge, ORCA prints a message next
                     # to the energy so we can't use line.split()[-1]
                     self.other["energy"] = float(line.split()[4])
+
+                elif line.startswith("CARTESIAN GRADIENT"):
+                    gradient = np.zeros((len(self.atoms), 3))
+                    self.skip_lines(f, 2)
+                    n += 2
+                    for i in range(0, len(self.atoms)):
+                        n += 1
+                        line = f.readline()
+                        info = line.split()
+                        gradient[i] = np.array([float(x) for x in info[3:]])
+                    
+                    self.other["forces"] = -gradient
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
@@ -911,6 +939,19 @@ class FileReader:
                     n += 1
                 self.other["gradient"] = grad
 
+            #forces
+            if "Forces (Hartrees/Bohr)" in line:
+                gradient = np.zeros((len(self.atoms), 3))
+                self.skip_lines(f, 2)
+                n += 2
+                for i in range(0, len(self.atoms)):
+                    n += 1
+                    line = f.readline()
+                    info = line.split()
+                    gradient[i] = np.array([float(x) for x in info[2:]])
+                
+                self.other["forces"] = gradient
+
             # capture errors
             # only keep first error, want to fix one at a time
             if "error" not in self.other:
@@ -1018,7 +1059,6 @@ class FileReader:
 
                         self.other['theory'] = theory
                         self.other['other_kwargs'] = other_kwargs
-                            
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -1127,6 +1167,109 @@ class FileReader:
         self.other = other
         return
 
+    def read_fchk(self, f, just_geom=True):
+        def parse_to_list(i, lines, length, data_type):
+            """takes a block in an fchk file and turns it into an array
+               block headers all end with N=   <int>
+               the length of the array will be <int>
+               the data type is specified by data_type"""
+            i += 1
+            line = lines[i]
+            items_per_line = len(line.split())
+            total_items = items_per_line
+            num_lines = 1
+            while total_items < length:
+                total_items += items_per_line
+                num_lines += 1
+            
+            block = ""
+            for line in lines[i:i+num_lines]:
+                block += " "
+                block += line
+            
+            return np.array([data_type(x) for x in block.split()]), i + num_lines
+        
+        self.atoms = []
+        atom_numbers = []
+        atom_coords = []
+        
+        other = {}
+        
+        int_info =  re.compile("([\S\s]+?)\s*I\s*([N=]*)\s*(-?\d+)")
+        real_info = re.compile("([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)")
+        
+        theory = Theory()
+        reading_orbital_data = False
+        n_alpha = 0
+        n_beta = 0
+        orbital_data = {}
+        
+        lines = f.readlines()
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if i == 1:
+                job_info = line.split()
+                if job_info[0] == "SP":
+                    theory.job_type = [SinglePointJob()]
+                elif job_info[0] == "FOPT":
+                    theory.job_type [OptimizationJob()]
+                elif job_info[0] == "FTS":
+                    theory.job_type = [OptimizationJob(transition_state=True)]
+                elif job_info[0] == "FORCE":
+                    theory.job_type = [ForceJob()]
+                elif job_info[0] == "FREQ":
+                    theory.job_type = [FrequencyJob()]
+                
+                theory.method = job_info[1]
+                if len(job_info) > 2:
+                    theory.basis = job_info[2]
+                
+                i += 1
+                continue
+                
+            int_match = int_info.match(line)
+            real_match = real_info.match(line)
+            if int_match is not None:
+                data = int_match.group(1)
+                value = int_match.group(3)
+                if data == "Charge" and not just_geom:
+                    theory.charge = int(value)
+                elif data == "Multiplicity" and not just_geom:
+                    theory.multiplicity = int(value)
+                elif data == "Atomic numbers":
+                    atom_numbers, i = parse_to_list(i, lines, int(value), int)
+                elif not just_geom:
+                    if int_match.group(2):
+                        other[data], i = parse_to_list(i, lines, int(value), int)
+                        continue
+                    else:
+                        other[data] = int(value)
+            
+            elif real_match is not None:
+                data = real_match.group(1)
+                value = real_match.group(3)
+                if data == "Current cartesian coordinates":
+                    atom_coords, i = parse_to_list(i, lines, int(value), float)
+                elif data == "Total Energy":
+                    other["energy"] = float(value)
+                elif not just_geom:
+                    if real_match.group(2):
+                        other[data], i = parse_to_list(i, lines, int(value), float)
+                        continue
+                    else:
+                        other[data] = float(value)
+            
+            i += 1
+        
+        self.other = other
+        self.other["theory"] = theory
+        
+        coords = np.reshape(atom_coords, (len(atom_numbers), 3))
+        for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
+            atom = Atom(element=ELEMENTS[atnum], coords=UNIT.A0_TO_BOHR*coord, name=str(n+1))
+            self.atoms.append(atom)
 
 class Frequency:
     """

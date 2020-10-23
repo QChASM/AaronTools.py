@@ -207,11 +207,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         output += "electronic energy of %s = %.6f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
                 nrg)
-<<<<<<< HEAD
-        output += "    E+ZPE             = %.6f Eh  (dZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
-=======
         output += "    E+ZPE             = %.6f Eh  (ZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
->>>>>>> 9737419ce0df77a13e57b1a5041a7c8a33a2dff4
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
         output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
         output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)

@@ -140,6 +140,21 @@ class Theory:
                             % (str(job1), str(job2))
                         )
 
+    def __setattr__(self, attr, val):
+        if isinstance(val, str):
+            if attr == "method":
+                super().__setattr__(attr, Method(val))
+            elif attr == "basis":
+                super().__setattr__(attr, BasisSet(val))
+            elif attr == "empirical_dispersion":
+                super.__setattr__(attr, EmpiricalDispersion(val))
+            elif attr == "grid":
+                super().__setattr__(attr, IntegrationGrid(val))
+            else:
+                super().__setattr__(attr, val)
+        else:
+            super().__setattr__(attr, val)
+
     def make_header(
         self, geom=None, style="gaussian", conditional_kwargs={}, **kwargs
     ):
