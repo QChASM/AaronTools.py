@@ -64,8 +64,8 @@ for f in args.infile:
         col = "%.2e/%s" % (float(co.gradient[crit]['value']), 'YES' if co.gradient[crit]['converged'] else 'NO')
         s += "  %14s" % col
 
-    if co.error is not None and co.error != "UNKNOWN":
-        s += "  %s" % co.error
+    if "error" in infile.other and infile.other["error"] is not None and infile.other["error"] != "UNKNOWN":
+        s += "  %s" % infile.other["error_msg"]
     elif len(header_vals) == 0:
         s += "  no progress found"
     elif co.finished:

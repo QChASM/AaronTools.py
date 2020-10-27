@@ -108,12 +108,9 @@ for infile in args.infile:
                 sub = Substituent(sub_name)
 
             #replace old substituent with new substituent
-            geom.substitute(sub, target)
+            geom.substitute(sub, target, minimize=args.mini)
 
             geom.refresh_connected()
-
-    if args.mini:
-        geom.minimize_sub_torsion()
 
     s = geom.write(append=False, outfile=args.outfile[0]) 
     if not args.outfile[0]:

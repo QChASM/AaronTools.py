@@ -170,7 +170,7 @@ S = Pathway(Gs[0], np.array([G.coords() for G in Gs]), basis=Q, other_vars={'ene
 s_max, r_max = Pathway.t_to_s(1, S.region_length)
 
 #header for writing energies
-nrg_out = " t       E       dE/dt\n"
+nrg_out = "t\tE\tdE/dt\n"
 #list of geometries to print
 write_geoms = []
 
@@ -182,7 +182,7 @@ if args.print_max or args.print_min:
     dt = ts[1] - ts[0]
     for t in ts:
         dEdt = S.dvar_func_dt['energy'](t) * S.dvar_func_dt['energy'](t+dt)
-        if dEdt <= 0 and S.dvar_func['energy'](t) > 0 and args.print_max:
+        if dEdt <= 0 and S.dvar_func_dt['energy'](t) > 0 and args.print_max:
             max_n_min_ts.append(t)
         if dEdt <= 0 and S.dvar_func_dt['energy'](t) < 0 and args.print_min:
             max_n_min_ts.append(t)
