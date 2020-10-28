@@ -389,6 +389,6 @@ class CompOutput:
         principal_inertia *= UNIT.AMU_TO_KG * 1e-20
 
         #rotational constants in Hz
-        rot_consts = [PHYSICAL.PLANCK/(8*np.pi**2 * moment) for moment in principal_inertia]
+        rot_consts = [PHYSICAL.PLANCK/(8*np.pi**2 * moment) for moment in principal_inertia if moment > 0]
 
         self.rotational_temperature = [ PHYSICAL.PLANCK * const / PHYSICAL.KB for const in rot_consts]

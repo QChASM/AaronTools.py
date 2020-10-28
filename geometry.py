@@ -161,6 +161,15 @@ class Geometry:
         form=iupac -> iupac to smiles from opsin API
                        --> form=smiles
         form=smiles -> structure from cactvs API"""
+        def get_cactus_sd(smiles):
+            url_sd = (
+                "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
+                % smiles
+            )
+            # print(url_sd)
+            s_sd = urlopen(url_sd).read().decode("utf8")
+            
+            return s_sd
 
         from urllib.error import HTTPError
         from urllib.request import urlopen
@@ -188,13 +197,21 @@ class Geometry:
                 )
 
         # print(smiles)
-
-        url_sd = (
-            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-            % smiles
-        )
-        # print(url_sd)
-        s_sd = urlopen(url_sd).read().decode("utf8")
+        try:
+            from rdkit.Chem import AllChem
+            
+            m = AllChem.MolFromSmiles(smiles)
+            if m is None:
+                s_sd = get_cactus_sd(smiles)
+            else:
+                mh = AllChem.AddHs(m)
+                AllChem.EmbedMolecule(mh, randomSeed=0x421c52)
+                s_sd = AllChem.MolToMolBlock(mh)
+                # print(s_sd)
+            
+        except ImportError as e:
+            s_sd = get_cactus_sd(smiles)
+        
         f = FileReader((name, "sd", s_sd))
         return cls(f, refresh_connected=False)
 
