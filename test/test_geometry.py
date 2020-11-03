@@ -679,7 +679,7 @@ class TestGeometry(TestWithTimer):
         # bidentate -> monodentate, none
         ref = Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
-        tm_simple.map_ligand(monodentate, ["35"])
+        tm_simple.map_ligand(monodentate.copy(), ["35"])
         self.assertTrue(
             validate(
                 tm_simple, ref, heavy_only=True, thresh="loose", debug=debug
@@ -689,7 +689,7 @@ class TestGeometry(TestWithTimer):
         # bidentate -> two monodentate
         ref = Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
-        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
+        tm_simple.map_ligand([monodentate.copy(), "ACN"], ["35", "36"])
         self.assertTrue(
             validate(
                 tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
@@ -748,10 +748,10 @@ class TestGeometry(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_map_ligand"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
-    suite.addTest(TestGeometry("test_RMSD"))
+    # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 
 

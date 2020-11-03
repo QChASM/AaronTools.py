@@ -646,7 +646,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
-        self.assertTrue(validate(mol, ref))
+        self.assertTrue(validate(mol, ref, thresh="loose", debug=False))
 
     def test_interpolate(self):
         """test interpolate.py
@@ -814,7 +814,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_changeElement"))
+    suite.addTest(TestCLS("test_mapLigand"))
     return suite
 
 

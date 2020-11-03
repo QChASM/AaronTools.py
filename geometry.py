@@ -940,11 +940,13 @@ class Geometry:
                 partitions[rank][rank] += [i]
 
             new_partitions = partitions.copy()
-            center = list(filter(lambda x: "center" in x.tags, self))
-            if center:
-                center = self.COM(targets=center)
-            else:
-                center = self.COM()
+            # using the catalyst's center can make it difficult
+            # to compare C2 symmetric ligands
+            # center = list(filter(lambda x: "center" in x.tags, self)) 
+            # if center:
+            #     center = self.COM(targets=center)
+            # else:
+            center = self.COM()
             # norm = self.get_principle_axes()
             # norm = norm[1][:, 0] - center
             for rank, rank_dict in partitions.items():
@@ -1529,9 +1531,9 @@ class Geometry:
         """
 
         def calc_LJ(a, b):
+            dist = a.dist(b)
             sigma = a.rij(b)
             epsilon = a.eij(b)
-            dist = a.dist(b)
             return epsilon * ((sigma / dist) ** 12 - (sigma / dist) ** 6)
 
         energy = 0
@@ -2762,9 +2764,14 @@ class Geometry:
             shift = new_key.bond(old_key)
             ligand.coord_shift(shift)
             # rotate ligand
-            targets = old_key.connected - set(self.center)
+            targets = [atom for atom in self.center if atom.is_connected(old_key)]
+            if len(targets) > 0:
+                new_axis = shift - new_key.coords
+            else:
+                targets = old_key.connected - set(self.center)
+                new_axis = ligand.COM(targets=new_key.connected) - new_key.coords
+
             old_axis = self.COM(targets=targets) - old_key.coords
-            new_axis = ligand.COM(targets=new_key.connected) - new_key.coords
             w, angle = get_rotation(old_axis, new_axis)
             ligand.rotate(w, angle, center=new_key)
             return ligand
@@ -2975,9 +2982,11 @@ class Geometry:
                     end = self.COM(key.connected)
                 axis = end - start
                 self.minimize_torsion(targets, axis, center=key, increment=8)
+
         self.remove_clash()
         if minimize:
             self.minimize()
+        
         self.refresh_ranks()
         return rv
 

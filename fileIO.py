@@ -669,6 +669,10 @@ class FileReader:
                     for i in range(0, len(self.atoms)):
                         n += 1
                         line = f.readline()
+                        # orca prints a warning before gradient if some
+                        # coordinates are constrained
+                        if line.startswith("WARNING:"):
+                            continue
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[3:]])
                     
