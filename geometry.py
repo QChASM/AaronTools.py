@@ -1873,7 +1873,7 @@ class Geometry:
 
         # shift geometry to place center atom at origin
         if center is not None:
-            if not isinstance(center, type(self.atoms[0].coords)):
+            if not (hasattr(center, "__len__") and all(isinstance(x, float) for x in center)):
                 tmp = self.find(center)
                 if len(tmp) > 1:
                     center = deepcopy(self.COM(tmp))
@@ -1887,7 +1887,7 @@ class Geometry:
             w = np.array(w, dtype=np.double)
 
         if angle is not None and len(w) == 3:
-            w /= np.linalg.norm(w)
+            w = w / np.linalg.norm(w)
             q = np.hstack(([np.cos(angle / 2)], w * np.sin(angle / 2)))
         elif len(w) != 4:
             raise TypeError(
