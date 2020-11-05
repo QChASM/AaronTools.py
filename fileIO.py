@@ -614,6 +614,8 @@ class FileReader:
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
 
+        nrg_regex = re.compile("((?:[A-Za-z]+\s+)?E\(.*\))\s*\.\.\.\s*(.*)$")
+
         def add_grad(grad, name, line):
             grad[name] = {}
             grad[name]["value"] = line.split()[-3]
@@ -657,6 +659,10 @@ class FileReader:
                 n += 1
                 continue
             else:
+                nrg = nrg_regex.match(line) 
+                if nrg is not None:
+                    self.other[nrg.group(1)] = float(nrg.group(2))
+                    
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
                     # to the energy so we can't use line.split()[-1]

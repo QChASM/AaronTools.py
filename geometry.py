@@ -1903,10 +1903,11 @@ class Geometry:
         qv = q[1:]
 
         for t in targets:
+            xprod = np.cross(qv, t.coords)
             t.coords = (
                 t.coords
-                + 2 * qs * np.cross(qv, t.coords)
-                + 2 * np.cross(qv, np.cross(qv, t.coords))
+                + 2 * qs * xprod
+                + 2 * np.cross(qv, xprod)
             )
 
         if center is not None:
