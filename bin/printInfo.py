@@ -83,6 +83,8 @@ for f in args.infile:
             if args.info == [] or any(key.lower() == info.lower() for info in args.info):
                 if isinstance(infile.other[key], str):
                     s += "\t%-30s=\t%s\n" % (key, infile.other[key])
+                elif isinstance(infile.other[key], bool):
+                    s += "\t%-30s =\t%s\n" % (key, str(infile.other[key]))
                 elif isinstance(infile.other[key], int):
                     s += "\t%-30s =\t%i\n" % (key, infile.other[key])
                 elif isinstance(infile.other[key], float):
