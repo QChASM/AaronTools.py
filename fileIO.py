@@ -668,6 +668,12 @@ class FileReader:
                     # to the energy so we can't use line.split()[-1]
                     self.other["energy"] = float(line.split()[4])
 
+                if line.startswith("TOTAL SCF ENERGY"):
+                    self.skip_lines(f, 2)
+                    line = f.readline()
+                    n += 3
+                    self.other["SCF energy"] = float(line.split()[3])
+
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
                     self.skip_lines(f, 2)
@@ -796,6 +802,10 @@ class FileReader:
 
                 line = f.readline()
                 n += 1
+        
+        if not just_geom:
+            if "finished" not in self.other:
+                self.other["finished"] = False
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
