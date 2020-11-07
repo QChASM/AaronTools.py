@@ -224,13 +224,41 @@ class FileWriter:
 
     @classmethod
     def write_in(cls, geom, theory, outfile=None, **kwargs):
+        """
+        can accept "monomers" as a kwarg
+        this should be a list of lists of atoms corresponding to the 
+        separate monomers in a sapt calculation
+        this will only be used if theory.method.sapt is True
+        if a sapt method is used but no monoers are given, 
+        geom's components attribute will be used intead
+        """
+        if "monomers" in kwargs:
+            monomers = kwargs["monomers"]
+            del kwargs["monomers"]
+        else:
+            monomers = None
+            
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
         s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
-        for atom in geom.atoms:
-            coords = atom.coords.copy()
-            if use_bohr:
-                coords /= UNIT.A0_TO_BOHR
-            s += fmt.format(atom.element, *coords)
+        if theory.method.sapt:
+            if monomers is None:
+                monomers = [comp.atoms for comp in geom.components]
+            
+            for monomer, charge, mult in zip(monomers, theory.multiplicity[1:], theory.charge[1:]):
+                s += "--\n"
+                s += "%2i %i\n" % (charge, mult)
+                for atom in monomer:
+                    coords = atom.coords
+                    if use_bohr:
+                        coords = coords / UNIT.A0_TO_BOHR
+                    s += fmt.format(atom.element, *coords)       
+        
+        else:
+            for atom in geom.atoms:
+                coords = atom.coords
+                if use_bohr:
+                    coords = coords / UNIT.A0_TO_BOHR
+                s += fmt.format(atom.element, *coords)
 
         s += theory.make_footer(geom, style="psi4", **kwargs)
 

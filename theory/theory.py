@@ -72,8 +72,16 @@ class Theory:
         grid=None,
         **kw
     ):
-        self.charge = int(charge)
-        self.multiplicity = int(multiplicity)
+        if not isinstance(charge, list):
+            self.charge = int(charge)
+        else:
+            self.charge = charge
+        
+        if not isinstance(multiplicity, list):
+            self.multiplicity = int(multiplicity)
+        else:
+            self.multiplicity = multiplicity
+
         self.geometry = None
         self.memory = None
         self.processors = None
@@ -649,10 +657,12 @@ class Theory:
     def get_psi4_header(
         self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
     ):
-        """write Psi4 input file
+        """
+        write Psi4 input file
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
-        returns file content and warnings e.g. if a certain feature is not available in Psi4"""
+        returns file content and warnings e.g. if a certain feature is not available in Psi4
+        """
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -673,9 +683,7 @@ class Theory:
 
         # get basis info if method is not semi empirical
         if not self.method.is_semiempirical:
-            basis_info = self.basis.get_psi4_basis_info(
-                "sapt" in self.method.get_psi4()[0].lower()
-            )
+            basis_info = self.basis.get_psi4_basis_info(self.method.sapt)
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -701,7 +709,7 @@ class Theory:
                                 "%s", "mp2"
                             )
 
-                        elif "sapt" in self.method.name.lower():
+                        elif self.method.sapt:
                             basis_info[key][i] = basis_info[key][i].replace(
                                 "%s", "sapt"
                             )
@@ -751,7 +759,11 @@ class Theory:
                 s += "\n"
 
         s += "molecule {\n"
-        s += "%2i %i\n" % (self.charge, self.multiplicity)
+        if self.method.sapt:
+            s += "%2i %i\n" % (self.charge[0], self.multiplicity[0])
+        else:
+            s += "%2i %i\n" % (self.charge, self.multiplicity)
+        
         if PSI4_COORDINATES in combined_dict:
             for kw in combined_dict[PSI4_COORDINATES]:
                 if "pubchem" in kw.lower():
@@ -778,7 +790,9 @@ class Theory:
     def get_psi4_footer(
         self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
     ):
-        """get psi4 footer"""
+        """
+        get psi4 footer
+        """
 
         warnings = []
         if self.job_type is not None:
