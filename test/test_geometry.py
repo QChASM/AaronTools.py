@@ -745,10 +745,21 @@ class TestGeometry(TestWithTimer):
             )
         )
 
+    def test_vbur(self):
+        """
+        tests % volume buried
+        uses Monte Carlo integration, so it this fails, run it again
+        still figuring out how reliable it is
+        """
+        geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        vbur = geom.percent_buried_volume()
+        if not np.isclose(vbur, 86.3, atol=0.2):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.2))
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_vbur"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
     # suite.addTest(TestGeometry("test_RMSD"))

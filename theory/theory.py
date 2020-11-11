@@ -758,29 +758,39 @@ class Theory:
                     s += "\n"
                 s += "\n"
 
-        s += "molecule {\n"
-        if self.method.sapt:
-            s += "%2i %i\n" % (self.charge[0], self.multiplicity[0])
-        else:
-            s += "%2i %i\n" % (self.charge, self.multiplicity)
+        if self.method.sapt and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1 > self.multiplicity[0]:
+            s += "mol = psi4.core.Molecule.from_arrays(\n"
+            s += "    molecular_multiplicity=%i,\n" % self.multiplicity[0]
+            s += "    molecular_charge=%i,\n" % self.charge[0]
+            if PSI4_COORDINATES in combined_dict:
+                for kw in combined_dict[PSI4_COORDINATES]:
+                    if len(combined_dict[kw]) > 0:
+                        s += "    %s=%s,\n" % (kw, repr(combined_dict[kw][0]))
         
-        if PSI4_COORDINATES in combined_dict:
-            for kw in combined_dict[PSI4_COORDINATES]:
-                if "pubchem" in kw.lower():
-                    self.structure = None
-                if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
-                    opt = combined_dict[PSI4_COORDINATES][kw][0]
-                    if "pubchem" in kw.lower() and not kw.strip().endswith(
-                        ":"
-                    ):
-                        kw = kw.strip() + ":"
-                    s += "%s %s\n" % (kw.strip(), opt)
-                    if kw == "units":
-                        if opt.lower() in ["bohr", "au", "a.u."]:
-                            use_bohr = True
+        else:
+            s += "molecule {\n"
+            if self.method.sapt:
+                s += "%2i %i\n" % (self.charge[0], self.multiplicity[0])
+            else:
+                s += "%2i %i\n" % (self.charge, self.multiplicity)
 
-                else:
-                    s += "%s\n" % kw
+            if PSI4_COORDINATES in combined_dict:
+                for kw in combined_dict[PSI4_COORDINATES]:
+                    if "pubchem" in kw.lower():
+                        self.structure = None
+                    if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
+                        opt = combined_dict[PSI4_COORDINATES][kw][0]
+                        if "pubchem" in kw.lower() and not kw.strip().endswith(
+                            ":"
+                        ):
+                            kw = kw.strip() + ":"
+                        s += "%s %s\n" % (kw.strip(), opt)
+                        if kw == "units":
+                            if opt.lower() in ["bohr", "au", "a.u."]:
+                                use_bohr = True
+            
+                    else:
+                        s += "%s\n" % kw
 
         if return_warnings:
             return s, use_bohr, warnings
@@ -819,7 +829,7 @@ class Theory:
             other_kw_dict, conditional_kwargs, dict2_conditional=True
         )
 
-        s = "}\n\n"
+        s = "\n"
 
         # settings
         # a setting will only get added if its list has at least one item, but only the first item will be used

@@ -14,7 +14,7 @@ import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
 from AaronTools.config import Config
-from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL
+from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII, BONDI_RADII
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.finders import Finder
 from AaronTools.utils.prime_numbers import Primes
@@ -1202,9 +1202,9 @@ class Geometry:
                     for j in i.connected
                     if j in self.atoms and j not in avoid
                 ]
-                for i in self.atoms
+                if i not in avoid else [] for i in self.atoms
             ]
-            path = utils.shortest_path(graph, a1, a2)
+            path = utils.shortest_path(graph, self.atoms.index(a1), self.atoms.index(a2))
         if not path:
             raise LookupError(
                 "could not determine best path between {} and {}".format(
@@ -1626,6 +1626,87 @@ class Geometry:
                 else:
                     formed.add(tuple(sorted([s.name, c.name])))
         return broken, formed
+
+    def percent_buried_volume(
+        self, 
+        ligands=None, 
+        center=None, 
+        radius=3.5, 
+        radii="umn", 
+        scale=1.17, 
+    ):
+        """
+        calculates % buried volume (%V_bur)
+        ligands - list of ligands to use in calculation, defaults to self.components
+        center - center atom
+        radius - sphere radius around center atom
+        radii - "umn" or "bondi", VDW radii to use
+        scale - scale VDW radii by this
+        """
+        # NOTE - it would be nice to multiprocess the MC integration, but...
+        #        python's multiprocessing doesn't let you spawn processes
+        #        outside of the __name__ == '__main__' context
+        
+        if ligands is None:
+            if self.components is None:
+                self.detect_components()
+            ligands = [l for l in self.components]
+        
+        if center is None:
+            if self.center is None:
+                self.detect_components()
+            if len(self.center) > 1:
+                raise RuntimeError("one center must be specified for %V_bur calculation")
+            center = self.center[0]
+        
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        else:
+            raise RuntimeError("received %s for radii, must be umn or bondi" % radii)
+        
+        radius_list = []
+        
+        atoms_within_radius = []
+        for lig in ligands:
+            for atom in lig:
+                d = center.dist(atom)
+                if d - scale*radii_dict[atom.element] < radius:
+                    atoms_within_radius.append(atom)
+                    radius_list.append(scale*radii_dict[atom.element])
+        
+        coords = self.coords(atoms_within_radius)
+        
+        prev_vol = cur_vol = 0
+        n_samples = 1000
+        buried_points = 0
+        dV = []
+        i = 0
+        while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
+            i += 1
+            for p in range(0, n_samples):
+                r = np.random.uniform(0, radius)
+                t1 = np.random.uniform(0, 2*np.pi)
+                t2 = np.random.uniform(0, np.pi)
+                x = r * np.sin(t1)
+                y = r * np.cos(t1)
+                z = r * np.cos(t2)
+                
+                xyz = np.array([x, y, z]) + center.coords
+                for coord, r in zip(coords, radius_list):
+                    d = np.linalg.norm(xyz - coord)
+                    if d < r:
+                        buried_points += 1
+                        break
+            
+            cur_vol = float(buried_points) / float(i * n_samples)
+            dV.append(abs(cur_vol - prev_vol))
+            prev_vol = cur_vol
+        
+        return 100*cur_vol
 
     # geometry manipulation
     def append_structure(self, structure):
@@ -2783,9 +2864,23 @@ class Geometry:
             center = old_ligand.COM(targets=old_keys)
             shift = center - ligand.COM(targets=new_keys)
             ligand.coord_shift(shift)
+            remove_centers = []
 
             # bend around key axis
-            old_walk = old_ligand.shortest_path(*old_keys)
+            try:
+                old_walk = old_ligand.shortest_path(*old_keys)
+            
+            except ValueError:
+                # for some ferrocene ligands, AaronTools misidentifies the Fe
+                # as another metal center
+                # we'll remove any centers that are on the path between the key atoms
+                # also, sometimes the ligand atoms don't have the center in their connected
+                # attribute, even though the center has the ligand atoms in its
+                # connected attribute, so refresh_connected
+                self.refresh_connected()
+                old_walk = self.shortest_path(*old_keys, avoid=[a for a in self.center if any(k.is_connected(a) for k in old_keys)])
+                remove_centers = [c for c in self.center if c in old_walk]
+
             if len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
@@ -2815,6 +2910,8 @@ class Geometry:
             new_axis = new_keys[0].bond(new_keys[1])
             w, angle = get_rotation(old_axis, new_axis)
             ligand.rotate(w, angle, center=center)
+            
+            return remove_centers
 
         def map_rot_frag(frag, a, b, ligand, old_key, new_key):
             old_vec = old_key.coords - b.coords
@@ -2842,6 +2939,8 @@ class Geometry:
             # backbone fragments separated by rotatable bonds
             frag_list = ligand.get_frag_list(max_order=1)
             ligand.write("ligand")
+
+            remove_centers = []
 
             # get key atoms on each side of rotatable bonds
             key_count = {}
@@ -2874,10 +2973,11 @@ class Geometry:
                             continue
                         ok += [old_keys[i]]
                         nk += [n]
-                    map_2_key(old_ligand, ligand, ok, nk)
+                    remove_centers.extend(map_2_key(old_ligand, ligand, ok, nk))
                     partial_map = True
                     mapped_frags += [frag]
                     continue
+                
                 if k == 1 and not partial_map:
                     frag, a, b = key_count[k][0]
                     for i, n in enumerate(new_keys):
@@ -2888,6 +2988,7 @@ class Geometry:
                         mapped_frags += [frag]
                         break
                     continue
+                
                 if k == 1 and partial_map:
                     for frag, a, b in key_count[k]:
                         for i, n in enumerate(new_keys):
@@ -2896,7 +2997,8 @@ class Geometry:
                             map_rot_frag(frag, a, b, ligand, old_keys[i], n)
                             mapped_frags += [frag]
                             break
-            return
+            
+            return remove_centers
 
         if not self.components:
             self.detect_components()
@@ -2930,24 +3032,29 @@ class Geometry:
                     old_ligands += [c]
         start = 0
         end = None
+        remove_centers = []
         for i, ligand in enumerate(ligands):
             end = start + len(ligand.key_atoms)
             if len(ligand.key_atoms) == 1:
                 map_1_key(self, ligand, old_keys[start], new_keys[start])
             elif len(ligand.key_atoms) == 2:
-                map_2_key(
-                    old_ligands[start],
-                    ligand,
-                    old_keys[start:end],
-                    new_keys[start:end],
+                remove_centers.extend(
+                    map_2_key(
+                        old_ligands[start],
+                        ligand,
+                        old_keys[start:end],
+                        new_keys[start:end],
+                    )
                 )
             else:
-                map_more_key(
-                    self,
-                    old_ligands[start],
-                    ligand,
-                    old_keys[start:end],
-                    new_keys[start:end],
+                remove_centers.extend(
+                    map_more_key(
+                        self,
+                        old_ligands[start],
+                        ligand,
+                        old_keys[start:end],
+                        new_keys[start:end],
+                    )
                 )
 
             for a in ligand.atoms:
@@ -2964,6 +3071,10 @@ class Geometry:
             for atom in self.atoms:
                 if atom.connected & set(ol.atoms):
                     atom.connected = atom.connected - set(ol.atoms)
+
+        # remove extraneous centers, i.e. from ferrocene ligands
+        for rc in remove_centers:
+            self.center.remove(rc)
 
         # add new
         for ligand in ligands:

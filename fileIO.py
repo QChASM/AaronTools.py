@@ -240,11 +240,43 @@ class FileWriter:
             
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
         s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
-        if theory.method.sapt:
+        # psi4 input is VERY different for sapt jobs with the low-spin 
+        # combination of fragments
+        if theory.method.sapt and sum(theory.multiplicity[1:]) - len(theory.multiplicity[1:]) + 1 > theory.multiplicity[0]:
+            seps = []
+            for i, m1 in enumerate(monomers[:-1]):
+                seps.append(0)
+                for m2 in monomers[:i+1]:
+                    seps[-1] += len(m2)
+
+            s += "    fragment_separators=%s,\n" % repr(seps)
+            s += "    elez=%s,\n" % repr([ELEMENTS.index(atom.element) for monomer in monomers for atom in monomer])
+            s += "    fragment_multiplicities=%s,\n" % repr(theory.multiplicity[1:])
+            s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
+            s += "    geom=["
+            i = 0
+            for monomer in monomers:
+                print("monomer")
+                for atom in monomer:
+                    print(atom)
+            for monomer in monomers:
+                s += "\n"
+                for atom in monomer:
+                    if use_bohr:
+                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(atom.coords / UNIT.A0_TO_BOHR)
+                    else:
+                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(atom.coords)
+
+            
+            s += "    ],\n"
+            s += ")\n\n"
+            s += "activate(mol)\n"
+        
+        elif theory.method.sapt:
             if monomers is None:
                 monomers = [comp.atoms for comp in geom.components]
             
-            for monomer, charge, mult in zip(monomers, theory.multiplicity[1:], theory.charge[1:]):
+            for monomer, mult, charge in zip(monomers, theory.multiplicity[1:], theory.charge[1:]):
                 s += "--\n"
                 s += "%2i %i\n" % (charge, mult)
                 for atom in monomer:
@@ -252,13 +284,17 @@ class FileWriter:
                     if use_bohr:
                         coords = coords / UNIT.A0_TO_BOHR
                     s += fmt.format(atom.element, *coords)       
-        
+            
+            s += "}\n"
+       
         else:
             for atom in geom.atoms:
                 coords = atom.coords
                 if use_bohr:
                     coords = coords / UNIT.A0_TO_BOHR
                 s += fmt.format(atom.element, *coords)
+            
+            s += "}\n"
 
         s += theory.make_footer(geom, style="psi4", **kwargs)
 
