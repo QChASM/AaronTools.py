@@ -76,7 +76,7 @@ class Theory:
             self.charge = int(charge)
         else:
             self.charge = charge
-        
+
         if not isinstance(multiplicity, list):
             self.multiplicity = int(multiplicity)
         else:
@@ -96,7 +96,7 @@ class Theory:
             else:
                 self.__setattr__(key, None)
         self.kwargs = kw
-    
+
         if isinstance(self.processors, str):
             processors = re.search("(\d+)", self.processors)
             if processors:
@@ -223,7 +223,6 @@ class Theory:
             rv = self.get_gaussian_header(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
-            print(rv)
             return rv
 
         elif style == "orca":
@@ -248,7 +247,7 @@ class Theory:
             self.basis.refresh_elements(geom)
 
         kwargs = combine_dicts(self.kwargs, kwargs)
-        
+
         other_kw_dict = {}
         for kw in kwargs:
             if (
@@ -288,7 +287,6 @@ class Theory:
             rv = self.get_gaussian_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
-            print(rv)
             return rv
 
         elif style == "psi4":
@@ -418,7 +416,6 @@ class Theory:
                         or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                     )
                 ):
-                    print(other_kw_dict[GAUSSIAN_ROUTE])
                     s += "=("
                     for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
                         opt = x.split("=")[0]
@@ -765,7 +762,7 @@ class Theory:
                 for kw in combined_dict[PSI4_COORDINATES]:
                     if len(combined_dict[kw]) > 0:
                         s += "    %s=%s,\n" % (kw, repr(combined_dict[kw][0]))
-        
+
         else:
             s += "molecule {\n"
             if self.method.sapt:
@@ -787,7 +784,7 @@ class Theory:
                         if kw == "units":
                             if opt.lower() in ["bohr", "au", "a.u."]:
                                 use_bohr = True
-            
+
                     else:
                         s += "%s\n" % kw
 
