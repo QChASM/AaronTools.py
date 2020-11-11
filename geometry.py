@@ -1634,6 +1634,7 @@ class Geometry:
         radius=3.5,
         radii="umn",
         scale=1.17,
+        exclude=None, 
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1655,9 +1656,18 @@ class Geometry:
         if center is None:
             if self.center is None:
                 self.detect_components()
-            if len(self.center) > 1:
-                raise RuntimeError("one center must be specified for %V_bur calculation")
-            center = self.center[0]
+            center = self.center
+
+        elif isinstance(center, Atom):
+            center = [center]
+
+        if all(isinstance(a, Atom) for a in center):
+            center_coords = self.COM(center)
+        else:
+            center_coords = center
+
+        if exclude is not None:
+            exclude = self.find(exclude)
 
         if isinstance(radii, dict):
             radii_dict = radii
@@ -1673,7 +1683,9 @@ class Geometry:
         atoms_within_radius = []
         for lig in ligands:
             for atom in lig:
-                d = center.dist(atom)
+                if exclude is not None and atom in exclude:
+                    continue
+                d = np.linalg.norm(center_coords - atom.coords)
                 if d - scale*radii_dict[atom.element] < radius:
                     atoms_within_radius.append(atom)
                     radius_list.append(scale*radii_dict[atom.element])
@@ -1695,7 +1707,7 @@ class Geometry:
                 y = r * np.cos(t1)
                 z = r * np.cos(t2)
 
-                xyz = np.array([x, y, z]) + center.coords
+                xyz = np.array([x, y, z]) + center_coords
                 for coord, r in zip(coords, radius_list):
                     d = np.linalg.norm(xyz - coord)
                     if d < r:
