@@ -57,6 +57,23 @@ makeconf_parser.add_argument('-s', '--substituent', metavar='(n=substituent|subs
                             "that name will be rotated\n" + \
                             "Default: rotate any detected substituents")
 
+makeconf_parser.add_argument('-rc', '--remove-clash', \
+                             action='store_true', \
+                             default=False, \
+                             required=False, \
+                             dest='remove_clash', \
+                             help="if atoms are too close together, wiggle the\n" + \
+                             "substituents to remove the clash")
+
+makeconf_parser.add_argument('-sc', '--skip-clash', \
+                             action='store_true', \
+                             required=False, \
+                             default=False, \
+                             dest='skip_clash', \
+                             help="do not print structures with atoms that are\n" + \
+                             "too close together or for which substituent\n" + \
+                             "clashing could not be resolved with '--remove-clash'")
+
 makeconf_parser.add_argument('-o', '--output-destination', \
                             type=str, \
                             default=None, \
@@ -86,6 +103,8 @@ if args.list_avail:
 detect_subs = False
 
 s = ""
+
+skipped = 0
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -182,8 +201,40 @@ for infile in args.infile:
 
         prev_conf = conf
 
+        bad_subs = []
+        print_geom = geom
+        if args.remove_clash:
+            print_geom = Geometry([a.copy() for a in geom])
+            # print_geom.update_geometry(geom.coordinates.copy())
+            sub_list = [Substituent(print_geom.find([at.name for at in sub]), 
+                                    detect=False, 
+                                    end=print_geom.find_exact(sub.end.name)[0]) 
+                        for sub in substituents]
+            bad_subs = print_geom.remove_clash(sub_list)
+            # somehow the atoms get out of order
+            print_geom.atoms = sorted(print_geom.atoms, key=lambda a: float(a.name))
+
+        if args.skip_clash:
+            if bad_subs:
+                skipped += 1
+                continue
+
+            clashing = False
+            for j, a1 in enumerate(print_geom.atoms):
+                for a2 in print_geom.atoms[:j]:
+                    if a2 not in a1.connected and a1.is_connected(a2):
+                        clashing = True
+                        break
+                    
+                if clashing:
+                    break
+            
+            if clashing:
+                skipped += 1
+                continue
+
         if args.outfile is None:
-            s += geom.write(outfile=False)
+            s += print_geom.write(outfile=False)
             s += '\n'
         else:
             if os.path.isdir(os.path.expanduser(args.outfile)):
@@ -192,8 +243,11 @@ for infile in args.infile:
             else:
                 outfile = args.outfile.replace('$i', str(conf + 1))
            
-            geom.write(outfile=outfile, append='$i' not in args.outfile)
+            print_geom.write(outfile=outfile, append='$i' not in args.outfile)
 
     
 if args.outfile is None or args.list_info:
     print(s[:-1])
+    
+if skipped > 0:
+    print("%i conformers skipped because of clashing substituent(s)" % skipped)

@@ -679,7 +679,7 @@ class TestGeometry(TestWithTimer):
         # bidentate -> monodentate, none
         ref = Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
-        tm_simple.map_ligand(monodentate, ["35"])
+        tm_simple.map_ligand(monodentate.copy(), ["35"])
         self.assertTrue(
             validate(
                 tm_simple, ref, heavy_only=True, thresh="loose", debug=debug
@@ -689,7 +689,7 @@ class TestGeometry(TestWithTimer):
         # bidentate -> two monodentate
         ref = Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
-        tm_simple.map_ligand([monodentate, "ACN"], ["35", "36"])
+        tm_simple.map_ligand([monodentate.copy(), "ACN"], ["35", "36"])
         self.assertTrue(
             validate(
                 tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
@@ -745,13 +745,24 @@ class TestGeometry(TestWithTimer):
             )
         )
 
+    def test_vbur(self):
+        """
+        tests % volume buried
+        uses Monte Carlo integration, so it this fails, run it again
+        still figuring out how reliable it is
+        """
+        geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        vbur = geom.percent_buried_volume()
+        if not np.isclose(vbur, 86.3, atol=0.2):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.2))
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_vbur"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
-    suite.addTest(TestGeometry("test_RMSD"))
+    # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 
 

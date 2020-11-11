@@ -94,6 +94,7 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
         rmsd[1].write("ref")
         rmsd[0].write("test")
         rmsd = rmsd[2]
+    
     return rmsd < thresh
 
 

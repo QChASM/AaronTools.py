@@ -72,8 +72,16 @@ class Theory:
         grid=None,
         **kw
     ):
-        self.charge = int(charge)
-        self.multiplicity = int(multiplicity)
+        if not isinstance(charge, list):
+            self.charge = int(charge)
+        else:
+            self.charge = charge
+        
+        if not isinstance(multiplicity, list):
+            self.multiplicity = int(multiplicity)
+        else:
+            self.multiplicity = multiplicity
+
         self.geometry = None
         self.memory = None
         self.processors = None
@@ -88,7 +96,7 @@ class Theory:
             else:
                 self.__setattr__(key, None)
         self.kwargs = kw
-
+    
         if isinstance(self.processors, str):
             processors = re.search("(\d+)", self.processors)
             if processors:
@@ -139,6 +147,21 @@ class Theory:
                             "cannot run multiple jobs of the same type: %s, %s"
                             % (str(job1), str(job2))
                         )
+
+    def __setattr__(self, attr, val):
+        if isinstance(val, str):
+            if attr == "method":
+                super().__setattr__(attr, Method(val))
+            elif attr == "basis":
+                super().__setattr__(attr, BasisSet(val))
+            elif attr == "empirical_dispersion":
+                super.__setattr__(attr, EmpiricalDispersion(val))
+            elif attr == "grid":
+                super().__setattr__(attr, IntegrationGrid(val))
+            else:
+                super().__setattr__(attr, val)
+        else:
+            super().__setattr__(attr, val)
 
     def make_header(
         self, geom=None, style="gaussian", conditional_kwargs={}, **kwargs
@@ -224,6 +247,8 @@ class Theory:
         if self.basis is not None:
             self.basis.refresh_elements(geom)
 
+        kwargs = combine_dicts(self.kwargs, kwargs)
+        
         other_kw_dict = {}
         for kw in kwargs:
             if (
@@ -631,10 +656,12 @@ class Theory:
     def get_psi4_header(
         self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
     ):
-        """write Psi4 input file
+        """
+        write Psi4 input file
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
-        returns file content and warnings e.g. if a certain feature is not available in Psi4"""
+        returns file content and warnings e.g. if a certain feature is not available in Psi4
+        """
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -655,9 +682,7 @@ class Theory:
 
         # get basis info if method is not semi empirical
         if not self.method.is_semiempirical:
-            basis_info = self.basis.get_psi4_basis_info(
-                "sapt" in self.method.get_psi4()[0].lower()
-            )
+            basis_info = self.basis.get_psi4_basis_info(self.method.sapt)
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -683,7 +708,7 @@ class Theory:
                                 "%s", "mp2"
                             )
 
-                        elif "sapt" in self.method.name.lower():
+                        elif self.method.sapt:
                             basis_info[key][i] = basis_info[key][i].replace(
                                 "%s", "sapt"
                             )
@@ -732,25 +757,39 @@ class Theory:
                     s += "\n"
                 s += "\n"
 
-        s += "molecule {\n"
-        s += "%2i %i\n" % (self.charge, self.multiplicity)
-        if PSI4_COORDINATES in combined_dict:
-            for kw in combined_dict[PSI4_COORDINATES]:
-                if "pubchem" in kw.lower():
-                    self.structure = None
-                if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
-                    opt = combined_dict[PSI4_COORDINATES][kw][0]
-                    if "pubchem" in kw.lower() and not kw.strip().endswith(
-                        ":"
-                    ):
-                        kw = kw.strip() + ":"
-                    s += "%s %s\n" % (kw.strip(), opt)
-                    if kw == "units":
-                        if opt.lower() in ["bohr", "au", "a.u."]:
-                            use_bohr = True
+        if self.method.sapt and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1 > self.multiplicity[0]:
+            s += "mol = psi4.core.Molecule.from_arrays(\n"
+            s += "    molecular_multiplicity=%i,\n" % self.multiplicity[0]
+            s += "    molecular_charge=%i,\n" % self.charge[0]
+            if PSI4_COORDINATES in combined_dict:
+                for kw in combined_dict[PSI4_COORDINATES]:
+                    if len(combined_dict[kw]) > 0:
+                        s += "    %s=%s,\n" % (kw, repr(combined_dict[kw][0]))
+        
+        else:
+            s += "molecule {\n"
+            if self.method.sapt:
+                s += "%2i %i\n" % (self.charge[0], self.multiplicity[0])
+            else:
+                s += "%2i %i\n" % (self.charge, self.multiplicity)
 
-                else:
-                    s += "%s\n" % kw
+            if PSI4_COORDINATES in combined_dict:
+                for kw in combined_dict[PSI4_COORDINATES]:
+                    if "pubchem" in kw.lower():
+                        self.structure = None
+                    if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
+                        opt = combined_dict[PSI4_COORDINATES][kw][0]
+                        if "pubchem" in kw.lower() and not kw.strip().endswith(
+                            ":"
+                        ):
+                            kw = kw.strip() + ":"
+                        s += "%s %s\n" % (kw.strip(), opt)
+                        if kw == "units":
+                            if opt.lower() in ["bohr", "au", "a.u."]:
+                                use_bohr = True
+            
+                    else:
+                        s += "%s\n" % kw
 
         if return_warnings:
             return s, use_bohr, warnings
@@ -760,7 +799,9 @@ class Theory:
     def get_psi4_footer(
         self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
     ):
-        """get psi4 footer"""
+        """
+        get psi4 footer
+        """
 
         warnings = []
         if self.job_type is not None:
@@ -787,7 +828,7 @@ class Theory:
             other_kw_dict, conditional_kwargs, dict2_conditional=True
         )
 
-        s = "}\n\n"
+        s = "\n"
 
         # settings
         # a setting will only get added if its list has at least one item, but only the first item will be used

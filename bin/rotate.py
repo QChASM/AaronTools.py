@@ -219,7 +219,7 @@ for f in args.infile:
             outfile = args.outfile[0]
             outfile = outfile.replace('$INFILE', os.path.basename(f))
             outfile = outfile.replace('$AXIS', ".".join(["%.3f" % x for x in vector]))
-            outfile = outfile.replace('$ANGLE', "%.2f" % np.rad2deg(args.angle*(i+1)))
+            outfile = outfile.replace('$ANGLE', str.zfill("%.2f" % np.rad2deg(args.angle*(i+1)), 6))
             parent_dir = os.path.dirname(outfile)
             if not os.path.isdir(parent_dir) and parent_dir != '':
                 os.makedirs(parent_dir)

@@ -303,3 +303,29 @@ class SinglePointJob(JobType):
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
         return {PSI4_JOB: {"energy": []}}
+
+
+class ForceJob(JobType):
+    """force/gradient job"""
+    def __init__(self, numerical=False):
+        super().__init__()
+        self.numerical = numerical
+    
+    def get_gaussian(self):
+        """returns a dict with keys: GAUSSIAN_ROUTE"""
+        out = {GAUSSIAN_ROUTE:{"force":[]}}
+        if self.numerical:
+            out[GAUSSIAN_ROUTE]["force"].append("EnGrad")
+        return out
+    
+    def get_orca(self):
+        """returns a dict with keys: ORCA_ROUTE"""
+        return {ORCA_ROUTE:["NumGrad" if self.numerical else "EnGrad"]}
+    
+    def get_psi4(self):
+        """returns a dict with keys: PSI4_JOB"""
+        out = {PSI4_JOB:{"gradient":[]}}
+        if self.numerical:
+            out[PSI4_JOB]["gradient"].append("dertype='energy'")
+        return out
+        

@@ -44,7 +44,8 @@ class TestFromString(TestWithTimer):
     def test_geometry(self):
         geom = Geometry.from_string("(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac")
         ref = TestFromString.chiral_geom
-        self.assertTrue(validate(geom, ref, thresh="loose", heavy_only=True))
+        # really loose threshhold b/c rdkit can give a boat cyclohexane...
+        self.assertTrue(validate(geom, ref, thresh=0.35, heavy_only=True))
 
     def test_ring(self):
         # sometimes this doesn't work b/c cactus decides to give a crap structure

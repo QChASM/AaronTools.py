@@ -14,7 +14,9 @@ class EmpiricalDispersion:
             Nonlocal Approximation (or NL, NLA, -NL)
             Pernal, Podeszwa, Patkowski, & Szalewicz (or DAS2009, -DAS2009)
             Podeszwa, Katarzyna, Patkowski, & Szalewicz (or DAS2010, -DAS2010)
+            Coupled-Cluster Doubles (or CCD)
             Řezác, Greenwell, & Beran (or DMP2)
+            Coupled-Cluster Doubles + Řezác, Greenwell, & Beran (or (CCD)DMP2)
         
         or simply the keyword for the input file type you are using"""
         
@@ -94,8 +96,12 @@ class EmpiricalDispersion:
             return ("-das2009", None)        
         elif any(self.name.upper() == name for name in ["PODESZWA, KATARZYNA, PATKOWSKI, & SZALEWICZ", "DAS2010", "-DAS2010"]):
             return ("-das2010", None)        
+        elif any(self.name.upper() == name for name in ["COUPLED-CLUSTER DOUBLES", "CCD"]):
+            return ("(ccd)", None)        
         elif any(self.name.upper() == name for name in ["ŘEZÁC, GREENWELL, & BERAN", "DMP2"]):
-            return ("dmp2", None)
+            return ("dmp2", None)        
+        elif any(self.name.upper() == name for name in ["COUPLED-CLUSTER DOUBLES + ŘEZÁC, GREENWELL, & BERAN", "(CCD)DMP2"]):
+            return ("(ccd)dmp2", None)
         else:
             return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 

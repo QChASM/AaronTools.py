@@ -425,6 +425,7 @@ class CompOutput:
         rot_consts = [
             PHYSICAL.PLANCK / (8 * np.pi ** 2 * moment)
             for moment in principal_inertia
+            if moment > 0
         ]
 
         self.rotational_temperature = [

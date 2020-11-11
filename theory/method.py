@@ -5,11 +5,21 @@ class Method:
     used to ensure the proper keyword is used
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
-    def __init__(self, name, is_semiempirical=False):
-        """name: str, functional name
-        is_semiemperical: bool, basis set is not required"""
+    def __init__(self, name, is_semiempirical=False, sapt=False):
+        """
+        name: str, functional name
+        is_semiemperical: bool, basis set is not required
+        sapt: bool, whether or not the method is a SAPT method
+              if it is a sapt method, the Theory()'s charge and multiplicity
+              should be a list, with the first item in the list being the overall
+              charge and multiplicity and subsequent items being the charge and
+              multiplicity of the monomers
+              a list of monomers can be given the the Geometry.write() method,
+              otherwise the Geometry()'s components attribute will be used
+        """
         self.name = name
         self.is_semiempirical = is_semiempirical
+        self.sapt = sapt
 
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""

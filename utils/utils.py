@@ -480,3 +480,33 @@ def rotation_matrix(theta, axis):
             for j in range(0, dim)
         ]
     )
+
+
+def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
+    """
+    returns a grid of points that are equally spaced on a sphere
+    with the specified radius and center
+    numer of points can be adjusted with n
+    """
+    # generate a grid of points on the unit sphere
+    grid = []
+    d_theta = np.pi * (3. - np.sqrt(5.))
+    dy = 2./(n - 1)
+    
+    for i in range(0, n):
+        y = 1 - i * dy
+        r = np.sqrt(1 - y**2)
+        
+        theta = i * d_theta
+        
+        x = np.cos(theta) * r
+        z = np.sin(theta) * r
+        
+        grid.append(np.array([x, y, z]))
+    
+    grid = np.array(grid)
+    # scale the points to the specified radius and move the center
+    grid *= radius
+    grid += center
+    
+    return grid

@@ -84,11 +84,25 @@ class Component(Geometry):
         return False
 
     @classmethod
-    def list(cls):
+    def list(cls, name_regex=None, coordinating_elements=None):
         names = []
         for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
             name = os.path.splitext(os.path.basename(f))[0]
-            names.append(name)
+            name_ok = True
+            elements_ok = True
+
+            if name_regex is not None and re.search(name_regex, name, re.IGNORECASE) is None:
+                name_ok = False
+
+            if coordinating_elements is not None:
+                geom = cls(name)
+                elements = [atom.element for atom in geom.find("key")]
+                if not all(elements.count(x) == coordinating_elements.count(x) for x in coordinating_elements) or \
+                   not all(coordinating_elements.count(x) == elements.count(x) for x in elements):
+                    elements_ok = False
+
+            if name_ok and elements_ok:
+                names.append(name)
 
         return names
 
