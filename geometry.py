@@ -1639,20 +1639,27 @@ class Geometry:
         """
         calculates % buried volume (%V_bur)
         ligands - list of ligands to use in calculation, defaults to self.components
-        center - center atom
-        radius - sphere radius around center atom
-        radii - "umn" or "bondi", VDW radii to use
-        scale - scale VDW radii by this
+        center  - center atom(s) or np.array of coordinates
+                  if more than one atom is specified, the sphere will be centered on
+                  the centroid between the atoms
+        radius  - sphere radius around center atom
+        radii   - "umn" or "bondi", VDW radii to use
+                  can also be a dict() with atom symbols as the keys and
+                  their respective radii as the values
+        scale   - scale VDW radii by this
+        exclude - atoms to exclude from the calculation
         """
         # NOTE - it would be nice to multiprocess the MC integration, but...
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
-
+        
+        # determine ligands if none were specified
         if ligands is None:
             if self.components is None:
                 self.detect_components()
             ligands = [l for l in self.components]
 
+        # determine center if none was specified
         if center is None:
             if self.center is None:
                 self.detect_components()
@@ -1669,6 +1676,7 @@ class Geometry:
         if exclude is not None:
             exclude = self.find(exclude)
 
+        # VDW radii to use
         if isinstance(radii, dict):
             radii_dict = radii
         elif radii.lower() == "umn":
@@ -1678,9 +1686,13 @@ class Geometry:
         else:
             raise RuntimeError("received %s for radii, must be umn or bondi" % radii)
 
+        # list of scaled VDW radii for each atom that's close enough to
+        # the center of the sphere
         radius_list = []
-
         atoms_within_radius = []
+        
+        # determine which atom's radii extend within the sphere
+        # reduces the number of distances we need to calculate
         for lig in ligands:
             for atom in lig:
                 if exclude is not None and atom in exclude:
@@ -1697,9 +1709,13 @@ class Geometry:
         buried_points = 0
         dV = []
         i = 0
+        # determine %V_bur 
+        # do at least 75000 total points, but keep going until
+        # the last 5 changes are all less than 1e-4
         while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
             i += 1
             for p in range(0, n_samples):
+                # get a random point inside the sphere
                 r = np.random.uniform(0, radius)
                 t1 = np.random.uniform(0, 2*np.pi)
                 t2 = np.random.uniform(0, np.pi)
@@ -1708,6 +1724,8 @@ class Geometry:
                 z = r * np.cos(t2)
 
                 xyz = np.array([x, y, z]) + center_coords
+                # see if the point is inside of any atom's 
+                # scaled VDW radius
                 for coord, r in zip(coords, radius_list):
                     d = np.linalg.norm(xyz - coord)
                     if d < r:
@@ -1718,6 +1736,7 @@ class Geometry:
             dV.append(abs(cur_vol - prev_vol))
             prev_vol = cur_vol
 
+        # return 100x the volume
         return 100*cur_vol
 
     # geometry manipulation
