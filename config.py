@@ -5,6 +5,7 @@ import re
 from copy import deepcopy
 from warnings import warn
 
+import AaronTools
 from AaronTools.const import AARONLIB, QCHASM
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
@@ -359,9 +360,7 @@ class Config(configparser.ConfigParser):
             else:
                 kwargs[key] = val
 
-        theory = Theory(
-            *self._args, geometry=geometry, **self._kwargs, **kwargs
-        )
+        theory = Theory(*self._args, geometry=geometry, **kwargs)
         # build ImplicitSolvent object
         if self[section].get("solvent", fallback="gas") == "gas":
             theory.solvent = None
@@ -431,6 +430,59 @@ class Config(configparser.ConfigParser):
             theory.job_type = [SinglePointJob()]
         # return updated theory object
         return theory
+
+    def get_template(self):
+        if "Reaction" in self:
+            structures = []
+            path = os.path.join(
+                AARONLIB,
+                "TS_geoms",
+                self["Reaction"]["reaction"],
+                self["Reaction"]["template"],
+            )
+            for dirpath, dirnames, filenames in os.walk(path):
+                for name in filenames:
+                    if name.startswith("TS"):
+                        kind = "ts"
+                    elif name.startswith("INT"):
+                        kind = "min"
+                    name = os.path.join(dirpath, name)
+                    structure = AaronTools.geometry.Geometry(name)
+                    structure.name = os.path.relpath(name, path)
+                    structure.name = ".".join(structure.name.split(".")[:-1])
+                    structures += [(structure, kind)]
+            return structures
+        # get starting structure
+        if "Geometry" not in self or "structure" not in self["Geometry"]:
+            structure = "{}.xyz".format(self["Job"]["name"])
+            warn(
+                "No structure indicated in self. Trying to use {}".format(
+                    structure
+                )
+            )
+        else:
+            structure = self["Geometry"]["structure"]
+        try:
+            structure = AaronTools.geometry.Geometry(structure)
+        except IndexError:
+            structure = AaronTools.geometry.Geometry.from_string(structure)
+            self._changes[""] = ({}, None)
+        # adjust structure attributes
+        if "name" in self["Job"]:
+            structure.name = self["Job"]["name"]
+        if "Geometry" in self and "comment" in self["Geometry"]:
+            structure.comment = self["Geometry"]["comment"]
+            structure.parse_comment()
+        # apply functions found in [Geometry] section
+        # structure.write()
+        # os.system("chimera {}.xyz".format(structure.name))
+        if "Geometry" in self:
+            if "&call" in self["Geometry"]:
+                lines = self["Geometry"]["&call"]
+                for line in lines.split("\n"):
+                    if line.strip():
+                        eval(line.strip())
+        return structure
 
     def _parse_includes(self):
         """

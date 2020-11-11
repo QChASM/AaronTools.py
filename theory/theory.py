@@ -200,6 +200,7 @@ class Theory:
             rv = self.get_gaussian_header(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
+            print(rv)
             return rv
 
         elif style == "orca":
@@ -259,9 +260,11 @@ class Theory:
                 other_kw_dict[kw] = kwargs[kw]
 
         if style == "gaussian":
-            return self.get_gaussian_footer(
+            rv = self.get_gaussian_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
+            print(rv)
+            return rv
 
         elif style == "psi4":
             return self.get_psi4_footer(
@@ -390,11 +393,7 @@ class Theory:
                         or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                     )
                 ):
-                    opts = [
-                        opt.split("=")[0]
-                        for opt in other_kw_dict[GAUSSIAN_ROUTE][option]
-                    ]
-
+                    print(other_kw_dict[GAUSSIAN_ROUTE])
                     s += "=("
                     for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
                         opt = x.split("=")[0]

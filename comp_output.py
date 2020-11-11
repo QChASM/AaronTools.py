@@ -1,4 +1,6 @@
 #! /usr/bin/env python3
+from collections.abc import MutableSequence
+
 import numpy as np
 
 from AaronTools.atoms import Atom
@@ -6,6 +8,28 @@ from AaronTools.const import PHYSICAL, UNIT
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import float_vec, uptri2sym
+
+
+def obj_to_dict(obj):
+    rv = {}
+    if hasattr(obj, "__dict__"):
+        for attr in obj.__dict__:
+            val = getattr(obj, attr)
+            if isinstance(val, Geometry):
+                val = list(zip(val.elements, val.coords))
+            elif isinstance(val, MutableSequence):
+                val = [obj_to_dict(v) for v in val]
+            else:
+                val = obj_to_dict(val)
+            if isinstance(val, dict):
+                tmp = {}
+                for k, v in val.items():
+                    tmp[str(k)] = v
+                val = tmp
+            rv[str(attr)] = val
+        return rv
+    else:
+        return obj
 
 
 class CompOutput:
@@ -23,8 +47,8 @@ class CompOutput:
     """
 
     QUASI_HARMONIC = "QHARM"
-    QUASI_RRHO     = "QRRHO"
-    RRHO           = "RRHO"
+    QUASI_RRHO = "QRRHO"
+    RRHO = "RRHO"
 
     def __init__(self, fname="", get_all=True):
         self.geometry = None
@@ -88,10 +112,13 @@ class CompOutput:
 
         if self.frequency:
             self.grimme_g = self.calc_Grimme_G()
-            #recalculate ZPVE b/c our constants and the ones in various programs
-            #might be slightly different
+            # recalculate ZPVE b/c our constants and the ones in various programs
+            # might be slightly different
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
+
+    def to_dict(self):
+        return obj_to_dict(self)
 
     def get_progress(self):
         rv = ""
@@ -113,7 +140,7 @@ class CompOutput:
         """returns ZPVE correction"""
         hc = PHYSICAL.PLANCK * PHYSICAL.SPEED_OF_LIGHT / UNIT.HART_TO_JOULE
         vib = sum(self.frequency.real_frequencies)
-        zpve =  0.5 * hc * vib
+        zpve = 0.5 * hc * vib
         return zpve
 
     def therm_corr(self, temperature=None, v0=100, method="RRHO"):
@@ -169,7 +196,7 @@ class CompOutput:
 
         # Rotational
         if all(r == np.inf for r in rot):
-            # atomic 
+            # atomic
             qr = 1
             Sr = 0
         elif len(rot) == 3:
@@ -253,9 +280,7 @@ class CompOutput:
         return Gcorr_qRRHO + self.energy
 
     def bond_change(self, atom1, atom2, threshold=0.25):
-        """
-
-        """
+        """"""
         ref = self.opts[0]
         d_ref = ref.atoms[atom1].dist(ref.atoms[atom2])
 
@@ -374,21 +399,34 @@ class CompOutput:
         average atomic weights
         exists because older versions of ORCA don't print rotational temperatures"""
         self.geometry.coord_shift(-self.geometry.COM(mass_weight=True))
-        
-        inertia_mat = np.zeros((3,3))
+
+        inertia_mat = np.zeros((3, 3))
         for atom in self.geometry.atoms:
             for i in range(0, 3):
                 for j in range(0, 3):
                     if i == j:
-                        inertia_mat[i][j] += sum([atom.mass() * atom.coords[k]**2 for k in range(0, 3) if k != i])
+                        inertia_mat[i][j] += sum(
+                            [
+                                atom.mass() * atom.coords[k] ** 2
+                                for k in range(0, 3)
+                                if k != i
+                            ]
+                        )
                     else:
-                        inertia_mat[i][j] -= atom.mass() * atom.coords[i] * atom.coords[j]    
+                        inertia_mat[i][j] -= (
+                            atom.mass() * atom.coords[i] * atom.coords[j]
+                        )
 
         principal_inertia, vecs = np.linalg.eigh(inertia_mat)
 
         principal_inertia *= UNIT.AMU_TO_KG * 1e-20
 
-        #rotational constants in Hz
-        rot_consts = [PHYSICAL.PLANCK/(8*np.pi**2 * moment) for moment in principal_inertia]
+        # rotational constants in Hz
+        rot_consts = [
+            PHYSICAL.PLANCK / (8 * np.pi ** 2 * moment)
+            for moment in principal_inertia
+        ]
 
-        self.rotational_temperature = [ PHYSICAL.PLANCK * const / PHYSICAL.KB for const in rot_consts]
+        self.rotational_temperature = [
+            PHYSICAL.PLANCK * const / PHYSICAL.KB for const in rot_consts
+        ]
