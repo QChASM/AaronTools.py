@@ -226,10 +226,10 @@ class FileWriter:
     def write_in(cls, geom, theory, outfile=None, **kwargs):
         """
         can accept "monomers" as a kwarg
-        this should be a list of lists of atoms corresponding to the 
+        this should be a list of lists of atoms corresponding to the
         separate monomers in a sapt calculation
         this will only be used if theory.method.sapt is True
-        if a sapt method is used but no monoers are given, 
+        if a sapt method is used but no monoers are given,
         geom's components attribute will be used intead
         """
         if "monomers" in kwargs:
@@ -237,21 +237,33 @@ class FileWriter:
             del kwargs["monomers"]
         else:
             monomers = None
-            
+
         fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
         s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
-        # psi4 input is VERY different for sapt jobs with the low-spin 
+        # psi4 input is VERY different for sapt jobs with the low-spin
         # combination of fragments
-        if theory.method.sapt and sum(theory.multiplicity[1:]) - len(theory.multiplicity[1:]) + 1 > theory.multiplicity[0]:
+        if (
+            theory.method.sapt
+            and sum(theory.multiplicity[1:]) - len(theory.multiplicity[1:]) + 1
+            > theory.multiplicity[0]
+        ):
             seps = []
             for i, m1 in enumerate(monomers[:-1]):
                 seps.append(0)
-                for m2 in monomers[:i+1]:
+                for m2 in monomers[: i + 1]:
                     seps[-1] += len(m2)
 
             s += "    fragment_separators=%s,\n" % repr(seps)
-            s += "    elez=%s,\n" % repr([ELEMENTS.index(atom.element) for monomer in monomers for atom in monomer])
-            s += "    fragment_multiplicities=%s,\n" % repr(theory.multiplicity[1:])
+            s += "    elez=%s,\n" % repr(
+                [
+                    ELEMENTS.index(atom.element)
+                    for monomer in monomers
+                    for atom in monomer
+                ]
+            )
+            s += "    fragment_multiplicities=%s,\n" % repr(
+                theory.multiplicity[1:]
+            )
             s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
             s += "    geom=["
             i = 0
@@ -263,37 +275,42 @@ class FileWriter:
                 s += "\n"
                 for atom in monomer:
                     if use_bohr:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(atom.coords / UNIT.A0_TO_BOHR)
+                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
+                            atom.coords / UNIT.A0_TO_BOHR
+                        )
                     else:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(atom.coords)
+                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
+                            atom.coords
+                        )
 
-            
             s += "    ],\n"
             s += ")\n\n"
             s += "activate(mol)\n"
-        
+
         elif theory.method.sapt:
             if monomers is None:
                 monomers = [comp.atoms for comp in geom.components]
-            
-            for monomer, mult, charge in zip(monomers, theory.multiplicity[1:], theory.charge[1:]):
+
+            for monomer, mult, charge in zip(
+                monomers, theory.multiplicity[1:], theory.charge[1:]
+            ):
                 s += "--\n"
                 s += "%2i %i\n" % (charge, mult)
                 for atom in monomer:
                     coords = atom.coords
                     if use_bohr:
                         coords = coords / UNIT.A0_TO_BOHR
-                    s += fmt.format(atom.element, *coords)       
-            
+                    s += fmt.format(atom.element, *coords)
+
             s += "}\n"
-       
+
         else:
             for atom in geom.atoms:
                 coords = atom.coords
                 if use_bohr:
                     coords = coords / UNIT.A0_TO_BOHR
                 s += fmt.format(atom.element, *coords)
-            
+
             s += "}\n"
 
         s += theory.make_footer(geom, style="psi4", **kwargs)
@@ -373,7 +390,7 @@ class FileReader:
             elif self.file_type == "out":
                 self.read_orca_out(f, get_all, just_geom)
             elif self.file_type == "dat":
-                self.read_psi4_out(f, get_all, just_geom)            
+                self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom)
 
@@ -409,7 +426,7 @@ class FileReader:
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)
         elif self.file_type == "dat":
-            self.read_psi4_out(f, get_all, just_geom)        
+            self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom)
 
@@ -460,9 +477,9 @@ class FileReader:
         for line in lines[4 : 4 + natoms]:
             atom_info = line.split()
             self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
-        
+
         for line in lines[4 + natoms : 4 + natoms + nbonds]:
-            a1, a2 = [int(x)-1 for x in line.split()[0:2]]
+            a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
             self.atoms[a1].connected.add(self.atoms[a2])
             self.atoms[a2].connected.add(self.atoms[a1])
 
@@ -659,7 +676,7 @@ class FileReader:
                         grad["RMS Disp"]["converged"] = "*" in max_d_conv
 
                     self.other["gradient"] = grad
-                
+
                 elif "Total Gradient" in line:
                     gradient = np.zeros((len(self.atoms), 3))
                     self.skip_lines(f, 2)
@@ -669,7 +686,7 @@ class FileReader:
                         line = f.readline()
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[1:]])
-                    
+
                     self.other["forces"] = -gradient
 
                 line = f.readline()
@@ -723,10 +740,10 @@ class FileReader:
                 n += 1
                 continue
             else:
-                nrg = nrg_regex.match(line) 
+                nrg = nrg_regex.match(line)
                 if nrg is not None:
                     self.other[nrg.group(1)] = float(nrg.group(2))
-                    
+
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
                     # to the energy so we can't use line.split()[-1]
@@ -751,7 +768,7 @@ class FileReader:
                             continue
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[3:]])
-                    
+
                     self.other["forces"] = -gradient
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
@@ -866,7 +883,7 @@ class FileReader:
 
                 line = f.readline()
                 n += 1
-        
+
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
@@ -945,7 +962,9 @@ class FileReader:
             if NORM_FINISH in line:
                 self.other["finished"] = True
             if "SCF Done" in line:
-                self.other["energy"] = float(line.split()[4])
+                tmp = [l.strip() for l in line.split()]
+                idx = tmp.index("=")
+                self.other["energy"] = float(tmp[idx + 1])
             if "Molecular mass:" in line:
                 self.other["mass"] = float(float_num.search(line).group(0))
                 self.other["mass"] *= UNIT.AMU_TO_KG
@@ -1023,7 +1042,7 @@ class FileReader:
                     n += 1
                 self.other["gradient"] = grad
 
-            #forces
+            # forces
             if "Forces (Hartrees/Bohr)" in line:
                 gradient = np.zeros((len(self.atoms), 3))
                 self.skip_lines(f, 2)
@@ -1033,7 +1052,7 @@ class FileReader:
                     line = f.readline()
                     info = line.split()
                     gradient[i] = np.array([float(x) for x in info[2:]])
-                
+
                 self.other["forces"] = gradient
 
             # capture errors
@@ -1050,15 +1069,17 @@ class FileReader:
 
         if not just_geom:
             if route is not None:
-                other_kwargs = {GAUSSIAN_ROUTE:{}}
-                route_spec = re.compile('(\w+)=?\((.*)\)')
-                method_and_basis = re.search("#([NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route)
+                other_kwargs = {GAUSSIAN_ROUTE: {}}
+                route_spec = re.compile("(\w+)=?\((.*)\)")
+                method_and_basis = re.search(
+                    "#([NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
+                )
                 if method_and_basis is not None:
                     if method_and_basis.group(3):
-                        method_info = method_and_basis.group(3).split('/')
+                        method_info = method_and_basis.group(3).split("/")
                     else:
-                        method_info = method_and_basis.group(2).split('/')
-                    
+                        method_info = method_and_basis.group(2).split("/")
+
                     method = method_info[0]
                     if len(method_info) > 1:
                         basis = method_info[1]
@@ -1068,81 +1089,90 @@ class FileReader:
                     route_options = route.split()
                     job_type = []
                     for option in route_options:
-                        if option.startswith('#'):
+                        if option.startswith("#"):
                             continue
                         elif option.startswith(method):
                             continue
 
                         option_lower = option.lower()
-                        if option_lower.startswith('opt'):
+                        if option_lower.startswith("opt"):
                             ts = False
                             match = route_spec.search(option)
                             if match:
-                                options = match.group(2).split(',')
-                            elif option_lower.startswith('opt='):
-                                options = [''.join(option.split('=')[1:])]
+                                options = match.group(2).split(",")
+                            elif option_lower.startswith("opt="):
+                                options = ["".join(option.split("=")[1:])]
                             else:
                                 job_type.append(OptimizationJob())
                                 continue
-                            
-                            other_kwargs[GAUSSIAN_ROUTE]['opt'] = []
+
+                            other_kwargs[GAUSSIAN_ROUTE]["opt"] = []
 
                             for opt in options:
-                                if opt.lower() == 'ts':
+                                if opt.lower() == "ts":
                                     ts = True
                                 else:
-                                    other_kwargs[GAUSSIAN_ROUTE]['opt'].append(opt)
-                            
-                            job_type.append(OptimizationJob(transition_state=ts))
+                                    other_kwargs[GAUSSIAN_ROUTE]["opt"].append(
+                                        opt
+                                    )
 
-                        elif option_lower.startswith('freq'):
+                            job_type.append(
+                                OptimizationJob(transition_state=ts)
+                            )
+
+                        elif option_lower.startswith("freq"):
                             temp = 298.15
                             match = route_spec.search(option)
                             if match:
-                                options = match.group(2).split(',')
-                            elif option_lower.startswith('freq='):
-                                options = ''.join(option.split('=')[1:])
+                                options = match.group(2).split(",")
+                            elif option_lower.startswith("freq="):
+                                options = "".join(option.split("=")[1:])
                             else:
                                 job_type.append(FrequencyJob())
                                 continue
-                            
-                            other_kwargs[GAUSSIAN_ROUTE]['freq'] = []
+
+                            other_kwargs[GAUSSIAN_ROUTE]["freq"] = []
 
                             for opt in options:
-                                if opt.lower().startswith('temp'):
-                                    temp = float(opt.split('=')[1])
+                                if opt.lower().startswith("temp"):
+                                    temp = float(opt.split("=")[1])
                                 else:
-                                    other_kwargs[GAUSSIAN_ROUTE]['freq'].append(opt)
-                            
+                                    other_kwargs[GAUSSIAN_ROUTE][
+                                        "freq"
+                                    ].append(opt)
+
                             job_type.append(FrequencyJob(temperature=temp))
 
-                        elif option_lower == 'sp':
+                        elif option_lower == "sp":
                             job_type.append(SinglePointJob())
 
                         else:
-                            #TODO: parse grid and solvent
+                            # TODO: parse grid and solvent
                             match = route_spec.search(option)
                             if match:
                                 keyword = match.group(1)
-                                options = match.group(2).split(',')
+                                options = match.group(2).split(",")
                                 other_kwargs[GAUSSIAN_ROUTE][keyword] = options
-                            elif '=' in option:
-                                keyword = option.split('=')[0]
-                                options = ''.join(option.split('=')[1:])
-                                other_kwargs[GAUSSIAN_ROUTE][keyword] = [options]
+                            elif "=" in option:
+                                keyword = option.split("=")[0]
+                                options = "".join(option.split("=")[1:])
+                                other_kwargs[GAUSSIAN_ROUTE][keyword] = [
+                                    options
+                                ]
                             else:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
-                            
-                        theory = Theory(charge       = self.other['charge'], 
-                                        multiplicity = self.other['multiplicity'],
-                                        job_type     = job_type, 
-                                        basis        = basis,
-                                        method       = method
-                                 )
 
-                        self.other['theory'] = theory
-                        self.other['other_kwargs'] = other_kwargs
+                        theory = Theory(
+                            charge=self.other["charge"],
+                            multiplicity=self.other["multiplicity"],
+                            job_type=job_type,
+                            basis=basis,
+                            method=method,
+                        )
+
+                        self.other["theory"] = theory
+                        self.other["other_kwargs"] = other_kwargs
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -1254,9 +1284,9 @@ class FileReader:
     def read_fchk(self, f, just_geom=True):
         def parse_to_list(i, lines, length, data_type):
             """takes a block in an fchk file and turns it into an array
-               block headers all end with N=   <int>
-               the length of the array will be <int>
-               the data type is specified by data_type"""
+            block headers all end with N=   <int>
+            the length of the array will be <int>
+            the data type is specified by data_type"""
             i += 1
             line = lines[i]
             items_per_line = len(line.split())
@@ -1265,31 +1295,36 @@ class FileReader:
             while total_items < length:
                 total_items += items_per_line
                 num_lines += 1
-            
+
             block = ""
-            for line in lines[i:i+num_lines]:
+            for line in lines[i : i + num_lines]:
                 block += " "
                 block += line
-            
-            return np.array([data_type(x) for x in block.split()]), i + num_lines
-        
+
+            return (
+                np.array([data_type(x) for x in block.split()]),
+                i + num_lines,
+            )
+
         self.atoms = []
         atom_numbers = []
         atom_coords = []
-        
+
         other = {}
-        
-        int_info =  re.compile("([\S\s]+?)\s*I\s*([N=]*)\s*(-?\d+)")
-        real_info = re.compile("([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)")
-        
+
+        int_info = re.compile("([\S\s]+?)\s*I\s*([N=]*)\s*(-?\d+)")
+        real_info = re.compile(
+            "([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+        )
+
         theory = Theory()
         reading_orbital_data = False
         n_alpha = 0
         n_beta = 0
         orbital_data = {}
-        
+
         lines = f.readlines()
-        
+
         i = 0
         while i < len(lines):
             line = lines[i]
@@ -1298,21 +1333,21 @@ class FileReader:
                 if job_info[0] == "SP":
                     theory.job_type = [SinglePointJob()]
                 elif job_info[0] == "FOPT":
-                    theory.job_type [OptimizationJob()]
+                    theory.job_type[OptimizationJob()]
                 elif job_info[0] == "FTS":
                     theory.job_type = [OptimizationJob(transition_state=True)]
                 elif job_info[0] == "FORCE":
                     theory.job_type = [ForceJob()]
                 elif job_info[0] == "FREQ":
                     theory.job_type = [FrequencyJob()]
-                
+
                 theory.method = job_info[1]
                 if len(job_info) > 2:
                     theory.basis = job_info[2]
-                
+
                 i += 1
                 continue
-                
+
             int_match = int_info.match(line)
             real_match = real_info.match(line)
             if int_match is not None:
@@ -1326,11 +1361,13 @@ class FileReader:
                     atom_numbers, i = parse_to_list(i, lines, int(value), int)
                 elif not just_geom:
                     if int_match.group(2):
-                        other[data], i = parse_to_list(i, lines, int(value), int)
+                        other[data], i = parse_to_list(
+                            i, lines, int(value), int
+                        )
                         continue
                     else:
                         other[data] = int(value)
-            
+
             elif real_match is not None:
                 data = real_match.group(1)
                 value = real_match.group(3)
@@ -1340,20 +1377,27 @@ class FileReader:
                     other["energy"] = float(value)
                 elif not just_geom:
                     if real_match.group(2):
-                        other[data], i = parse_to_list(i, lines, int(value), float)
+                        other[data], i = parse_to_list(
+                            i, lines, int(value), float
+                        )
                         continue
                     else:
                         other[data] = float(value)
-            
+
             i += 1
-        
+
         self.other = other
         self.other["theory"] = theory
-        
+
         coords = np.reshape(atom_coords, (len(atom_numbers), 3))
         for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
-            atom = Atom(element=ELEMENTS[atnum], coords=UNIT.A0_TO_BOHR*coord, name=str(n+1))
+            atom = Atom(
+                element=ELEMENTS[atnum],
+                coords=UNIT.A0_TO_BOHR * coord,
+                name=str(n + 1),
+            )
             self.atoms.append(atom)
+
 
 class Frequency:
     """

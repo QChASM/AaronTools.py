@@ -168,7 +168,7 @@ class Geometry:
             )
             # print(url_sd)
             s_sd = urlopen(url_sd).read().decode("utf8")
-            
+
             return s_sd
 
         from urllib.error import HTTPError
@@ -199,7 +199,7 @@ class Geometry:
         # print(smiles)
         try:
             from rdkit.Chem import AllChem
-            
+
             m = AllChem.MolFromSmiles(smiles)
             if m is None:
                 s_sd = get_cactus_sd(smiles)
@@ -208,10 +208,10 @@ class Geometry:
                 AllChem.EmbedMolecule(mh, randomSeed=0x421c52)
                 s_sd = AllChem.MolToMolBlock(mh)
                 # print(s_sd)
-            
+
         except ImportError as e:
             s_sd = get_cactus_sd(smiles)
-        
+
         f = FileReader((name, "sd", s_sd))
         return cls(f, refresh_connected=False)
 
@@ -221,13 +221,13 @@ class Geometry:
         return [a.element for a in self.atoms]
 
     @property
-    def coordinates(self):
+    def coords(self):
         """
         array of coordinates (read only)
         """
-        return self.coords()
+        return self.coordinates()
 
-    def coords(self, atoms=None):
+    def coordinates(self, atoms=None):
         """
         returns N x 3 coordinate matrix for requested atoms
             (defaults to all atoms)
@@ -942,7 +942,7 @@ class Geometry:
             new_partitions = partitions.copy()
             # using the catalyst's center can make it difficult
             # to compare C2 symmetric ligands
-            # center = list(filter(lambda x: "center" in x.tags, self)) 
+            # center = list(filter(lambda x: "center" in x.tags, self))
             # if center:
             #     center = self.COM(targets=center)
             # else:
@@ -1628,12 +1628,12 @@ class Geometry:
         return broken, formed
 
     def percent_buried_volume(
-        self, 
-        ligands=None, 
-        center=None, 
-        radius=3.5, 
-        radii="umn", 
-        scale=1.17, 
+        self,
+        ligands=None,
+        center=None,
+        radius=3.5,
+        radii="umn",
+        scale=1.17,
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1646,19 +1646,19 @@ class Geometry:
         # NOTE - it would be nice to multiprocess the MC integration, but...
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
-        
+
         if ligands is None:
             if self.components is None:
                 self.detect_components()
             ligands = [l for l in self.components]
-        
+
         if center is None:
             if self.center is None:
                 self.detect_components()
             if len(self.center) > 1:
                 raise RuntimeError("one center must be specified for %V_bur calculation")
             center = self.center[0]
-        
+
         if isinstance(radii, dict):
             radii_dict = radii
         elif radii.lower() == "umn":
@@ -1667,9 +1667,9 @@ class Geometry:
             radii_dict = BONDI_RADII
         else:
             raise RuntimeError("received %s for radii, must be umn or bondi" % radii)
-        
+
         radius_list = []
-        
+
         atoms_within_radius = []
         for lig in ligands:
             for atom in lig:
@@ -1677,9 +1677,9 @@ class Geometry:
                 if d - scale*radii_dict[atom.element] < radius:
                     atoms_within_radius.append(atom)
                     radius_list.append(scale*radii_dict[atom.element])
-        
-        coords = self.coords(atoms_within_radius)
-        
+
+        coords = self.coordinates(atoms_within_radius)
+
         prev_vol = cur_vol = 0
         n_samples = 1000
         buried_points = 0
@@ -1694,18 +1694,18 @@ class Geometry:
                 x = r * np.sin(t1)
                 y = r * np.cos(t1)
                 z = r * np.cos(t2)
-                
+
                 xyz = np.array([x, y, z]) + center.coords
                 for coord, r in zip(coords, radius_list):
                     d = np.linalg.norm(xyz - coord)
                     if d < r:
                         buried_points += 1
                         break
-            
+
             cur_vol = float(buried_points) / float(i * n_samples)
             dV.append(abs(cur_vol - prev_vol))
             prev_vol = cur_vol
-        
+
         return 100*cur_vol
 
     # geometry manipulation
@@ -2401,7 +2401,7 @@ class Geometry:
 
             geom.remove_fragment([walk[0], walk[-1]], walk[1:-1], add_H=False)
             geom -= [walk[0], walk[-1]]
-            
+
             walk[1].connected.add(ring_fragment.end[0])
             walk[-2].connected.add(ring_fragment.end[-1])
             ring_fragment.end[-1].connected.add(walk[-2])
@@ -2869,7 +2869,7 @@ class Geometry:
             # bend around key axis
             try:
                 old_walk = old_ligand.shortest_path(*old_keys)
-            
+
             except ValueError:
                 # for some ferrocene ligands, AaronTools misidentifies the Fe
                 # as another metal center
@@ -2910,7 +2910,7 @@ class Geometry:
             new_axis = new_keys[0].bond(new_keys[1])
             w, angle = get_rotation(old_axis, new_axis)
             ligand.rotate(w, angle, center=center)
-            
+
             return remove_centers
 
         def map_rot_frag(frag, a, b, ligand, old_key, new_key):
@@ -2977,7 +2977,7 @@ class Geometry:
                     partial_map = True
                     mapped_frags += [frag]
                     continue
-                
+
                 if k == 1 and not partial_map:
                     frag, a, b = key_count[k][0]
                     for i, n in enumerate(new_keys):
@@ -2988,7 +2988,7 @@ class Geometry:
                         mapped_frags += [frag]
                         break
                     continue
-                
+
                 if k == 1 and partial_map:
                     for frag, a, b in key_count[k]:
                         for i, n in enumerate(new_keys):
@@ -2997,7 +2997,7 @@ class Geometry:
                             map_rot_frag(frag, a, b, ligand, old_keys[i], n)
                             mapped_frags += [frag]
                             break
-            
+
             return remove_centers
 
         if not self.components:
@@ -3098,7 +3098,7 @@ class Geometry:
         self.remove_clash()
         if minimize:
             self.minimize()
-        
+
         self.refresh_ranks()
         return rv
 
