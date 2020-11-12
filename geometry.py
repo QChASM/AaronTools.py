@@ -1716,12 +1716,20 @@ class Geometry:
             i += 1
             for p in range(0, n_samples):
                 # get a random point inside the sphere
-                r = np.random.uniform(0, radius)
-                t1 = np.random.uniform(0, 2*np.pi)
-                t2 = np.random.uniform(0, np.pi)
-                x = r * np.sin(t1)
-                y = r * np.cos(t1)
-                z = r * np.cos(t2)
+                #I don't think these are uniformly distributed within a sphere!
+                #r = np.random.uniform(0, radius)
+                #t1 = np.random.uniform(0, 2*np.pi)
+                #t2 = np.random.uniform(0, np.pi)
+                #x = r * np.sin(t1)
+                #y = r * np.cos(t1)
+                #z = r * np.cos(t2)
+
+                r = radius*np.random.uniform(0, 1)**(1/3)
+                theta = np.arcsin(np.random.uniform(-1, 1)) + np.pi/2
+                phi = np.random.uniform(0, 2*np.pi)
+                x = r * np.sin(theta)*np.cos(phi)
+                y = r * np.sin(theta)*np.sin(phi)
+                z = r * np.cos(theta)
 
                 xyz = np.array([x, y, z]) + center_coords
                 # see if the point is inside of any atom's 
