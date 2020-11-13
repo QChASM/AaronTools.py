@@ -1,9 +1,11 @@
+import os
 import collections.abc
 import copy
 import re
 from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
+from AaronTools.const import QCHASM
 import numpy as np
 
 
@@ -486,7 +488,7 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
     """
     returns a grid of points that are equally spaced on a sphere
     with the specified radius and center
-    numer of points can be adjusted with n
+    number of points can be adjusted with n
     """
     # generate a grid of points on the unit sphere
     grid = []
@@ -510,3 +512,44 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
     grid += center
     
     return grid
+
+def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
+    """
+    returns one of the Lebedev grid points (xi, yi, zi) 
+    and weights (wi) with the specified radius and center. 
+    Weights do not include r**2, so integral of F(x,y,z) 
+    over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number 
+    of points (n) must be one of 110, 194, 302, 590, 1454, 5810
+    """
+    # read grid data  on unit sphere
+    grid_file = os.path.join(QCHASM, "AaronTools", "utils", "quad_grids", "Leb" + str(n) + ".grid")
+    grid_data = np.loadtxt(grid_file)
+    
+    # scale the points to the specified radius and move the center
+    grid = grid_data[:, [0,1,2]]*radius
+    grid += center
+
+    # adjust weights for radius
+    weights = grid_data[:,3]
+    
+    return grid, weights
+
+def gauss_legendre_grid(a=-1, b=1, n=32):
+    """
+    returns a Gauss-Legendre grid points (xi) and weights 
+    (wi)for the range a to b. Integral over F(x) is
+    \sum_i{F(xi)wi}. The number of points (n) must be one 
+    of 20, 32, 64, 75, 99, 127
+    """
+    # read grid points on the range [-1,1] and weights
+    grid_file = os.path.join(QCHASM, "AaronTools", "utils", "quad_grids", "Leg" + str(n) + ".grid")
+    grid_data = np.loadtxt(grid_file)
+    
+    # shift grid range to [a,b]
+    grid = grid_data[:,0]*(b - a)/2 + a + (b - a)/2
+
+    #adjust weights for new range
+    weights = grid_data[:,1]*(b - a)/2
+    
+    return grid, weights
+
