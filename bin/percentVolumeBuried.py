@@ -75,6 +75,28 @@ vbur_parser.add_argument('-r', '--radius',
                          help="radius around center"
 )
 
+
+vbur_parser.add_argument('-m', '--method',
+                         type=str,
+                         default="lebedev",
+                         dest="method",
+                         help="integration method (MC or lebedev)"
+)
+
+vbur_parser.add_argument('--rpoints',
+                         type=int,
+                         default="20",
+                         dest="rpoints",
+                         help="number of radial shells for Lebedev integration"
+)
+
+vbur_parser.add_argument('--apoints',
+                         type=int,
+                         default="1454",
+                         dest="apoints",
+                         help="number of angular points for Lebedev integration"
+)
+
 args = vbur_parser.parse_args()
 
 s = ""
@@ -111,7 +133,7 @@ for f in args.infile:
         exlude = geom.find(exclude)
     
     try:
-        vbur = geom.percent_buried_volume(ligands=ligands, center=args.center, radius=args.radius, radii=args.radii, scale=args.scale, exclude=exclude) 
+        vbur = geom.percent_buried_volume(ligands=ligands, center=args.center, radius=args.radius, radii=args.radii, scale=args.scale, exclude=exclude, method=args.method, rpoints=args.rpoints, apoints=args.apoints) 
 
         if len(args.infile) > 1:
             s += "%20s:\t" % f

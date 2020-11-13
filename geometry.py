@@ -1635,9 +1635,13 @@ class Geometry:
         radii="umn",
         scale=1.17,
         exclude=None, 
+        method="lebedev",
+        rpoints="20",
+        apoints="1454",
     ):
         """
         calculates % buried volume (%V_bur)
+        Monte-Carlo version
         ligands - list of ligands to use in calculation, defaults to self.components
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
@@ -1648,6 +1652,9 @@ class Geometry:
                   their respective radii as the values
         scale   - scale VDW radii by this
         exclude - atoms to exclude from the calculation
+        method  - integration method (MC or lebedev)
+        rpoints - number of radial shells for Lebedev integration
+        apoints - number of angular points for Lebedev integration
         """
         # NOTE - it would be nice to multiprocess the MC integration, but...
         #        python's multiprocessing doesn't let you spawn processes
@@ -1704,48 +1711,69 @@ class Geometry:
 
         coords = self.coordinates(atoms_within_radius)
 
-        prev_vol = cur_vol = 0
-        n_samples = 1000
-        buried_points = 0
-        dV = []
-        i = 0
-        # determine %V_bur 
-        # do at least 75000 total points, but keep going until
-        # the last 5 changes are all less than 1e-4
-        while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
-            i += 1
-            for p in range(0, n_samples):
-                # get a random point inside the sphere
-                #I don't think these are uniformly distributed within a sphere!
-                #r = np.random.uniform(0, radius)
-                #t1 = np.random.uniform(0, 2*np.pi)
-                #t2 = np.random.uniform(0, np.pi)
-                #x = r * np.sin(t1)
-                #y = r * np.cos(t1)
-                #z = r * np.cos(t2)
+        #Monte-Carlo integration
+        if method == 'MC':
+            prev_vol = cur_vol = 0
+            n_samples = 1000
+            buried_points = 0
+            dV = []
+            i = 0
+            # determine %V_bur 
+            # do at least 75000 total points, but keep going until
+            # the last 5 changes are all less than 1e-4
+            while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
+                i += 1
+                for p in range(0, n_samples):
+                    # get a random point uniformly distributed inside the sphere
+                    r = radius*np.random.uniform(0, 1)**(1/3)
+                    theta = np.arcsin(np.random.uniform(-1, 1)) + np.pi/2
+                    phi = np.random.uniform(0, 2*np.pi)
+                    x = r * np.sin(theta)*np.cos(phi)
+                    y = r * np.sin(theta)*np.sin(phi)
+                    z = r * np.cos(theta)
 
-                r = radius*np.random.uniform(0, 1)**(1/3)
-                theta = np.arcsin(np.random.uniform(-1, 1)) + np.pi/2
-                phi = np.random.uniform(0, 2*np.pi)
-                x = r * np.sin(theta)*np.cos(phi)
-                y = r * np.sin(theta)*np.sin(phi)
-                z = r * np.cos(theta)
+                    xyz = np.array([x, y, z]) + center_coords
+                    # see if the point is inside of any atom's 
+                    # scaled VDW radius
+                    for coord, r in zip(coords, radius_list):
+                        d = np.linalg.norm(xyz - coord)
+                        if d < r:
+                            buried_points += 1
+                            break
 
-                xyz = np.array([x, y, z]) + center_coords
-                # see if the point is inside of any atom's 
-                # scaled VDW radius
-                for coord, r in zip(coords, radius_list):
-                    d = np.linalg.norm(xyz - coord)
-                    if d < r:
-                        buried_points += 1
-                        break
+                cur_vol = float(buried_points) / float(i * n_samples)
+                dV.append(abs(cur_vol - prev_vol))
+                prev_vol = cur_vol
+            # return 100x the volume
+            return 100*cur_vol
+        
+        #default to Gauss-Legendre integration over Lebedev spheres
+        else:	
+            #grab radial grid points and weights
+            rgrid, rweights = utils.gauss_legendre_grid(a = 0, b = radius, n = rpoints)
+            #grab Lebedev grid for unit sphere at origin
+            agrid, aweights = utils.lebedev_sphere(radius = 1, center = np.zeros(3), n = apoints)
 
-            cur_vol = float(buried_points) / float(i * n_samples)
-            dV.append(abs(cur_vol - prev_vol))
-            prev_vol = cur_vol
+            BV = 0
+            for rindex in range(0,rgrid.size):
+                ang_int = 0
+                for aindex in range(0,agrid.shape[0]):
+                    #scale grid point to radius and shift to center
+                    apoint = agrid[aindex]*rgrid[rindex]
+                    apoint += center_coords
 
-        # return 100x the volume
-        return 100*cur_vol
+                    # add weight if the point is inside of any atom's 
+                    # scaled VDW radius
+                    for coord, r in zip(coords, radius_list):
+                        d = np.linalg.norm(apoint - coord)
+                        if d < r:
+                            ang_int += aweights[aindex]
+                            break
+                #add integral over current shell
+                BV += rweights[rindex]*(4*np.pi*ang_int*rgrid[rindex]**2)
+
+            return 100*BV/((4/3)*np.pi*radius**3)
+
 
     # geometry manipulation
     def append_structure(self, structure):

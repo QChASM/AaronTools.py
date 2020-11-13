@@ -524,14 +524,13 @@ def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
     # read grid data  on unit sphere
     grid_file = os.path.join(QCHASM, "AaronTools", "utils", "quad_grids", "Leb" + str(n) + ".grid")
     grid_data = np.loadtxt(grid_file)
-    
+    grid = grid_data[:, [0,1,2]]  
+    weights = grid_data[:,3]
+  
     # scale the points to the specified radius and move the center
-    grid = grid_data[:, [0,1,2]]*radius
+    grid *= radius
     grid += center
 
-    # adjust weights for radius
-    weights = grid_data[:,3]
-    
     return grid, weights
 
 def gauss_legendre_grid(a=-1, b=1, n=32):
