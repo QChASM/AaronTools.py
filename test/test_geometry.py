@@ -745,7 +745,7 @@ class TestGeometry(TestWithTimer):
             )
         )
 
-    def test_vbur(self):
+    def test_vbur_MC(self):
         """
         tests % volume buried (MC integration)
         uses Monte Carlo integration, so it this fails, run it again
@@ -760,8 +760,6 @@ class TestGeometry(TestWithTimer):
     def test_vbur_lebedev(self):
         """
         tests % volume buried (Lebedev integration)
-        uses Monte Carlo integration, so it this fails, run it again
-        still figuring out how reliable it is
         """
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         vbur = geom.percent_buried_volume(method="lebedev")
