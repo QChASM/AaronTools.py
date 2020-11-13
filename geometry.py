@@ -1641,7 +1641,7 @@ class Geometry:
     ):
         """
         calculates % buried volume (%V_bur)
-        Monte-Carlo version
+        Monte-Carlo or Gauss-Legendre/Lebedev integration
         ligands - list of ligands to use in calculation, defaults to self.components
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
@@ -1656,7 +1656,8 @@ class Geometry:
         rpoints - number of radial shells for Lebedev integration
         apoints - number of angular points for Lebedev integration
         """
-        # NOTE - it would be nice to multiprocess the MC integration, but...
+        # NOTE - it would be nice to multiprocess the MC integration (or 
+        #        split up the shells for the Lebedev integration, but...
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
         
@@ -1726,11 +1727,12 @@ class Geometry:
                 for p in range(0, n_samples):
                     # get a random point uniformly distributed inside the sphere
                     r = radius*np.random.uniform(0, 1)**(1/3)
-                    theta = np.arcsin(np.random.uniform(-1, 1)) + np.pi/2
+                    z = np.random.uniform(-1,1)
+                    theta = np.arcsin(z) + np.pi/2
                     phi = np.random.uniform(0, 2*np.pi)
                     x = r * np.sin(theta)*np.cos(phi)
                     y = r * np.sin(theta)*np.sin(phi)
-                    z = r * np.cos(theta)
+                    z *= r
 
                     xyz = np.array([x, y, z]) + center_coords
                     # see if the point is inside of any atom's 
@@ -1749,29 +1751,31 @@ class Geometry:
         
         #default to Gauss-Legendre integration over Lebedev spheres
         else:	
-            #grab radial grid points and weights
+            #grab radial grid points and weights for range (0,radius)
             rgrid, rweights = utils.gauss_legendre_grid(a = 0, b = radius, n = rpoints)
             #grab Lebedev grid for unit sphere at origin
             agrid, aweights = utils.lebedev_sphere(radius = 1, center = np.zeros(3), n = apoints)
 
             BV = 0
-            for rindex in range(0,rgrid.size):
+            #loop over radial shells
+            for rvalue,rweight in zip(rgrid, rweights):
                 ang_int = 0
-                for aindex in range(0,agrid.shape[0]):
+                #loop over angular grid for given shell
+                for apoint,aweight in zip(agrid, aweights):
                     #scale grid point to radius and shift to center
-                    apoint = agrid[aindex]*rgrid[rindex]
-                    apoint += center_coords
+                    xyz = apoint*rvalue + center_coords
 
                     # add weight if the point is inside of any atom's 
                     # scaled VDW radius
                     for coord, r in zip(coords, radius_list):
-                        d = np.linalg.norm(apoint - coord)
+                        d = np.linalg.norm(xyz - coord)
                         if d < r:
-                            ang_int += aweights[aindex]
+                            ang_int += aweight
                             break
                 #add integral over current shell
-                BV += rweights[rindex]*(4*np.pi*ang_int*rgrid[rindex]**2)
+                BV += rweight*(4*np.pi*ang_int*rvalue**2)
 
+            #return 100*calculated volume relative to volume of sphere
             return 100*BV/((4/3)*np.pi*radius**3)
 
 
