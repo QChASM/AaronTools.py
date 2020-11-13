@@ -200,7 +200,7 @@ for f in args.infile:
         if len(geom.find(args.perp)) < 3:
             raise RuntimeError("must specify at least three atoms to --perpendicular/-p")
         
-        xyz = geom.coords(args.perp) - geom.COM(args.perp)
+        xyz = geom.coordinates(args.perp) - geom.COM(args.perp)
         R = np.dot(xyz.T, xyz)
         u, s, vh = np.linalg.svd(R, compute_uv=True)
         vector = u[:,-1]

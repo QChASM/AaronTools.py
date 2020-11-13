@@ -491,7 +491,7 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
     number of points can be adjusted with n
     """
     # generate a grid of points on the unit sphere
-    grid = []
+    grid = np.zeros((n, 3))
     d_theta = np.pi * (3. - np.sqrt(5.))
     dy = 2./(n - 1)
     
@@ -504,9 +504,8 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
         x = np.cos(theta) * r
         z = np.sin(theta) * r
         
-        grid.append(np.array([x, y, z]))
+        grid[i] = np.array([x, y, z])
     
-    grid = np.array(grid)
     # scale the points to the specified radius and move the center
     grid *= radius
     grid += center

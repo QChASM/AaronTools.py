@@ -1636,8 +1636,8 @@ class Geometry:
         scale=1.17,
         exclude=None, 
         method="lebedev",
-        rpoints="20",
-        apoints="1454",
+        rpoints=20,
+        apoints=1454,
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1713,16 +1713,16 @@ class Geometry:
         coords = self.coordinates(atoms_within_radius)
 
         #Monte-Carlo integration
-        if method == 'MC':
+        if method.lower() == "mc":
             prev_vol = cur_vol = 0
-            n_samples = 1000
+            n_samples = 3000
             buried_points = 0
             dV = []
             i = 0
             # determine %V_bur 
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
+            while not all(dv < 4e-4 for dv in dV[-5:]) or i < 25:
                 i += 1
                 for p in range(0, n_samples):
                     # get a random point uniformly distributed inside the sphere

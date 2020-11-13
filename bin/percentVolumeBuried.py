@@ -36,14 +36,14 @@ vbur_parser.add_argument('-k', '--key-atoms',
                          default=None, 
                          required=False, 
                          dest='ligand_atoms', 
-                         help='key atoms to define ligand to consider in calculation',
+                         help='key atoms to define ligand to consider in calculation\nDefault: use all ligands',
 )
 
 vbur_parser.add_argument('-e', '--exclude-atoms', 
                          default=None, 
                          required=False, 
                          dest='exclude_atoms', 
-                         help='atoms to exclude from the calculation',
+                         help='atoms to exclude from the calculation\nDefault: exclude no ligand atoms',
 )
 
 vbur_parser.add_argument('-c', '--center', 
@@ -51,50 +51,54 @@ vbur_parser.add_argument('-c', '--center',
                          default=None, 
                          required=False, 
                          dest='center', 
-                         help='atom the sphere is centered on',
+                         help='atom the sphere is centered on\nDefault: detect metal center (centroid of all metals if multiple are present)',
 )
 
 vbur_parser.add_argument('-v', '--vdw-radii', 
                          default="umn",
                          choices=["umn", "bondi"],
                          dest="radii",
-                         help="VDW radii to use in calculation",
+                         help="VDW radii to use in calculation\nDefault: umn",
 )
 
 vbur_parser.add_argument('-s', '--scale',
                          default=1.17,
                          type=float,
                          dest="scale",
-                         help="scale VDW radii by this amount",
+                         help="scale VDW radii by this amount\nDefault: 1.17",
 )
 
 vbur_parser.add_argument('-r', '--radius',
                          default=3.5,
                          type=float,
                          dest="radius",
-                         help="radius around center"
+                         help="radius around center\nDefault: 3.5 Ångström"
 )
 
 
 vbur_parser.add_argument('-m', '--method',
                          type=str,
-                         default="lebedev",
+                         default="Lebedev",
+                         choices=["MC", "Lebedev"],
                          dest="method",
-                         help="integration method (MC or lebedev)"
+                         help="integration method\nDefault: Lebedev"
 )
 
-vbur_parser.add_argument('--rpoints',
+grid_options = vbur_parser.add_argument_group('Lebedev integration options')
+grid_options.add_argument('-rp', '--radial-points',
                          type=int,
-                         default="20",
+                         default=20,
+                         choices=[20, 32, 64, 75, 99, 127],
                          dest="rpoints",
-                         help="number of radial shells for Lebedev integration"
+                         help="number of radial shells for Lebedev integration\nlower values are faster, but at the cost of accuracy\nDefault: 20"
 )
 
-vbur_parser.add_argument('--apoints',
+grid_options.add_argument('-ap', '--angular-points',
                          type=int,
-                         default="1454",
+                         default=1454,
+                         choices=[110, 194, 302, 590, 1454, 5810],
                          dest="apoints",
-                         help="number of angular points for Lebedev integration"
+                         help="number of angular points for Lebedev integration\nlower values are faster, but at the cost of accuracy\nDefault: 1454"
 )
 
 args = vbur_parser.parse_args()
@@ -133,7 +137,16 @@ for f in args.infile:
         exlude = geom.find(exclude)
     
     try:
-        vbur = geom.percent_buried_volume(ligands=ligands, center=args.center, radius=args.radius, radii=args.radii, scale=args.scale, exclude=exclude, method=args.method, rpoints=args.rpoints, apoints=args.apoints) 
+        vbur = geom.percent_buried_volume(ligands=ligands, 
+                                          center=args.center, 
+                                          radius=args.radius, 
+                                          radii=args.radii, 
+                                          scale=args.scale, 
+                                          exclude=exclude, 
+                                          method=args.method, 
+                                          rpoints=args.rpoints, 
+                                          apoints=args.apoints
+        ) 
 
         if len(args.infile) > 1:
             s += "%20s:\t" % f

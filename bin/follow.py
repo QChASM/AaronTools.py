@@ -171,9 +171,9 @@ for i, mode in enumerate(modes):
         w = width(args.animate[0])
         fmt = "%0" + "%i" % w + "i"
 
-        Xf = G.coords() + dX
-        X = G.coords()
-        Xr = G.coords() - dX
+        Xf = G.coords + dX
+        X = G.coords
+        Xr = G.coords - dX
 
         #make a scales(t) function so we can see the animation progress in the XYZ file comment
         if args.roundtrip:
@@ -206,7 +206,7 @@ for i, mode in enumerate(modes):
         fmt = "%0" + "%i" % w + "i"
 
         Gm = G.copy()
-        Gm.update_geometry(G.coords() + dX)
+        Gm.update_geometry(G.coords + dX)
         Gm.comment = "following mode %s scaled to displace at most %s" % (repr(mode), repr(scale[i]))
 
         outfile = outfiles[i]

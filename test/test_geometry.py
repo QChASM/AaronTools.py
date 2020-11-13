@@ -133,7 +133,7 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(len(elements), 12)
         self.assertEqual(elements[0], "C")
         # coords
-        coords = mol.coords()
+        coords = mol.coords
         self.assertEqual(coords.shape, (12, 3))
 
     # utilities
@@ -520,14 +520,14 @@ class TestGeometry(TestWithTimer):
         for a in benzene.atoms:
             a.coords += vector
         mol.coord_shift([0, 3.2, -1.0])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
         # shift some atoms
         vector = np.array([0, -3.2, 1.0])
         for a in benzene.atoms[0:5]:
             a.coords += vector
         mol.coord_shift([0, -3.2, 1.0], [str(i) for i in range(1, 6)])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
     def test_change_distance(self):
         def validate_distance(before, after, moved):
