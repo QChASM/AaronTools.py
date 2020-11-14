@@ -1716,13 +1716,23 @@ class Geometry:
         
         # determine which atom's radii extend within the sphere
         # reduces the number of distances we need to calculate
+        # also determine innermost and outermost atom edges (minr and maxr)
+        # so we can skip integration shells that don't contain atoms
+        minr = radius
+        maxr = 0.0
         for lig in ligands:
             for atom in lig:
                 if exclude is not None and atom in exclude:
                     continue
                 d = np.linalg.norm(center_coords - atom.coords)
-                if d - scale*radii_dict[atom.element] < radius:
+                inner_edge = d - scale*radii_dict[atom.element]
+                outer_edge = inner_edge + scale*radii_dict[atom.element]
+                if inner_edge < radius:
                     atoms_within_radius.append(atom)
+                    if inner_edge < minr:
+                        minr = inner_edge
+                    if outer_edge > maxr:
+                        maxr = outer_edge
 
         # sort atoms based on their distance to the center
         # this makes is so we break out of looping over the atoms faster
@@ -1782,30 +1792,40 @@ class Geometry:
             #grab Lebedev grid for unit sphere at origin
             agrid, aweights = utils.lebedev_sphere(radius = 1, center = np.zeros(3), n = apoints)
 
-            BV = 0
+            #value of integral (without 4 pi r^2) for each shell
+            shell_values = []
             #loop over radial shells
             for rvalue, rweight in zip(rgrid, rweights):
-                ang_int = 0
-                #loop over angular grid for given shell
-                
-                agrid_r = agrid * rvalue + center_coords
-                D = distance_matrix(agrid_r, coords)
-                for d_row, aweight in zip(D, aweights):
-                    #scale grid point to radius and shift to center
+                # collect non-zero weights in inside_weights, then sum after looping over shell
+                inside_weights = []
+                #skip shell unless there are atoms within that shell
+                if rvalue > minr and rvalue < maxr:
+                    #loop over angular grid for given shell
+                    
+                    agrid_r = agrid * rvalue + center_coords
+                    D = distance_matrix(agrid_r, coords)
+                    for d_row, aweight in zip(D, aweights):
+                        #scale grid point to radius and shift to center
 
-                    # add weight if the point is inside of any atom's 
-                    # scaled VDW radius
-                    for d, r in zip(d_row, radius_list):
-                        if d < r:
-                            ang_int += aweight
-                            break
-                #add integral over current shell
-                BV += rweight*(4*np.pi*ang_int*rvalue**2)
+                        # add weight if the point is inside of any atom's 
+                        # scaled VDW radius
+                        for d, r in zip(d_row, radius_list):
+                            if d < r:
+                                inside_weights.append(aweight)
+                                break
+
+                    #save integral over current shell (without 4 pi r^2)
+                    inside_weights = np.asarray(inside_weights)
+                    shell_values.append(np.sum(inside_weights))
+                #save 0 for empty shells
+                else:
+                    shell_values.append(0)
 
             #return 100*calculated volume relative to volume of sphere
             # stop = perf_counter()
             # print("took:", stop - start)
-            return 100*BV/((4/3)*np.pi*radius**3)
+            shell_values = np.asarray(shell_values)
+            return 300*np.sum(shell_values*rweights*rgrid**2)/(radius**3)
 
 
     # geometry manipulation
