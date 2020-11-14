@@ -10,6 +10,8 @@ from warnings import warn
 
 import numpy as np
 
+from scipy.spatial import distance_matrix
+
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
@@ -1529,9 +1531,16 @@ class Geometry:
         """
         computes LJ energy using autodock parameters
         """
-
-        def calc_LJ(a, b):
-            dist = a.dist(b)
+        
+        if other is None:
+            D = distance_matrix(self.coords, self.coords)
+        else:
+            if hasattr(other, "coords"):
+                D = distance_matrix(self.coords, other.coords)
+            else:
+                D = distance_matrix(self.coords, np.array([a.coords for a in other]))
+        
+        def calc_LJ(a, b, dist):
             sigma = a.rij(b)
             epsilon = a.eij(b)
             return epsilon * ((sigma / dist) ** 12 - (sigma / dist) ** 6)
@@ -1539,9 +1548,9 @@ class Geometry:
         energy = 0
         for i, a in enumerate(self.atoms):
             if other is None:
-                try:
+                if i + 1 < len(self.atoms):
                     tmp = self.atoms[i + 1 :]
-                except IndexError:
+                else:
                     return energy
             else:
                 try:
@@ -1549,10 +1558,10 @@ class Geometry:
                 except AttributeError:
                     tmp = other
 
-            for b in tmp:
-                if a == b:
+            for j, b in enumerate(tmp):
+                if a is b:
                     continue
-                energy += calc_LJ(a, b)
+                energy += calc_LJ(a, b, D[i, j])
 
         return energy
 
@@ -1638,6 +1647,7 @@ class Geometry:
         method="lebedev",
         rpoints=20,
         apoints=1454,
+        min_iter=25,
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1655,6 +1665,9 @@ class Geometry:
         method  - integration method (MC or lebedev)
         rpoints - number of radial shells for Lebedev integration
         apoints - number of angular points for Lebedev integration
+        min_iter - minimum number of iterations for MC integration
+                   each iteration is a batch of 3000 points
+                   iterations will continue beyond min_iter if the volume has not converged
         """
         # NOTE - it would be nice to multiprocess the MC integration (or 
         #        split up the shells for the Lebedev integration, but...
@@ -1663,7 +1676,6 @@ class Geometry:
 
         # from time import perf_counter
         # start = perf_counter()
-        from scipy.spatial import distance_matrix
 
         # determine ligands if none were specified
         if ligands is None:
@@ -1732,23 +1744,25 @@ class Geometry:
             # determine %V_bur 
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while not all(dv < 4e-4 for dv in dV[-5:]) or i < 25:
+            while not all(dv < 4e-4 for dv in dV[-5:]) or i < min_iter:
                 i += 1
-                for p in range(0, n_samples):
-                    # get a random point uniformly distributed inside the sphere
-                    r = radius*np.random.uniform(0, 1)**(1/3)
-                    z = np.random.uniform(-1,1)
-                    theta = np.arcsin(z) + np.pi/2
-                    phi = np.random.uniform(0, 2*np.pi)
-                    x = r * np.sin(theta)*np.cos(phi)
-                    y = r * np.sin(theta)*np.sin(phi)
-                    z *= r
+                # get a random point uniformly distributed inside the sphere
+                r = radius*np.random.uniform(0, 1, n_samples)**(1/3)
+                z = np.random.uniform(-1, 1, n_samples)
+                theta = np.arcsin(z) + np.pi/2
+                phi = np.random.uniform(0, 2*np.pi, n_samples)
+                x = r * np.sin(theta)*np.cos(phi)
+                y = r * np.sin(theta)*np.sin(phi)
+                z *= r
 
-                    xyz = np.array([x, y, z]) + center_coords
-                    # see if the point is inside of any atom's 
-                    # scaled VDW radius
-                    for coord, r in zip(coords, radius_list):
-                        d = np.linalg.norm(xyz - coord)
+                xyz = np.array([x, y, z]).T
+                xyz += center_coords
+                # see if the point is inside of any atom's 
+                # scaled VDW radius
+                D = distance_matrix(xyz, coords)
+                for d_row in D:
+                    for d, r in zip(d_row, radius_list):
+                        # d = np.linalg.norm(xyz - coord)
                         if d < r:
                             buried_points += 1
                             break
@@ -3194,15 +3208,19 @@ class Geometry:
             """
             Returns: np.array(bend_axis) if clash found, False otherwise
             """
+            from scipy.spatial import distance_matrix
+            
             clashing = []
-            for atom in self.atoms:
+            D = distance_matrix(self.coords, sub.coords)
+            for i, atom in enumerate(self.atoms):
                 if atom in sub.atoms or atom == sub.end:
                     continue
                 threshold = atom._radii
-                for sub_atom in sub.atoms:
+                for j, sub_atom in enumerate(sub.atoms):
                     threshold += sub_atom._radii
                     threshold *= scale
-                    dist = atom.dist(sub_atom)
+                    # dist = atom.dist(sub_atom)
+                    dist = D[i, j]
                     if dist < threshold or dist < 0.8:
                         clashing += [(atom, threshold - dist)]
             if not clashing:
