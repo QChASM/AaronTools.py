@@ -669,6 +669,12 @@ class TestGeometry(TestWithTimer):
         tridentate = AaronTools.component.Component(TestGeometry.tridentate)
         debug = False
 
+        # import cProfile
+
+        # profile = cProfile.Profile()
+        # profile.enable()
+
+
         """
         #TODO: get a reference file for this
         # two monodentate -> bidentate
@@ -745,6 +751,9 @@ class TestGeometry(TestWithTimer):
             )
         )
 
+        # profile.disable()
+        # profile.print_stats()
+
     def test_vbur_MC(self):
         """
         tests % volume buried (MC integration)
@@ -769,15 +778,16 @@ class TestGeometry(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_vbur_MC"))
-    suite.addTest(TestGeometry("test_vbur_lebedev"))
+    suite.addTest(TestGeometry("test_map_ligand"))
+    # suite.addTest(TestGeometry("test_vbur_MC"))
+    # suite.addTest(TestGeometry("test_vbur_lebedev"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
     # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 
 
-ONLYSOME = False
+ONLYSOME = True
 
 if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()

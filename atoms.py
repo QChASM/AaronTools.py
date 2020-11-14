@@ -15,10 +15,10 @@ from AaronTools.const import (
     RIJ,
     SATURATION,
     TMETAL,
+    VDW_RADII,
 )
 
 warn_LJ = set([])
-
 
 class BondOrder:
     bonds = {}
@@ -97,6 +97,7 @@ class Atom:
         elif element in ELEMENTS:
             self.element = element
             self._set_radii()
+            self._set_vdw()
             self._set_connectivity()
             self._set_saturation()
         else:
@@ -179,6 +180,15 @@ class Atom:
             self._radii = float(RADII[self.element])
         except KeyError:
             warn("Radii not found for element: %s" % self.element)
+        return
+    
+    def _set_vdw(self):
+        """Sets atomic radii"""
+        try:
+            self._vdw = float(VDW_RADII[self.element])
+        except KeyError:
+            warn("VDW Radii not found for element: %s" % self.element)
+            self._vdw = 0
         return
 
     def _set_connectivity(self):

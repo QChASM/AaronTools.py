@@ -1529,38 +1529,44 @@ class Geometry:
 
         return np.linalg.eigh(I_CM)
 
-    def LJ_energy(self, other=None):
+    def LJ_energy(self, other=None, approximate=True):
         """
         computes LJ energy using autodock parameters
+        approximate - ignore atoms that are farther than 1.5x the
+                      sum of their VDW radii from each other
         """
         
         if other is None:
             D = distance_matrix(self.coords, self.coords)
+
         else:
             if hasattr(other, "coords"):
                 D = distance_matrix(self.coords, other.coords)
+                other = other.atoms
             else:
                 D = distance_matrix(self.coords, np.array([a.coords for a in other]))
-        
-        def calc_LJ(a, b, dist):
+       
+        def calc_LJ(a, b, dist, approximate):
+            if approximate and dist > 1.5 * (a._vdw + b._vdw):
+                # optimization thing - if the atoms are far apart,
+                # the LJ energy is around 0
+                return 0
             sigma = a.rij(b)
             epsilon = a.eij(b)
-            return epsilon * ((sigma / dist) ** 12 - (sigma / dist) ** 6)
+            s_d_6 = (sigma / dist) ** 6
+            return epsilon * (s_d_6 ** 2 - s_d_6)
 
         energy = 0
         for i, a in enumerate(self.atoms):
             if other is None:
                 tmp = self.atoms[:i]
             else:
-                try:
-                    tmp = other.atoms
-                except AttributeError:
-                    tmp = other
+                tmp = other
 
             for j, b in enumerate(tmp):
                 if a is b:
                     continue
-                energy += calc_LJ(a, b, D[i, j])
+                energy += calc_LJ(a, b, D[i, j], approximate)
 
         return energy
 
@@ -1673,9 +1679,6 @@ class Geometry:
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
 
-        # from time import perf_counter
-        # start = perf_counter()
-
         # determine ligands if none were specified
         if ligands is None:
             if self.components is None:
@@ -1765,13 +1768,13 @@ class Geometry:
                 z *= r
 
                 xyz = np.array([x, y, z]).T
+                r_p = np.linalg.norm(xyz)
                 xyz += center_coords
                 # see if the point is inside of any atom's 
                 # scaled VDW radius
                 D = distance_matrix(xyz, coords)
                 for d_row in D:
                     for d, r in zip(d_row, radius_list):
-                        # d = np.linalg.norm(xyz - coord)
                         if d < r:
                             buried_points += 1
                             break
@@ -1780,8 +1783,6 @@ class Geometry:
                 dV.append(abs(cur_vol - prev_vol))
                 prev_vol = cur_vol
             # return 100x the volume
-            # stop = perf_counter()
-            # print("took:", stop - start)
             return 100*cur_vol
         
         #default to Gauss-Legendre integration over Lebedev spheres
@@ -1793,38 +1794,30 @@ class Geometry:
             agrid, aweights = utils.lebedev_sphere(radius = 1, center = np.zeros(3), n = apoints)
 
             #value of integral (without 4 pi r^2) for each shell
-            shell_values = []
+            shell_values = np.zeros(rpoints)
             #loop over radial shells
-            for rvalue, rweight in zip(rgrid, rweights):
+            for i, (rvalue, rweight) in enumerate(zip(rgrid, rweights)):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
-                inside_weights = []
+                inside_weights = np.zeros(apoints)
                 #skip shell unless there are atoms within that shell
                 if rvalue > minr and rvalue < maxr:
                     #loop over angular grid for given shell
                     
                     agrid_r = agrid * rvalue + center_coords
                     D = distance_matrix(agrid_r, coords)
-                    for d_row, aweight in zip(D, aweights):
+                    for j, (d_row, aweight) in enumerate(zip(D, aweights)):
                         #scale grid point to radius and shift to center
 
                         # add weight if the point is inside of any atom's 
                         # scaled VDW radius
                         for d, r in zip(d_row, radius_list):
                             if d < r:
-                                inside_weights.append(aweight)
+                                inside_weights[j] = aweight
                                 break
 
                     #save integral over current shell (without 4 pi r^2)
-                    inside_weights = np.asarray(inside_weights)
-                    shell_values.append(np.sum(inside_weights))
-                #save 0 for empty shells
-                else:
-                    shell_values.append(0)
+                    shell_values[i] = np.sum(inside_weights)
 
-            #return 100*calculated volume relative to volume of sphere
-            # stop = perf_counter()
-            # print("took:", stop - start)
-            shell_values = np.asarray(shell_values)
             return 300*np.sum(shell_values*rweights*rgrid**2)/(radius**3)
 
 
