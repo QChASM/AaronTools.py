@@ -828,10 +828,12 @@ class Geometry:
             old_connectivity += [a.connected]
             a.connected = set([])
 
+        D = distance_matrix(self.coords, self.coords)
+
         # determine connectivity
         for i, a in enumerate(self.atoms):
-            for b in self.atoms[i + 1 :]:
-                if a.is_connected(b, threshold):
+            for j, b in enumerate(self.atoms[:i]):
+                if a.dist_is_connected(b, D[i, j], threshold):
                     a.connected.add(b)
                     b.connected.add(a)
 
@@ -1262,19 +1264,19 @@ class Geometry:
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
 
-        # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
-        total_mass = 0
-        center = np.array([0, 0, 0], dtype=np.float)
-        for t in targets:
-            if mass_weight:
-                total_mass += t.mass()
-                center += t.mass() * t.coords
-            else:
-                center += t.coords
+        coords = self.coordinates(targets)
+        if mass_weight:
+            total_mass = 0
+            for i in range(0, len(coords)):
+                coords[i] *= targets[i].mass()
+                total_mass += targets[i].mass()
 
+        # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
+        center = np.mean(coords, axis=0)
+        
         if mass_weight and total_mass:
-            return center / total_mass
-        return center / len(targets)
+            return center * len(targets) / total_mass
+        return center
 
     def RMSD(
         self,
@@ -1548,10 +1550,7 @@ class Geometry:
         energy = 0
         for i, a in enumerate(self.atoms):
             if other is None:
-                if i + 1 < len(self.atoms):
-                    tmp = self.atoms[i + 1 :]
-                else:
-                    return energy
+                tmp = self.atoms[:i]
             else:
                 try:
                     tmp = other.atoms
@@ -2084,13 +2083,15 @@ class Geometry:
         qs = q[0]
         qv = q[1:]
 
-        for t in targets:
-            xprod = np.cross(qv, t.coords)
-            t.coords = (
-                t.coords
-                + 2 * qs * xprod
-                + 2 * np.cross(qv, xprod)
-            )
+        xyz = self.coordinates(targets)
+        xprod = np.cross(qv, xyz)
+        qs_xprod = 2 * qs * xprod
+        qv_xprod = 2 * np.cross(qv, xprod)
+        
+        coords = self.coordinates(targets)
+        coords += qs_xprod + qv_xprod
+        for t, coord in zip(targets, coords):
+            t.coords = coord
 
         if center is not None:
             self.coord_shift(center)
@@ -3208,7 +3209,6 @@ class Geometry:
             """
             Returns: np.array(bend_axis) if clash found, False otherwise
             """
-            from scipy.spatial import distance_matrix
             
             clashing = []
             D = distance_matrix(self.coords, sub.coords)
@@ -3219,7 +3219,6 @@ class Geometry:
                 for j, sub_atom in enumerate(sub.atoms):
                     threshold += sub_atom._radii
                     threshold *= scale
-                    # dist = atom.dist(sub_atom)
                     dist = D[i, j]
                     if dist < threshold or dist < 0.8:
                         clashing += [(atom, threshold - dist)]

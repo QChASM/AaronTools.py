@@ -279,6 +279,14 @@ class Atom:
     # measurement
     def is_connected(self, other, tolerance=None):
         """determines if distance between atoms is small enough to be bonded"""
+        return self.dist_is_connected(other, self.dist(other), tolerance)
+
+    def dist_is_connected(self, other, dist_to_other, tolerance):
+        """
+        determines if distance between atoms is small enough to be bonded
+        used to optimize connected checks when distances can be quickly precalculated
+        like with scipy.spatial.distance_matrix
+        """
         if tolerance is None:
             tolerance = 0.3
 
@@ -287,7 +295,7 @@ class Atom:
         if other._radii is None:
             other._set_radii()
         cutoff = self._radii + other._radii + tolerance
-        return self.dist(other) < cutoff
+        return dist_to_other < cutoff
 
     def bond(self, other):
         """returns the vector self-->other"""
