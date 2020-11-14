@@ -1660,7 +1660,11 @@ class Geometry:
         #        split up the shells for the Lebedev integration, but...
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
-        
+
+        # from time import perf_counter
+        # start = perf_counter()
+        from scipy.spatial import distance_matrix
+
         # determine ligands if none were specified
         if ligands is None:
             if self.components is None:
@@ -1673,8 +1677,8 @@ class Geometry:
                 self.detect_components()
             center = self.center
 
-        elif isinstance(center, Atom):
-            center = [center]
+        else:
+            center = self.find(center)
 
         if all(isinstance(a, Atom) for a in center):
             center_coords = self.COM(center)
@@ -1708,7 +1712,13 @@ class Geometry:
                 d = np.linalg.norm(center_coords - atom.coords)
                 if d - scale*radii_dict[atom.element] < radius:
                     atoms_within_radius.append(atom)
-                    radius_list.append(scale*radii_dict[atom.element])
+
+        # sort atoms based on their distance to the center
+        # this makes is so we break out of looping over the atoms faster
+        atoms_within_radius.sort(key=lambda a, c=center_coords: np.linalg.norm(a.coords - c))
+
+        for atom in atoms_within_radius:
+            radius_list.append(scale * radii_dict[atom.element])
 
         coords = self.coordinates(atoms_within_radius)
 
@@ -1747,10 +1757,13 @@ class Geometry:
                 dV.append(abs(cur_vol - prev_vol))
                 prev_vol = cur_vol
             # return 100x the volume
+            # stop = perf_counter()
+            # print("took:", stop - start)
             return 100*cur_vol
         
         #default to Gauss-Legendre integration over Lebedev spheres
         else:	
+            # start = perf_counter()
             #grab radial grid points and weights for range (0,radius)
             rgrid, rweights = utils.gauss_legendre_grid(a = 0, b = radius, n = rpoints)
             #grab Lebedev grid for unit sphere at origin
@@ -1758,17 +1771,18 @@ class Geometry:
 
             BV = 0
             #loop over radial shells
-            for rvalue,rweight in zip(rgrid, rweights):
+            for rvalue, rweight in zip(rgrid, rweights):
                 ang_int = 0
                 #loop over angular grid for given shell
-                for apoint,aweight in zip(agrid, aweights):
+                
+                agrid_r = agrid * rvalue + center_coords
+                D = distance_matrix(agrid_r, coords)
+                for d_row, aweight in zip(D, aweights):
                     #scale grid point to radius and shift to center
-                    xyz = apoint*rvalue + center_coords
 
                     # add weight if the point is inside of any atom's 
                     # scaled VDW radius
-                    for coord, r in zip(coords, radius_list):
-                        d = np.linalg.norm(xyz - coord)
+                    for d, r in zip(d_row, radius_list):
                         if d < r:
                             ang_int += aweight
                             break
@@ -1776,6 +1790,8 @@ class Geometry:
                 BV += rweight*(4*np.pi*ang_int*rvalue**2)
 
             #return 100*calculated volume relative to volume of sphere
+            # stop = perf_counter()
+            # print("took:", stop - start)
             return 100*BV/((4/3)*np.pi*radius**3)
 
 
