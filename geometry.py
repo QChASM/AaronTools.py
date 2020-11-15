@@ -1736,6 +1736,7 @@ class Geometry:
                         minr = inner_edge
                     if outer_edge > maxr:
                         maxr = outer_edge
+        maxr = min(maxr, radius)
 
         # sort atoms based on their distance to the center
         # this makes is so we break out of looping over the atoms faster
@@ -1796,18 +1797,17 @@ class Geometry:
             #value of integral (without 4 pi r^2) for each shell
             shell_values = np.zeros(rpoints)
             #loop over radial shells
-            for i, (rvalue, rweight) in enumerate(zip(rgrid, rweights)):
+            for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
                 inside_weights = np.zeros(apoints)
                 #skip shell unless there are atoms within that shell
                 if rvalue > minr and rvalue < maxr:
                     #loop over angular grid for given shell
                     
+                    #scale grid point to radius and shift to center
                     agrid_r = agrid * rvalue + center_coords
                     D = distance_matrix(agrid_r, coords)
                     for j, (d_row, aweight) in enumerate(zip(D, aweights)):
-                        #scale grid point to radius and shift to center
-
                         # add weight if the point is inside of any atom's 
                         # scaled VDW radius
                         for d, r in zip(d_row, radius_list):
@@ -1818,7 +1818,7 @@ class Geometry:
                     #save integral over current shell (without 4 pi r^2)
                     shell_values[i] = np.sum(inside_weights)
 
-            return 300*np.sum(shell_values*rweights*rgrid**2)/(radius**3)
+            return 300*np.dot(shell_values*rgrid**2,rweights)/(radius**3)
 
 
     # geometry manipulation

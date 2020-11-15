@@ -96,7 +96,7 @@ grid_options.add_argument('-rp', '--radial-points',
 grid_options.add_argument('-ap', '--angular-points',
                          type=int,
                          default=1454,
-                         choices=[110, 194, 302, 590, 1454, 5810],
+                         choices=[110, 194, 302, 590, 974, 1454, 2030, 2702, 5810],
                          dest="apoints",
                          help="number of angular points for Lebedev integration\nlower values are faster, but at the cost of accuracy\nDefault: 1454"
 )
@@ -156,7 +156,7 @@ for f in args.infile:
         raise RuntimeError("calulation failed for %s: %s" % (f, e))
 
 if not args.outfile:
-    print(s.strip())
+    print(s)
 else:
     with open(args.outfile, "w") as f:
         f.write(s)
