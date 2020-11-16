@@ -6,6 +6,9 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.finders import NotAny
+
+from warnings import warn
 
 vbur_parser = argparse.ArgumentParser(description='calculated % volume buried in a sphere around a center atom', \
     formatter_class=argparse.RawTextHelpFormatter)
@@ -32,11 +35,11 @@ vbur_parser.add_argument('-if', '--input-format',
                         help="file format of input - xyz is assumed if input is stdin"
 )
 
-vbur_parser.add_argument('-k', '--key-atoms', 
+vbur_parser.add_argument('-t', '--targets', 
                          default=None, 
                          required=False, 
-                         dest='ligand_atoms', 
-                         help='key atoms to define ligand to consider in calculation\nDefault: use all ligands',
+                         dest='targets', 
+                         help='atoms to consider in calculation\nDefault: use all atoms excent the center',
 )
 
 vbur_parser.add_argument('-e', '--exclude-atoms', 
@@ -101,11 +104,20 @@ grid_options.add_argument('-ap', '--angular-points',
                          help="number of angular points for Lebedev integration\nlower values are faster, but at the cost of accuracy\nDefault: 1454"
 )
 
+mc_options = vbur_parser.add_argument_group("Monte-Carlo integration options")
+mc_options.add_argument('-i', '--minimum-iterations',
+                         type=int,
+                         default=25,
+                         metavar="ITERATIONS",
+                         dest="min_iter",
+                         help="minimum iterations - each is a batch of 3000 points\n" + \
+                              "MC will continue after this until convergence criteria are met\n" + \
+                              "Default: 25",
+)
+
 args = vbur_parser.parse_args()
 
 s = ""
-
-np.set_printoptions(precision=5)
 
 for f in args.infile:
     if isinstance(f, str):
@@ -122,30 +134,29 @@ for f in args.infile:
 
     geom = Geometry(infile)
 
-    ligands = args.ligand_atoms
-    if args.ligand_atoms is not None:
-        ligands = []
-        if not geom.components:
-            geom.detect_components()
-        key = geom.find(args.ligand_atoms)
-        for comp in geom.components:
-            if any(k in comp.atoms for k in key):
-                ligands.append(comp)
+    if args.targets is not None:
+        targets = geom.find(args.targets)
+    else:
+        geom.detect_components()
+        if geom.center is not None:
+            targets = geom.find(NotAny(geom.center))
+        else:
+            warn("center not determined for %s" % f)
+            continue
    
-    exclude = args.exclude_atoms
     if args.exclude_atoms is not None:
-        exlude = geom.find(exclude)
+        targets = geom.find([targets, NotAny(args.exclude_atoms)])
     
     try:
-        vbur = geom.percent_buried_volume(ligands=ligands, 
+        vbur = geom.percent_buried_volume(targets=targets, 
                                           center=args.center, 
                                           radius=args.radius, 
                                           radii=args.radii, 
                                           scale=args.scale, 
-                                          exclude=exclude, 
                                           method=args.method, 
                                           rpoints=args.rpoints, 
-                                          apoints=args.apoints
+                                          apoints=args.apoints,
+                                          min_iter=args.min_iter,
         ) 
 
         if len(args.infile) > 1:
@@ -156,7 +167,7 @@ for f in args.infile:
         raise RuntimeError("calulation failed for %s: %s" % (f, e))
 
 if not args.outfile:
-    print(s)
+    print(s.strip())
 else:
     with open(args.outfile, "w") as f:
-        f.write(s)
+        f.write(s.strip())

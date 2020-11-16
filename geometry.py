@@ -1643,8 +1643,8 @@ class Geometry:
 
     def percent_buried_volume(
         self,
-        ligands=None,
         center=None,
+        targets=None,
         radius=3.5,
         radii="umn",
         scale=1.17,
@@ -1657,16 +1657,15 @@ class Geometry:
         """
         calculates % buried volume (%V_bur)
         Monte-Carlo or Gauss-Legendre/Lebedev integration
-        ligands - list of ligands to use in calculation, defaults to self.components
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
                   the centroid between the atoms
+        targets - atoms to use in calculation, defaults to all atoms not in center
         radius  - sphere radius around center atom
         radii   - "umn" or "bondi", VDW radii to use
                   can also be a dict() with atom symbols as the keys and
                   their respective radii as the values
         scale   - scale VDW radii by this
-        exclude - atoms to exclude from the calculation
         method  - integration method (MC or lebedev)
         rpoints - number of radial shells for Lebedev integration
         apoints - number of angular points for Lebedev integration
@@ -1679,28 +1678,29 @@ class Geometry:
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
 
-        # determine ligands if none were specified
-        if ligands is None:
-            if self.components is None:
-                self.detect_components()
-            ligands = [l for l in self.components]
-
         # determine center if none was specified
         if center is None:
             if self.center is None:
                 self.detect_components()
             center = self.center
-
-        else:
-            center = self.find(center)
-
-        if all(isinstance(a, Atom) for a in center):
             center_coords = self.COM(center)
-        else:
-            center_coords = center
 
-        if exclude is not None:
-            exclude = self.find(exclude)
+        else:
+            try:
+                center = self.find(center)
+                center_coords = self.COM(center)
+            except LookupError:
+                # assume an array was given
+                center_coords = center
+
+        # determine atoms if none were specified
+        if targets is None:
+            if center is None:
+                targets = self.atoms
+            else:
+                targets = [atom for atom in self.atoms if atom not in center]
+        else:
+            targets = self.find(targets)
 
         # VDW radii to use
         if isinstance(radii, dict):
@@ -1723,23 +1723,24 @@ class Geometry:
         # so we can skip integration shells that don't contain atoms
         minr = radius
         maxr = 0.0
-        for lig in ligands:
-            for atom in lig:
-                if exclude is not None and atom in exclude:
-                    continue
-                d = np.linalg.norm(center_coords - atom.coords)
-                inner_edge = d - scale*radii_dict[atom.element]
-                outer_edge = inner_edge + scale*radii_dict[atom.element]
-                if inner_edge < radius:
-                    atoms_within_radius.append(atom)
-                    if inner_edge < minr:
-                        minr = inner_edge
-                    if outer_edge > maxr:
-                        maxr = outer_edge
+        for atom in targets:
+            if exclude is not None and atom in exclude:
+                continue
+            d = np.linalg.norm(center_coords - atom.coords)
+            inner_edge = d - scale*radii_dict[atom.element]
+            outer_edge = inner_edge + scale*radii_dict[atom.element]
+            if inner_edge < radius:
+                atoms_within_radius.append(atom)
+                if inner_edge < minr:
+                    minr = inner_edge
+                if outer_edge > maxr:
+                    maxr = outer_edge
         maxr = min(maxr, radius)
+        if minr < 0:
+            minr = 0
 
         # sort atoms based on their distance to the center
-        # this makes is so we break out of looping over the atoms faster
+        # this makes is so we usually break out of looping over the atoms faster
         atoms_within_radius.sort(key=lambda a, c=center_coords: np.linalg.norm(a.coords - c))
 
         for atom in atoms_within_radius:
@@ -1757,10 +1758,13 @@ class Geometry:
             # determine %V_bur 
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while not all(dv < 4e-4 for dv in dV[-5:]) or i < min_iter:
+            while not all(dv < 2e-4 for dv in dV[-5:]) or i < min_iter:
                 i += 1
                 # get a random point uniformly distributed inside the sphere
-                r = radius*np.random.uniform(0, 1, n_samples)**(1/3)
+                # only sample points between minr and maxr because maybe that makes
+                # things converge faster
+                r = (maxr - minr) * np.random.uniform(0, 1, n_samples)**(1/3)
+                r += minr
                 z = np.random.uniform(-1, 1, n_samples)
                 theta = np.arcsin(z) + np.pi/2
                 phi = np.random.uniform(0, 2*np.pi, n_samples)
@@ -1783,12 +1787,13 @@ class Geometry:
                 cur_vol = float(buried_points) / float(i * n_samples)
                 dV.append(abs(cur_vol - prev_vol))
                 prev_vol = cur_vol
-            # return 100x the volume
-            return 100*cur_vol
+
+            between_v = cur_vol * (4./3) * np.pi * (maxr**3 - minr**3)
+            tot_v = (4./3) * np.pi * radius**3
+            return 100 * between_v / tot_v
         
         #default to Gauss-Legendre integration over Lebedev spheres
         else:	
-            # start = perf_counter()
             #grab radial grid points and weights for range (0,radius)
             rgrid, rweights = utils.gauss_legendre_grid(a = 0, b = radius, n = rpoints)
             #grab Lebedev grid for unit sphere at origin
@@ -1818,7 +1823,7 @@ class Geometry:
                     #save integral over current shell (without 4 pi r^2)
                     shell_values[i] = np.sum(inside_weights)
 
-            return 300*np.dot(shell_values*rgrid**2,rweights)/(radius**3)
+            return 300*np.dot(shell_values*rgrid**2, rweights)/(radius**3)
 
 
     # geometry manipulation

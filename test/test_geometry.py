@@ -770,24 +770,73 @@ class TestGeometry(TestWithTimer):
         """
         tests % volume buried (Lebedev integration)
         """
+        # 20, 1454
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
-        vbur = geom.percent_buried_volume(method="lebedev")
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=20, apoints=1454)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 32, 974
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=32, apoints=974)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 64, 590
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=64, apoints=590)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))        
+        
+        # 75, 302
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=75, apoints=302)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))        
+        
+        # 99, 194
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=99, apoints=194)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 127, 110
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=127, apoints=110)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 20, 2030
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=127, apoints=2030)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 20, 2702
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=127, apoints=2702)
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        
+        # 20, 5810
+        vbur = geom.percent_buried_volume(method="lebedev", rpoints=127, apoints=5810)
         if not np.isclose(vbur, 86.0, atol=0.05):
             print("V_bur =", vbur, "expected:", 86.0)
         self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_map_ligand"))
-    # suite.addTest(TestGeometry("test_vbur_MC"))
-    # suite.addTest(TestGeometry("test_vbur_lebedev"))
+    # suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_vbur_MC"))
+    suite.addTest(TestGeometry("test_vbur_lebedev"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
     # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 
 
-ONLYSOME = True
+ONLYSOME = False
 
 if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()
