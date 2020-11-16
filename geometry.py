@@ -1728,7 +1728,7 @@ class Geometry:
                 continue
             d = np.linalg.norm(center_coords - atom.coords)
             inner_edge = d - scale*radii_dict[atom.element]
-            outer_edge = inner_edge + scale*radii_dict[atom.element]
+            outer_edge = inner_edge + 2*scale*radii_dict[atom.element]
             if inner_edge < radius:
                 atoms_within_radius.append(atom)
                 if inner_edge < minr:
@@ -1758,7 +1758,7 @@ class Geometry:
             # determine %V_bur 
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while not all(dv < 2e-4 for dv in dV[-5:]) or i < min_iter:
+            while i < min_iter or not (all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4):
                 i += 1
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
@@ -1787,43 +1787,39 @@ class Geometry:
                 cur_vol = float(buried_points) / float(i * n_samples)
                 dV.append(abs(cur_vol - prev_vol))
                 prev_vol = cur_vol
-
-            between_v = cur_vol * (4./3) * np.pi * (maxr**3 - minr**3)
-            tot_v = (4./3) * np.pi * radius**3
+            
+            between_v = cur_vol * (maxr**3 - minr**3)
+            tot_v = radius**3
             return 100 * between_v / tot_v
         
         #default to Gauss-Legendre integration over Lebedev spheres
         else:	
-            #grab radial grid points and weights for range (0,radius)
-            rgrid, rweights = utils.gauss_legendre_grid(a = 0, b = radius, n = rpoints)
+            #grab radial grid points and weights for range (minr, maxr)
+            rgrid, rweights = utils.gauss_legendre_grid(a=minr, b=maxr, n=rpoints)
             #grab Lebedev grid for unit sphere at origin
-            agrid, aweights = utils.lebedev_sphere(radius = 1, center = np.zeros(3), n = apoints)
+            agrid, aweights = utils.lebedev_sphere(radius=1, center=np.zeros(3), n=apoints)
 
             #value of integral (without 4 pi r^2) for each shell
             shell_values = np.zeros(rpoints)
             #loop over radial shells
             for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
-                inside_weights = np.zeros(apoints)
-                #skip shell unless there are atoms within that shell
-                if rvalue > minr and rvalue < maxr:
-                    #loop over angular grid for given shell
-                    
-                    #scale grid point to radius and shift to center
-                    agrid_r = agrid * rvalue + center_coords
-                    D = distance_matrix(agrid_r, coords)
-                    for j, (d_row, aweight) in enumerate(zip(D, aweights)):
-                        # add weight if the point is inside of any atom's 
-                        # scaled VDW radius
-                        for d, r in zip(d_row, radius_list):
-                            if d < r:
-                                inside_weights[j] = aweight
-                                break
+                inside_weights = np.zeros(apoints)  
+                # scale grid point to radius and shift to center
+                agrid_r = agrid * rvalue + center_coords
+                D = distance_matrix(agrid_r, coords)
+                for j, (d_row, aweight) in enumerate(zip(D, aweights)):
+                    # add weight if the point is inside of any atom's 
+                    # scaled VDW radius
+                    for d, r in zip(d_row, radius_list):
+                        if d < r:
+                            inside_weights[j] = aweight
+                            break
 
                     #save integral over current shell (without 4 pi r^2)
                     shell_values[i] = np.sum(inside_weights)
 
-            return 300*np.dot(shell_values*rgrid**2, rweights)/(radius**3)
+            return 300*np.dot(shell_values*rgrid**2, rweights) / (radius**3)
 
 
     # geometry manipulation
