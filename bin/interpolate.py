@@ -166,7 +166,7 @@ for G in Gs:
         nrg.append(0)
 
 #interpolate between the structures
-S = Pathway(Gs[0], np.array([G.coords() for G in Gs]), basis=Q, other_vars={'energy':nrg})
+S = Pathway(Gs[0], np.array([G.coords for G in Gs]), basis=Q, other_vars={'energy':nrg})
 s_max, r_max = Pathway.t_to_s(1, S.region_length)
 
 #header for writing energies

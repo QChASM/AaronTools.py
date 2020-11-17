@@ -10,6 +10,8 @@ from warnings import warn
 
 import numpy as np
 
+from scipy.spatial import distance_matrix
+
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
@@ -782,10 +784,12 @@ class Geometry:
             old_connectivity += [a.connected]
             a.connected = set([])
 
+        D = distance_matrix(self.coords, self.coords)
+
         # determine connectivity
         for i, a in enumerate(self.atoms):
-            for b in self.atoms[i + 1 :]:
-                if a.is_connected(b, threshold):
+            for j, b in enumerate(self.atoms[:i]):
+                if a.dist_is_connected(b, D[i, j], threshold):
                     a.connected.add(b)
                     b.connected.add(a)
 
@@ -1220,19 +1224,19 @@ class Geometry:
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
 
+        coords = self.coordinates(targets)
+        if mass_weight:
+            total_mass = 0
+            for i in range(0, len(coords)):
+                coords[i] *= targets[i].mass()
+                total_mass += targets[i].mass()
+
         # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
-        total_mass = 0
-        center = np.array([0, 0, 0], dtype=np.float)
-        for t in targets:
-            if mass_weight:
-                total_mass += t.mass()
-                center += t.mass() * t.coords
-            else:
-                center += t.coords
+        center = np.mean(coords, axis=0)
 
         if mass_weight and total_mass:
-            return center / total_mass
-        return center / len(targets)
+            return center * len(targets) / total_mass
+        return center
 
     def RMSD(
         self,
@@ -1485,34 +1489,44 @@ class Geometry:
 
         return np.linalg.eigh(I_CM)
 
-    def LJ_energy(self, other=None):
+    def LJ_energy(self, other=None, approximate=True):
         """
         computes LJ energy using autodock parameters
+        approximate - ignore atoms that are farther than 1.5x the
+                      sum of their VDW radii from each other
         """
 
-        def calc_LJ(a, b):
-            dist = a.dist(b)
+        if other is None:
+            D = distance_matrix(self.coords, self.coords)
+
+        else:
+            if hasattr(other, "coords"):
+                D = distance_matrix(self.coords, other.coords)
+                other = other.atoms
+            else:
+                D = distance_matrix(self.coords, np.array([a.coords for a in other]))
+
+        def calc_LJ(a, b, dist, approximate):
+            if approximate and dist > 1.5 * (a._vdw + b._vdw):
+                # optimization thing - if the atoms are far apart,
+                # the LJ energy is around 0
+                return 0
             sigma = a.rij(b)
             epsilon = a.eij(b)
-            return epsilon * ((sigma / dist) ** 12 - (sigma / dist) ** 6)
+            s_d_6 = (sigma / dist) ** 6
+            return epsilon * (s_d_6 ** 2 - s_d_6)
 
         energy = 0
         for i, a in enumerate(self.atoms):
             if other is None:
-                try:
-                    tmp = self.atoms[i + 1 :]
-                except IndexError:
-                    return energy
+                tmp = self.atoms[:i]
             else:
-                try:
-                    tmp = other.atoms
-                except AttributeError:
-                    tmp = other
+                tmp = other
 
-            for b in tmp:
-                if a == b:
+            for j, b in enumerate(tmp):
+                if a is b:
                     continue
-                energy += calc_LJ(a, b)
+                energy += calc_LJ(a, b, D[i, j], approximate)
 
         return energy
 
@@ -1589,38 +1603,66 @@ class Geometry:
 
     def percent_buried_volume(
         self,
-        ligands=None,
         center=None,
+        targets=None,
         radius=3.5,
         radii="umn",
         scale=1.17,
+        exclude=None,
+        method="lebedev",
+        rpoints=20,
+        apoints=1454,
+        min_iter=25,
     ):
         """
         calculates % buried volume (%V_bur)
-        ligands - list of ligands to use in calculation, defaults to self.components
-        center - center atom
-        radius - sphere radius around center atom
-        radii - "umn" or "bondi", VDW radii to use
-        scale - scale VDW radii by this
+        Monte-Carlo or Gauss-Legendre/Lebedev integration
+        center  - center atom(s) or np.array of coordinates
+                  if more than one atom is specified, the sphere will be centered on
+                  the centroid between the atoms
+        targets - atoms to use in calculation, defaults to all atoms not in center
+        radius  - sphere radius around center atom
+        radii   - "umn" or "bondi", VDW radii to use
+                  can also be a dict() with atom symbols as the keys and
+                  their respective radii as the values
+        scale   - scale VDW radii by this
+        method  - integration method (MC or lebedev)
+        rpoints - number of radial shells for Lebedev integration
+        apoints - number of angular points for Lebedev integration
+        min_iter - minimum number of iterations for MC integration
+                   each iteration is a batch of 3000 points
+                   iterations will continue beyond min_iter if the volume has not converged
         """
-        # NOTE - it would be nice to multiprocess the MC integration, but...
+        # NOTE - it would be nice to multiprocess the MC integration (or
+        #        split up the shells for the Lebedev integration, but...
         #        python's multiprocessing doesn't let you spawn processes
         #        outside of the __name__ == '__main__' context
 
-        if ligands is None:
-            if self.components is None:
-                self.detect_components()
-            ligands = [l for l in self.components]
-
+        # determine center if none was specified
         if center is None:
             if self.center is None:
                 self.detect_components()
-            if len(self.center) > 1:
-                raise RuntimeError(
-                    "one center must be specified for %V_bur calculation"
-                )
-            center = self.center[0]
+            center = self.center
+            center_coords = self.COM(center)
 
+        else:
+            try:
+                center = self.find(center)
+                center_coords = self.COM(center)
+            except LookupError:
+                # assume an array was given
+                center_coords = center
+
+        # determine atoms if none were specified
+        if targets is None:
+            if center is None:
+                targets = self.atoms
+            else:
+                targets = [atom for atom in self.atoms if atom not in center]
+        else:
+            targets = self.find(targets)
+
+        # VDW radii to use
         if isinstance(radii, dict):
             radii_dict = radii
         elif radii.lower() == "umn":
@@ -1632,45 +1674,115 @@ class Geometry:
                 "received %s for radii, must be umn or bondi" % radii
             )
 
+        # list of scaled VDW radii for each atom that's close enough to
+        # the center of the sphere
         radius_list = []
-
         atoms_within_radius = []
-        for lig in ligands:
-            for atom in lig:
-                d = center.dist(atom)
-                if d - scale * radii_dict[atom.element] < radius:
-                    atoms_within_radius.append(atom)
-                    radius_list.append(scale * radii_dict[atom.element])
+
+        # determine which atom's radii extend within the sphere
+        # reduces the number of distances we need to calculate
+        # also determine innermost and outermost atom edges (minr and maxr)
+        # so we can skip integration shells that don't contain atoms
+        minr = radius
+        maxr = 0.0
+        for atom in targets:
+            if exclude is not None and atom in exclude:
+                continue
+            d = np.linalg.norm(center_coords - atom.coords)
+            inner_edge = d - scale*radii_dict[atom.element]
+            outer_edge = inner_edge + 2*scale*radii_dict[atom.element]
+            if inner_edge < radius:
+                atoms_within_radius.append(atom)
+                if inner_edge < minr:
+                    minr = inner_edge
+                if outer_edge > maxr:
+                    maxr = outer_edge
+        maxr = min(maxr, radius)
+        if minr < 0:
+            minr = 0
+
+        # sort atoms based on their distance to the center
+        # this makes is so we usually break out of looping over the atoms faster
+        atoms_within_radius.sort(key=lambda a, c=center_coords: np.linalg.norm(a.coords - c))
+
+        for atom in atoms_within_radius:
+            radius_list.append(scale * radii_dict[atom.element])
 
         coords = self.coordinates(atoms_within_radius)
 
-        prev_vol = cur_vol = 0
-        n_samples = 1000
-        buried_points = 0
-        dV = []
-        i = 0
-        while not all(dv < 2e-4 for dv in dV[-5:]) or i < 75:
-            i += 1
-            for p in range(0, n_samples):
-                r = np.random.uniform(0, radius)
-                t1 = np.random.uniform(0, 2 * np.pi)
-                t2 = np.random.uniform(0, np.pi)
-                x = r * np.sin(t1)
-                y = r * np.cos(t1)
-                z = r * np.cos(t2)
+        #Monte-Carlo integration
+        if method.lower() == "mc":
+            prev_vol = cur_vol = 0
+            n_samples = 3000
+            buried_points = 0
+            dV = []
+            i = 0
+            # determine %V_bur
+            # do at least 75000 total points, but keep going until
+            # the last 5 changes are all less than 1e-4
+            while i < min_iter or not (all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4):
+                i += 1
+                # get a random point uniformly distributed inside the sphere
+                # only sample points between minr and maxr because maybe that makes
+                # things converge faster
+                r = (maxr - minr) * np.random.uniform(0, 1, n_samples)**(1/3)
+                r += minr
+                z = np.random.uniform(-1, 1, n_samples)
+                theta = np.arcsin(z) + np.pi/2
+                phi = np.random.uniform(0, 2*np.pi, n_samples)
+                x = r * np.sin(theta)*np.cos(phi)
+                y = r * np.sin(theta)*np.sin(phi)
+                z *= r
 
-                xyz = np.array([x, y, z]) + center.coords
-                for coord, r in zip(coords, radius_list):
-                    d = np.linalg.norm(xyz - coord)
-                    if d < r:
-                        buried_points += 1
-                        break
+                xyz = np.array([x, y, z]).T
+                r_p = np.linalg.norm(xyz)
+                xyz += center_coords
+                # see if the point is inside of any atom's
+                # scaled VDW radius
+                D = distance_matrix(xyz, coords)
+                for d_row in D:
+                    for d, r in zip(d_row, radius_list):
+                        if d < r:
+                            buried_points += 1
+                            break
 
-            cur_vol = float(buried_points) / float(i * n_samples)
-            dV.append(abs(cur_vol - prev_vol))
-            prev_vol = cur_vol
+                cur_vol = float(buried_points) / float(i * n_samples)
+                dV.append(abs(cur_vol - prev_vol))
+                prev_vol = cur_vol
 
-        return 100 * cur_vol
+            between_v = cur_vol * (maxr**3 - minr**3)
+            tot_v = radius**3
+            return 100 * between_v / tot_v
+
+        #default to Gauss-Legendre integration over Lebedev spheres
+        else:
+            #grab radial grid points and weights for range (minr, maxr)
+            rgrid, rweights = utils.gauss_legendre_grid(a=minr, b=maxr, n=rpoints)
+            #grab Lebedev grid for unit sphere at origin
+            agrid, aweights = utils.lebedev_sphere(radius=1, center=np.zeros(3), n=apoints)
+
+            #value of integral (without 4 pi r^2) for each shell
+            shell_values = np.zeros(rpoints)
+            #loop over radial shells
+            for i, rvalue in enumerate(rgrid):
+                # collect non-zero weights in inside_weights, then sum after looping over shell
+                inside_weights = np.zeros(apoints)
+                # scale grid point to radius and shift to center
+                agrid_r = agrid * rvalue + center_coords
+                D = distance_matrix(agrid_r, coords)
+                for j, (d_row, aweight) in enumerate(zip(D, aweights)):
+                    # add weight if the point is inside of any atom's
+                    # scaled VDW radius
+                    for d, r in zip(d_row, radius_list):
+                        if d < r:
+                            inside_weights[j] = aweight
+                            break
+
+                    #save integral over current shell (without 4 pi r^2)
+                    shell_values[i] = np.sum(inside_weights)
+
+            return 300*np.dot(shell_values*rgrid**2, rweights) / (radius**3)
+
 
     # geometry manipulation
     def append_structure(self, structure):
@@ -1950,9 +2062,15 @@ class Geometry:
         qs = q[0]
         qv = q[1:]
 
-        for t in targets:
-            xprod = np.cross(qv, t.coords)
-            t.coords = t.coords + 2 * qs * xprod + 2 * np.cross(qv, xprod)
+        xyz = self.coordinates(targets)
+        xprod = np.cross(qv, xyz)
+        qs_xprod = 2 * qs * xprod
+        qv_xprod = 2 * np.cross(qv, xprod)
+
+        coords = self.coordinates(targets)
+        coords += qs_xprod + qv_xprod
+        for t, coord in zip(targets, coords):
+            t.coords = coord
 
         if center is not None:
             self.coord_shift(center)
@@ -3086,15 +3204,17 @@ class Geometry:
             """
             Returns: np.array(bend_axis) if clash found, False otherwise
             """
+
             clashing = []
-            for atom in self.atoms:
+            D = distance_matrix(self.coords, sub.coords)
+            for i, atom in enumerate(self.atoms):
                 if atom in sub.atoms or atom == sub.end:
                     continue
                 threshold = atom._radii
-                for sub_atom in sub.atoms:
+                for j, sub_atom in enumerate(sub.atoms):
                     threshold += sub_atom._radii
                     threshold *= scale
-                    dist = atom.dist(sub_atom)
+                    dist = D[i, j]
                     if dist < threshold or dist < 0.8:
                         clashing += [(atom, threshold - dist)]
             if not clashing:

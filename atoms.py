@@ -15,10 +15,10 @@ from AaronTools.const import (
     RIJ,
     SATURATION,
     TMETAL,
+    VDW_RADII,
 )
 
 warn_LJ = set([])
-
 
 class BondOrder:
     bonds = {}
@@ -97,6 +97,7 @@ class Atom:
         elif element in ELEMENTS:
             self.element = element
             self._set_radii()
+            self._set_vdw()
             self._set_connectivity()
             self._set_saturation()
         else:
@@ -179,6 +180,15 @@ class Atom:
             self._radii = float(RADII[self.element])
         except KeyError:
             warn("Radii not found for element: %s" % self.element)
+        return
+    
+    def _set_vdw(self):
+        """Sets atomic radii"""
+        try:
+            self._vdw = float(VDW_RADII[self.element])
+        except KeyError:
+            warn("VDW Radii not found for element: %s" % self.element)
+            self._vdw = 0
         return
 
     def _set_connectivity(self):
@@ -279,6 +289,14 @@ class Atom:
     # measurement
     def is_connected(self, other, tolerance=None):
         """determines if distance between atoms is small enough to be bonded"""
+        return self.dist_is_connected(other, self.dist(other), tolerance)
+
+    def dist_is_connected(self, other, dist_to_other, tolerance):
+        """
+        determines if distance between atoms is small enough to be bonded
+        used to optimize connected checks when distances can be quickly precalculated
+        like with scipy.spatial.distance_matrix
+        """
         if tolerance is None:
             tolerance = 0.3
 
@@ -287,7 +305,7 @@ class Atom:
         if other._radii is None:
             other._set_radii()
         cutoff = self._radii + other._radii + tolerance
-        return self.dist(other) < cutoff
+        return dist_to_other < cutoff
 
     def bond(self, other):
         """returns the vector self-->other"""

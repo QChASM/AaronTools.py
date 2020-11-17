@@ -63,7 +63,7 @@ for f in args.infile:
             infile = FileReader(f, just_geom=False)
     else:
         if args.input_format is not None:
-            infile = FileReader(('from stdin', args.input_format[0], f))
+            infile = FileReader(('from stdin', args.input_format[0], f), just_geom=False)
         else:
             if len(sys.argv) >= 1:
                 infile = FileReader(('from stdin', 'xyz', f), just_geom=False)

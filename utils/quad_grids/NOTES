@@ -1,0 +1,13 @@
+LegXXX.grid contains XXX points and weights for Gauss-Legendre quadrature. The points are from https://keisan.casio.com/exec/system/1280624821 except for Leg127.grid which is from https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_legendre/quadrature_rules_legendre.html
+Each line is
+xi wi
+
+The integral from [-1,1] of F(x) = \sum_{i}{F(xi)*wi}
+
+LebXXX.grid contains XXX Lebedev points and weights.  The points are from https://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html and have been converted to cartesian coordinates.
+Each line is
+xi yi zi wi
+
+The integral over the unit sphere of F(x,y,z) = 4\pi \sum{i}{F(xi,yi,zi)*wi}
+The integral over a sphere of radius R of F(x,y,z) = 4\pi R^2 \sum{i}{F(R*xi,R*yi,R*zi)*wi}
+
