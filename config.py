@@ -286,7 +286,7 @@ class Config(configparser.ConfigParser):
 
         this adds opt(MaxCycle=1000,NoEigenTest) pop=NBORead to the route with any other
         pop or opt options being added by the job type
-        
+
         'two-layer' options can also be specified as a python dictionary
         the following is equivalent to the above example:
         [Job]
@@ -396,8 +396,8 @@ class Config(configparser.ConfigParser):
             theory.solvent = None
         elif self[section]["solvent"]:
             theory.solvent = ImplicitSolvent(
-                self[section]["solvent"],
                 self[section]["solvent_model"],
+                self[section]["solvent"],
             )
         # build JobType list
         job_type = self[section].get("type", fallback=False)
@@ -418,13 +418,22 @@ class Config(configparser.ConfigParser):
                                 "\(.*?\)", self["Geometry"]["constraints"]
                             )
                         except KeyError:
-                            raise RuntimeError(
-                                "Constraints for forming/breaking bonds must be specified for TS search"
-                            )
+                            try:
+                                theory.geometry.parse_comment()
+                                con_list = theory.geometry.other["constraint"]
+                            except KeyError:
+                                raise RuntimeError(
+                                    "Constraints for forming/breaking bonds must be specified for TS search"
+                                )
                         for con in con_list:
-                            con = tuple(
-                                geometry.find(str(c))[0] for c in eval(con)
-                            )
+                            try:
+                                con = tuple(
+                                    geometry.find(str(c))[0] for c in eval(con)
+                                )
+                            except TypeError:
+                                con = tuple(
+                                    geometry.find(str(c))[0] for c in con
+                                )
                             if len(con) == 1:
                                 constraints.setdefault("atoms", [])
                                 constraints["atoms"] += [con]
@@ -473,9 +482,9 @@ class Config(configparser.ConfigParser):
             for dirpath, dirnames, filenames in os.walk(path):
                 for name in filenames:
                     if name.startswith("TS"):
-                        kind = "ts"
+                        kind = "TS"
                     elif name.startswith("INT"):
-                        kind = "min"
+                        kind = "Minimum"
                     name = os.path.join(dirpath, name)
                     structure = AaronTools.geometry.Geometry(name)
                     structure.name = os.path.relpath(name, path)

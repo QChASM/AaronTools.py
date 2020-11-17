@@ -77,7 +77,7 @@ class Ring(Geometry):
                 self.end = None
 
     @classmethod
-    def from_string(cls, name, end_length, end_atom=None, form='smiles'):
+    def from_string(cls, name, end_length, end_atom=None, form="smiles"):
         """create ring fragment from string
         name        str         identifier for ring
         end_length  int         number of atoms in ring end
@@ -92,14 +92,14 @@ class Ring(Geometry):
             ring.find_end(end_length, end_atom)
             return ring
 
-        elif end_lenth is not None:
+        elif end_length is not None:
             ring = cls(ring)
             ring.find_end(end_length)
             return ring
 
         else:
             return cls(ring, name=name)
-    
+
     @classmethod
     def list(cls):
         names = []
@@ -183,6 +183,8 @@ class Ring(Geometry):
                 "unable to find %i long path starting with %s around %s"
                 % (path_length, start, self.name)
             )
-        
+
         else:
-            self.comment = ",".join([str(self.atoms.index(a) + 1) for a in self.atoms])
+            self.comment = ",".join(
+                [str(self.atoms.index(a) + 1) for a in self.atoms]
+            )

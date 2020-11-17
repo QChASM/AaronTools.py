@@ -10,10 +10,12 @@ from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import float_vec, uptri2sym
 
 
-def obj_to_dict(obj):
+def obj_to_dict(obj, skip_attrs=[]):
     rv = {}
     if hasattr(obj, "__dict__"):
         for attr in obj.__dict__:
+            if attr in skip_attrs:
+                continue
             val = getattr(obj, attr)
             if isinstance(val, Geometry):
                 val = list(zip(val.elements, val.coords))
@@ -53,6 +55,7 @@ class CompOutput:
     def __init__(self, fname="", get_all=True):
         self.geometry = None
         self.opts = None
+        self.opt_steps = None
         self.frequency = None
         self.archive = None
 
@@ -69,6 +72,7 @@ class CompOutput:
         self.error, self.error_msg, self.finished = (None, None, None)
 
         keys = [
+            "opt_steps",
             "energy",
             "error",
             "error_msg",
@@ -88,9 +92,7 @@ class CompOutput:
             "archive",
         ]
 
-        if isinstance(fname, str) and ".log" in fname:
-            from_file = FileReader(fname, get_all, just_geom=False)
-        elif isinstance(fname, tuple) and "log" == fname[1]:
+        if isinstance(fname, (str, tuple)):
             from_file = FileReader(fname, get_all, just_geom=False)
         elif isinstance(fname, FileReader):
             from_file = fname
@@ -98,10 +100,10 @@ class CompOutput:
             return
 
         self.geometry = Geometry(from_file)
-        if "all_geom" in from_file.other:
+        if from_file.all_geom:
             self.opts = []
-            for g in from_file.other["all_geom"]:
-                self.opts += [Geometry(g)]
+            for g in from_file.all_geom:
+                self.opts += [Geometry(g[0])]
 
         for k in keys:
             if k in from_file.other:
@@ -117,8 +119,8 @@ class CompOutput:
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
 
-    def to_dict(self):
-        return obj_to_dict(self)
+    def to_dict(self, skip_attrs=[]):
+        return obj_to_dict(self, skip_attrs=skip_attrs)
 
     def get_progress(self):
         rv = ""

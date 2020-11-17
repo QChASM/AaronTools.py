@@ -1,15 +1,15 @@
 import os
 import re
 import subprocess
-import sys
-
-from AaronTools.const import AARONLIB
 from time import sleep
 from warnings import warn
+
 from jinja2 import Environment, FileSystemLoader
 
-USER = os.getenv('USER')
-QUEUE_TYPE = os.getenv('QUEUE_TYPE').upper()
+from AaronTools.const import AARONLIB
+
+USER = os.getenv("USER")
+QUEUE_TYPE = os.getenv("QUEUE_TYPE").upper()
 
 
 class JobControl:
@@ -19,7 +19,7 @@ class JobControl:
 class SubmitProcess:
     """class for submitting jobs to the queue
     attributes:
-    
+
     name:       name of job and input file minus the extension
     exe:        type of input file (com, in, inp)
     directory:  directory the input file is in
@@ -28,14 +28,13 @@ class SubmitProcess:
     memory:     allocated memory in GB
     template:   template job file"""
 
-
     def __init__(self, fname, walltime, processors, memory, template=None):
         """fname:   str     - path to input file (e.g. /home/CoolUser/CoolStuff/neat.com
         walltime:   int/str - walltime in hours
         processors: int/str - allocated processors
         memory:     int/str - allocated memory in GB
         template:   str     - path to template file; if template is None, will look for
-                              psi4.job, orca.job, or gaussian.job (depending on 
+                              psi4.job, orca.job, or gaussian.job (depending on
                               extension on fname)"""
         directory, filename = os.path.split(fname)
         self.name, exe = os.path.splitext(filename)
@@ -51,114 +50,145 @@ class SubmitProcess:
         """returns list(jobids (str)) of jobids in directory
         retry: bool - if there's an error while checking the queue, sleep 300s and try again"""
         if QUEUE_TYPE == "LSF":
-            args = ['bjobs', '-l', '2']
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            args = ["bjobs", "-l", "2"]
+            proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn('error checking queue: %s\nsleeping 300s before trying again' 
-                     % err.decode('utf-8'))
+                warn(
+                    "error checking queue: %s\nsleeping 300s before trying again"
+                    % err.decode("utf-8")
+                )
                 sleep(300)
-                return unfinished_jobs_in_dir(directory, retry)
-            
+                return SubmitProcess.unfinished_jobs_in_dir(directory, retry)
+
             else:
-                out = out.decode('utf-8')
-                out = out.replace('\s', '')
-                out = out.replace('\r', '')
-                out = out.replace('\n', '')
-                
-                jobs = re.findall('(Job<\d+>.*RUNLIMIT)', out)
+                out = out.decode("utf-8")
+                out = out.replace("\s", "")
+                out = out.replace("\r", "")
+                out = out.replace("\n", "")
+
+                jobs = re.findall("(Job<\d+>.*RUNLIMIT)", out)
 
                 job_ids = []
                 for job in jobs:
-                    test = re.match('Job<(\d+)>\S+CWD<.+%s>' % directory, job)
+                    test = re.match("Job<(\d+)>\S+CWD<.+%s>" % directory, job)
                     if test:
                         job_ids.append(test.group(1))
 
                 return job_ids
 
         elif QUEUE_TYPE == "PBS":
-            args = ['qstat' ,'-fx']
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            args = ["qstat", "-fx"]
+            proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn('error checking queue: %s\nsleeping 300s before trying again' 
-                     % err.decode('utf-8'))
+                warn(
+                    "error checking queue: %s\nsleeping 300s before trying again"
+                    % err.decode("utf-8")
+                )
                 sleep(300)
-                return unfinished_jobs_in_dir(directory, retry)
-            
-            else:
-                out = out.decode('utf-8')
-                out = out.replace('\n', '')
-                out = out.replace('\r', '')
+                return SubmitProcess.unfinished_jobs_in_dir(directory, retry)
 
-                jobs = re.findall('<Job>(.+?)<\/Job>', out)
+            else:
+                out = out.decode("utf-8")
+                out = out.replace("\n", "")
+                out = out.replace("\r", "")
+
+                jobs = re.findall("<Job>(.+?)<\/Job>", out)
 
                 job_ids = []
                 for job in jobs:
-                    #Q - queued
-                    #R - running
-                    #S - suspended 
-                    test = re.match('<Job_Id>(\d+).+<job_state>[QRS].+PBS_O_WORKDIR=[^,<>]*%s' % directory, job)
+                    # Q - queued
+                    # R - running
+                    # S - suspended
+                    test = re.match(
+                        "<Job_Id>(\d+).+<job_state>[QRS].+PBS_O_WORKDIR=[^,<>]*%s"
+                        % directory,
+                        job,
+                    )
                     if test:
                         job_ids.append(test.group(1))
 
                 return job_ids
 
         elif QUEUE_TYPE == "SLURM":
-            args = ['squeue' ,'-o', '%i#%Z#%t', '-u', USER]
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            args = ["squeue", "-o", "%i#%Z#%t", "-u", USER]
+            proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn('error checking queue: %s\nsleeping 300s before trying again' 
-                     % err.decode('utf-8'))
+                warn(
+                    "error checking queue: %s\nsleeping 300s before trying again"
+                    % err.decode("utf-8")
+                )
                 sleep(300)
-                return unfinished_jobs_in_dir(directory, retry)
-            
+                return SubmitProcess.unfinished_jobs_in_dir(directory, retry)
+
             else:
-                out = out.decode('utf-8')
+                out = out.decode("utf-8")
                 job_ids = []
                 for job in out.splitlines():
-                    jobid, job_path, job_status = job.split('#')
-                    if directory.endswith(job_path) and job_status in ['R', 'PD']:
+                    jobid, job_path, job_status = job.split("#")
+                    if directory.endswith(job_path) and job_status in [
+                        "R",
+                        "PD",
+                    ]:
                         job_ids.append(jobid)
 
                 return job_ids
 
         elif QUEUE_TYPE == "SGE":
-            #for SGE, we first grab the job ids for the jobs the user is running
-            #we then call qstat again to get the directory those jobs are in
-            args = ['qstat', '-s', 'pr', '-u', USER]
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # for SGE, we first grab the job ids for the jobs the user is running
+            # we then call qstat again to get the directory those jobs are in
+            args = ["qstat", "-s", "pr", "-u", USER]
+            proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn('error checking queue: %s\nsleeping 300s before trying again' 
-                     % err.decode('utf-8'))
+                warn(
+                    "error checking queue: %s\nsleeping 300s before trying again"
+                    % err.decode("utf-8")
+                )
                 sleep(300)
-                return unfinished_jobs_in_dir(directory, retry)
-            
+                return SubmitProcess.unfinished_jobs_in_dir(directory, retry)
+
             else:
-                out = out.decode('utf-8')
-                jobs = re.findall('^\s*?(\w+)', out)
-                #first line is a header
+                out = out.decode("utf-8")
+                jobs = re.findall("^\s*?(\w+)", out)
+                # first line is a header
                 jobs.pop(0)
 
-                jlist = ','.join(jobs)
+                jlist = ",".join(jobs)
 
-                args = ['qstat', '-j', jlist]
-                proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                args = ["qstat", "-j", jlist]
+                proc = subprocess.Popen(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
                 out, err = proc.communicate()
                 if len(err) != 0 and retry:
-                    warn('error checking queue: %s\nsleeping 300s before trying again' 
-                         % err.decode('utf-8'))
+                    warn(
+                        "error checking queue: %s\nsleeping 300s before trying again"
+                        % err.decode("utf-8")
+                    )
                     sleep(300)
-                    return unfinished_jobs_in_dir(directory, retry)
-                
+                    return SubmitProcess.unfinished_jobs_in_dir(
+                        directory, retry
+                    )
+
                 else:
-                    out = out.decode('utf-8')
+                    out = out.decode("utf-8")
                     job_ids = []
                     for line in out.splitlines():
-                        job_number = re.search('job_number:\s+(\d+)', line)
-                        workdir = re.search('sge_o_workdir:\s+[\S]+%s$' % directory)
+                        job_number = re.search("job_number:\s+(\d+)", line)
+                        workdir = re.search(
+                            "sge_o_workdir:\s+[\S]+%s$" % directory, line
+                        )
                         if job_number:
                             job = job_number.group(1)
 
@@ -169,10 +199,10 @@ class SubmitProcess:
 
     def submit(self, wait=False, quiet=True):
         """submit job to the queue
-        wait: bool/int - do not leave the function until any job in the directory 
+        wait: bool/int - do not leave the function until any job in the directory
                          finishes (polled every 5 minutes or 'wait' seconds)"""
-   
-        job_file = os.path.join(self.directory, self.name + '.job')
+
+        job_file = os.path.join(self.directory, self.name + ".job")
 
         opts = {
             "name": self.name,
@@ -181,31 +211,39 @@ class SubmitProcess:
             "memory": self.memory,
         }
 
-
         tm = self.template.render(**opts)
 
-        with open(job_file, 'w') as f:
+        with open(job_file, "w") as f:
             f.write(tm)
 
         if QUEUE_TYPE == "LSF":
             args = ["bsub", "<", job_file]
         elif QUEUE_TYPE == "SLURM":
-            args = ['sbatch', '<', job_file]
-        elif QUEUE_TYPE == 'PBS':
-            args = ['qsub', job_file]
-        elif QUEUE_TYPE == 'SGE':
-            args = ['qsub', job_file]
+            args = ["sbatch", "<", job_file]
+        elif QUEUE_TYPE == "PBS":
+            args = ["qsub", job_file]
+        elif QUEUE_TYPE == "SGE":
+            args = ["qsub", job_file]
         else:
-            raise NotImplementedError("%s queues not supported, only LSF, SLURM, PBS, and SGE" \
-                                       % QUEUE_TYPE)
+            raise NotImplementedError(
+                "%s queues not supported, only LSF, SLURM, PBS, and SGE"
+                % QUEUE_TYPE
+            )
 
-        proc = subprocess.Popen(args, cwd=self.directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            args,
+            cwd=self.directory,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
         self.submit_out, self.submit_err = proc.communicate()
 
         if len(self.submit_err) != 0:
-            raise RuntimeError("error with submitting job %s: %s" 
-                               % (self.name, self.submit_err.decode('utf-8')))
+            raise RuntimeError(
+                "error with submitting job %s: %s"
+                % (self.name, self.submit_err.decode("utf-8"))
+            )
 
         if not quiet:
             print(self.submit_out.decode("utf-8").strip())
@@ -217,7 +255,7 @@ class SubmitProcess:
                 wait_time = abs(wait)
 
             while len(self.unfinished_jobs_in_dir(self.directory)) != 0:
-                #print(self.unfinished_jobs_in_dir(self.directory))
+                # print(self.unfinished_jobs_in_dir(self.directory))
                 sleep(wait_time)
 
         return
@@ -235,5 +273,5 @@ class SubmitProcess:
                 filename = "ORCA_template.txt"
             elif self.exe == "in":
                 filename = "Psi4_template.txt"
-            
+
         self.template = environment.get_template(filename)

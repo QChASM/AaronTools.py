@@ -431,7 +431,6 @@ class FileReader:
             self.read_fchk(f, just_geom)
 
         f.close()
-
         return
 
     def skip_lines(self, f, n):
@@ -913,6 +912,7 @@ class FileReader:
         self.all_geom = []
         line = f.readline()
         self.other["archive"] = ""
+        self.other["opt_steps"] = 0
         found_archive = False
         n = 1
         route = None
@@ -943,6 +943,7 @@ class FileReader:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
+                self.other["opt_steps"] += 1
                 self.atoms, n = get_atoms(f, n)
             if just_geom:
                 line = f.readline()
@@ -1464,7 +1465,7 @@ class Frequency:
         elif style == "dat":
             self.parse_psi4_lines(lines, hpmodes)
         else:
-            raise RuntimeError("no frequency parser for %s files" % form)
+            raise RuntimeError("no frequency parser for %s files" % style)
 
         self.sort_frequencies()
         return

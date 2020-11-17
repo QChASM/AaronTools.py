@@ -2,12 +2,10 @@
 import os
 import unittest
 
-from numpy import dot, finfo, array
-from numpy.linalg import inv
-
 from AaronTools.geometry import Geometry
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
 from AaronTools.pathway import Pathway
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from numpy import array
 
 
 class TestPathway(TestWithTimer):
@@ -19,10 +17,11 @@ class TestPathway(TestWithTimer):
         ref = Geometry(
             os.path.join(prefix, "ref_files", "torsion_interpolation.xyz")
         )
-        S = Pathway(self.t60, array([self.t60.coords(), self.t90.coords()]))
+        S = Pathway(self.t60, array([self.t60.coords, self.t90.coords]))
         geom = S.Geom_func(0.4)
         rmsd = geom.RMSD(ref, align=True, sort=False)
         self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
+
 
 def suite():
     suite = unittest.TestSuite()

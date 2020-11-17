@@ -7,7 +7,7 @@ from copy import copy
 import AaronTools
 import numpy as np
 from AaronTools.atoms import Atom
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
@@ -76,7 +76,7 @@ class TestGeometry(TestWithTimer):
     monodentate = os.path.join(prefix, "test_files/ligands/ACN.xyz")
     bidentate = os.path.join(prefix, "test_files/ligands/S-tBu-BOX.xyz")
     tridentate = os.path.join(prefix, "test_files/ligands/squaramide.xyz")
-    
+
     lig_1 = os.path.join(prefix, "test_files", "lig_1.xyz")
     lig_2 = os.path.join(prefix, "test_files", "lig_2.xyz")
 
@@ -133,7 +133,7 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(len(elements), 12)
         self.assertEqual(elements[0], "C")
         # coords
-        coords = mol.coords()
+        coords = mol.coords
         self.assertEqual(coords.shape, (12, 3))
 
     # utilities
@@ -469,11 +469,18 @@ class TestGeometry(TestWithTimer):
         test = Geometry(TestGeometry.benzene)
         res = ref.RMSD(test, targets="C", ref_targets="C")
         self.assertTrue(res < rmsd_tol(ref))
-        
+
         # same molecule, slightly different structure
         mol1 = Geometry(TestGeometry.lig_1)
         mol2 = Geometry(TestGeometry.lig_2)
-        self.assertTrue(np.isclose(mol1.RMSD(mol2, heavy_only=True, sort=True), 0.2557, rtol=0, atol=1e-3))
+        self.assertTrue(
+            np.isclose(
+                mol1.RMSD(mol2, heavy_only=True, sort=True),
+                0.2557,
+                rtol=0,
+                atol=1e-3,
+            )
+        )
 
     # geometry manipulation
     def test_get_fragment(self):
@@ -520,14 +527,14 @@ class TestGeometry(TestWithTimer):
         for a in benzene.atoms:
             a.coords += vector
         mol.coord_shift([0, 3.2, -1.0])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
         # shift some atoms
         vector = np.array([0, -3.2, 1.0])
         for a in benzene.atoms[0:5]:
             a.coords += vector
         mol.coord_shift([0, -3.2, 1.0], [str(i) for i in range(1, 6)])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
     def test_change_distance(self):
         def validate_distance(before, after, moved):
@@ -756,6 +763,7 @@ class TestGeometry(TestWithTimer):
         if not np.isclose(vbur, 86.3, atol=0.2):
             print("V_bur =", vbur, "expected:", 86.3)
         self.assertTrue(np.isclose(vbur, 86.3, atol=0.2))
+
 
 def suite():
     suite = unittest.TestSuite()

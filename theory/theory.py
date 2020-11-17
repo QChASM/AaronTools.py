@@ -754,7 +754,11 @@ class Theory:
                     s += "\n"
                 s += "\n"
 
-        if self.method.sapt and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1 > self.multiplicity[0]:
+        if (
+            self.method.sapt
+            and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
+            > self.multiplicity[0]
+        ):
             s += "mol = psi4.core.Molecule.from_arrays(\n"
             s += "    molecular_multiplicity=%i,\n" % self.multiplicity[0]
             s += "    molecular_charge=%i,\n" % self.charge[0]

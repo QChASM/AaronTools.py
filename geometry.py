@@ -14,7 +14,7 @@ import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools.atoms import Atom
 from AaronTools.config import Config
-from AaronTools.const import D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII, BONDI_RADII
+from AaronTools.const import BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.finders import Finder
 from AaronTools.utils.prime_numbers import Primes
@@ -101,66 +101,11 @@ class Geometry:
     # class methods
     @classmethod
     def from_string(cls, name, form="smiles"):
-        """get structure from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API"""
-
-        accepted_forms = ["iupac", "smiles"]
-
-        if form not in accepted_forms:
-            raise NotImplementedError(
-                "cannot create structure given %s; use one of %s" % form,
-                str(accepted_forms),
-            )
-
-        urlsafe_name = urllib.parse.quote(name)
-        print(urlsafe_name)
-        if form == "smiles":
-            smiles = urlsafe_name
-        elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % urlsafe_name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
-
-        url_sd = (
-            "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-            % smiles
-        )
-        s_sd = urlopen(url_sd).read().decode("utf8")
-        f = FileReader((name, "sd", s_sd))
-        return Geometry(f)
-
-    # attribute access
-    def _stack_coords(self, atoms=None):
-        """
-        Generates a N x 3 coordinate matrix for atoms
-        Note: the matrix rows are copies of, not references to, the
-            Atom.coords objects. Run Geometry.update_geometry(matrix) after
-            using this method to save changes.
-        """
-        if atoms is None:
-            atoms = self.atoms
-        else:
-            atoms = self.find(atoms)
-        rv = np.zeros((len(atoms), 3), dtype=float)
-        for i, a in enumerate(atoms):
-            rv[i] = a.coords[:]
-        return rv
-
-    @classmethod
-    def from_string(cls, name, form="smiles"):
         """get Geometry from string
         form=iupac -> iupac to smiles from opsin API
                        --> form=smiles
         form=smiles -> structure from cactvs API"""
+
         def get_cactus_sd(smiles):
             url_sd = (
                 "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
@@ -170,9 +115,6 @@ class Geometry:
             s_sd = urlopen(url_sd).read().decode("utf8")
 
             return s_sd
-
-        from urllib.error import HTTPError
-        from urllib.request import urlopen
 
         accepted_forms = ["iupac", "smiles"]
 
@@ -196,7 +138,6 @@ class Geometry:
                     % name
                 )
 
-        # print(smiles)
         try:
             from rdkit.Chem import AllChem
 
@@ -205,15 +146,31 @@ class Geometry:
                 s_sd = get_cactus_sd(smiles)
             else:
                 mh = AllChem.AddHs(m)
-                AllChem.EmbedMolecule(mh, randomSeed=0x421c52)
+                AllChem.EmbedMolecule(mh, randomSeed=0x421C52)
                 s_sd = AllChem.MolToMolBlock(mh)
                 # print(s_sd)
-
-        except ImportError as e:
+        except ImportError:
             s_sd = get_cactus_sd(smiles)
 
         f = FileReader((name, "sd", s_sd))
         return cls(f, refresh_connected=False)
+
+    # attribute access
+    def _stack_coords(self, atoms=None):
+        """
+        Generates a N x 3 coordinate matrix for atoms
+        Note: the matrix rows are copies of, not references to, the
+            Atom.coords objects. Run Geometry.update_geometry(matrix) after
+            using this method to save changes.
+        """
+        if atoms is None:
+            atoms = self.atoms
+        else:
+            atoms = self.find(atoms)
+        rv = np.zeros((len(atoms), 3), dtype=float)
+        for i, a in enumerate(atoms):
+            rv[i] = a.coords[:]
+        return rv
 
     @property
     def elements(self):
@@ -233,7 +190,7 @@ class Geometry:
             (defaults to all atoms)
         """
         if atoms is None:
-            return self._stack_coords(self.atoms)
+            return self._stack_coords()
         return self._stack_coords(atoms)
 
     # utilities
@@ -355,12 +312,13 @@ class Geometry:
                 if m == "":
                     continue
                 m = m.split("-")
-                m = [int(i) - 1 for i in m]
-                for i, j in zip(m[:-1], m[1:]):
-                    a = self.atoms[i]
-                    b = self.atoms[j]
-                    a.constraint.add((b, a.dist(b)))
-                    b.constraint.add((a, b.dist(a)))
+                m = [int(i) for i in m]
+                if len(m) == 2:
+                    for i, j in zip(m[:-1], m[1:]):
+                        a = self.find(str(i))[0]
+                        b = self.find(str(j))[0]
+                        a.constraint.add((b, a.dist(b)))
+                        b.constraint.add((a, b.dist(a)))
                 rv["constraint"] += [m]
         # active centers
         match = re.search("C:([0-9,]+)", self.comment)
@@ -373,7 +331,6 @@ class Geometry:
                 a = self.atoms[int(m) - 1]
                 a.add_tag("center")
                 rv["center"] += [a]
-
         # ligand
         match = re.search("L:([0-9;,-]+)", self.comment)
         if match is not None:
@@ -396,7 +353,6 @@ class Geometry:
                             continue
                         tmp += [a]
                 rv["ligand"] += [tmp]
-
         # key atoms
         match = re.search("K:([0-9,;]+)", self.comment)
         if match is not None:
@@ -1202,9 +1158,13 @@ class Geometry:
                     for j in i.connected
                     if j in self.atoms and j not in avoid
                 ]
-                if i not in avoid else [] for i in self.atoms
+                if i not in avoid
+                else []
+                for i in self.atoms
             ]
-            path = utils.shortest_path(graph, self.atoms.index(a1), self.atoms.index(a2))
+            path = utils.shortest_path(
+                graph, self.atoms.index(a1), self.atoms.index(a2)
+            )
         if not path:
             raise LookupError(
                 "could not determine best path between {} and {}".format(
@@ -1656,7 +1616,9 @@ class Geometry:
             if self.center is None:
                 self.detect_components()
             if len(self.center) > 1:
-                raise RuntimeError("one center must be specified for %V_bur calculation")
+                raise RuntimeError(
+                    "one center must be specified for %V_bur calculation"
+                )
             center = self.center[0]
 
         if isinstance(radii, dict):
@@ -1666,7 +1628,9 @@ class Geometry:
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
         else:
-            raise RuntimeError("received %s for radii, must be umn or bondi" % radii)
+            raise RuntimeError(
+                "received %s for radii, must be umn or bondi" % radii
+            )
 
         radius_list = []
 
@@ -1674,9 +1638,9 @@ class Geometry:
         for lig in ligands:
             for atom in lig:
                 d = center.dist(atom)
-                if d - scale*radii_dict[atom.element] < radius:
+                if d - scale * radii_dict[atom.element] < radius:
                     atoms_within_radius.append(atom)
-                    radius_list.append(scale*radii_dict[atom.element])
+                    radius_list.append(scale * radii_dict[atom.element])
 
         coords = self.coordinates(atoms_within_radius)
 
@@ -1689,7 +1653,7 @@ class Geometry:
             i += 1
             for p in range(0, n_samples):
                 r = np.random.uniform(0, radius)
-                t1 = np.random.uniform(0, 2*np.pi)
+                t1 = np.random.uniform(0, 2 * np.pi)
                 t2 = np.random.uniform(0, np.pi)
                 x = r * np.sin(t1)
                 y = r * np.cos(t1)
@@ -1706,7 +1670,7 @@ class Geometry:
             dV.append(abs(cur_vol - prev_vol))
             prev_vol = cur_vol
 
-        return 100*cur_vol
+        return 100 * cur_vol
 
     # geometry manipulation
     def append_structure(self, structure):
@@ -1954,7 +1918,10 @@ class Geometry:
 
         # shift geometry to place center atom at origin
         if center is not None:
-            if not (hasattr(center, "__len__") and all(isinstance(x, float) for x in center)):
+            if not (
+                hasattr(center, "__len__")
+                and all(isinstance(x, float) for x in center)
+            ):
                 tmp = self.find(center)
                 if len(tmp) > 1:
                     center = deepcopy(self.COM(tmp))
@@ -1985,11 +1952,7 @@ class Geometry:
 
         for t in targets:
             xprod = np.cross(qv, t.coords)
-            t.coords = (
-                t.coords
-                + 2 * qs * xprod
-                + 2 * np.cross(qv, xprod)
-            )
+            t.coords = t.coords + 2 * qs * xprod + 2 * np.cross(qv, xprod)
 
         if center is not None:
             self.coord_shift(center)
@@ -2122,7 +2085,10 @@ class Geometry:
             a2_frag = self.get_fragment(a2, a3)[1:]
             a3_frag = self.get_fragment(a3, a2)[1:]
             if any(atom in a2_frag for atom in a3_frag):
-                warn("changing dihedral that is in a ring:\n%s, %s" % (str(a2), str(a3)))
+                warn(
+                    "changing dihedral that is in a ring:\n%s, %s"
+                    % (str(a2), str(a3))
+                )
         else:
             a2_frag = [a1]
             a3_frag = [a4]
@@ -2846,12 +2812,16 @@ class Geometry:
             shift = new_key.bond(old_key)
             ligand.coord_shift(shift)
             # rotate ligand
-            targets = [atom for atom in self.center if atom.is_connected(old_key)]
+            targets = [
+                atom for atom in self.center if atom.is_connected(old_key)
+            ]
             if len(targets) > 0:
                 new_axis = shift - new_key.coords
             else:
                 targets = old_key.connected - set(self.center)
-                new_axis = ligand.COM(targets=new_key.connected) - new_key.coords
+                new_axis = (
+                    ligand.COM(targets=new_key.connected) - new_key.coords
+                )
 
             old_axis = self.COM(targets=targets) - old_key.coords
             w, angle = get_rotation(old_axis, new_axis)
@@ -2878,7 +2848,14 @@ class Geometry:
                 # attribute, even though the center has the ligand atoms in its
                 # connected attribute, so refresh_connected
                 self.refresh_connected()
-                old_walk = self.shortest_path(*old_keys, avoid=[a for a in self.center if any(k.is_connected(a) for k in old_keys)])
+                old_walk = self.shortest_path(
+                    *old_keys,
+                    avoid=[
+                        a
+                        for a in self.center
+                        if any(k.is_connected(a) for k in old_keys)
+                    ]
+                )
                 remove_centers = [c for c in self.center if c in old_walk]
 
             if len(old_walk) == 2:
@@ -2973,7 +2950,9 @@ class Geometry:
                             continue
                         ok += [old_keys[i]]
                         nk += [n]
-                    remove_centers.extend(map_2_key(old_ligand, ligand, ok, nk))
+                    remove_centers.extend(
+                        map_2_key(old_ligand, ligand, ok, nk)
+                    )
                     partial_map = True
                     mapped_frags += [frag]
                     continue

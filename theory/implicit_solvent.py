@@ -402,8 +402,8 @@ class ImplicitSolvent:
         "CYCLOHEXANONE",
     ]
 
-    def __init__(self, name, solvent):
-        self.name = name
+    def __init__(self, solvent_model, solvent):
+        self.name = solvent_model
         self.solvent = solvent
 
     def get_gaussian(self):
@@ -466,6 +466,7 @@ class ImplicitSolvent:
         )
 
     def get_orca(self):
+        warnings = []
         if not any(
             self.name.upper() == model
             for model in ["SMD", "CPCM", "C-PCM", "PCM"]
@@ -474,8 +475,6 @@ class ImplicitSolvent:
                 "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
                 % self.name
             )
-
-        warnings = []
 
         out = {}
         cpcm = True

@@ -719,4 +719,6 @@ class Substituent(Geometry):
         self.rotate(axis, angle, center=self.end)
 
     def rebuild(self):
-        super().rebuild(start=self.atoms[0])
+        start = self.atoms.pop(0)
+        super().rebuild()
+        self.atoms = [start] + self.atoms

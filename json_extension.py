@@ -61,7 +61,7 @@ class ATEncoder(json.JSONEncoder):
             rv["comment"] = obj.comment
 
         # for Catalyst child classes
-        if isinstance(obj, Catalyst):
+        if isinstance(obj, Geometry) and obj.components:
             # comment
             obj.fix_comment()
             rv["comment"] = obj.comment
@@ -137,7 +137,7 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_atom(obj)
         if obj["_type"] == "Substituent":
             return self._decode_substituent(obj)
-        if obj["_type"] in ["Geometry", "Component", "Catalyst"]:
+        if obj["_type"] in ["Geometry", "Component"]:
             return self._decode_geometry(obj)
         if obj["_type"] == "Frequency":
             return self._decode_frequency(obj)
@@ -165,11 +165,7 @@ class ATDecoder(json.JSONDecoder):
 
         if obj["_type"] == "Component":
             key_atom_names = [a.name for a in obj["key_atoms"]]
-            return Component(
-                geom, key_atoms=key_atom_names, refresh_connected=False
-            )
-        elif obj["_type"] == "Catalyst":
-            return Catalyst(geom, refresh_connected=False)
+            return Component(geom, key_atoms=key_atom_names)
         else:
             return geom
 
