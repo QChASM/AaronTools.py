@@ -5,3 +5,7 @@
 /**/Session.vim
 /bond_length
 test/ligand.xyz
+/AaronTools.py.egg-info
+/build
+/dist
+/doc
