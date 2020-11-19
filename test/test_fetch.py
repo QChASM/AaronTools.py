@@ -49,7 +49,27 @@ class TestFromString(TestWithTimer):
             self.is_NO2(sub)
 
         except ImportError:
-            pass
+            # I still want to test CACTVS things because sometimes they change stuff
+            # that breaks our stuff
+            if os.getenv("USER", False) == "ajs99778":
+                sub = Substituent.from_string("acetyl", form='iupac')
+                print(sub.write(outfile=False))
+                self.is_COCH3(sub)
+
+                sub = Substituent.from_string("nitro", form='iupac')
+                print(sub.write(outfile=False))
+                self.is_NO2(sub)
+
+                sub = Substituent.from_string("O=[N.]=O", form='smiles')
+                print(sub.write(outfile=False))
+                self.is_NO2(sub)
+
+                sub = Substituent.from_string("O=[N]=O", form='smiles')
+                print(sub.write(outfile=False))
+                self.is_NO2(sub)
+
+            else:
+                self.skipTest("RDKit not installed, CACTVS is not tested")
         
     def test_geometry(self):
         try:
@@ -60,7 +80,14 @@ class TestFromString(TestWithTimer):
             self.assertTrue(validate(geom, ref, thresh=0.35, heavy_only=True, debug=False))
         
         except:
-            pass
+            if os.getenv("USER", False) == "ajs99778":
+                geom = Geometry.from_string("(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac")
+                print(geom.write(outfile=False))
+                ref = TestFromString.chiral_geom
+                # really loose threshhold b/c rdkit can give a boat cyclohexane...
+                self.assertTrue(validate(geom, ref, thresh=0.35, heavy_only=True, debug=False))
+            else:
+                self.skipTest("RDKit not installed, CACTVS is not tested")
 
     def test_ring(self):
         try:
@@ -70,7 +97,14 @@ class TestFromString(TestWithTimer):
             self.assertTrue(validate(ring, ref, thresh="loose"))
 
         except ImportError:
-            pass
+            if os.getenv("USER", False) == "ajs99778":
+                ring = Ring.from_string("benzene", end_length=1, end_atom='C', form="iupac")
+                print(ring.write(outfile=False))
+                ref = self.benzene
+                self.assertTrue(validate(ring, ref, thresh="loose"))
+
+            else:
+                self.skipTest("RDKit not installed, CACTVS is not tested")
 
 if __name__ == "__main__":
     unittest.main()
