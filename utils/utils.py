@@ -316,17 +316,19 @@ def same_cycle(graph, a, b):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
         ]
-    graph = copy.deepcopy(graph)
+    graph = [[i for i in j] for j in graph]
 
     graph, removed = trim_leaves(graph)
+
     if a in removed or b in removed:
         return False
     path = shortest_path(graph, a, b)
     for p, q in zip(path[:-1], path[1:]):
         graph[p].remove(q)
         graph[q].remove(p)
+    
     path = shortest_path(graph, a, b)
-    if not path:
+    if path is None:
         return False
     return True
 
@@ -351,7 +353,7 @@ def shortest_path(graph, start, end):
             [graph.atoms.index(j) for j in i.connected if j in graph.atoms]
             for i in graph.atoms
         ]
-    graph = copy.deepcopy(graph)
+    graph = [[i for i in j] for j in graph]
 
     # initialize distance array, parent array, and set of unvisited nodes
     dist = [np.inf for x in graph]
@@ -398,14 +400,20 @@ def shortest_path(graph, start, end):
     return path
 
 
-def trim_leaves(graph, _removed=[]):
+# XXX: for some reason, if _removed defaults to [], it might behave like a global variable
+# def trim_leaves(graph, _removed=[]):
+def trim_leaves(graph, _removed=None):
     from AaronTools.geometry import Geometry
 
+    # print(_removed)
+    if _removed is None:
+        _removed = []
+    
     if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
         ]
-    graph = copy.deepcopy(graph)
+    graph = [[i for i in j] for j in graph]
     some_removed = False
 
     for i, con in enumerate(graph):

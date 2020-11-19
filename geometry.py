@@ -43,10 +43,16 @@ class Geometry:
         comment="",
         components=None,
         refresh_connected=True,
+        refresh_ranks=True,
     ):
         """
         :structure: can be a Geometry(), a FileReader(), a file name, or a
             list of atoms
+        :name: str
+        :comment: str
+        :components: list of AaronTools.component.Component() or None
+        :refresh_connected: usually True - determine connectivity
+        :refresh_ranks: usually True - rank atoms, only False when loading from database
         """
         self.name = name
         self.comment = comment
@@ -83,7 +89,8 @@ class Geometry:
                     # SEQCROW sometimes uses refresh_connected=False to keep
                     # the connectivity the same as what's on screen
                     self.refresh_connected()
-                self.refresh_ranks()
+                if refresh_ranks:
+                    self.refresh_ranks()
                 return
         else:
             return
@@ -97,7 +104,8 @@ class Geometry:
             # some file types contain connectivity info (e.g. sd) - might not want
             # to overwrite that
             self.refresh_connected()
-        self.refresh_ranks()
+        if refresh_ranks:
+            self.refresh_ranks()
         return
 
     # class methods
@@ -770,6 +778,7 @@ class Geometry:
             a.connected = set([])
             for c in con:
                 a.connected.add(atoms[c])
+        
         return atoms
 
     def refresh_connected(self, threshold=None):
@@ -1544,11 +1553,11 @@ class Geometry:
         # con of form (atom_name_1, atom_name_2, original_distance)
         for con in constraints:
             dist = self.atoms[con[0]].dist(self.atoms[con[1]])
-            if dist - con[2] > thresh:
+            if dist - constraints[con] > thresh:
                 # current > constraint: atoms too far apart
                 # want to move closer together
                 rv += [(con[0], con[1], -1)]
-            elif con[2] - dist > thresh:
+            elif constraints[con] - dist > thresh:
                 # constraint > current: atoms too close together
                 # want to move farther apart
                 rv += [(con[0], con[1], 1)]

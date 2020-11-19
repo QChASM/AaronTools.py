@@ -23,7 +23,7 @@ class TestJSON(TestWithTimer):
 
     def json_tester(self, ref, equality_function, as_iter=False, **kwargs):
         # test to json
-        test = json.dumps(ref, cls=ATEncoder)
+        test = json.dumps(ref, cls=ATEncoder, indent=4)
         # test from json
         test = json.loads(test, cls=ATDecoder)
         if as_iter:
@@ -69,7 +69,7 @@ class TestJSON(TestWithTimer):
             skip.remove("name")
         if "comment" not in skip:
             self.assertEqual(ref.comment, test.comment)
-        for a, b in zip(ref, test):
+        for a, b in zip(sorted(ref.atoms, key=lambda x: float(x.name)), sorted(test.atoms, key=lambda x: float(x.name))):
             self.atom_equal(a, b, skip)
 
     def sub_equal(self, ref, test):
@@ -82,22 +82,31 @@ class TestJSON(TestWithTimer):
 
     def component_equal(self, ref, test):
         self.geom_equal(ref, test, skip=["name"])
+        # need to sort substituents to make sure the order is the same
+        # use the name of the first atom in the substituent
         self.assertEqual(len(ref.substituents), len(test.substituents))
-        for r, t in zip(sorted(ref.substituents), sorted(test.substituents)):
+        for r, t in zip(sorted(ref.substituents, key=lambda x: int(x.atoms[0].name)), sorted(test.substituents, key=lambda x: int(x.atoms[0].name))):
             self.geom_equal(r, t, skip=["comment"])
         self.assertEqual(len(ref.backbone), len(test.backbone))
-        for r, t in zip(ref.backbone, test.backbone):
+        for r, t in zip(sorted(ref.backbone), sorted(test.backbone)):
             self.atom_equal(r, t)
         self.assertEqual(len(ref.key_atoms), len(test.key_atoms))
-        for r, t in zip(ref.key_atoms, test.key_atoms):
+        for r, t in zip(sorted(ref.key_atoms), sorted(test.key_atoms)):
             self.atom_equal(r, t)
 
     def catalyst_equal(self, ref, test):
+        # only one of them needs the comment re-parsed, but 
+        # it shouldn't matter if we do both
+        ref.parse_comment()
+        test.parse_comment()
         self.geom_equal(ref, test)
+        if ref.center is None:
+            ref.detect_components()
+        if test.center is None:
+            test.detect_components()
         for r, t in zip(ref.center, test.center):
             self.atom_equal(r, t)
-        for key in ref.components:
-            for r, t in zip(ref.components[key], test.components[key]):
+        for r, t in zip(sorted(ref.components), sorted(test.components)):
                 self.component_equal(r, t)
 
     def comp_out_equal(self, ref, test):

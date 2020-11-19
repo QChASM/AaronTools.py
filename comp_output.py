@@ -92,7 +92,7 @@ class CompOutput:
             "archive",
         ]
 
-        if isinstance(fname, (str, tuple)):
+        if isinstance(fname, (str, tuple)) and len(fname) > 0:
             from_file = FileReader(fname, get_all, just_geom=False)
         elif isinstance(fname, FileReader):
             from_file = fname

@@ -158,7 +158,7 @@ class ATDecoder(json.JSONDecoder):
         kwargs = {"structure": obj["atoms"]}
         for key in ["name", "comment"]:
             kwargs[key] = obj[key]
-        geom = Geometry(**kwargs, refresh_connected=False)
+        geom = Geometry(**kwargs, refresh_connected=False, refresh_ranks=False)
         for i, connected in enumerate(obj["connectivity"]):
             for c in connected:
                 geom.atoms[i].connected.add(geom.atoms[c])

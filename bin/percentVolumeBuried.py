@@ -39,7 +39,7 @@ vbur_parser.add_argument('-t', '--targets',
                          default=None, 
                          required=False, 
                          dest='targets', 
-                         help='atoms to consider in calculation\nDefault: use all atoms excent the center',
+                         help='atoms to consider in calculation\nDefault: use all atoms except the center',
 )
 
 vbur_parser.add_argument('-e', '--exclude-atoms', 

@@ -49,6 +49,7 @@ class Substituent(Geometry):
         """
         sub is either a file sub, a geometry, or an atom list
         """
+        super().__init__()
         self.name = name
         self.atoms = []
         self.end = end
@@ -133,7 +134,6 @@ class Substituent(Geometry):
             self.atoms = from_file.atoms
             if targets is not None:
                 self.atoms = self.find(targets)
-            self.refresh_connected()
 
             # set conformer info
             conf_info = re.search("CF:(\d+),(\d+)", self.comment)
@@ -361,6 +361,7 @@ class Substituent(Geometry):
             ):
                 continue
             ref_sub = Substituent(name)
+            ref_sub.refresh_connected()
             ref_sub.refresh_ranks()
             # add to cache
             sub_lengths[ref_sub.name] = len(ref_sub.atoms)
@@ -394,6 +395,7 @@ class Substituent(Geometry):
                 self.comment = ref_sub.comment
                 self.conf_angle = ref_sub.conf_angle
                 self.conf_num = ref_sub.conf_num
+                found = True
                 break
 
         # update cache

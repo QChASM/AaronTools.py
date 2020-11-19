@@ -768,9 +768,9 @@ class TestGeometry(TestWithTimer):
         """
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         vbur = geom.percent_buried_volume(method="MC")
-        if not np.isclose(vbur, 86.0, atol=0.25):
+        if not np.isclose(vbur, 86.0, atol=0.35):
             print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.25))
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.35))
 
         # a few synthetic tests
         geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
@@ -878,8 +878,7 @@ class TestGeometry(TestWithTimer):
 def suite():
     suite = unittest.TestSuite()
     # suite.addTest(TestGeometry("test_map_ligand"))
-    suite.addTest(TestGeometry("test_vbur_MC"))
-    suite.addTest(TestGeometry("test_vbur_lebedev"))
+    suite.addTest(TestGeometry("test_examine_constraints"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
     # suite.addTest(TestGeometry("test_RMSD"))
