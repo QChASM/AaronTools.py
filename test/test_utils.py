@@ -9,29 +9,15 @@ from AaronTools.utils import utils
 class TestUtils(TestWithTimer):
     def test_same_cycle(self):
         graph = [[1, 2], [0, 2], [0, 1, 3], [2]]
-        print(graph)
         self.assertFalse(utils.same_cycle(graph, 2, 3))
-        print()
-        print(graph)
         self.assertFalse(utils.same_cycle(graph, 0, 3))
-        print()
-        print(graph)
         self.assertTrue(utils.same_cycle(graph, 0, 1))
-        print()
 
         graph = [[1, 2, 3], [0, 2], [0, 1], [0, 4], [3]]
-        print(graph)
         self.assertFalse(utils.same_cycle(graph, 2, 3))
-        print()
-        print(graph)
         self.assertFalse(utils.same_cycle(graph, 0, 4))
-        print()
-        print(graph)
         self.assertTrue(utils.same_cycle(graph, 1, 0))
-        print()
-        print(graph)
         self.assertTrue(utils.same_cycle(graph, 2, 0))
-        print()
 
 
 def suite():
