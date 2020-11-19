@@ -3,10 +3,9 @@ import os
 import unittest
 
 import numpy as np
-
 from AaronTools.fileIO import FileReader, FileWriter
-from AaronTools.test import TestWithTimer, prefix
 from AaronTools.geometry import Geometry
+from AaronTools.test import TestWithTimer, prefix
 from AaronTools.theory import *
 
 
@@ -67,62 +66,70 @@ class TestFileReader(TestWithTimer):
             self.assertTrue(len(a.tags) == 0)
 
     def test_read_orca_out_structure(self):
-        ref = FileReader("ref_files/orca_geom.xyz")
+        ref = FileReader(os.path.join(prefix, "ref_files", "orca_geom.xyz"))
         test = FileReader(os.path.join(prefix, "test_files", "orca_geom.out"))
         self.assertTrue(self.validate_atoms(ref, test))
 
     def test_read_psi4_dat_structure(self):
         ref = FileReader(os.path.join(prefix, "ref_files", "psi4_geom.xyz"))
-        test = FileReader((self.psi4_output_file, 'dat', None))
+        test = FileReader((self.psi4_output_file, "dat", None))
         self.assertTrue(self.validate_atoms(ref, test))
 
     def test_read_log_structure(self):
-        ref = FileReader("ref_files/file_io_normal.xyz")
+        ref = FileReader(
+            os.path.join(prefix, "ref_files", "file_io_normal.xyz")
+        )
         test = FileReader(os.path.join(prefix, "test_files", "normal.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
-        ref = FileReader("ref_files/file_io_error.xyz")
+        ref = FileReader(
+            os.path.join(prefix, "ref_files", "file_io_error.xyz")
+        )
         test = FileReader(os.path.join(prefix, "test_files", "error.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
-        ref = FileReader("ref_files/file_io_died.xyz")
+        ref = FileReader(os.path.join(prefix, "ref_files", "file_io_died.xyz"))
         test = FileReader(os.path.join(prefix, "test_files", "died.log"))
         self.assertTrue(self.validate_atoms(ref, test))
 
     def test_read_com_info(self):
         """testing if we can read route info"""
-        ref1 = {'method': 'B3LYP/aug-cc-pVDZ', \
-                'temperature': '298.15', \
-                'solvent': '1,1,1-TriChloroEthane', \
-                'solvent_model': 'PCM', \
-                'emp_dispersion': 'GD3', \
-                'grid': 'SuperFineGrid', \
-                'comment': 'testing 1 2 3\ntesting 1 2 3', \
-                'charge': 0, \
-                'multiplicity': 1}
+        ref1 = {
+            "method": "B3LYP/aug-cc-pVDZ",
+            "temperature": "298.15",
+            "solvent": "1,1,1-TriChloroEthane",
+            "solvent_model": "PCM",
+            "emp_dispersion": "GD3",
+            "grid": "SuperFineGrid",
+            "comment": "testing 1 2 3\ntesting 1 2 3",
+            "charge": 0,
+            "multiplicity": 1,
+        }
 
         test = FileReader(self.com_file1, just_geom=False)
         self.assertEqual(test.other, ref1)
 
-        ref2 = {'method': 'B3LYP/aug-cc-pVDZ', \
-                'temperature': '298.15', \
-                'solvent': '1,1,1-TriChloroEthane', \
-                'solvent_model': 'PCM', \
-                'emp_dispersion': 'GD3', \
-                'grid': 'ultrafinegrid', \
-                'comment': 'testing 1 2 3\ntesting 1 2 3', \
-                'charge': 0, \
-                'multiplicity': 1}
+        ref2 = {
+            "method": "B3LYP/aug-cc-pVDZ",
+            "temperature": "298.15",
+            "solvent": "1,1,1-TriChloroEthane",
+            "solvent_model": "PCM",
+            "emp_dispersion": "GD3",
+            "grid": "ultrafinegrid",
+            "comment": "testing 1 2 3\ntesting 1 2 3",
+            "charge": 0,
+            "multiplicity": 1,
+        }
 
         test = FileReader(self.com_file2, just_geom=False)
         self.assertEqual(test.other, ref2)
 
     def test_write_com(self):
         """write gaussian input file"""
-        #this compares the exact string, not things like RMSD or dictionaries
-        #if it fails, someone may have added a column of whitespace or something
+        # this compares the exact string, not things like RMSD or dictionaries
+        # if it fails, someone may have added a column of whitespace or something
         geom = Geometry(self.small_mol)
-       
+
         ref = """#n PBE1PBE/gen freq=(temperature=298.15,HPModes,NoRaman) opt=VeryTight EmpiricalDispersion=GD3BJ scrf=(SMD,solvent=dichloromethane)
 
 comment line 1
@@ -155,33 +162,38 @@ def2TZVP
 
 """
 
-        theory = Theory(charge=0, \
-                        multiplicity=1, \
-                        method="PBE0", \
-                        basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
-                        solvent=ImplicitSolvent("SMD", "dichloromethane"), \
-                        job_type=[FrequencyJob(), OptimizationJob()], \
-                 )
+        theory = Theory(
+            charge=0,
+            multiplicity=1,
+            method="PBE0",
+            basis=BasisSet(
+                [Basis("def2-SVP", ["H"]), Basis("def2-TZVP", ["C"])]
+            ),
+            empirical_dispersion=EmpiricalDispersion("D3BJ"),
+            solvent=ImplicitSolvent("SMD", "dichloromethane"),
+            job_type=[FrequencyJob(), OptimizationJob()],
+        )
 
-        kw_dict = {GAUSSIAN_ROUTE: {"opt": ['VeryTight'], \
-                                    "freq": ['HPModes', 'NoRaman'], \
-                                   }, \
-                   GAUSSIAN_COMMENT: ['comment line 1', 'comment line 2'], \
-                  }
+        kw_dict = {
+            GAUSSIAN_ROUTE: {
+                "opt": ["VeryTight"],
+                "freq": ["HPModes", "NoRaman"],
+            },
+            GAUSSIAN_COMMENT: ["comment line 1", "comment line 2"],
+        }
 
-        test = FileWriter.write_com(geom, theory=theory, outfile=False, **kw_dict)
+        test = FileWriter.write_com(
+            geom, theory=theory, outfile=False, **kw_dict
+        )
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
 
-    
     def test_write_inp(self):
         """write orca input file"""
-        #like gaussian input files, this compares exact output
+        # like gaussian input files, this compares exact output
 
         geom = Geometry(self.small_mol)
-
 
         ref = """#comment line 1
 #comment line 2
@@ -215,25 +227,30 @@ O    -3.965790  -3.592630   0.001340
 
 """
 
-        theory = Theory(charge=0, \
-                        multiplicity=1, \
-                        method="PBE0", \
-                        basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
-                        solvent=ImplicitSolvent("SMD", "dichloromethane"), \
-                        job_type=[FrequencyJob(), OptimizationJob()], \
-                 )
+        theory = Theory(
+            charge=0,
+            multiplicity=1,
+            method="PBE0",
+            basis=BasisSet(
+                [Basis("def2-SVP", ["H"]), Basis("def2-TZVP", ["C"])]
+            ),
+            empirical_dispersion=EmpiricalDispersion("D3BJ"),
+            solvent=ImplicitSolvent("SMD", "dichloromethane"),
+            job_type=[FrequencyJob(), OptimizationJob()],
+        )
 
-        kw_dict = {ORCA_COMMENT: ['comment line 1', 'comment line 2']}
+        kw_dict = {ORCA_COMMENT: ["comment line 1", "comment line 2"]}
 
-        test = FileWriter.write_inp(geom, theory=theory, outfile=False, **kw_dict)
+        test = FileWriter.write_inp(
+            geom, theory=theory, outfile=False, **kw_dict
+        )
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
 
     def test_write_in(self):
         """write psi4 input file"""
-        #like gaussian input files, this compares exact output
+        # like gaussian input files, this compares exact output
 
         geom = Geometry(self.small_mol)
 
@@ -270,23 +287,30 @@ nrg = frequencies('PBE0-d3bj')
 nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
 """
 
-        theory = Theory(charge=0, \
-                        multiplicity=1, \
-                        method="PBE0", \
-                        basis=BasisSet([Basis('def2-SVP', ['H']), Basis('def2-TZVP', ['C'])]), \
-                        empirical_dispersion=EmpiricalDispersion("D3BJ"), \
-                        job_type=[FrequencyJob(), OptimizationJob()], \
-                 )
+        theory = Theory(
+            charge=0,
+            multiplicity=1,
+            method="PBE0",
+            basis=BasisSet(
+                [Basis("def2-SVP", ["H"]), Basis("def2-TZVP", ["C"])]
+            ),
+            empirical_dispersion=EmpiricalDispersion("D3BJ"),
+            job_type=[FrequencyJob(), OptimizationJob()],
+        )
 
-        kw_dict = {PSI4_COMMENT: ['comment line 1', 'comment line 2'], PSI4_JOB:{'optimize':['return_wfn=True']}}
+        kw_dict = {
+            PSI4_COMMENT: ["comment line 1", "comment line 2"],
+            PSI4_JOB: {"optimize": ["return_wfn=True"]},
+        }
 
-        test = FileWriter.write_in(geom, theory=theory, outfile=False, **kw_dict)
+        test = FileWriter.write_in(
+            geom, theory=theory, outfile=False, **kw_dict
+        )
 
         self.assertEqual(test.splitlines(), ref.splitlines())
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
-
 
 
 if __name__ == "__main__":

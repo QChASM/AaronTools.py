@@ -4,17 +4,16 @@ import os
 import unittest
 
 import numpy as np
-
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 class TestSubstituent(TestWithTimer):
-    COCH3 = Geometry(os.path.join(prefix, "test_files/COCH3.xyz"))
-    NO2 = Geometry(os.path.join(prefix, "test_files/NO2.xyz"))
+    COCH3 = Geometry(os.path.join(prefix, "test_files", "COCH3.xyz"))
+    NO2 = Geometry(os.path.join(prefix, "test_files", "NO2.xyz"))
     benz_NO2_Cl = Geometry(
-        os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+        os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
     )
 
     def is_COCH3(self, sub):

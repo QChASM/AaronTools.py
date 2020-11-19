@@ -9,8 +9,8 @@ from numpy import array
 
 
 class TestPathway(TestWithTimer):
-    t60 = Geometry(os.path.join(prefix, "test_files/torsion-60.xyz"))
-    t90 = Geometry(os.path.join(prefix, "test_files/torsion-90.xyz"))
+    t60 = Geometry(os.path.join(prefix, "test_files", "torsion-60.xyz"))
+    t90 = Geometry(os.path.join(prefix, "test_files", "torsion-90.xyz"))
 
     def test_interpolating_structure(self):
         # test to see if interpolated geometry is correct

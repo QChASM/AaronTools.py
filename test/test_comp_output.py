@@ -9,12 +9,12 @@ from AaronTools.test import TestWithTimer, prefix
 
 class TestCompOutput(TestWithTimer):
     # with frequencies
-    normal = CompOutput(os.path.join(prefix, "test_files/normal.log"))
-    died = CompOutput(os.path.join(prefix, "test_files/died.log"))
-    error = CompOutput(os.path.join(prefix, "test_files/error.log"))
+    normal = CompOutput(os.path.join(prefix, "test_files", "normal.log"))
+    died = CompOutput(os.path.join(prefix, "test_files", "died.log"))
+    error = CompOutput(os.path.join(prefix, "test_files", "error.log"))
     # optimization
-    opt_run = CompOutput(os.path.join(prefix, "test_files/opt_running.log"))
-    opt_norm = CompOutput(os.path.join(prefix, "test_files/opt_normal.log"))
+    opt_run = CompOutput(os.path.join(prefix, "test_files", "opt_running.log"))
+    opt_norm = CompOutput(os.path.join(prefix, "test_files", "opt_normal.log"))
 
     def test_get_progress(self):
         test = [TestCompOutput.died.get_progress()]
@@ -54,7 +54,13 @@ class TestCompOutput(TestWithTimer):
             ]
         ]
         ref = [
-            [-1856.01865834, -1855.440611, -1855.538011, -1855.5328046892625, 0.486148]
+            [
+                -1856.01865834,
+                -1855.440611,
+                -1855.538011,
+                -1855.5328046892625,
+                0.486148,
+            ]
         ]
 
         tmp = logs[1]

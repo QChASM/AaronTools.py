@@ -34,7 +34,7 @@ def is_close(a, b, tol=10 ** -8, debug=False):
 
 
 class TestGeometry(TestWithTimer):
-    benz_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    benz_NO2_Cl = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
     benz_NO2_Cl_conn = [
         "2,6,12",
         "1,3,7",
@@ -52,30 +52,36 @@ class TestGeometry(TestWithTimer):
         "12",
     ]
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
-    benzene = os.path.join(prefix, "test_files/benzene.xyz")
-    pyridine = os.path.join(prefix, "test_files/pyridine.xyz")
-    pentane = os.path.join(prefix, "test_files/pentane.xyz")
-    naphthalene = os.path.join(prefix, "ref_files/naphthalene.xyz")
+    benzene = os.path.join(prefix, "test_files", "benzene.xyz")
+    pyridine = os.path.join(prefix, "test_files", "pyridine.xyz")
+    pentane = os.path.join(prefix, "test_files", "pentane.xyz")
+    naphthalene = os.path.join(prefix, "ref_files", "naphthalene.xyz")
     tetrahydronaphthalene = os.path.join(
-        prefix, "ref_files/tetrahydronaphthalene.xyz"
+        prefix, "ref_files", "tetrahydronaphthalene.xyz"
     )
-    pyrene = os.path.join(prefix, "ref_files/pyrene.xyz")
-    benz_Cl = os.path.join(prefix, "test_files/benzene_4-Cl.xyz")
-    benz_OH_Cl = os.path.join(prefix, "test_files/benzene_1-OH_4-Cl.xyz")
-    benz_Ph_Cl = os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
-    Et_NO2 = os.path.join(prefix, "test_files/Et_1-NO2.xyz")
-    cat = os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
+    pyrene = os.path.join(prefix, "ref_files", "pyrene.xyz")
+    benz_Cl = os.path.join(prefix, "test_files", "benzene_4-Cl.xyz")
+    benz_OH_Cl = os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
+    benz_Ph_Cl = os.path.join(prefix, "test_files", "benzene_1-Ph_4-Cl.xyz")
+    Et_NO2 = os.path.join(prefix, "test_files", "Et_1-NO2.xyz")
+    cat = os.path.join(prefix, "test_files", "catalysts", "tm_single-lig.xyz")
 
-    tm_simple = os.path.join(prefix, "test_files/catalysts/tm_single-lig.xyz")
-    tm_multi = os.path.join(prefix, "test_files/catalysts/tm_multi-lig.xyz")
-    org_1 = os.path.join(prefix, "test_files/catalysts/org_1.xyz")
-    org_tri = os.path.join(prefix, "test_files/catalysts/org_tri.xyz")
+    tm_simple = os.path.join(
+        prefix, "test_files", "catalysts/tm_single-lig.xyz"
+    )
+    tm_multi = os.path.join(
+        prefix, "test_files", "catalysts", "tm_multi-lig.xyz"
+    )
+    org_1 = os.path.join(prefix, "test_files", "catalysts", "org_1.xyz")
+    org_tri = os.path.join(prefix, "test_files", "catalysts", "org_tri.xyz")
     ptco4 = os.path.join(prefix, "test_files", "ptco4.xyz")
     catalysts = [tm_simple, tm_multi, org_1, org_tri, ptco4]
 
-    monodentate = os.path.join(prefix, "test_files/ligands/ACN.xyz")
-    bidentate = os.path.join(prefix, "test_files/ligands/S-tBu-BOX.xyz")
-    tridentate = os.path.join(prefix, "test_files/ligands/squaramide.xyz")
+    monodentate = os.path.join(prefix, "test_files", "ligands", "ACN.xyz")
+    bidentate = os.path.join(prefix, "test_files", "ligands", "S-tBu-BOX.xyz")
+    tridentate = os.path.join(
+        prefix, "test_files", "ligands", "squaramide.xyz"
+    )
 
     lig_1 = os.path.join(prefix, "test_files", "lig_1.xyz")
     lig_2 = os.path.join(prefix, "test_files", "lig_2.xyz")
@@ -222,12 +228,12 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(len(old) - len(mol.atoms[0].connected) == 1)
 
     def test_canonical_rank(self):
-        pentane = Geometry(os.path.join(prefix, "test_files/pentane.xyz"))
+        pentane = Geometry(os.path.join(prefix, "test_files", "pentane.xyz"))
         pentane_rank = [1, 3, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
 
-        mol = Geometry(os.path.join(prefix, "test_files/6a2e5am1hex.xyz"))
+        mol = Geometry(os.path.join(prefix, "test_files", "6a2e5am1hex.xyz"))
         mol_rank = [11, 9, 8, 10, 6, 5, 4, 7, 3, 0, 2, 1]
         test_rank = mol.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, mol_rank)
@@ -389,7 +395,7 @@ class TestGeometry(TestWithTimer):
                 )
 
         with open(
-            os.path.join(prefix, "ref_files/detect_components.json")
+            os.path.join(prefix, "ref_files", "detect_components.json")
         ) as f:
             ref = json.load(f)
         self.assertDictEqual(test, ref)
@@ -689,7 +695,7 @@ class TestGeometry(TestWithTimer):
         """
 
         # bidentate -> monodentate, none
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_1.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_1.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand(monodentate.copy(), ["35"])
         self.assertTrue(
@@ -699,7 +705,7 @@ class TestGeometry(TestWithTimer):
         )
 
         # bidentate -> two monodentate
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_2.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_2.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand([monodentate.copy(), "ACN"], ["35", "36"])
         self.assertTrue(
@@ -709,7 +715,7 @@ class TestGeometry(TestWithTimer):
         )
 
         # bidentate -> bidentate
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_3.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
         self.assertTrue(
@@ -719,7 +725,7 @@ class TestGeometry(TestWithTimer):
         )
 
         # tridentate -> tridentate
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_4.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_4.xyz"))
         org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
         self.assertTrue(
@@ -729,7 +735,7 @@ class TestGeometry(TestWithTimer):
         )
 
         # tridentate -> monodentate + bidentate -> tridentate
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_6.xyz"))
         org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(["EDA", "ACN"], ["30", "28", "58"])
         self.assertTrue(
@@ -738,8 +744,8 @@ class TestGeometry(TestWithTimer):
             )
         )
 
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_7.xyz"))
-        org_tri = Geometry(os.path.join(prefix, "ref_files/lig_map_6.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_7.xyz"))
+        org_tri = Geometry(os.path.join(prefix, "ref_files", "lig_map_6.xyz"))
         org_tri.map_ligand(tridentate, ["10", "11", "2"])
         self.assertTrue(
             validate(
@@ -748,7 +754,7 @@ class TestGeometry(TestWithTimer):
         )
 
         # bidentate -> two bulky monodentate
-        ref = Geometry(os.path.join(prefix, "ref_files/lig_map_5.xyz"))
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_5.xyz"))
         tm_simple = Geometry(TestGeometry.tm_simple)
         tm_simple.map_ligand(["iPr-NC3C"] * 2, ["35", "36"])
         self.assertTrue(

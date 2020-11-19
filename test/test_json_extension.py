@@ -4,7 +4,6 @@ import os
 import unittest
 
 import numpy as np
-
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
@@ -15,11 +14,11 @@ from AaronTools.test import TestWithTimer, prefix
 
 
 class TestJSON(TestWithTimer):
-    small_mol = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
-    COCH3 = os.path.join(prefix, "test_files/COCH3.xyz")
-    lig = os.path.join(prefix, "test_files/ligands/R-Quinox-tBu3.xyz")
-    cat = os.path.join(prefix, "test_files/catalysts/tm_multi-lig.xyz")
-    log = os.path.join(prefix, "test_files/normal.log")
+    small_mol = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    COCH3 = os.path.join(prefix, "test_files", "COCH3.xyz")
+    lig = os.path.join(prefix, "test_files", "ligands", "R-Quinox-tBu3.xyz")
+    cat = os.path.join(prefix, "test_files", "catalysts", "tm_multi-lig.xyz")
+    log = os.path.join(prefix, "test_files", "normal.log")
 
     def json_tester(self, ref, equality_function, as_iter=False, **kwargs):
         # test to json
@@ -69,7 +68,10 @@ class TestJSON(TestWithTimer):
             skip.remove("name")
         if "comment" not in skip:
             self.assertEqual(ref.comment, test.comment)
-        for a, b in zip(sorted(ref.atoms, key=lambda x: float(x.name)), sorted(test.atoms, key=lambda x: float(x.name))):
+        for a, b in zip(
+            sorted(ref.atoms, key=lambda x: float(x.name)),
+            sorted(test.atoms, key=lambda x: float(x.name)),
+        ):
             self.atom_equal(a, b, skip)
 
     def sub_equal(self, ref, test):
@@ -85,7 +87,10 @@ class TestJSON(TestWithTimer):
         # need to sort substituents to make sure the order is the same
         # use the name of the first atom in the substituent
         self.assertEqual(len(ref.substituents), len(test.substituents))
-        for r, t in zip(sorted(ref.substituents, key=lambda x: int(x.atoms[0].name)), sorted(test.substituents, key=lambda x: int(x.atoms[0].name))):
+        for r, t in zip(
+            sorted(ref.substituents, key=lambda x: int(x.atoms[0].name)),
+            sorted(test.substituents, key=lambda x: int(x.atoms[0].name)),
+        ):
             self.geom_equal(r, t, skip=["comment"])
         self.assertEqual(len(ref.backbone), len(test.backbone))
         for r, t in zip(sorted(ref.backbone), sorted(test.backbone)):
@@ -95,7 +100,7 @@ class TestJSON(TestWithTimer):
             self.atom_equal(r, t)
 
     def catalyst_equal(self, ref, test):
-        # only one of them needs the comment re-parsed, but 
+        # only one of them needs the comment re-parsed, but
         # it shouldn't matter if we do both
         ref.parse_comment()
         test.parse_comment()
@@ -107,7 +112,7 @@ class TestJSON(TestWithTimer):
         for r, t in zip(ref.center, test.center):
             self.atom_equal(r, t)
         for r, t in zip(sorted(ref.components), sorted(test.components)):
-                self.component_equal(r, t)
+            self.component_equal(r, t)
 
     def comp_out_equal(self, ref, test):
         keys = [
