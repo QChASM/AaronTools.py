@@ -1,0 +1,11 @@
+include *.json
+include *.py
+include LICENSE
+include config.ini
+recursive-include Ligands *
+recursive-include Rings *
+recursive-include Substituents *
+recursive-include test/ref_files *
+recursive-include test/test_files *
+recursive-include utils/quad_grids *
+recursive-include utils *.py

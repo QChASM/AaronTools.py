@@ -1,7 +1,6 @@
 """For storing, manipulating, and measuring molecular structures"""
 import itertools
 import re
-import urllib
 from collections import deque
 from copy import deepcopy
 from urllib.error import HTTPError

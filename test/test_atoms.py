@@ -10,7 +10,9 @@ from AaronTools.test import TestWithTimer, prefix
 
 
 class TestBondOrder(TestWithTimer):
-    benzene_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+    benzene_NO2_Cl = os.path.join(
+        prefix, "test_files", "benzene_1-NO2_4-Cl.xyz"
+    )
 
     def test_get(self):
         mol = Geometry(TestBondOrder.benzene_NO2_Cl)
@@ -37,9 +39,11 @@ class TestBondOrder(TestWithTimer):
 
 class TestAtoms(TestWithTimer):
     # Test constants
-    benzene_NO2_Cl = os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
-    pentane = os.path.join(prefix, "test_files/pentane.xyz")
-    hexanol_diamine = os.path.join(prefix, "test_files/6a2e5am1hex.xyz")
+    benzene_NO2_Cl = os.path.join(
+        prefix, "test_files", "benzene_1-NO2_4-Cl.xyz"
+    )
+    pentane = os.path.join(prefix, "test_files", "pentane.xyz")
+    hexanol_diamine = os.path.join(prefix, "test_files", "6a2e5am1hex.xyz")
 
     # helper functions
     def read_xyz(self, fname):

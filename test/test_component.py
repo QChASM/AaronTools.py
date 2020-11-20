@@ -10,25 +10,27 @@ from AaronTools.test import TestWithTimer, prefix, validate
 
 class TestComponent(TestWithTimer):
     # simple geometries
-    benz = Component(os.path.join(prefix, "test_files/benzene.xyz"))
-    benz_Cl = Component(os.path.join(prefix, "test_files/benzene_4-Cl.xyz"))
+    benz = Component(os.path.join(prefix, "test_files", "benzene.xyz"))
+    benz_Cl = Component(os.path.join(prefix, "test_files", "benzene_4-Cl.xyz"))
     benz_NO2_Cl = Component(
-        os.path.join(prefix, "test_files/benzene_1-NO2_4-Cl.xyz")
+        os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
     )
     benz_OH_Cl = Component(
-        os.path.join(prefix, "test_files/benzene_1-OH_4-Cl.xyz")
+        os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
     )
     benz_Ph_Cl = Component(
-        os.path.join(prefix, "test_files/benzene_1-Ph_4-Cl.xyz")
+        os.path.join(prefix, "test_files", "benzene_1-Ph_4-Cl.xyz")
     )
-    Et_NO2 = Component(os.path.join(prefix, "test_files/Et_1-NO2.xyz"))
-    pent = Component(os.path.join(prefix, "test_files/pentane.xyz"))
+    Et_NO2 = Component(os.path.join(prefix, "test_files", "Et_1-NO2.xyz"))
+    pent = Component(os.path.join(prefix, "test_files", "pentane.xyz"))
 
     # ligands
-    RQ_tBu = Component(os.path.join(prefix, "test_files/R-Quinox-tBu3.xyz"))
+    RQ_tBu = Component(os.path.join(prefix, "test_files", "R-Quinox-tBu3.xyz"))
     for a in RQ_tBu.find("P"):
         a.add_tag("key")
-    tri = Component(os.path.join(prefix, "test_files/ligands/squaramide.xyz"))
+    tri = Component(
+        os.path.join(prefix, "test_files", "ligands", "squaramide.xyz")
+    )
 
     def is_member(self, valid, test):
         for a in valid:
@@ -72,7 +74,7 @@ class TestComponent(TestWithTimer):
         tBu = geom.find("4-6,24-59")
 
         try:
-            test_Me = set(geom.find("Me"))
+            test_Me = set(geom.find(["Me", "CH3"]))
             test_tBu = set(geom.find("tBu"))
             test_backbone = set(geom.find("backbone"))
         except LookupError:
@@ -83,7 +85,9 @@ class TestComponent(TestWithTimer):
         self.assertTrue(self.is_member(backbone, test_backbone))
 
     def test_minimize_torsion(self):
-        ref = Component("ref_files/minimize_torsion.xyz")
+        ref = Component(
+            os.path.join(prefix, "ref_files", "minimize_torsion.xyz")
+        )
 
         geom = TestComponent.benz.copy()
         geom.substitute(Substituent("tBu"), "12")
@@ -97,7 +101,7 @@ class TestComponent(TestWithTimer):
         geom.sub_rotate("4", angle=60)
         geom.sub_rotate("6", angle=60)
         geom.sub_rotate("5", angle=60)
-        ref = Component(os.path.join(prefix, "ref_files/sub_rotate.xyz"))
+        ref = Component(os.path.join(prefix, "ref_files", "sub_rotate.xyz"))
         self.assertTrue(validate(geom, ref, heavy_only=True))
 
 

@@ -45,7 +45,7 @@ sterimol_parser.add_argument('-r', '--radii', \
                                 default='bondi', \
                                 choices=['bondi', 'umn'], \
                                 dest='radii', \
-                                help="van der Waals radii - Bondi or Truhlar et. al.")
+                                help="van der Waals radii - Bondi or Truhlar et. al.\nDefault: bondi")
 
 sterimol_parser.add_argument('-v', '--vector', \
                             action='store_true', \

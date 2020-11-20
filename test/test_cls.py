@@ -26,8 +26,10 @@ class TestCLS(TestWithTimer):
         prefix, "ref_files", "chlorotoluene_180.xyz"
     )
 
-    benzene_dimer = os.path.join("test_files", "benzene_dimer.xyz")
-    benzene_dimer_ref = os.path.join("ref_files", "benzene_dimer_ref.xyz")
+    benzene_dimer = os.path.join(prefix, "test_files", "benzene_dimer.xyz")
+    benzene_dimer_ref = os.path.join(
+        prefix, "ref_files", "benzene_dimer_ref.xyz"
+    )
 
     naphthalene = os.path.join(prefix, "ref_files", "naphthalene.xyz")
 
@@ -208,7 +210,6 @@ class TestCLS(TestWithTimer):
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
-
 
         args = [
             sys.executable,
@@ -653,7 +654,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         assumes current working directory is writable b/c interpolate doesn't
         print structures to stdout"""
         ref = Geometry(
-            os.path.join(prefix, "ref_files/torsion_interpolation.xyz")
+            os.path.join(prefix, "ref_files", "torsion_interpolation.xyz")
         )
 
         args = [

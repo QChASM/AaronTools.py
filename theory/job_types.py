@@ -1,5 +1,3 @@
-import os
-
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_GEN_BASIS,
