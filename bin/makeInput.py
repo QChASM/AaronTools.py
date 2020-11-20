@@ -363,7 +363,15 @@ for pos in [PSI4_SETTINGS, PSI4_COORDINATES, PSI4_JOB, PSI4_OPTKING, GAUSSIAN_RO
             kwargs[pos][setting].extend(opt)
 
 
-for pos in [ORCA_ROUTE, PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, PSI4_BEFORE_JOB, GAUSSIAN_POST]:
+for pos in [ORCA_ROUTE]:
+    opt = getattr(args, pos)
+    if len(opt) > 0:
+        if pos not in kwargs:
+            kwargs[pos] = []
+
+        kwargs[pos].extend(opt)
+
+for pos in [PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, PSI4_BEFORE_JOB, GAUSSIAN_POST]:
     opt = getattr(args, pos)
     if len(opt) > 0:
         if pos not in kwargs:

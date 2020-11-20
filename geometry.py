@@ -1551,6 +1551,8 @@ class Geometry:
         constraints = self.get_constraints()
         # con of form (atom_name_1, atom_name_2, original_distance)
         for con in constraints:
+            if len(con) != 2:
+                continue
             dist = self.atoms[con[0]].dist(self.atoms[con[1]])
             if dist - constraints[con] > thresh:
                 # current > constraint: atoms too far apart
