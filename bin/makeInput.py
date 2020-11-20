@@ -256,18 +256,20 @@ psi4_options.add_argument("--before-molecule",
 
 psi4_options.add_argument("--before-job",
                           action="append",
+                          nargs="+",
                           default=[],
                           dest=PSI4_BEFORE_JOB,
                           metavar="BEFORE JOB",
-                          help="line to add before the job",
+                          help="line to add before the job\ninput file(s) should not be right after --before-job",
 )
 
 psi4_options.add_argument("--after-job",
                           action="append",
+                          nargs="+",
                           default=[],
                           dest=PSI4_AFTER_JOB,
                           metavar="AFTER JOB",
-                          help="line to add after the job",
+                          help="line to add after the job\ninput file(s) should not be right after --after-job",
 )
 
 
@@ -276,7 +278,7 @@ psi4_options.add_argument("--job",
                           nargs="+",
                           default=[],
                           dest=PSI4_JOB,
-                          metavar="AFTER JOB",
+                          metavar="JOB",
                           help="other jobs to add\nexample: --job hessian\ninput file(s) should not be right after --job",
 )
 
@@ -367,7 +369,7 @@ for pos in [ORCA_ROUTE, PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, PSI4_BEFORE_JOB, GAUSS
         if pos not in kwargs:
             kwargs[pos] = []
 
-        kwargs[pos].extend(opt)
+        kwargs[pos].extend([" ".join(word) for word in opt])
 
 if len(args.comments) > 0:
     kwargs["comments"] = [" ".join(comment) for comment in args.comments]
