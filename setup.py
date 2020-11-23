@@ -121,7 +121,13 @@ setup(
     #
     #   py_modules=["my_module"],
     #
-    packages=find_packages(include=["AaronTools", "AaronTools.*"]),  # Required
+    packages=find_packages(
+        include=[
+            "AaronTools",
+            "AaronTools.*",
+        ]
+    ),  # Required
+    include_package_data=True,
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
     # and refuse to install the project if the version does not match. If you
@@ -134,6 +140,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
+    setup_requires=["setuptools_git"],
     install_requires=["numpy", "scipy"],
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
@@ -143,7 +150,7 @@ setup(
     #
     # Similar to `install_requires` above, these must be valid existing
     # projects.
-       #are we sure we can list rdkit here, since it is not installable via pip (only conda)?
+    # are we sure we can list rdkit here, since it is not installable via pip (only conda)?
     extras_require={  # Optional
         "extras": ["rdkit", "pdfminer", "jinja2"],
     },
@@ -155,6 +162,8 @@ setup(
     # For example, the following would provide a command called `sample` which
     # executes the function `main` from this package when invoked:
     scripts=script_files,  # Optional
+    # test suite hook
+    test_suite="unittest",
     # List additional URLs that are relevant to your project as a dict.
     #
     # This field corresponds to the "Project-URL" metadata fields:
