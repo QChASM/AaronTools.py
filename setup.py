@@ -121,7 +121,7 @@ setup(
     #
     #   py_modules=["my_module"],
     #
-    packages=find_packages(),  # Required
+    packages=find_packages(include=["AaronTools", "AaronTools.*"]),  # Required
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
     # and refuse to install the project if the version does not match. If you
@@ -145,7 +145,7 @@ setup(
     # projects.
        #are we sure we can list rdkit here, since it is not installable via pip (only conda)?
     extras_require={  # Optional
-        "extras": ["rdkit", "pdfminer", "jinja2"],	
+        "extras": ["rdkit", "pdfminer", "jinja2"],
     },
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow

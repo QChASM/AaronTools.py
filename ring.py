@@ -5,7 +5,7 @@ import os
 import re
 from glob import glob
 
-from AaronTools.const import AARONLIB, QCHASM
+from AaronTools.const import AARONLIB, AARONTOOLS
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
@@ -19,7 +19,7 @@ class Ring(Geometry):
     """
 
     AARON_LIBS = os.path.join(AARONLIB, "Rings", "*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools", "Rings", "*.xyz")
+    BUILTIN = os.path.join(AARONTOOLS, "Rings", "*.xyz")
 
     def __init__(self, frag, name=None, end=None):
         """

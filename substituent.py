@@ -9,7 +9,7 @@ from warnings import warn
 
 import numpy as np
 
-from AaronTools.const import AARONLIB, BONDI_RADII, QCHASM, VDW_RADII
+from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import proj, rotation_matrix
@@ -26,7 +26,7 @@ class Substituent(Geometry):
     """
 
     AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools", "Substituents", "*.xyz")
+    BUILTIN = os.path.join(AARONTOOLS, "Substituents", "*.xyz")
     CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
 
     try:

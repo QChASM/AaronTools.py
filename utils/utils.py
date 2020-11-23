@@ -1,12 +1,12 @@
-import os
 import collections.abc
 import copy
+import os
 import re
 from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
-from AaronTools.const import QCHASM
 import numpy as np
+from AaronTools.const import AARONTOOLS
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -326,7 +326,7 @@ def same_cycle(graph, a, b):
     for p, q in zip(path[:-1], path[1:]):
         graph[p].remove(q)
         graph[q].remove(p)
-    
+
     path = shortest_path(graph, a, b)
     if path is None:
         return False
@@ -408,7 +408,7 @@ def trim_leaves(graph, _removed=None):
     # print(_removed)
     if _removed is None:
         _removed = []
-    
+
     if isinstance(graph, Geometry):
         graph = [
             [graph.atoms.index(j) for j in i.connected] for i in graph.atoms
@@ -500,62 +500,67 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
     """
     # generate a grid of points on the unit sphere
     grid = np.zeros((n, 3))
-    d_theta = np.pi * (3. - np.sqrt(5.))
-    dy = 2./(n - 1)
-    
+    d_theta = np.pi * (3.0 - np.sqrt(5.0))
+    dy = 2.0 / (n - 1)
+
     for i in range(0, n):
         y = 1 - i * dy
-        r = np.sqrt(1 - y**2)
-        
+        r = np.sqrt(1 - y ** 2)
+
         theta = i * d_theta
-        
+
         x = np.cos(theta) * r
         z = np.sin(theta) * r
-        
+
         grid[i] = np.array([x, y, z])
-    
+
     # scale the points to the specified radius and move the center
     grid *= radius
     grid += center
-    
+
     return grid
+
 
 def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
     """
-    returns one of the Lebedev grid points (xi, yi, zi) 
-    and weights (wi) with the specified radius and center. 
-    Weights do not include r**2, so integral of F(x,y,z) 
-    over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number 
+    returns one of the Lebedev grid points (xi, yi, zi)
+    and weights (wi) with the specified radius and center.
+    Weights do not include r**2, so integral of F(x,y,z)
+    over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number
     of points (n) must be one of 110, 194, 302, 590, 1454, 5810
     """
     # read grid data  on unit sphere
-    grid_file = os.path.join(QCHASM, "AaronTools", "utils", "quad_grids", "Leb" + str(n) + ".grid")
+    grid_file = os.path.join(
+        AARONTOOLS, "utils", "quad_grids", "Leb" + str(n) + ".grid"
+    )
     grid_data = np.loadtxt(grid_file)
-    grid = grid_data[:, [0,1,2]]  
-    weights = grid_data[:,3]
-  
+    grid = grid_data[:, [0, 1, 2]]
+    weights = grid_data[:, 3]
+
     # scale the points to the specified radius and move the center
     grid *= radius
     grid += center
 
     return grid, weights
 
+
 def gauss_legendre_grid(a=-1, b=1, n=32):
     """
-    returns a Gauss-Legendre grid points (xi) and weights 
+    returns a Gauss-Legendre grid points (xi) and weights
     (wi)for the range a to b. Integral over F(x) is
-    \sum_i{F(xi)wi}. The number of points (n) must be one 
+    \sum_i{F(xi)wi}. The number of points (n) must be one
     of 20, 32, 64, 75, 99, 127
     """
     # read grid points on the range [-1,1] and weights
-    grid_file = os.path.join(QCHASM, "AaronTools", "utils", "quad_grids", "Leg" + str(n) + ".grid")
+    grid_file = os.path.join(
+        AARONTOOLS, "utils", "quad_grids", "Leg" + str(n) + ".grid"
+    )
     grid_data = np.loadtxt(grid_file)
-    
+
     # shift grid range to [a,b]
-    grid = grid_data[:,0]*(b - a)/2 + a + (b - a)/2
+    grid = grid_data[:, 0] * (b - a) / 2 + a + (b - a) / 2
 
-    #adjust weights for new range
-    weights = grid_data[:,1]*(b - a)/2
-    
+    # adjust weights for new range
+    weights = grid_data[:, 1] * (b - a) / 2
+
     return grid, weights
-
