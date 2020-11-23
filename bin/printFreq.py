@@ -13,7 +13,7 @@ def main(args):
             break
         val = comp.frequency.by_frequency[key]
         show = [val[x] for x in args.show if x != "vector"]
-        line = "{:0.4f}\t" + "{}\t" * len(show)
+        line = "{:9.4f}\t" + "{}\t" * len(show)
         print(line.format(key, *show))
         if "vector" in args.show:
             print(val["vector"])

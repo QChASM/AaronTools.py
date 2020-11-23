@@ -37,7 +37,7 @@ setup(
     # There are some restrictions on what makes a valid project name
     # specification here:
     # https://packaging.python.org/specifications/core-metadata/#name
-    name="AaronTools.py",  # Required
+    name="AaronTools",  # Required
     # Versions should comply with PEP 440:
     # https://www.python.org/dev/peps/pep-0440/
     #
@@ -48,7 +48,7 @@ setup(
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description="Tools for measuring and manipulating chemical structures",  # Optional
+    description="Tools for measuring and manipulating molecular structures",  # Optional
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
     #
@@ -79,7 +79,7 @@ setup(
     author="QChASM",  # Optional
     # This should be a valid email address corresponding to the author listed
     # above.
-    author_email="catalysttrends@uga.edu",  # Optional
+    author_email="qchasm@uga.edu",  # Optional
     # Classifiers help users find your project by categorizing it.
     #
     # For a list of valid classifiers, see https://pypi.org/classifiers/
@@ -143,8 +143,9 @@ setup(
     #
     # Similar to `install_requires` above, these must be valid existing
     # projects.
+       #are we sure we can list rdkit here, since it is not installable via pip (only conda)?
     extras_require={  # Optional
-        "extras": ["rdkit", "pdfminer", "jinja2"],
+        "extras": ["rdkit", "pdfminer", "jinja2"],	
     },
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow

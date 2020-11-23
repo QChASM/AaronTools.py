@@ -1,3 +1,5 @@
+"""for constructing headers and footers for input files"""
+
 import re
 
 from AaronTools.theory import (
@@ -164,7 +166,7 @@ class Theory:
             super().__setattr__(attr, val)
 
     def make_header(
-        self, geom=None, style="gaussian", conditional_kwargs={}, **kwargs
+        self, geom=None, style="gaussian", conditional_kwargs=None, **kwargs
     ):
         """geom: Geometry
         style: str, gaussian, orca, or psi4
@@ -176,6 +178,9 @@ class Theory:
                             will not add opt=noeigentest to the route
                             but if it's an OptimizationJob, it will add opt=noeigentest
         kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*"""
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         if geom is not None:
             self.geometry = geom
@@ -236,13 +241,16 @@ class Theory:
             )
 
     def make_footer(
-        self, geom=None, style="gaussian", conditional_kwargs={}, **kwargs
+        self, geom=None, style="gaussian", conditional_kwargs=None, **kwargs
     ):
         """geom: Geometry
         style: str, gaussian or psi4
         conditional_kwargs: dict, see make_header
         kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
         if self.basis is not None:
             self.basis.refresh_elements(geom)
 
@@ -284,23 +292,28 @@ class Theory:
                 other_kw_dict[kw] = kwargs[kw]
 
         if style == "gaussian":
-            rv = self.get_gaussian_footer(
+            return self.get_gaussian_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
-            return rv
 
         elif style == "psi4":
             return self.get_psi4_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
+        else:
+            NotImplementedError("no get_footer method for style: %s" % style)
+
     def get_gaussian_header(
-        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+        self, return_warnings=False, conditional_kwargs=None, **other_kw_dict
     ):
         """write Gaussian09/16 input file header (up to charge mult)
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
         returns warnings if a certain feature is not available in Gaussian"""
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         warnings = []
         if self.job_type is not None:
@@ -452,13 +465,16 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        else:
-            return s
+        
+        return s
 
     def get_gaussian_footer(
-        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+        self, return_warnings=False, conditional_kwargs=None, **other_kw_dict
     ):
         """write footer of gaussian input file"""
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -483,7 +499,6 @@ class Theory:
             and self.basis is not None
         ):
             basis_info = self.basis.get_gaussian_basis_info()
-            basis_elements = self.basis.elements_in_basis
 
         elif (
             self.method is not None
@@ -528,11 +543,11 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        else:
-            return s
+        
+        return s
 
     def get_orca_header(
-        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+        self, return_warnings=False, conditional_kwargs=None, **other_kw_dict
     ):
         """get ORCA input file header
         other_kw_dict is a dictionary with file positions (using ORCA_*)
@@ -540,6 +555,9 @@ class Theory:
         returns file content and warnings e.g. if a certain feature is not available in ORCA
         returns str of header content
         if return_warnings, returns str, list(warning)"""
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -552,7 +570,7 @@ class Theory:
         warnings = []
 
         # if method isn't semi-empirical, get basis info to write later
-        if not self.method.is_semiempirical:
+        if not self.method.is_semiempirical and self.basis is not None:
             basis_info = self.basis.get_orca_basis_info()
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
@@ -648,11 +666,11 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        else:
-            return s
+        
+        return s
 
     def get_psi4_header(
-        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+        self, return_warnings=False, conditional_kwargs=None, **other_kw_dict
     ):
         """
         write Psi4 input file
@@ -660,6 +678,9 @@ class Theory:
         corresponding to options/keywords
         returns file content and warnings e.g. if a certain feature is not available in Psi4
         """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -679,7 +700,7 @@ class Theory:
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         # get basis info if method is not semi empirical
-        if not self.method.is_semiempirical:
+        if not self.method.is_semiempirical and self.basis is not None:
             basis_info = self.basis.get_psi4_basis_info(self.method.sapt)
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
@@ -779,7 +800,7 @@ class Theory:
             if PSI4_COORDINATES in combined_dict:
                 for kw in combined_dict[PSI4_COORDINATES]:
                     if "pubchem" in kw.lower():
-                        self.structure = None
+                        self.geometry = None
                     if len(combined_dict[PSI4_COORDINATES][kw]) > 0:
                         opt = combined_dict[PSI4_COORDINATES][kw][0]
                         if "pubchem" in kw.lower() and not kw.strip().endswith(
@@ -796,15 +817,18 @@ class Theory:
 
         if return_warnings:
             return s, use_bohr, warnings
-        else:
-            return s, use_bohr
+        
+        return s, use_bohr
 
     def get_psi4_footer(
-        self, return_warnings=False, conditional_kwargs={}, **other_kw_dict
+        self, return_warnings=False, conditional_kwargs=None, **other_kw_dict
     ):
         """
         get psi4 footer
         """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
 
         warnings = []
         if self.job_type is not None:
@@ -913,5 +937,5 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        else:
-            return s
+        
+        return s

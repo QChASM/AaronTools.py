@@ -74,7 +74,7 @@ class TestComponent(TestWithTimer):
         tBu = geom.find("4-6,24-59")
 
         try:
-            test_Me = set(geom.find("Me"))
+            test_Me = set(geom.find(["Me", "CH3"]))
             test_tBu = set(geom.find("tBu"))
             test_backbone = set(geom.find("backbone"))
         except LookupError:
