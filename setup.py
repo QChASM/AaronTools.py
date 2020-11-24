@@ -150,9 +150,8 @@ setup(
     #
     # Similar to `install_requires` above, these must be valid existing
     # projects.
-    # are we sure we can list rdkit here, since it is not installable via pip (only conda)?
     extras_require={  # Optional
-        "extras": ["rdkit", "pdfminer", "jinja2"],
+        "extras": ["pdfminer", "jinja2"],
     },
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow
