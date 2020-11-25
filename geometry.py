@@ -2081,9 +2081,8 @@ class Geometry:
         qs_xprod = 2 * qs * xprod
         qv_xprod = 2 * np.cross(qv, xprod)
 
-        coords = self.coordinates(targets)
-        coords += qs_xprod + qv_xprod
-        for t, coord in zip(targets, coords):
+        xyz += qs_xprod + qv_xprod
+        for t, coord in zip(targets, xyz):
             t.coords = coord
 
         if center is not None:
