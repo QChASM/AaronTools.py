@@ -3,7 +3,7 @@ import os
 import re
 from glob import glob
 
-from AaronTools.const import AARONLIB, QCHASM
+from AaronTools.const import AARONLIB, AARONTOOLS
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 
@@ -21,7 +21,7 @@ class Component(Geometry):
     """
 
     AARON_LIBS = os.path.join(AARONLIB, "Ligands", "*.xyz")
-    BUILTIN = os.path.join(QCHASM, "AaronTools", "Ligands", "*.xyz")
+    BUILTIN = os.path.join(AARONTOOLS, "Ligands", "*.xyz")
 
     def __init__(
         self,
@@ -91,14 +91,22 @@ class Component(Geometry):
             name_ok = True
             elements_ok = True
 
-            if name_regex is not None and re.search(name_regex, name, re.IGNORECASE) is None:
+            if (
+                name_regex is not None
+                and re.search(name_regex, name, re.IGNORECASE) is None
+            ):
                 name_ok = False
 
             if coordinating_elements is not None:
                 geom = cls(name)
                 elements = [atom.element for atom in geom.find("key")]
-                if not all(elements.count(x) == coordinating_elements.count(x) for x in coordinating_elements) or \
-                   not all(coordinating_elements.count(x) == elements.count(x) for x in elements):
+                if not all(
+                    elements.count(x) == coordinating_elements.count(x)
+                    for x in coordinating_elements
+                ) or not all(
+                    coordinating_elements.count(x) == elements.count(x)
+                    for x in elements
+                ):
                     elements_ok = False
 
             if name_ok and elements_ok:

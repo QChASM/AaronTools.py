@@ -7,8 +7,7 @@ if "AARONLIB" in os.environ:
 else:
     AARONLIB = os.path.join(HOME, "Aaron_libs")
 
-QCHASM = os.path.dirname(os.path.abspath(__file__))
-QCHASM = os.path.dirname(QCHASM)
+AARONTOOLS = os.path.dirname(os.path.abspath(__file__))
 
 CONNECTIVITY_THRESHOLD = 0.5
 D_CUTOFF = 0.35

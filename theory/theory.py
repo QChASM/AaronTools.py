@@ -328,7 +328,7 @@ class Theory:
             GAUSSIAN_COMMENT not in other_kw_dict
             or len(other_kw_dict[GAUSSIAN_COMMENT]) == 0
         ):
-            other_kw_dict[GAUSSIAN_COMMENT] = ["comment"]
+            other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -617,10 +617,11 @@ class Theory:
         s = ""
 
         # comment
-        if ORCA_COMMENT in other_kw_dict:
-            for comment in other_kw_dict[ORCA_COMMENT]:
-                for line in comment.split("\n"):
-                    s += "#%s\n" % line
+        if ORCA_COMMENT not in other_kw_dict:
+            other_kw_dict[ORCA_COMMENT] = self.geometry.comment
+        for comment in other_kw_dict[ORCA_COMMENT]:
+            for line in comment.split("\n"):
+                s += "#%s\n" % line
 
         s += "!"
         # method
@@ -754,10 +755,11 @@ class Theory:
         s = ""
 
         # comment
-        if PSI4_COMMENT in combined_dict:
-            for comment in combined_dict[PSI4_COMMENT]:
-                for line in comment.split("\n"):
-                    s += "#%s\n" % line
+        if PSI4_COMMENT not in combined_dict:
+            combined_dict[PSI4_COMMENT] = self.geometry.comment
+        for comment in combined_dict[PSI4_COMMENT]:
+            for line in comment.split("\n"):
+                s += "#%s\n" % line
 
         # procs
         if self.processors is not None:

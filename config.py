@@ -6,7 +6,7 @@ from copy import deepcopy
 from warnings import warn
 
 import AaronTools
-from AaronTools.const import AARONLIB, QCHASM
+from AaronTools.const import AARONLIB, AARONTOOLS
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
     GAUSSIAN_CONSTRAINTS,
@@ -251,7 +251,7 @@ class Config(configparser.ConfigParser):
         Reads configuration information from `infile` after pulling defaults
         """
         for filename in [
-            os.path.join(QCHASM, "AaronTools/config.ini"),
+            os.path.join(AARONTOOLS, "config.ini"),
             os.path.join(AARONLIB, "config.ini"),
             infile,
         ]:
