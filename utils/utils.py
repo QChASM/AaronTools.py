@@ -124,7 +124,7 @@ def uptri2sym(vec, n=None, col_based=False):
 
 def float_vec(word):
     """
-    Turns strings into floatin point vectors
+    Turns strings into floating point vectors
     :word: a comma-delimited string of numbers
 
     if no comma or only one element:
@@ -527,12 +527,18 @@ def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
     and weights (wi) with the specified radius and center.
     Weights do not include r**2, so integral of F(x,y,z)
     over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number
-    of points (n) must be one of 110, 194, 302, 590, 1454, 5810
+    of points (n) must be one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810
     """
     # read grid data  on unit sphere
     grid_file = os.path.join(
         AARONTOOLS, "utils", "quad_grids", "Leb" + str(n) + ".grid"
     )
+    if not os.path.exists(grid_file):
+        # maybe some other error type?
+        raise NotImplementedError(
+            "cannot use Lebedev grid with %i points\n" % n +
+            "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
+        )
     grid_data = np.loadtxt(grid_file)
     grid = grid_data[:, [0, 1, 2]]
     weights = grid_data[:, 3]
@@ -555,6 +561,12 @@ def gauss_legendre_grid(a=-1, b=1, n=32):
     grid_file = os.path.join(
         AARONTOOLS, "utils", "quad_grids", "Leg" + str(n) + ".grid"
     )
+    if not os.path.exists(grid_file):
+        # maybe some other error type?
+        raise NotImplementedError(
+            "cannot use Gauss-Legendre grid with %i points\n" % n +
+            "use one of 20, 32, 64, 75, 99, 127"
+        )
     grid_data = np.loadtxt(grid_file)
 
     # shift grid range to [a,b]
@@ -564,3 +576,37 @@ def gauss_legendre_grid(a=-1, b=1, n=32):
     weights = grid_data[:, 1] * (b - a) / 2
 
     return grid, weights
+
+def perp_vector(v):
+    """
+    returns a vector orthonormal to v (np.ndarray)
+    if v is 2D, returns a vector orthonormal to the 
+    plane of best for the rows of v
+    """
+    v = np.squeeze(v)
+    if v.ndim == 1:
+        rv = np.zeros(len(v))
+        for k in range(0, len(v)):
+            if v[k] != 0:
+                if k == 0:
+                    rv[1] = v[k]
+                    rv[0] = v[1]
+                else:
+                    rv[0] = v[k]
+                    rv[1] = v[0]
+                break
+        else:
+            # a zero-vector was given
+            return np.ones(len(v)) / len(v)
+        
+        out = np.cross(rv, v)
+        out /= np.linalg.norm(out)
+        return out
+    
+    elif v.ndim == 2:
+        xyz = v - np.mean(v, axis=0)
+        R = np.dot(xyz.T, xyz)
+        u, s, vh = np.linalg.svd(R, compute_uv=True)
+        return u[:,-1]
+    
+    raise NotImplementedError("cannot determine vector perpendicular to %i-dimensional array" % v.ndim)

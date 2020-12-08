@@ -1623,6 +1623,7 @@ class Geometry:
         rpoints=20,
         apoints=1454,
         min_iter=25,
+        basis=None, 
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1638,11 +1639,14 @@ class Geometry:
                   their respective radii as the values
         scale   - scale VDW radii by this
         method  - integration method (MC or lebedev)
+                  MC is NOT recommended if basis is given
         rpoints - number of radial shells for Lebedev integration
         apoints - number of angular points for Lebedev integration
         min_iter - minimum number of iterations for MC integration
                    each iteration is a batch of 3000 points
                    iterations will continue beyond min_iter if the volume has not converged
+        basis - change of basis matrix
+                will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
         #        split up the shells for the Lebedev integration, but...
@@ -1726,15 +1730,24 @@ class Geometry:
 
         #Monte-Carlo integration
         if method.lower() == "mc":
-            prev_vol = cur_vol = 0
+            if basis is None:
+                prev_vol = cur_vol = 0
+                buried_points = 0
+                mean_conv = 1e-4
+                lookback_conv = 2e-4
+            else:
+                prev_vol = np.zeros(4)
+                cur_vol = np.zeros(4)
+                buried_points = np.zeros(4)
+                mean_conv = 1e-3
+                lookback_conv = 2e-3
             n_samples = 3000
-            buried_points = 0
             dV = []
             i = 0
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while i < min_iter or not (all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4):
+            while i < min_iter or not (all(dv < lookback_conv for dv in dV[-5:]) and np.mean(dV[-5:]) < mean_conv):
                 i += 1
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
@@ -1744,25 +1757,42 @@ class Geometry:
                 z = np.random.uniform(-1, 1, n_samples)
                 theta = np.arcsin(z) + np.pi/2
                 phi = np.random.uniform(0, 2*np.pi, n_samples)
-                x = r * np.sin(theta)*np.cos(phi)
-                y = r * np.sin(theta)*np.sin(phi)
+                x = r * np.sin(theta) * np.cos(phi)
+                y = r * np.sin(theta) * np.sin(phi)
                 z *= r
 
                 xyz = np.array([x, y, z]).T
-                r_p = np.linalg.norm(xyz)
+                if basis is not None:
+                    map_xyz = np.dot(xyz, basis)
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
                 D = distance_matrix(xyz, coords)
                 for d_row in D:
-                    for d, r in zip(d_row, radius_list):
+                    for j, (d, r) in enumerate(zip(d_row, radius_list)):
                         if d < r:
-                            buried_points += 1
+                            if basis is None:
+                                buried_points += 1
+                            else:
+                                if map_xyz[j,0] > 0 and map_xyz[j,1] > 0:
+                                    buried_points[0] += 1
+                                elif map_xyz[j,0] < 0 and map_xyz[j,1] > 0:
+                                    buried_points[1] += 1                                
+                                elif map_xyz[j,0] < 0 and map_xyz[j,1] < 0:
+                                    buried_points[2] += 1                                
+                                else:
+                                    buried_points[3] += 1
                             break
-
-                cur_vol = float(buried_points) / float(i * n_samples)
-                dV.append(abs(cur_vol - prev_vol))
-                prev_vol = cur_vol
+                
+                if basis is None:
+                    cur_vol = float(buried_points) / float(i * n_samples)
+                    dV.append(abs(cur_vol - prev_vol))
+                    prev_vol = cur_vol
+                else:
+                    cur_vol = buried_points / float(i * n_samples)
+                    dV.append(sum([abs(cur_vol[k] - prev_vol[k]) for k in range(0, 4)]))
+                    print(dV[-1], buried_points)
+                    prev_vol = cur_vol
 
             between_v = cur_vol * (maxr**3 - minr**3)
             tot_v = radius**3
@@ -1776,26 +1806,194 @@ class Geometry:
             agrid, aweights = utils.lebedev_sphere(radius=1, center=np.zeros(3), n=apoints)
 
             #value of integral (without 4 pi r^2) for each shell
-            shell_values = np.zeros(rpoints)
+            if basis is not None:
+                shell_values = np.zeros((4, rpoints))
+            else:
+                shell_values = np.zeros(rpoints)
             #loop over radial shells
             for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
-                inside_weights = np.zeros(apoints)
+                if basis is not None:
+                    inside_weights = np.zeros((4, apoints))
+                else:
+                    inside_weights = np.zeros(apoints)
                 # scale grid point to radius and shift to center
-                agrid_r = agrid * rvalue + center_coords
+                agrid_r = agrid * rvalue
+                if basis is not None:
+                    map_agrid_r = np.dot(agrid_r, basis)
+                agrid_r += center_coords
                 D = distance_matrix(agrid_r, coords)
                 for j, (d_row, aweight) in enumerate(zip(D, aweights)):
                     # add weight if the point is inside of any atom's
                     # scaled VDW radius
                     for d, r in zip(d_row, radius_list):
                         if d < r:
-                            inside_weights[j] = aweight
+                            if basis is not None:
+                                if map_agrid_r[j,0] > 0 and map_agrid_r[j,1] > 0:
+                                    inside_weights[0][j] = aweight
+                                elif map_agrid_r[j,0] < 0 and map_agrid_r[j,1] > 0:
+                                    inside_weights[1][j] = aweight                          
+                                elif map_agrid_r[j,0] < 0 and map_agrid_r[j,1] < 0:
+                                    inside_weights[2][j] = aweight                          
+                                else:
+                                    inside_weights[3][j] = aweight
+                            else:
+                                inside_weights[j] = aweight
+                            
                             break
 
                     #save integral over current shell (without 4 pi r^2)
-                    shell_values[i] = np.sum(inside_weights)
+                    if basis is not None:
+                        for k in range(0, 4):
+                            shell_values[k][i] = np.sum(inside_weights[k])
+                    else:
+                        shell_values[i] = np.sum(inside_weights)
 
-            return 300*np.dot(shell_values*rgrid**2, rweights) / (radius**3)
+            if basis is not None:
+                return [300*np.dot(shell_values[k]*rgrid**2, rweights) / (radius**3) for k in range(0, 4)]
+            else:
+                return 300*np.dot(shell_values*rgrid**2, rweights) / (radius**3)
+
+    def steric_map(
+        self, 
+        center=None, 
+        key_atoms=None, 
+        radii="umn", 
+        radius=3.5,
+        oop_vector=None, 
+        ip_vector=None, 
+        return_basis=False, 
+        num_pts=100,
+    ):
+        """
+        returns x, y, z, min_alt, max_alt or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
+        x - x coordinates for grid
+        y - y coordinates for grid 
+        z - altitude levels; points where no atoms are will be -1000
+        min_alt - minimum altitude (above -1000)
+        max_alt - maximum altitute
+        basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
+        atoms - list of atoms that are in the steric map
+        a contour plot can be created with this data - see stericMap.py command line script
+        
+        parameters:
+        center - atom, list of atoms, or array specifiying the origin
+        key_atoms - list of ligand key atoms. Atoms on these ligands will be in the steric map.
+        radii - "umn", "bondi", or dict() specifying the VDW radii to use
+        oop_vector - None or array specifying the direction out of the plane of the steric map
+                     if None, oop_vector is determined using the average vector from the key
+                     atoms to the center atom
+        ip_vector - None or array specifying a vector in the plane of the steric map
+                    if None, ip_vector is determined as the plane of best fit through the 
+                    key_atoms and the center
+        return_basis - whether or not to return a change of basis matrix
+        num_pts - number of points along x and y axis to use
+        """
+        
+        # determine center if none was specified
+        if center is None:
+            if self.center is None:
+                self.detect_components()
+            center = self.center
+            center_coords = self.COM(center)
+
+        else:
+            try:
+                center = self.find(center)
+                center_coords = self.COM(center)
+            except LookupError:
+                # assume an array was given
+                center_coords = center
+        
+        # VDW radii to use
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        else:
+            raise RuntimeError(
+                "received %s for radii, must be umn or bondi" % radii
+            )
+            
+        if key_atoms is None:
+            key_atoms = []
+            if self.components is None:
+                self.detect_components()
+            
+            for comp in self.components:
+                key_atoms.extend(comp.key_atoms)
+
+        else:
+            key_atoms = self.find(key_atoms)
+        
+        targets = []
+        for key in key_atoms:
+            if key not in targets:
+                if isinstance(center, Atom) or (hasattr(center, "__iter__") and all(isinstance(a, Atom) for a in center)):
+                    targets.extend(self.get_fragment(key, center))
+                
+                else:
+                    targets.extend(self.get_all_connected(key))
+        
+        if oop_vector is None:
+            oop_vector = np.zeros(3)
+            for atom in key_atoms:
+                oop_vector += center_coords - atom.coords
+            
+            oop_vector /= np.linalg.norm(oop_vector)
+        
+        if ip_vector is None:
+            if len(key_atoms) == 1:
+                ip_vector = utils.perp_vector(oop_vector)
+            else:
+                coords = [atom.coords for atom in key_atoms]
+                coords.append(center_coords)
+                coords = np.array(coords)
+                ip_vector = utils.perp_vector(coords)
+        
+        x_vec = np.cross(ip_vector, oop_vector)
+        
+        basis = np.array([x_vec, ip_vector, oop_vector]).T
+        coords = self.coordinates(targets) - center_coords
+        new_coords = np.dot(coords, basis)
+        dist_ip = distance_matrix(new_coords[:,0:2], [np.zeros(2)])[:,0]
+        atoms_within_radius = []
+        radius_list = []
+        for i, atom in enumerate(targets):
+            if dist_ip[i] < radius:
+                atoms_within_radius.append(atom)
+                radius_list.append(radii_dict[atom.element])
+
+        atom_coords = np.dot(self.coordinates(atoms_within_radius), basis)
+        
+        x = np.linspace(-radius, radius, num=num_pts)
+        y = np.linspace(-radius, radius, num=num_pts)
+        z = -1000 * np.ones((num_pts, num_pts))
+        max_alt = None
+        min_alt = None
+        for i in range(0, num_pts):
+            for j in range(0, num_pts):
+                if x[i]**2 + y[j]**2 > radius**2:
+                    continue
+                for k in range(0, len(atoms_within_radius)):
+                    w = np.sqrt((x[i] - atom_coords[k][0])**2 + (y[j] - atom_coords[k][1])**2)
+                    if w < radius_list[k]:
+                        h = np.sqrt(radius_list[k]**2 - w**2) 
+                        alt = atom_coords[k,2] + h
+                        # matplotlib mirrors z?
+                        if alt > z[j,i]:
+                            z[j,i] = alt
+                            if max_alt is None or alt > max_alt:
+                                max_alt = alt
+                            
+                            if min_alt is None or alt < min_alt:
+                                min_alt = alt
+        
+        if return_basis:
+            return x, y, z, min_alt, max_alt, basis, atoms_within_radius
+        return x, y, z, min_alt, max_alt
 
 
     # geometry manipulation
