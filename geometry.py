@@ -1639,7 +1639,6 @@ class Geometry:
                   their respective radii as the values
         scale   - scale VDW radii by this
         method  - integration method (MC or lebedev)
-                  MC is NOT recommended if basis is given
         rpoints - number of radial shells for Lebedev integration
         apoints - number of angular points for Lebedev integration
         min_iter - minimum number of iterations for MC integration
@@ -1733,21 +1732,20 @@ class Geometry:
             if basis is None:
                 prev_vol = cur_vol = 0
                 buried_points = 0
-                mean_conv = 1e-4
-                lookback_conv = 2e-4
+
             else:
                 prev_vol = np.zeros(4)
                 cur_vol = np.zeros(4)
                 buried_points = np.zeros(4)
-                mean_conv = 1e-3
-                lookback_conv = 2e-3
+                tot_points = np.zeros(4)
+
             n_samples = 3000
             dV = []
             i = 0
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while i < min_iter or not (all(dv < lookback_conv for dv in dV[-5:]) and np.mean(dV[-5:]) < mean_conv):
+            while i < min_iter or not (all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4):
                 i += 1
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
@@ -1764,34 +1762,42 @@ class Geometry:
                 xyz = np.array([x, y, z]).T
                 if basis is not None:
                     map_xyz = np.dot(xyz, basis)
+                    for p in map_xyz:
+                        if p[0] > 0 and p[1] > 0:
+                            tot_points[0] += 1
+                        elif p[0] <= 0 and p[1] > 0:
+                            tot_points[1] += 1
+                        elif p[0] <= 0 and p[1] <= 0:
+                            tot_points[2] += 1
+                        else:
+                            tot_points[3] += 1
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
                 D = distance_matrix(xyz, coords)
-                for d_row in D:
+                for k, d_row in enumerate(D):
                     for j, (d, r) in enumerate(zip(d_row, radius_list)):
                         if d < r:
                             if basis is None:
                                 buried_points += 1
                             else:
-                                if map_xyz[j,0] > 0 and map_xyz[j,1] > 0:
+                                if map_xyz[k,0] > 0 and map_xyz[k,1] > 0:
                                     buried_points[0] += 1
-                                elif map_xyz[j,0] < 0 and map_xyz[j,1] > 0:
-                                    buried_points[1] += 1                                
-                                elif map_xyz[j,0] < 0 and map_xyz[j,1] < 0:
-                                    buried_points[2] += 1                                
+                                elif map_xyz[k,0] <= 0 and map_xyz[k,1] > 0:
+                                    buried_points[1] += 1
+                                elif map_xyz[k,0] <= 0 and map_xyz[k,1] <= 0:
+                                    buried_points[2] += 1
                                 else:
                                     buried_points[3] += 1
                             break
                 
                 if basis is None:
-                    cur_vol = float(buried_points) / float(i * n_samples)
+                    cur_vol = float(buried_points) / (float(i * n_samples))
                     dV.append(abs(cur_vol - prev_vol))
                     prev_vol = cur_vol
                 else:
-                    cur_vol = buried_points / float(i * n_samples)
-                    dV.append(sum([abs(cur_vol[k] - prev_vol[k]) for k in range(0, 4)]))
-                    print(dV[-1], buried_points)
+                    cur_vol = np.divide(buried_points, tot_points) / 4
+                    dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                     prev_vol = cur_vol
 
             between_v = cur_vol * (maxr**3 - minr**3)
