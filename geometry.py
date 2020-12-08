@@ -1941,20 +1941,22 @@ class Geometry:
             oop_vector = np.zeros(3)
             for atom in key_atoms:
                 oop_vector += center_coords - atom.coords
-            
-            oop_vector /= np.linalg.norm(oop_vector)
+
+        oop_vector /= np.linalg.norm(oop_vector)
         
         if ip_vector is None:
             if len(key_atoms) == 1:
                 ip_vector = utils.perp_vector(oop_vector)
+                x_vec = np.cross(ip_vector, oop_vector)
             else:
                 coords = [atom.coords for atom in key_atoms]
                 coords.append(center_coords)
                 coords = np.array(coords)
                 ip_vector = utils.perp_vector(coords)
-        
-        x_vec = np.cross(ip_vector, oop_vector)
-        
+                x_vec = np.cross(ip_vector, oop_vector)
+                x_vec /= np.linalg.norm(x_vec)
+                ip_vector = -np.cross(x_vec, oop_vector)
+
         basis = np.array([x_vec, ip_vector, oop_vector]).T
         coords = self.coordinates(targets) - center_coords
         new_coords = np.dot(coords, basis)
@@ -1966,8 +1968,8 @@ class Geometry:
                 atoms_within_radius.append(atom)
                 radius_list.append(radii_dict[atom.element])
 
-        atom_coords = np.dot(self.coordinates(atoms_within_radius), basis)
-        
+        atom_coords = np.dot(self.coordinates(atoms_within_radius) - center_coords, basis)
+
         x = np.linspace(-radius, radius, num=num_pts)
         y = np.linspace(-radius, radius, num=num_pts)
         z = -1000 * np.ones((num_pts, num_pts))

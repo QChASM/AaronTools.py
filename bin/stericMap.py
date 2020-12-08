@@ -190,7 +190,7 @@ for f in args.infile:
         ax.text(-0.9 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[2])
         ax.text( 0.7 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[3])
 
-    if args.outfile is None:
+    if not args.outfile:
         plt.show()
     else:
         plt.savefig(args.outfile, dpi=500)
