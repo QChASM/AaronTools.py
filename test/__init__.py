@@ -3,7 +3,6 @@ import unittest
 from os.path import dirname
 
 import numpy as np
-
 from AaronTools.geometry import Geometry
 
 prefix = dirname(__file__)
@@ -86,15 +85,15 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
                 print("elements don't match")
             return False
     # and RMSD should be below a threshold
-    rmsd = ref.RMSD(
-        test, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
+    rmsd = test.RMSD(
+        ref, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
     )
     if debug:
         print("RMSD:", rmsd[2], "\tTHRESH:", thresh)
-        rmsd[1].write("ref")
-        rmsd[0].write("test")
+        rmsd[0].write("ref")
+        rmsd[1].write("test")
         rmsd = rmsd[2]
-    
+
     return rmsd < thresh
 
 

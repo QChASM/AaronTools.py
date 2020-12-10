@@ -1420,7 +1420,13 @@ class Frequency:
         :vector: (2D array) normal mode vectors
         """
 
-        def __init__(self, frequency, intensity=None, vector=[], forcek=[]):
+        def __init__(
+            self, frequency, intensity=None, vector=None, forcek=None
+        ):
+            if vector is None:
+                vector = []
+            if forcek is None:
+                forcek = []
             self.frequency = frequency
             self.intensity = intensity
             self.vector = np.array(vector)

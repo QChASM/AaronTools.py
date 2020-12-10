@@ -4,6 +4,14 @@ A setuptools based setup module.
 See:
 https://packaging.python.org/guides/distributing-packages-using-setuptools/
 https://github.com/pypa/sampleproject
+
+
+To build new releases:
+    $ pip install --upgrade setuptools-git wheel twine
+    $ python setup.py sdist bdist_wheel
+To upload new releases:
+    create ~/.pypirc as directed here: https://packaging.python.org/guides/distributing-packages-using-setuptools/#create-an-account
+    $ twine upload dist/AaronTools-XXX.*
 """
 
 from glob import glob
@@ -44,7 +52,7 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version="1.0b1",  # Required
+    version="1.0b2",  # Required
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
@@ -111,7 +119,12 @@ setup(
     keywords="computational chemistry utility",  # Optional
     # When your source code is in a subdirectory under the project root, e.g.
     # `src/`, it is necessary to specify the `package_dir` argument.
-    # package_dir={"": "src"},  # Optional
+    package_dir={
+        "AaronTools": "",
+        "AaronTools.test": "test",
+        "AaronTools.theory": "theory",
+        "AaronTools.utils": "utils",
+    },  # Optional
     # You can just specify package directories manually here if your project is
     # simple. Or you can use find_packages().
     #
@@ -121,12 +134,12 @@ setup(
     #
     #   py_modules=["my_module"],
     #
-    packages=find_packages(
-        include=[
-            "AaronTools",
-            "AaronTools.*",
-        ]
-    ),  # Required
+    packages=[
+        "AaronTools",
+        "AaronTools.test",
+        "AaronTools.theory",
+        "AaronTools.utils",
+    ],  # Required
     include_package_data=True,
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
@@ -161,8 +174,6 @@ setup(
     # For example, the following would provide a command called `sample` which
     # executes the function `main` from this package when invoked:
     scripts=script_files,  # Optional
-    # test suite hook
-    test_suite="unittest",
     # List additional URLs that are relevant to your project as a dict.
     #
     # This field corresponds to the "Project-URL" metadata fields:
