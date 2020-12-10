@@ -1648,7 +1648,8 @@ class Geometry:
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
                   the centroid between the atoms
-        targets - atoms to use in calculation, defaults to all atoms not in center
+        targets - atoms to use in calculation, defaults to all non-center if there
+                  is only one center, otherwise all atoms
         radius  - sphere radius around center atom
         radii   - "umn" or "bondi", VDW radii to use
                   can also be a dict() with atom symbols as the keys and
@@ -1686,7 +1687,10 @@ class Geometry:
             if center is None:
                 targets = self.atoms
             else:
-                targets = [atom for atom in self.atoms if atom not in center]
+                if len(center) == 1:
+                    targets = [atom for atom in self.atoms if atom not in center]
+                else:
+                    targets = [atom for atom in self.atoms]
         else:
             targets = self.find(targets)
 
@@ -2108,9 +2112,8 @@ class Geometry:
         qs_xprod = 2 * qs * xprod
         qv_xprod = 2 * np.cross(qv, xprod)
 
-        coords = self.coordinates(targets)
-        coords += qs_xprod + qv_xprod
-        for t, coord in zip(targets, coords):
+        xyz += qs_xprod + qv_xprod
+        for t, coord in zip(targets, xyz):
             t.coords = coord
 
         if center is not None:

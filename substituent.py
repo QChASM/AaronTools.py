@@ -132,6 +132,7 @@ class Substituent(Geometry):
             self.name = sub
             self.comment = from_file.comment
             self.atoms = from_file.atoms
+            self.refresh_connected()
             if targets is not None:
                 self.atoms = self.find(targets)
 
