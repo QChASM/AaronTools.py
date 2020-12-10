@@ -281,13 +281,14 @@ class Substituent(Geometry):
             rot_axis /= np.linalg.norm(rot_axis)
             angle = np.arccos(np.dot(bond, x_axis))
             geom.rotate(rot_axis, -angle)
-        # this causes failing of test cases, and I don't understand what the purpose
-        # is, so I'm just taking it out for now. Tests pass without it
-        # else:
-        #     # if the bonded_atom is already on the x axis, we will instead
-        #     # rotate about the y axis by 180 degrees
-        #     angle = np.pi
-        #     geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
+        else:
+            try:
+                import rdkit
+            except ImportError:
+                # if the bonded_atom is already on the x axis, we will instead
+                # rotate about the y axis by 180 degrees
+                angle = np.pi
+                geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
 
         out = cls(
             [atom for atom in geom.atoms if atom != added_Cl],
