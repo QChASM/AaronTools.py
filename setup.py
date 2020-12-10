@@ -11,7 +11,7 @@ To build new releases:
     $ python setup.py sdist bdist_wheel
 To upload new releases:
     create ~/.pypirc as directed here: https://packaging.python.org/guides/distributing-packages-using-setuptools/#create-an-account
-    $ twine upload dist/AaronTools-XXX.*
+    $ twine upload dist/AaronTools-XXX.tar.gz dist/AaronTools-XXX-py3-none-any.whl
 """
 
 from glob import glob
@@ -52,7 +52,7 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version="1.0b2",  # Required
+    version="1.0b3",  # Required
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
