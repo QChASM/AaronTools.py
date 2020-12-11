@@ -2,6 +2,7 @@ import configparser
 import itertools as it
 import os
 import re
+import sys
 from copy import deepcopy
 from warnings import warn
 
@@ -88,7 +89,12 @@ class Config(configparser.ConfigParser):
             self.read_config(infile, quiet)
             # enforce selective case sensitivity
             for section in self:
-                if section in ["Substitution", "Mapping"]:
+                if section in [
+                    "Substitution",
+                    "Mapping",
+                    "Configs",
+                    "Results",
+                ]:
                     continue
                 for option, value in self[section].items():
                     if option.lower() != option:
@@ -118,8 +124,10 @@ class Config(configparser.ConfigParser):
         for section in ["Substitution", "Mapping"]:
             if section not in self:
                 continue
+            if "reopt" in self[section] and self.getboolean(section, "reopt"):
+                self._changes[""] = {}, None
             for key, val in self[section].items():
-                if key in self["DEFAULT"]:
+                if key in self["DEFAULT"] or key == "reopt":
                     continue
                 if "=" not in val:
                     val = [v.strip() for v in val.split(",")]
@@ -228,7 +236,7 @@ class Config(configparser.ConfigParser):
                         option = self[from_section][option]
                         eval_match = eval_match.replace("$" + attr, option, 1)
                     try:
-                        eval_match = eval(eval_match)
+                        eval_match = eval(eval_match, {})
                     except TypeError as e:
                         raise TypeError(
                             "{} for\n\t[{}]\n\t{} = {}\nin config file. Could not evaluate {}".format(
@@ -334,7 +342,7 @@ class Config(configparser.ConfigParser):
                 # if it's got brackets, it's probably a python-looking dictionary
                 # eval it instead of parsing
                 if "{" in value:
-                    out[option] = eval(value)
+                    out[option] = eval(value, {})
                 else:
                     out[option] = {}
                     for v in value.splitlines():
@@ -350,7 +358,7 @@ class Config(configparser.ConfigParser):
             value = self.get(section, option, fallback=False)
             if value:
                 if "{" in value:
-                    out[option] = eval(value)
+                    out[option] = eval(value, {})
                 else:
                     out[option] = {}
                     for v in value.splitlines():
@@ -428,7 +436,8 @@ class Config(configparser.ConfigParser):
                         for con in con_list:
                             try:
                                 con = tuple(
-                                    geometry.find(str(c))[0] for c in eval(con)
+                                    geometry.find(str(c))[0]
+                                    for c in eval(con, {})
                                 )
                             except TypeError:
                                 con = tuple(
@@ -473,19 +482,40 @@ class Config(configparser.ConfigParser):
     def get_template(self):
         if "Reaction" in self:
             structures = []
-            path = os.path.join(
-                AARONLIB,
-                "TS_geoms",
-                self["Reaction"]["reaction"],
-                self["Reaction"]["template"],
-            )
-            for dirpath, dirnames, filenames in os.walk(path):
-                for name in filenames:
+            if "template" in self["Reaction"]:
+                path = os.path.join(
+                    AARONLIB,
+                    "TS_geoms",
+                    self["Reaction"]["reaction"],
+                    self["Reaction"]["template"],
+                )
+                for dirpath, dirnames, filenames in os.walk(path):
+                    for name in filenames:
+                        if name.startswith("TS"):
+                            kind = "TS"
+                        elif name.startswith("INT"):
+                            kind = "Minimum"
+                        name = os.path.join(dirpath, name)
+                        structure = AaronTools.geometry.Geometry(name)
+                        structure.name = os.path.relpath(name, path)
+                        structure.name = ".".join(
+                            structure.name.split(".")[:-1]
+                        )
+                        structures += [(structure, kind)]
+            else:
+                path = os.path.join(
+                    AARONLIB,
+                    "TS_geoms",
+                    self["Reaction"]["reaction"],
+                )
+                for name in os.listdir(path):
                     if name.startswith("TS"):
                         kind = "TS"
                     elif name.startswith("INT"):
                         kind = "Minimum"
-                    name = os.path.join(dirpath, name)
+                    name = os.path.join(path, name)
+                    if not os.path.isfile(name):
+                        continue
                     structure = AaronTools.geometry.Geometry(name)
                     structure.name = os.path.relpath(name, path)
                     structure.name = ".".join(structure.name.split(".")[:-1])
@@ -494,11 +524,11 @@ class Config(configparser.ConfigParser):
         # get starting structure
         if "Geometry" not in self or "structure" not in self["Geometry"]:
             structure = "{}.xyz".format(self["Job"]["name"])
-            warn(
-                "No structure indicated in self. Trying to use {}".format(
-                    structure
-                )
+            self["Job"]["name"] = os.path.basename(self["Job"]["name"])
+            s = "No structure indicated in config. Trying to use {}".format(
+                structure
             )
+            print(s, file=sys.stderr)
         else:
             structure = self["Geometry"]["structure"]
         try:
@@ -520,7 +550,13 @@ class Config(configparser.ConfigParser):
                 lines = self["Geometry"]["&call"]
                 for line in lines.split("\n"):
                     if line.strip():
-                        eval(line.strip())
+                        eval(
+                            line.strip(),
+                            {
+                                "structure": structure,
+                                "Geometry": AaronTools.geometry.Geometry,
+                            },
+                        )
         return structure
 
     def _parse_includes(self):
@@ -554,3 +590,62 @@ class Config(configparser.ConfigParser):
             if section.lower() == "default":
                 for key, val in self[section].items():
                     self["DEFAULT"][key] = val
+
+    def get_spec(self, spec=None, skip_keys=None):
+        if spec is None:
+            spec = {}
+        if skip_keys is None:
+            skip_keys = []
+        for attr in ["_changes", "_changed_list", "_args", "_kwargs"]:
+            if attr in skip_keys:
+                continue
+            spec[attr] = self.__dict__[attr]
+        for section in self._sections:
+            for key, val in self.items(section=section):
+                if key in skip_keys:
+                    continue
+                spec["{}/{}".format(section, key).replace(".", "#")] = val
+        return spec
+
+    def for_step(self, step):
+        config = self.copy()
+        # find step-specific options
+        for section in config._sections:
+            for key, val in config[section].items():
+                remove_key = key
+                key = key.strip().split()
+                if len(key) == 1:
+                    continue
+                key_step = key[0]
+                key = " ".join(key[1:])
+                try:
+                    key_step = float(key_step)
+                except ValueError:
+                    key_step = key_step.strip()
+                # screen based on step
+                if key_step == "low" and step < 2 and step != 0:
+                    config[section][key] = val
+                if key_step == "high" and step >= 5:
+                    config[section][key] = val
+                if isinstance(key_step, float) and key_step == float(step):
+                    config[section][key] = val
+                # clean up metadata
+                del config[section][remove_key]
+        # other job-specific additions
+        if "host" in config["HPC"]:
+            try:
+                config["HPC"]["work_dir"] = config["HPC"].get("remote_dir")
+            except TypeError as e:
+                raise RuntimeError(
+                    "Must specify remote working directory for HPC (remote_dir = /path/to/HPC/work/dir)"
+                ) from e
+        else:
+            config["HPC"]["work_dir"] = config["Job"].get("top_dir")
+        config["HPC"]["job_name"] = config["Job"]["name"]
+        if step:
+            config["HPC"]["job_name"] = "{}.{}".format(
+                config["HPC"]["job_name"], step
+            )
+        # parse user-supplied functions in config file
+        config.parse_functions()
+        return config

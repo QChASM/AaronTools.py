@@ -1,6 +1,8 @@
 """For storing, manipulating, and measuring molecular structures"""
 import itertools
 import re
+import ssl
+import urllib.parse
 from collections import deque
 from copy import deepcopy
 from urllib.error import HTTPError
@@ -8,7 +10,6 @@ from urllib.request import urlopen
 from warnings import warn
 
 import numpy as np
-
 from scipy.spatial import distance_matrix
 
 import AaronTools
@@ -21,6 +22,8 @@ from AaronTools.finders import Finder
 from AaronTools.utils.prime_numbers import Primes
 
 COORD_THRESHOLD = 0.2
+CACTUS_HOST = "https://cactus.nci.nih.gov"
+OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
 
 
 class Geometry:
@@ -109,24 +112,43 @@ class Geometry:
 
     # class methods
     @classmethod
-    def from_string(cls, name, form="smiles"):
+    def iupac2smiles(cls, name):
+        # opsin seems to be better at iupac names with radicals
+        url_smi = "{}/opsin/{}.smi".format(
+            OPSIN_HOST, urllib.parse.quote(name)
+        )
+
+        try:
+            smiles = (
+                urlopen(url_smi, context=ssl.SSLContext())
+                .read()
+                .decode("utf8")
+            )
+        except HTTPError:
+            raise RuntimeError(
+                "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
+                % name
+            )
+        return smiles
+
+    @classmethod
+    def from_string(cls, name, form="smiles", strict_use_rdkit=False):
         """get Geometry from string
         form=iupac -> iupac to smiles from opsin API
                        --> form=smiles
         form=smiles -> structure from cactvs API"""
 
         def get_cactus_sd(smiles):
-            url_sd = (
-                "https://cactus.nci.nih.gov/chemical/structure/%s/file?format=sdf"
-                % smiles
+            url_sd = "{}/chemical/structure/{}/file?format=sdf".format(
+                CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            # print(url_sd)
-            s_sd = urlopen(url_sd).read().decode("utf8")
-
+            print(url_sd)
+            s_sd = (
+                urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
+            )
             return s_sd
 
         accepted_forms = ["iupac", "smiles"]
-
         if form not in accepted_forms:
             raise NotImplementedError(
                 "cannot create substituent given %s; use one of %s" % form,
@@ -136,28 +158,22 @@ class Geometry:
         if form == "smiles":
             smiles = name
         elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
+            smiles = cls.iupac2smiles(name)
 
         try:
-            from rdkit.Chem import AllChem
+            import rdkit.Chem.AllChem as rdk
 
-            m = AllChem.MolFromSmiles(smiles)
-            if m is None:
+            m = rdk.MolFromSmiles(smiles)
+            if m is None and not strict_use_rdkit:
                 s_sd = get_cactus_sd(smiles)
+            elif m:
+                mh = rdk.AddHs(m)
+                rdk.EmbedMolecule(mh, randomSeed=0x421C52)
+                s_sd = rdk.MolToMolBlock(mh)
             else:
-                mh = AllChem.AddHs(m)
-                AllChem.EmbedMolecule(mh, randomSeed=0x421C52)
-                s_sd = AllChem.MolToMolBlock(mh)
-                # print(s_sd)
+                raise RuntimeError(
+                    "Could not load {} with RDKit".format(smiles)
+                )
         except ImportError:
             s_sd = get_cactus_sd(smiles)
 
@@ -777,7 +793,7 @@ class Geometry:
             a.connected = set([])
             for c in con:
                 a.connected.add(atoms[c])
-        
+
         return atoms
 
     def refresh_connected(self, threshold=None):
@@ -1512,7 +1528,9 @@ class Geometry:
                 D = distance_matrix(self.coords, other.coords)
                 other = other.atoms
             else:
-                D = distance_matrix(self.coords, np.array([a.coords for a in other]))
+                D = distance_matrix(
+                    self.coords, np.array([a.coords for a in other])
+                )
 
         def calc_LJ(a, b, dist, approximate):
             if approximate and dist > 1.5 * (a._vdw + b._vdw):
@@ -1706,8 +1724,8 @@ class Geometry:
             if exclude is not None and atom in exclude:
                 continue
             d = np.linalg.norm(center_coords - atom.coords)
-            inner_edge = d - scale*radii_dict[atom.element]
-            outer_edge = inner_edge + 2*scale*radii_dict[atom.element]
+            inner_edge = d - scale * radii_dict[atom.element]
+            outer_edge = inner_edge + 2 * scale * radii_dict[atom.element]
             if inner_edge < radius:
                 atoms_within_radius.append(atom)
                 if inner_edge < minr:
@@ -1720,14 +1738,16 @@ class Geometry:
 
         # sort atoms based on their distance to the center
         # this makes is so we usually break out of looping over the atoms faster
-        atoms_within_radius.sort(key=lambda a, c=center_coords: np.linalg.norm(a.coords - c))
+        atoms_within_radius.sort(
+            key=lambda a, c=center_coords: np.linalg.norm(a.coords - c)
+        )
 
         for atom in atoms_within_radius:
             radius_list.append(scale * radii_dict[atom.element])
 
         coords = self.coordinates(atoms_within_radius)
 
-        #Monte-Carlo integration
+        # Monte-Carlo integration
         if method.lower() == "mc":
             if basis is None:
                 prev_vol = cur_vol = 0
@@ -1745,16 +1765,22 @@ class Geometry:
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
-            while i < min_iter or not (all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4):
+            while i < min_iter or not (
+                all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4
+            ):
                 i += 1
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
                 # things converge faster
-                r = (maxr - minr) * np.random.uniform(0, 1, n_samples)**(1/3)
+                r = (maxr - minr) * np.random.uniform(0, 1, n_samples) ** (
+                    1 / 3
+                )
                 r += minr
                 z = np.random.uniform(-1, 1, n_samples)
-                theta = np.arcsin(z) + np.pi/2
-                phi = np.random.uniform(0, 2*np.pi, n_samples)
+
+                theta = np.arcsin(z) + np.pi / 2
+                phi = np.random.uniform(0, 2 * np.pi, n_samples)
+                
                 x = r * np.sin(theta) * np.cos(phi)
                 y = r * np.sin(theta) * np.sin(phi)
                 z *= r
@@ -1800,16 +1826,20 @@ class Geometry:
                     dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                     prev_vol = cur_vol
 
-            between_v = cur_vol * (maxr**3 - minr**3)
-            tot_v = radius**3
+            between_v = cur_vol * (maxr ** 3 - minr ** 3)
+            tot_v = radius ** 3
             return 100 * between_v / tot_v
 
-        #default to Gauss-Legendre integration over Lebedev spheres
+        # default to Gauss-Legendre integration over Lebedev spheres
         else:
-            #grab radial grid points and weights for range (minr, maxr)
-            rgrid, rweights = utils.gauss_legendre_grid(a=minr, b=maxr, n=rpoints)
-            #grab Lebedev grid for unit sphere at origin
-            agrid, aweights = utils.lebedev_sphere(radius=1, center=np.zeros(3), n=apoints)
+            # grab radial grid points and weights for range (minr, maxr)
+            rgrid, rweights = utils.gauss_legendre_grid(
+                a=minr, b=maxr, n=rpoints
+            )
+            # grab Lebedev grid for unit sphere at origin
+            agrid, aweights = utils.lebedev_sphere(
+                radius=1, center=np.zeros(3), n=apoints
+            )
 
             #value of integral (without 4 pi r^2) for each shell
             if basis is not None:
@@ -1817,6 +1847,7 @@ class Geometry:
             else:
                 shell_values = np.zeros(rpoints)
             #loop over radial shells
+
             for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
                 if basis is not None:
@@ -1856,9 +1887,9 @@ class Geometry:
                         shell_values[i] = np.sum(inside_weights)
 
             if basis is not None:
-                return [300*np.dot(shell_values[k]*rgrid**2, rweights) / (radius**3) for k in range(0, 4)]
+                return [300 * np.dot(shell_values[k] * rgrid ** 2, rweights) / (radius ** 3) for k in range(0, 4)]
             else:
-                return 300*np.dot(shell_values*rgrid**2, rweights) / (radius**3)
+                return 300 * np.dot(shell_values * rgrid ** 2, rweights) / (radius ** 3)
 
     def steric_map(
         self, 
@@ -2002,7 +2033,6 @@ class Geometry:
         if return_basis:
             return x, y, z, min_alt, max_alt, basis, atoms_within_radius
         return x, y, z, min_alt, max_alt
-
 
     # geometry manipulation
     def append_structure(self, structure):

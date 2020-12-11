@@ -27,7 +27,15 @@ class TestFromString(TestWithTimer):
 
     def is_COCH3(self, sub):
         ref = TestFromString.COCH3
-        self.assertTrue(validate(sub, ref, thresh=5e-2, heavy_only=True))
+        ref.refresh_connected()
+        sub.refresh_connected()
+        ref.refresh_ranks()
+        ref.refresh_ranks()
+        ref.atoms = ref.reorder(start=ref.atoms[0])[0]
+        sub.atoms = sub.reorder(start=sub.atoms[0])[0]
+        self.assertTrue(
+            validate(sub, ref, thresh=0.03, heavy_only=True, sort=False)
+        )
 
     def is_NO2(self, sub):
         ref = TestFromString.NO2
@@ -37,41 +45,49 @@ class TestFromString(TestWithTimer):
         try:
             import rdkit
 
-            sub = Substituent.from_string("acetyl", form="iupac")
+            sub = Substituent.from_string(
+                "acetyl", form="iupac", strict_use_rdkit=True
+            )
             self.is_COCH3(sub)
 
-            sub = Substituent.from_string("nitro", form="iupac")
+            sub = Substituent.from_string(
+                "nitro", form="iupac", strict_use_rdkit=True
+            )
             self.is_NO2(sub)
 
-            sub = Substituent.from_string("O=[N.]=O", form="smiles")
+            sub = Substituent.from_string(
+                "O=[N.]=O", form="smiles", strict_use_rdkit=True
+            )
             self.is_NO2(sub)
 
-            sub = Substituent.from_string("O=[N]=O", form="smiles")
+            sub = Substituent.from_string(
+                "O=[N]=O", form="smiles", strict_use_rdkit=True
+            )
             self.is_NO2(sub)
 
         except ImportError:
             # I still want to test CACTVS things because sometimes they change stuff
             # that breaks our stuff
             if os.getenv("USER", False) == "ajs99778":
-                sub = Substituent.from_string("acetyl", form='iupac')
+                sub = Substituent.from_string("acetyl", form="iupac")
                 print(sub.write(outfile=False))
                 self.is_COCH3(sub)
 
-                sub = Substituent.from_string("nitro", form='iupac')
+                sub = Substituent.from_string("nitro", form="iupac")
                 print(sub.write(outfile=False))
                 self.is_NO2(sub)
 
-                sub = Substituent.from_string("O=[N.]=O", form='smiles')
+                sub = Substituent.from_string("O=[N.]=O", form="smiles")
                 print(sub.write(outfile=False))
                 self.is_NO2(sub)
 
-                sub = Substituent.from_string("O=[N]=O", form='smiles')
+                sub = Substituent.from_string("O=[N]=O", form="smiles")
                 print(sub.write(outfile=False))
                 self.is_NO2(sub)
 
             else:
                 self.skipTest("RDKit not installed, CACTVS is not tested")
-        
+
     def test_geometry(self):
         try:
             import rdkit
@@ -87,11 +103,17 @@ class TestFromString(TestWithTimer):
 
         except:
             if os.getenv("USER", False) == "ajs99778":
-                geom = Geometry.from_string("(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac")
+                geom = Geometry.from_string(
+                    "(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac"
+                )
                 print(geom.write(outfile=False))
                 ref = TestFromString.chiral_geom
                 # really loose threshhold b/c rdkit can give a boat cyclohexane...
-                self.assertTrue(validate(geom, ref, thresh=0.35, heavy_only=True, debug=False))
+                self.assertTrue(
+                    validate(
+                        geom, ref, thresh=0.35, heavy_only=True, debug=False
+                    )
+                )
             else:
                 self.skipTest("RDKit not installed, CACTVS is not tested")
 
@@ -107,7 +129,9 @@ class TestFromString(TestWithTimer):
 
         except ImportError:
             if os.getenv("USER", False) == "ajs99778":
-                ring = Ring.from_string("benzene", end_length=1, end_atom='C', form="iupac")
+                ring = Ring.from_string(
+                    "benzene", end_length=1, end_atom="C", form="iupac"
+                )
                 print(ring.write(outfile=False))
                 ref = self.benzene
                 self.assertTrue(validate(ring, ref, thresh="loose"))

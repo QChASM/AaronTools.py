@@ -1,0 +1,76 @@
+{
+  "DEFAULT": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH"
+  },
+  "Job.Simple": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "type": "optimize, frequencies"
+  },
+  "Job.Minimum": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "1 type": "optimize.changes",
+    "2 type": "optimize",
+    "3 type": "frequencies"
+  },
+  "Job.TS": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "1 type": "optimize.changes",
+    "2 type": "optimize.constrained",
+    "3 type": "optimize.ts",
+    "4 type": "frequencies"
+  },
+  "Job": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "charge": "0",
+    "multiplicity": "1",
+    "method": "b3lyp",
+    "denfit": "1",
+    "basis": "6-31G(d)",
+    "temperature": "298",
+    "solvent": "gas",
+    "low method": "PM6",
+    "low basis": ""
+  },
+  "HPC": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "user": "test_username",
+    "host": "test.host",
+    "transfer_host": "test.transfer.host",
+    "scratch_dir": "/scratch/path",
+    "exec_type": "gaussian",
+    "queue_type": "SLURM",
+    "queue": "test_queue",
+    "memory": "%{$ppn*2}GB",
+    "exec_memory": "%{$ppn*16//10}GB",
+    "parallel": "%{$ppn*$nodes}",
+    "nodes": "1",
+    "ppn": "14",
+    "wall": "12",
+    "low ppn": "2",
+    "low wall": "2"
+  },
+  "Geometry": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "structure": "HOH"
+  },
+  "Substitution": {
+    "remote_dir": "/remote/path/%{$name}",
+    "top_dir": "",
+    "name": "config_HOH",
+    "&combinations": "\n1 = Me, Et, Ph\n3 = Me, Et, Ph"
+  }
+}

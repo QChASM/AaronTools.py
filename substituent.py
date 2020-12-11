@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-
 import json
 import os
 import re
+import sys
 from copy import deepcopy
 from glob import glob
 from warnings import warn
@@ -164,7 +164,13 @@ class Substituent(Geometry):
 
     @classmethod
     def from_string(
-        cls, name, conf_num=None, conf_angle=None, form="smiles", debug=False
+        cls,
+        name,
+        conf_num=None,
+        conf_angle=None,
+        form="smiles",
+        debug=False,
+        strict_use_rdkit=False,
     ):
         """
         creates a substituent from a string
@@ -175,14 +181,9 @@ class Substituent(Geometry):
         """
         # convert whatever format we're given to smiles
         # then grab the structure from cactus site
-
-        from urllib.error import HTTPError
-        from urllib.request import urlopen
-
         from AaronTools.finders import BondedTo
 
         accepted_forms = ["iupac", "smiles"]
-
         if form not in accepted_forms:
             raise NotImplementedError(
                 "cannot create substituent given %s; use one of %s" % form,
@@ -195,19 +196,9 @@ class Substituent(Geometry):
         if form == "smiles":
             smiles = name
         elif form == "iupac":
-            # opsin seems to be better at iupac names with radicals
-            url_smi = "https://opsin.ch.cam.ac.uk/opsin/%s.smi" % name
-
-            try:
-                smiles = urlopen(url_smi).read().decode("utf8")
-            except HTTPError:
-                raise RuntimeError(
-                    "%s is not a valid IUPAC name or https://opsin.ch.cam.ac.uk is down"
-                    % name
-                )
-
+            smiles = cls.iupac2smiles(name)
         if debug:
-            print("radical smiles:", smiles)
+            print("radical smiles:", smiles, file=sys.stderr)
 
         # radical atom is the first atom in []
         # charged atoms are also in []
@@ -221,7 +212,6 @@ class Substituent(Geometry):
                 elif "+" not in rad and "-" not in rad:
                     my_rad = rad
                     break
-
         if my_rad is None:
             if radicals:
                 warn(
@@ -235,8 +225,9 @@ class Substituent(Geometry):
                     % smiles
                 )
 
-        # construct a modified smiles string with (H) right after the radical center
-        # keep track of the position of this added H
+        # construct a modified smiles string with (Cl) right after the radical center
+        # keep track of the position of this added Cl
+        # (use Cl instead of H b/c explicit H's don't always play nice with RDKit)
         pos1 = smiles.index(my_rad)
         pos2 = smiles.index(my_rad) + len(my_rad)
         previous_atoms = elements.findall(smiles[:pos1])
@@ -245,7 +236,7 @@ class Substituent(Geometry):
             mod_smiles = (
                 smiles[:pos1]
                 + re.sub(r"H\d+", "", my_rad[1:-1])
-                + "(H)"
+                + "(Cl)"
                 + smiles[pos2:]
             )
         else:
@@ -253,36 +244,33 @@ class Substituent(Geometry):
                 smiles[:pos1]
                 + my_rad[:-1].rstrip("H")
                 + "]"
-                + "(H)"
+                + "(Cl)"
                 + smiles[pos2:]
             )
-
         mod_smiles = mod_smiles.replace(".", "")
-
-        # fix triple bond url
-        mod_smiles = mod_smiles.replace("#", "%23")
-
         if debug:
-            print("modified smiles:", mod_smiles)
-            print("radical position:", rad_pos)
+            print("modified smiles:", mod_smiles, file=sys.stderr)
+            print("radical position:", rad_pos, file=sys.stderr)
 
         # grab structure from cactus
-        geom = Geometry.from_string(mod_smiles, form="smiles")
+        geom = Geometry.from_string(
+            mod_smiles, form="smiles", strict_use_rdkit=strict_use_rdkit
+        )
 
-        # the H we added is in the same position in the structure as in the smiles string
+        # the Cl we added is in the same position in the structure as in the smiles string
         rad = geom.atoms[rad_pos]
-        added_H = [atom for atom in rad.connected if atom.element == "H"][0]
+        added_Cl = [atom for atom in rad.connected if atom.element == "Cl"][0]
 
         # move the added H to the origin
-        geom.coord_shift(-added_H.coords)
+        geom.coord_shift(-added_Cl.coords)
 
         # get the atom bonded to this H
         # also move the atom on H to the front of the atoms list to have the expected connectivity
-        bonded_atom = geom.find(BondedTo(added_H))[0]
+        bonded_atom = geom.find(BondedTo(added_Cl))[0]
         geom.atoms = [bonded_atom] + [
             atom for atom in geom.atoms if atom != bonded_atom
         ]
-        bonded_atom.connected.discard(added_H)
+        bonded_atom.connected.discard(added_Cl)
 
         # align the H-atom bond with the x-axis to have the expected orientation
         bond = deepcopy(bonded_atom.coords)
@@ -293,20 +281,23 @@ class Substituent(Geometry):
             rot_axis /= np.linalg.norm(rot_axis)
             angle = np.arccos(np.dot(bond, x_axis))
             geom.rotate(rot_axis, -angle)
-
         else:
-            # if the bonded_atom is already on the x axis, we will instead
-            # rotate about the y axis by 180 degrees
-            angle = np.pi
-            geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
+            try:
+                import rdkit
+            except ImportError:
+                # if the bonded_atom is already on the x axis, we will instead
+                # rotate about the y axis by 180 degrees
+                angle = np.pi
+                geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
 
         out = cls(
-            [atom for atom in geom.atoms if atom != added_H],
+            [atom for atom in geom.atoms if atom != added_Cl],
             conf_num=conf_num,
             conf_angle=conf_angle,
             detect=False,
         )
-
+        out.refresh_connected()
+        out.refresh_ranks()
         return out
 
     def copy(self, end=None):

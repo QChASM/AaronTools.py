@@ -20,6 +20,7 @@ from AaronTools.const import (
 
 warn_LJ = set([])
 
+
 class BondOrder:
     bonds = {}
     warn_atoms = set([])
@@ -88,7 +89,13 @@ class Atom:
 
     BondOrder()
 
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[]):
+    def __init__(
+        self, element="", coords=None, flag=False, name="", tags=None
+    ):
+        if coords is None:
+            coords = []
+        if tags is None:
+            tags = []
         element = str(element).strip().capitalize()
         if element == "":
             self.element = element
@@ -181,7 +188,7 @@ class Atom:
         except KeyError:
             warn("Radii not found for element: %s" % self.element)
         return
-    
+
     def _set_vdw(self):
         """Sets atomic radii"""
         try:
@@ -248,13 +255,17 @@ class Atom:
 
     def get_neighbor_id(self):
         """
-        gets initial invariant based on self's element and the element of 
+        gets initial invariant based on self's element and the element of
         the atoms connected to self
         """
         # atomic number
         z = ELEMENTS.index(self.element)
         s = "%03i" % z
-        heavy = [ELEMENTS.index(x.element) for x in self.connected if x.element != "H"]
+        heavy = [
+            ELEMENTS.index(x.element)
+            for x in self.connected
+            if x.element != "H"
+        ]
         # number of non-hydrogen connections:
         s += "%02i" % len(heavy)
         # number of bonds with heavy atoms and their element
@@ -321,7 +332,7 @@ class Atom:
         v2 = self.bond(a3)
         dot = np.dot(v1, v2)
         # numpy is still unhappy with this sometimes
-        # every know and again, the changeElement cls test will "fail" b/c 
+        # every know and again, the changeElement cls test will "fail" b/c
         # numpy throws a warning here
         if abs(dot / (self.dist(a1) * self.dist(a3))) >= 1:
             return 0
@@ -491,7 +502,7 @@ class Atom:
                 return "linear 1"
             else:
                 return None
-        
+
         elif old_shape == "linear 1":
             if bond_change == 1:
                 return "linear 2"
@@ -580,18 +591,22 @@ class Atom:
         try_shapes = {}
         if len(self.connected) == 0:
             try_shapes["point"] = Atom.get_shape("point")
-        
+
         elif len(self.connected) == 1:
             try_shapes["linear 1"] = Atom.get_shape("linear 1")
 
         elif len(self.connected) == 2:
             try_shapes["linear 2"] = Atom.get_shape("linear 2")
             try_shapes["bent 2 planar"] = Atom.get_shape("bent 2 planar")
-            try_shapes["bent 2 tetrahedral"] = Atom.get_shape("bent 2 tetrahedral")
+            try_shapes["bent 2 tetrahedral"] = Atom.get_shape(
+                "bent 2 tetrahedral"
+            )
 
         elif len(self.connected) == 3:
             try_shapes["trigonal planar"] = Atom.get_shape("trigonal planar")
-            try_shapes["bent 3 tetrahedral"] = Atom.get_shape("bent 3 tetrahedral")
+            try_shapes["bent 3 tetrahedral"] = Atom.get_shape(
+                "bent 3 tetrahedral"
+            )
             try_shapes["t shaped"] = Atom.get_shape("t shaped")
 
         elif len(self.connected) == 4:

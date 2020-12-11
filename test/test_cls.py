@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # testing for command line scripts
 import os
+import ssl
 import sys
 import unittest
+import urllib
 from glob import glob
 from subprocess import PIPE, Popen
 
 import AaronTools
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader
-from AaronTools.geometry import Geometry
+from AaronTools.geometry import CACTUS_HOST, OPSIN_HOST, Geometry
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 from AaronTools.test.test_geometry import is_close
 
@@ -76,11 +78,19 @@ class TestCLS(TestWithTimer):
     )
 
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
+    # CLS stored in $PYTHONHOME/bin if installed via pip
+    if aarontools_bin not in os.getenv("PATH"):
+        proc = Popen(["pip", "show", "AaronTools"], stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+        if out:
+            tmp = os.path.split(aarontools_bin)
+            while tmp[1] and tmp[1] != "lib":
+                tmp = os.path.split(tmp[0])
+            aarontools_bin = os.path.join(tmp[0], "bin")
 
     def test_environment(self):
         """is this AaronTools' bin in the path?"""
         path = os.getenv("PATH")
-
         self.assertTrue(self.aarontools_bin in path)
 
     # geometry measurement
@@ -200,16 +210,24 @@ class TestCLS(TestWithTimer):
             "-s",
             "11=Cl",
         ]
-
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
-
-        if len(err) != 0:
-            raise RuntimeError(err)
-
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
+
+        # don't run smiles/iupac tests if we can't connect to the host site
+        try:
+            for host in [CACTUS_HOST, OPSIN_HOST]:
+                response = urllib.request.urlopen(
+                    host, context=ssl.SSLContext()
+                )
+                # name resolved, but something wrong with server
+                if response.status >= 500:
+                    return
+        except urllib.error.URLError:
+            # can't resolve name or some other connectivity error
+            return
 
         args = [
             sys.executable,
@@ -220,16 +238,11 @@ class TestCLS(TestWithTimer):
             "-s",
             "11=iupac:chloro",
         ]
-
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
-
-        if len(err) != 0:
-            raise RuntimeError(err)
-
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
-        self.assertTrue(validate(mol, ref, thresh=1e-1))
+        self.assertTrue(validate(mol, ref, thresh=2e-1))
 
     def test_closeRing(self):
         """test closeRing.py"""
