@@ -80,8 +80,8 @@ vbur_parser.add_argument('-r', '--radius',
 
 
 vbur_parser.add_argument('-m', '--method',
-                         type=str,
                          default="Lebedev",
+                         type=lambda x: x.capitalize() if x.lower() == "lebedev" else x.upper(),
                          choices=["MC", "Lebedev"],
                          dest="method",
                          help="integration method\nDefault: Lebedev"

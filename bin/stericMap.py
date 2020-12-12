@@ -7,6 +7,7 @@ import numpy as np
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import NotAny
+from AaronTools.utils.utils import rotation_matrix
 
 from warnings import warn
 
@@ -93,12 +94,40 @@ steric_parser.add_argument('-n', '--number-of-points',
                            help="number of points along x and y axes\nDefault: 100",
 )
 
+steric_parser.add_argument('-amin', '--altitude-minimum',
+                           default=None,
+                           type=float,
+                           dest="min",
+                           help="manually set the lower cutoff of the altitude map",
+)
+
+steric_parser.add_argument('-amax', '--altitude-maximum',
+                           default=None,
+                           type=float,
+                           dest="max",
+                           help="manually set the upper cutoff of the altitude map",
+)
+
+steric_parser.add_argument('-p', '--projection-shape',
+                           choices=('circle', 'square'),
+                           default="circle",
+                           dest="shape",
+                           help="shape of steric map\n" +
+                           "note that buried volume values with the square shape are still based\n" +
+                           "on a sphere around the center\n" +
+                           "Default: circle",
+)
+
 vbur_options = steric_parser.add_argument_group('Buried volume options')
 vbur_options.add_argument('-vbur', '--buried-volume',
-                          action='store_true',
+                          nargs='?',
                           default=False,
+                          choices=("Lebedev", "MC"),
+                          # this allows these choices to be case-insensitive, but we can still
+                          # show normal upper- and lowercase in the help page
+                          type=lambda x: x.capitalize() if x.lower() == "lebedev" else x.upper(),
                           dest="vbur",
-                          help="show buried volume in each quadrant",
+                          help="show buried volume in each quadrant using the specified method\nDefault: do not include %%Vbur",
 )
 
 vbur_options.add_argument('-rp', '--radial-points',
@@ -117,12 +146,22 @@ vbur_options.add_argument('-ap', '--angular-points',
                           help="number of angular points for Lebedev integration\nlower values are faster, but at the cost of accuracy\nDefault: 1454"
 )
 
+vbur_options.add_argument('-i', '--minimum-iterations',
+                          type=int,
+                          default=25,
+                          metavar="ITERATIONS",
+                          dest="min_iter",
+                          help="minimum iterations - each is a batch of 3000 points\n" + \
+                               "MC will continue after this until convergence criteria are met\n" + \
+                               "Default: 25",
+)
+
 vbur_options.add_argument('-s', '--scale',
                           type=float,
                           dest="scale",
                           default=1.17,
                           help="scale VDW radii by this amount\nDefault: 1.17"
-)   
+)
 
 
 args = steric_parser.parse_args()
@@ -135,6 +174,8 @@ ip_vector = args.ip_vector
 if args.ip_vector is not None:
     ip_vector = np.array(args.ip_vector)
 
+if args.vbur is None:
+    args.vbur = "Lebedev"
 
 for f in args.infile:
     if isinstance(f, str):
@@ -159,12 +200,49 @@ for f in args.infile:
         num_pts=args.num_pts,
         oop_vector=oop_vector,
         ip_vector=ip_vector,
+        shape=args.shape,
     )
 
+    if args.ip_vector is None or args.oop_vector is None:
+        print(f)
+    
+    if args.oop_vector is None:
+        z_vec = np.squeeze(basis[:,2])
+        print("out-of-plane vector: %s" % " ".join(["%6.3f" % yi for yi in z_vec]))
+    
+    if args.ip_vector is None:
+        z_vec = np.squeeze(basis[:,2])
+        y_vec = np.squeeze(basis[:,1])
+        r15 = rotation_matrix(np.deg2rad(15), z_vec)
+        yr = y_vec
+        for i in range(1, 24):
+            yr = np.dot(r15, yr)
+            print("in-plane vector rotated by %5.1f degrees: %s" % ((15 * i), " ".join(["%6.3f" % yi for yi in yr])))
+    
+    if args.min is not None:
+        min_alt = args.min
+    
+    if args.max is not None:
+        max_alt = args.max
+    
     fig, ax = plt.subplots()
-    steric_map = ax.contourf(x, y, z, extend="min", cmap=copy.copy(plt.cm.get_cmap("jet")), levels=np.linspace(min_alt, max_alt, num=20))
+    steric_map = ax.contourf(
+        x, 
+        y, 
+        z, 
+        extend="min", 
+        cmap=copy.copy(plt.cm.get_cmap("jet")), 
+        levels=np.linspace(min_alt, max_alt, num=20),
+    )
     steric_map.cmap.set_under('w')
-    steric_lines = ax.contour(x, y, z, extend="min", colors='k', levels=np.linspace(min_alt, max_alt, num=20))
+    steric_lines = ax.contour(
+        x, 
+        y, 
+        z, 
+        extend="min", 
+        colors='k', 
+        levels=np.linspace(min_alt, max_alt, num=20),
+    )
     bar = fig.colorbar(steric_map, format="%.1f")
     bar.set_label("altitude (Å)")
     ax.set_aspect("equal")
@@ -176,10 +254,11 @@ for f in args.infile:
             radius=args.radius, 
             radii=args.radii, 
             scale=args.scale, 
-            method="lebedev", 
+            method=args.vbur, 
             rpoints=args.rpoints, 
             apoints=args.apoints,
             basis=basis,
+            min_iter=args.min_iter,
         )
         
         ax.hlines(0, -args.radius, args.radius, color='k')

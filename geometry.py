@@ -1901,6 +1901,7 @@ class Geometry:
         ip_vector=None, 
         return_basis=False, 
         num_pts=100,
+        shape="circle",
     ):
         """
         returns x, y, z, min_alt, max_alt or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
@@ -1925,6 +1926,7 @@ class Geometry:
                     key_atoms and the center
         return_basis - whether or not to return a change of basis matrix
         num_pts - number of points along x and y axis to use
+        shape - "circle" or "square"
         """
         
         # determine center if none was specified
@@ -1993,6 +1995,9 @@ class Geometry:
                 x_vec = np.cross(ip_vector, oop_vector)
                 x_vec /= np.linalg.norm(x_vec)
                 ip_vector = -np.cross(x_vec, oop_vector)
+        
+        else:
+            x_vec = np.cross(ip_vector, oop_vector)
 
         basis = np.array([x_vec, ip_vector, oop_vector]).T
         coords = self.coordinates(targets) - center_coords
@@ -2001,7 +2006,10 @@ class Geometry:
         atoms_within_radius = []
         radius_list = []
         for i, atom in enumerate(targets):
-            if dist_ip[i] < radius:
+            if shape == "circle" and dist_ip[i] - radii_dict[atom.element] < radius:
+                atoms_within_radius.append(atom)
+                radius_list.append(radii_dict[atom.element])        
+            elif shape == "square" and dist_ip[i] - radii_dict[atom.element] < np.sqrt(2) * radius:
                 atoms_within_radius.append(atom)
                 radius_list.append(radii_dict[atom.element])
 
@@ -2014,7 +2022,7 @@ class Geometry:
         min_alt = None
         for i in range(0, num_pts):
             for j in range(0, num_pts):
-                if x[i]**2 + y[j]**2 > radius**2:
+                if shape == "circle" and x[i]**2 + y[j]**2 > radius**2:
                     continue
                 for k in range(0, len(atoms_within_radius)):
                     w = np.sqrt((x[i] - atom_coords[k][0])**2 + (y[j] - atom_coords[k][1])**2)

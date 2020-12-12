@@ -477,9 +477,9 @@ def rotation_matrix(theta, axis):
         for j in range(0, dim):
             if i != j:
                 if (i + j) % 2 != 0:
-                    p = 1
-                else:
                     p = -1
+                else:
+                    p = 1
                 if i > j:
                     p = -p
                 Sin[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
@@ -576,6 +576,7 @@ def gauss_legendre_grid(a=-1, b=1, n=32):
     weights = grid_data[:, 1] * (b - a) / 2
 
     return grid, weights
+
 
 def perp_vector(v):
     """
