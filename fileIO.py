@@ -514,6 +514,9 @@ class FileReader:
         n = 1
         read_geom = False
         while line != "":
+            if "* O   R   C   A *" in line:
+                self.file_type = "out"
+                return self.read_orca_out(f, get_all=get_all, just_geom=just_geom)
             if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
@@ -724,6 +727,9 @@ class FileReader:
         line = f.readline()
         n = 1
         while line != "":
+            if "Psi4: An Open-Source Ab Initio Electronic Structure Package" in line:
+                self.file_type = "dat"
+                return self.read_psi4_out(f, get_all=get_all, just_geom=just_geom)
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
