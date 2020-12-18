@@ -727,7 +727,10 @@ class FileReader:
 
                 elif "Correlation Energy" in line and "=" in line:
                     item = line.split("=")[0].strip().strip("*").strip()
-                    self.other[item] = float(line.split()[-2])
+                    if "DFT Exchange-Correlation" in item:
+                        self.other[item] = float(line.split()[-1])
+                    else:
+                        self.other[item] = float(line.split()[-2])
 
                 line = f.readline()
                 n += 1
