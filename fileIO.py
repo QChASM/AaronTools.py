@@ -690,6 +690,44 @@ class FileReader:
                         gradient[i] = np.array([float(x) for x in info[1:]])
 
                     self.other["forces"] = -gradient
+                
+                elif "SAPT Results" in line:
+                    self.skip_lines(f, 1)
+                    n += 1
+                    while "Total sSAPT" not in line:
+                        n += 1
+                        line = f.readline()
+                        if "---" in line:
+                            break
+                        if len(line.strip()) > 0:
+                            if "Special recipe" in line:
+                                continue
+                            item = line[:26].strip()
+                            val = 1e-3 * float(line[34:47])
+                            self.other[item] = val
+                
+                elif "SCF energy" in line:
+                    self.other["SCF energy"] = float(line.split()[-1])
+                
+                elif "correlation energy" in line and "=" in line:
+                    item = line.split("=")[0].strip()
+                    self.other[item] = float(line.split()[-1])
+
+                elif "total energy" in line and "=" in line or re.search("\(.\) energy", line):
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    self.other[item] = float(line.split()[-1])
+                    # hopefully the highest level energy gets printed last
+                    self.other["energy"] = self.other[item]
+
+                elif "Total Energy" in line and "=" in line:
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    self.other[item] = float(line.split()[-2])
+                    # hopefully the highest level energy gets printed last
+                    self.other["energy"] = self.other[item]
+
+                elif "Correlation Energy" in line and "=" in line:
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    self.other[item] = float(line.split()[-2])
 
                 line = f.readline()
                 n += 1
@@ -697,7 +735,7 @@ class FileReader:
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
 
-        nrg_regex = re.compile("((?:[A-Za-z]+\s+)?E\(.*\))\s*\.\.\.\s*(.*)$")
+        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -747,7 +785,12 @@ class FileReader:
             else:
                 nrg = nrg_regex.match(line)
                 if nrg is not None:
-                    self.other[nrg.group(1)] = float(nrg.group(2))
+                    nrg_type = nrg.group(1)
+                    # for some reason, ORCA prints MP2 correlation energy
+                    # as E(MP2) for CC jobs
+                    if nrg_type == "MP2":
+                        nrg_type = "MP2 CORR"
+                    self.other["E(%s)" % nrg_type] = float(nrg.group(2))
 
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
@@ -759,6 +802,14 @@ class FileReader:
                     line = f.readline()
                     n += 3
                     self.other["SCF energy"] = float(line.split()[3])
+
+                elif "TOTAL ENERGY:" in line:
+                    item = line.split()[-5] + " energy"
+                    self.other[item] = float(line.split()[-2])
+
+                elif "CORRELATION ENERGY" in line and "Eh" in line:
+                    item = line.split()[-6] + " correlation energy"
+                    self.other[item] = float(line.split()[-2])
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
@@ -1079,13 +1130,13 @@ class FileReader:
                 other_kwargs = {GAUSSIAN_ROUTE: {}}
                 route_spec = re.compile("(\w+)=?\((.*)\)")
                 method_and_basis = re.search(
-                    "#([NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
+                    "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
                 )
                 if method_and_basis is not None:
-                    if method_and_basis.group(3):
-                        method_info = method_and_basis.group(3).split("/")
-                    else:
+                    if method_and_basis.group(2):
                         method_info = method_and_basis.group(2).split("/")
+                    else:
+                        method_info = method_and_basis.group(1).split("/")
 
                     method = method_info[0]
                     if len(method_info) > 1:
@@ -1095,6 +1146,8 @@ class FileReader:
 
                     route_options = route.split()
                     job_type = []
+                    grid = None
+                    solvent = None
                     for option in route_options:
                         if option.startswith("#"):
                             continue
@@ -1119,9 +1172,9 @@ class FileReader:
                                 if opt.lower() == "ts":
                                     ts = True
                                 else:
-                                    other_kwargs[GAUSSIAN_ROUTE]["opt"].append(
-                                        opt
-                                    )
+                                    other_kwargs[GAUSSIAN_ROUTE][
+                                        "opt"
+                                    ].append(opt)
 
                             job_type.append(
                                 OptimizationJob(transition_state=ts)
@@ -1153,8 +1206,28 @@ class FileReader:
                         elif option_lower == "sp":
                             job_type.append(SinglePointJob())
 
+                        elif option_lower.startswith("int"):
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(",")
+                            elif option_lower.startswith("freq="):
+                                options = "".join(option.split("=")[1:])
+                            else:
+                                job_type.append(FrequencyJob())
+                                continue
+                            
+                            other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
+                            for opt in options:
+                                if opt.lower().startswith("grid"):
+                                    grid_name = opt.split("=")[1]
+                                    grid = IntegrationGrid(grid_name)
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE][
+                                        "Integral"
+                                    ].append(opt)
+
                         else:
-                            # TODO: parse grid and solvent
+                            # TODO: parse solvent
                             match = route_spec.search(option)
                             if match:
                                 keyword = match.group(1)
@@ -1169,17 +1242,19 @@ class FileReader:
                             else:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
+                    
+                    theory = Theory(
+                        charge=self.other["charge"],
+                        multiplicity=self.other["multiplicity"],
+                        job_type=job_type,
+                        basis=basis,
+                        method=method,
+                        grid=grid,
+                        solvent=solvent,
+                    )
 
-                        theory = Theory(
-                            charge=self.other["charge"],
-                            multiplicity=self.other["multiplicity"],
-                            job_type=job_type,
-                            basis=basis,
-                            method=method,
-                        )
-
-                        self.other["theory"] = theory
-                        self.other["other_kwargs"] = other_kwargs
+                    self.other["theory"] = theory
+                    self.other["other_kwargs"] = other_kwargs
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)

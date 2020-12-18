@@ -8,10 +8,10 @@ ORCA_COMMENT: list(str)
 
 PSI4_SETTINGS: dict(setting_name: [value])
 PSI4_BEFORE_GEOM: list(str)
-PSI4_AFTER_JOB: list(str) - $FUNCTIONAL will be replaced with method name
+PSI4_AFTER_JOB: list(str) -FUNCTIONAL will be replaced with method name
 PSI4_COMMENT: list(str)
 PSI4_COORDINATES: dict(str:list(str)) e.g. {'symmetry': ['c1']}
-PSI4_JOB: dict(optimize/frequencies/etc: list(str - $FUNCTIONAL replaced w/ method))
+PSI4_JOB: dict(optimize/frequencies/etc: list(str -FUNCTIONAL replaced w/ method))
 PSI4_OPTKING: dict(setting_name: [value])
 
 GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
@@ -39,7 +39,7 @@ PSI4_OPTKING = "optking" #constraints go here
 PSI4_BEFORE_JOB = "before_job" #before job stuff - e.g. auto_fragments
 
 GAUSSIAN_PRE_ROUTE = "link0" #can be used for things like %chk=some.chk
-GAUSSIAN_ROUTE = "route" #route specifies most options, e.g. #n B3LYP/3-21G opt 
+GAUSSIAN_ROUTE = "route" #route specifies most options, e.g. #n B3LYP/3-21G opt
 GAUSSIAN_COORDINATES = 3 #coordinate section - ignored
 GAUSSIAN_CONSTRAINTS = "constraints" #constraints section (e.g. B 1 2 F)
 GAUSSIAN_GEN_BASIS = "gen_basis" #gen or genecp basis section
@@ -47,11 +47,10 @@ GAUSSIAN_GEN_ECP = "gen_ecp" #genecp ECP section
 GAUSSIAN_POST = "end_of_file" #after everything else (e.g. NBO options)
 GAUSSIAN_COMMENT = "comments" #comment line after the route
 
-
-from AaronTools.theory.theory import Theory
 from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.grid import IntegrationGrid
 from AaronTools.theory.method import Method
 from AaronTools.theory.job_types import *
+from AaronTools.theory.theory import Theory

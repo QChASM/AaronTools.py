@@ -1,7 +1,7 @@
+"""various job types for Theory() instances"""
+
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
-    GAUSSIAN_GEN_BASIS,
-    GAUSSIAN_GEN_ECP,
     GAUSSIAN_ROUTE,
     ORCA_BLOCKS,
     ORCA_ROUTE,
@@ -35,14 +35,17 @@ class OptimizationJob(JobType):
     """optimization job"""
 
     def __init__(
-        self, transition_state=False, constraints=None, geometry=None
+            self,
+            transition_state=False,
+            constraints=None,
+            geometry=None,
     ):
         """use transition_state=True to do a TS optimization
         constraints - dict with 'atoms', 'bonds', 'angles' and 'torsions' as keys
                       constraints['atoms']: list(Atom) - atoms to constrain
                       constraints['bonds']: list(list(Atom, len=2)) - distances to constrain
                       constraints['angles']: list(list(Atom, len=3)) - 1-3 angles to constrain
-                      constraints['torsions']: list(list(Atom, len=4)) - dihedral angles to constrain
+                      constraints['torsions']: list(list(Atom, len=4)) - constrained dihedral angles
         geometry    - Geoemtry, will be set when using an AaronTools FileWriter"""
         super().__init__()
 
@@ -57,8 +60,11 @@ class OptimizationJob(JobType):
         else:
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
 
-        if self.constraints is not None and any(
-            len(self.constraints[key]) > 0 for key in self.constraints.keys()
+        if (
+                self.constraints is not None and
+                any(
+                    self.constraints[key] for key in self.constraints.keys()
+                )
         ):
             out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
             out[GAUSSIAN_CONSTRAINTS] = []
@@ -107,8 +113,11 @@ class OptimizationJob(JobType):
         else:
             out = {ORCA_ROUTE: ["Opt"]}
 
-        if self.constraints is not None and any(
-            len(self.constraints[key]) > 0 for key in self.constraints.keys()
+        if (
+                self.constraints is not None and
+                any(
+                    self.constraints[key] for key in self.constraints.keys()
+                )
         ):
 
             out[ORCA_BLOCKS] = {"geom": ["Constraints"]}
@@ -116,16 +125,16 @@ class OptimizationJob(JobType):
                 for constraint in self.constraints["atoms"]:
                     atom1 = constraint
                     ndx1 = self.geometry.atoms.index(atom1)
-                    s = "    {C %2i C}" % (ndx1)
-                    out[ORCA_BLOCKS]["geom"].append(s)
+                    out_str = "    {C %2i C}" % (ndx1)
+                    out[ORCA_BLOCKS]["geom"].append(out_str)
 
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = constraint
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
-                    s = "    {B %2i %2i C}" % (ndx1, ndx2)
-                    out[ORCA_BLOCKS]["geom"].append(s)
+                    out_str = "    {B %2i %2i C}" % (ndx1, ndx2)
+                    out[ORCA_BLOCKS]["geom"].append(out_str)
 
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
@@ -133,8 +142,8 @@ class OptimizationJob(JobType):
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
-                    s = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
-                    out[ORCA_BLOCKS]["geom"].append(s)
+                    out_str = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
+                    out[ORCA_BLOCKS]["geom"].append(out_str)
 
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
@@ -143,8 +152,8 @@ class OptimizationJob(JobType):
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
                     ndx4 = self.geometry.atoms.index(atom4)
-                    s = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
-                    out[ORCA_BLOCKS]["geom"].append(s)
+                    out_str = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
+                    out[ORCA_BLOCKS]["geom"].append(out_str)
 
             out[ORCA_BLOCKS]["geom"].append("end")
 
@@ -161,85 +170,88 @@ class OptimizationJob(JobType):
             out = {PSI4_JOB: {"optimize": []}}
 
         # constraints
-        if self.constraints is not None and any(
-            [len(self.constraints[key]) > 0 for key in self.constraints.keys()]
+        if (
+                self.constraints is not None and
+                any(
+                    [self.constraints[key] for key in self.constraints.keys()]
+                )
         ):
             out[PSI4_OPTKING] = {}
             if (
-                "atoms" in self.constraints
-                and len(self.constraints["atoms"]) > 0
+                    "atoms" in self.constraints
+                    and self.constraints["atoms"]
             ):
-                s = ""
+                out_str = ""
                 if (
-                    len(self.constraints["atoms"]) > 0
-                    and self.geometry is not None
+                        self.constraints["atoms"]
+                        and self.geometry is not None
                 ):
-                    s += 'freeze_list = """\n'
+                    out_str += 'freeze_list = """\n'
                     for atom in self.constraints["atoms"]:
-                        s += "    %2i xyz\n" % (
+                        out_str += "    %2i xyz\n" % (
                             self.geometry.atoms.index(atom) + 1
                         )
 
-                    s += '"""\n'
-                    s += "    \n"
+                    out_str += '"""\n'
+                    out_str += "    \n"
 
-                out[PSI4_BEFORE_GEOM] = [s]
+                out[PSI4_BEFORE_GEOM] = [out_str]
 
                 out[PSI4_OPTKING]["frozen_cartesian"] = ["$freeze_list"]
 
             if "bonds" in self.constraints:
                 if (
-                    len(self.constraints["bonds"]) > 0
-                    and self.geometry is not None
+                        self.constraints["bonds"]
+                        and self.geometry is not None
                 ):
-                    s = '("\n'
+                    out_str = '("\n'
                     for bond in self.constraints["bonds"]:
                         atom1, atom2 = bond
-                        s += "        %2i %2i\n" % (
+                        out_str += "        %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
                         )
 
-                    s += '    ")\n'
+                    out_str += '    ")\n'
 
-                    out[PSI4_OPTKING]["frozen_distance"] = [s]
+                    out[PSI4_OPTKING]["frozen_distance"] = [out_str]
 
             if "angles" in self.constraints:
                 if (
-                    len(self.constraints["angles"]) > 0
-                    and self.geometry is not None
+                        self.constraints["angles"]
+                        and self.geometry is not None
                 ):
-                    s = '("\n'
+                    out_str = '("\n'
                     for angle in self.constraints["angles"]:
                         atom1, atom2, atom3 = angle
-                        s += "        %2i %2i %2i\n" % (
+                        out_str += "        %2i %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
                             self.geometry.atoms.index(atom3) + 1,
                         )
 
-                    s += '    ")\n'
+                    out_str += '    ")\n'
 
-                    out[PSI4_OPTKING]["frozen_bend"] = [s]
+                    out[PSI4_OPTKING]["frozen_bend"] = [out_str]
 
             if "torsions" in self.constraints:
                 if (
-                    len(self.constraints["torsions"]) > 0
-                    and self.geometry is not None
+                        self.constraints["torsions"]
+                        and self.geometry is not None
                 ):
-                    s += '("\n'
+                    out_str += '("\n'
                     for torsion in self.constraints["torsions"]:
                         atom1, atom2, atom3, atom4 = torsion
-                        s += "        %2i %2i %2i %2i\n" % (
+                        out_str += "        %2i %2i %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
                             self.geometry.atoms.index(atom3) + 1,
                             self.geometry.atoms.index(atom4) + 1,
                         )
 
-                    s += '    ")\n'
+                    out_str += '    ")\n'
 
-                    out[PSI4_OPTKING]["frozen_dihedral"] = [s]
+                    out[PSI4_OPTKING]["frozen_dihedral"] = [out_str]
 
         return out
 
@@ -308,22 +320,21 @@ class ForceJob(JobType):
     def __init__(self, numerical=False):
         super().__init__()
         self.numerical = numerical
-    
+
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE"""
         out = {GAUSSIAN_ROUTE:{"force":[]}}
         if self.numerical:
             out[GAUSSIAN_ROUTE]["force"].append("EnGrad")
         return out
-    
+
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
         return {ORCA_ROUTE:["NumGrad" if self.numerical else "EnGrad"]}
-    
+
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
         out = {PSI4_JOB:{"gradient":[]}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
         return out
-        
