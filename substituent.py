@@ -1,3 +1,5 @@
+"""for fragments attached to a structure by one bond"""
+
 #!/usr/bin/env python3
 import json
 import os
@@ -12,7 +14,7 @@ import numpy as np
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import proj, rotation_matrix
+from AaronTools.utils.utils import rotation_matrix
 
 
 class Substituent(Geometry):
@@ -37,14 +39,14 @@ class Substituent(Geometry):
         cache["lengths"] = {}  # for storing number of atoms in each sub
 
     def __init__(
-        self,
-        sub=None,
-        name=None,
-        targets=None,
-        end=None,
-        conf_num=None,
-        conf_angle=None,
-        detect=True,
+            self,
+            sub=None,
+            name=None,
+            targets=None,
+            end=None,
+            conf_num=None,
+            conf_angle=None,
+            detect=True,
     ):
         """
         sub is either a file sub, a geometry, or an atom list
@@ -105,7 +107,7 @@ class Substituent(Geometry):
                 sub = os.path.basename(sub).rstrip(".xyz")
 
             if fsub is None:
-                match = re.search("^{X(.*)}$", sub)
+                match = re.search(r"^{X(.*)}$", sub)
                 if match:
                     fsub = Geometry.from_string("Cl" + match.group(1))
                     fsub.coord_shift(-fsub.atoms[0].coords)
@@ -137,7 +139,7 @@ class Substituent(Geometry):
                 self.atoms = self.find(targets)
 
             # set conformer info
-            conf_info = re.search("CF:(\d+),(\d+)", self.comment)
+            conf_info = re.search(r"CF:(\d+),(\d+)", self.comment)
             if conf_info is not None:
                 self.conf_num = int(conf_info.group(1))
                 self.conf_angle = np.deg2rad(float(conf_info.group(2)))
@@ -155,8 +157,8 @@ class Substituent(Geometry):
         if len(self.atoms) != len(other.atoms):
             return len(self.atoms) < len(other.atoms)
         for a, b in zip(
-            self.reorder(start=self.atoms[0])[0],
-            other.reorder(start=other.atoms[0])[0],
+                self.reorder(start=self.atoms[0])[0],
+                other.reorder(start=other.atoms[0])[0],
         ):
             if a < b and not b < a:
                 return True
@@ -164,13 +166,13 @@ class Substituent(Geometry):
 
     @classmethod
     def from_string(
-        cls,
-        name,
-        conf_num=None,
-        conf_angle=None,
-        form="smiles",
-        debug=False,
-        strict_use_rdkit=False,
+            cls,
+            name,
+            conf_num=None,
+            conf_angle=None,
+            form="smiles",
+            debug=False,
+            strict_use_rdkit=False,
     ):
         """
         creates a substituent from a string
@@ -179,7 +181,7 @@ class Substituent(Geometry):
         conf_angle  int     angle between conformers
         form        str     type of identifier (smiles, iupac)
         """
-        # convert whatever format we're given to smiles
+        # convert whatever format we"re given to smiles
         # then grab the structure from cactus site
         from AaronTools.finders import BondedTo
 
@@ -190,8 +192,8 @@ class Substituent(Geometry):
                 str(accepted_forms),
             )
 
-        rad = re.compile("\[\S+?\]")
-        elements = re.compile("[A-Z][a-z]?")
+        rad = re.compile(r"\[\S+?\]")
+        elements = re.compile(r"[A-Z][a-z]?")
 
         if form == "smiles":
             smiles = name
@@ -227,7 +229,7 @@ class Substituent(Geometry):
 
         # construct a modified smiles string with (Cl) right after the radical center
         # keep track of the position of this added Cl
-        # (use Cl instead of H b/c explicit H's don't always play nice with RDKit)
+        # (use Cl instead of H b/c explicit H"s don"t always play nice with RDKit)
         pos1 = smiles.index(my_rad)
         pos2 = smiles.index(my_rad) + len(my_rad)
         previous_atoms = elements.findall(smiles[:pos1])
@@ -252,7 +254,7 @@ class Substituent(Geometry):
             print("modified smiles:", mod_smiles, file=sys.stderr)
             print("radical position:", rad_pos, file=sys.stderr)
 
-        # grab structure from cactus
+        # grab structure from cactus/RDKit
         geom = Geometry.from_string(
             mod_smiles, form="smiles", strict_use_rdkit=strict_use_rdkit
         )
@@ -291,7 +293,7 @@ class Substituent(Geometry):
                 geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
 
         out = cls(
-            [atom for atom in geom.atoms if atom != added_Cl],
+            [atom for atom in geom.atoms if atom is not added_Cl],
             conf_num=conf_num,
             conf_angle=conf_angle,
             detect=False,
@@ -321,6 +323,7 @@ class Substituent(Geometry):
 
     @classmethod
     def list(cls):
+        """list substituents available from AaronTools or the user's library"""
         names = []
         for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
             name = os.path.splitext(os.path.basename(f))[0]
@@ -344,12 +347,12 @@ class Substituent(Geometry):
 
         for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
             filename = os.path.basename(f)
-            match = re.search("^([\s\S]+).xyz", filename)
+            match = re.search(r"^([\s\S]+).xyz", filename)
             name = match.group(1)
             # test number of atoms against cache
             if (
-                name in sub_lengths
-                and len(test_sub.atoms) != sub_lengths[name]
+                    name in sub_lengths
+                    and len(test_sub.atoms) != sub_lengths[name]
             ):
                 continue
             ref_sub = Substituent(name)
@@ -373,8 +376,8 @@ class Substituent(Geometry):
                 # and correct connected elements
                 failed = False
                 for i, j in zip(
-                    sorted([aa.element for aa in a.connected]),
-                    sorted([bb.element for bb in b.connected]),
+                        sorted([aa.element for aa in a.connected]),
+                        sorted([bb.element for bb in b.connected]),
                 ):
                     if i != j:
                         failed = True
@@ -405,11 +408,11 @@ class Substituent(Geometry):
         """returns sterimol parameter value for the specified parameter
         return_vector: bool/returns tuple(vector start, vector end) instead
         parameter (str) can be:
-            'L'
-            'B1'
-            'B5'
-        radii: 'bondi' - Bondi vdW radii
-               'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            "L"
+            "B1"
+            "B5"
+        radii: "bondi" - Bondi vdW radii
+               "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
         """
         if self.end is None:
             raise RuntimeError(
@@ -464,7 +467,7 @@ class Substituent(Geometry):
                 test_B1 = np.linalg.norm(test_B1_v) + r1
                 obstructed = False
                 if param_value is None or test_B1 < param_value:
-                    # check to see if this atom's B1 is obstructed by another atom
+                    # check to see if this atom"s B1 is obstructed by another atom
                     if np.linalg.norm(test_B1_v) > 1e-4:
                         perp_vec = test_B1_v / np.linalg.norm(test_B1_v)
 
@@ -480,32 +483,30 @@ class Substituent(Geometry):
                             if r2 - d > r1:
                                 # atom is completely in the shadow of a2
                                 obstructed = True
-                                # print(atom.name, 'completely obstructed by', a2.name)
+                                # print(atom.name, "completely obstructed by", a2.name)
                                 break
 
                             elif np.linalg.norm(u_v) + r2 - test_B1 < 1e-3:
                                 # a2 is closer to the L axis than atom
-                                # print(atom.name, 'farther than', a2.name)
+                                # print(atom.name, "farther than", a2.name)
                                 continue
 
                             # elif np.linalg.norm(u_v) < 3*np.finfo(float).eps:
                             #    #this atom is close to the L axis
-                            #    #if it is the 'B1 atom', we'll find out when we check it
-                            #    #but we don't need to check against it
+                            #    #if it is the "B1 atom", we"ll find out when we check it
+                            #    #but we don"t need to check against it
                             #    continue
 
                             else:
-                                # if the atom is far enough from the L axis, check if the B1 is
-                                # blocked by another atom
-                                # - see if the vector perpendicular to the L axis that points towards
-                                #   the atom is between the vectors from the L axis tangent to
-                                #   the VDW shadow of another atom
-                                #   if it is between the tangent vectors, then this atom is obstructed
-                                #   and does not define the minimum width
+                                # if the atom is far enough from the L axis, check
+                                # if the B1 is blocked by another atom
+                                # - see if the vector perpendicular to the L axis that
+                                #   points towards the atom is between the vectors from
+                                #   the L axis tangent to the VDW shadow of another atom
+                                #   if it is between the tangent vectors, then this atom
+                                #   is obstructed and does not define the minimum width
                                 p_v = (
-                                    test_B1
-                                    * perp_vec
-                                    / np.linalg.norm(test_B1)
+                                    test_B1 * perp_vec / np.linalg.norm(test_B1)
                                 )
                                 u_n = u_v / np.linalg.norm(u_v)
                                 r_v = r2 * np.cross(u_n, L_axis)
@@ -525,27 +526,25 @@ class Substituent(Geometry):
                                 c12 = np.linalg.norm(tan2 - tan1)
 
                                 t1p = np.arccos(
-                                    (c1p ** 2 - a1p ** 2 - b1p ** 2)
-                                    / (-2 * a1p * b1p)
+                                    (c1p ** 2 - a1p ** 2 - b1p ** 2) / (-2 * a1p * b1p)
                                 )
                                 t2p = np.arccos(
-                                    (c2p ** 2 - a2p ** 2 - b2p ** 2)
-                                    / (-2 * a2p * b2p)
+                                    (c2p ** 2 - a2p ** 2 - b2p ** 2) / (-2 * a2p * b2p)
                                 )
                                 t12 = np.arccos(
-                                    (c12 ** 2 - a12 ** 2 - b12 ** 2)
-                                    / (-2 * a12 * b12)
+                                    (c12 ** 2 - a12 ** 2 - b12 ** 2) / (-2 * a12 * b12)
                                 )
 
                                 if abs(t1p + t2p - t12) < 1e-3:
-                                    # print(atom.name, 'partially obstructed by', a2.name)
+                                    # print(atom.name, "partially obstructed by", a2.name)
                                     obstructed = True
                                     break
                                 # else:
-                                # print(atom.name, 'unobstructed by', a2.name)
+                                # print(atom.name, "unobstructed by", a2.name)
                                 # print(t1p, t2p, t12, tan1, tan2, test_B1*perp_vec)
 
-                    # if the atom is close to the L axis, scan angles and check the same thing as above
+                    # if the atom is close to the L axis, scan angles and check the same
+                    # thing as above
                     else:
                         v_n = test_v / np.linalg.norm(test_v)
                         perp_vec = v_n[::-1]
@@ -572,12 +571,18 @@ class Substituent(Geometry):
                                 if r2 - d > r1:
                                     # atom is completely in the shadow of a2
                                     obstructed = True
-                                    # print(atom.name, 'completely obstructed by', a2.name)
+                                    # print(atom.name, "completely obstructed by", a2.name)
                                     break
 
                                 elif np.linalg.norm(u_v) + r2 - test_B1 < 1e-2:
                                     # a2 is closer to the L axis than atom
-                                    # print(atom.name, 'farther than', a2.name, 'at angle', angle)
+                                    # print(
+                                    #     atom.name,
+                                    #     "farther than",
+                                    #     a2.name,
+                                    #     "at angle",
+                                    #     angle
+                                    #)
                                     continue
 
                                 u_n = u_v / np.linalg.norm(u_v)
@@ -598,32 +603,40 @@ class Substituent(Geometry):
                                 c12 = np.linalg.norm(tan2 - tan1)
 
                                 t1p = np.arccos(
-                                    (c1p ** 2 - a1p ** 2 - b1p ** 2)
-                                    / (-2 * a1p * b1p)
+                                    (c1p ** 2 - a1p ** 2 - b1p ** 2) / (-2 * a1p * b1p)
                                 )
                                 t2p = np.arccos(
-                                    (c2p ** 2 - a2p ** 2 - b2p ** 2)
-                                    / (-2 * a2p * b2p)
+                                    (c2p ** 2 - a2p ** 2 - b2p ** 2) / (-2 * a2p * b2p)
                                 )
                                 t12 = np.arccos(
-                                    (c12 ** 2 - a12 ** 2 - b12 ** 2)
-                                    / (-2 * a12 * b12)
+                                    (c12 ** 2 - a12 ** 2 - b12 ** 2) / (-2 * a12 * b12)
                                 )
 
                                 # print(t1p, t2p, t12, t1p + t2p)
 
                                 if abs(t1p + t2p - t12) < 1e-3:
                                     partially_obstructed = True
-                                    # print(atom.name, 'obstructed by', a2.name, 'at angle', angle)
-                                    # we might have found and opening, but if it's too small,
-                                    # it's not really a usable opening
+                                    # print(
+                                    #     atom.name,
+                                    #     "obstructed by",
+                                    #     a2.name,
+                                    #     "at angle",
+                                    #     angle
+                                    # )
+                                    # we might have found and opening, but if it"s too small,
+                                    # it"s not really a usable opening
                                     # must have an arc length > 1 A
                                     if (
-                                        start_angle is not None
-                                        and end_angle is None
+                                            start_angle is not None
+                                            and end_angle is None
                                     ):
                                         if (angle - start_angle) * r1 < 0.9:
-                                            # print('< 1 A gap between', start_angle, angle, (angle-start_angle) * r1)
+                                            # print(
+                                            #     "< 1 A gap between",
+                                            #     start_angle,
+                                            #     angle,
+                                            #     (angle-start_angle) * r1
+                                            # )
                                             start_angle = None
                                         else:
                                             end_angle = angle
@@ -631,10 +644,10 @@ class Substituent(Geometry):
 
                             else:
                                 if (
-                                    not partially_obstructed
-                                    and start_angle is None
+                                        not partially_obstructed
+                                        and start_angle is None
                                 ):
-                                    # print(atom.name, 'not obstructed at angle', angle)
+                                    # print(atom.name, "not obstructed at angle", angle)
                                     start_angle = angle
                                 elif end_angle is not None:
                                     break
@@ -642,9 +655,9 @@ class Substituent(Geometry):
                             if obstructed:
                                 break
 
-                        # print(atom.name, 'finished scanning', start_angle, end_angle, angle)
+                        # print(atom.name, "finished scanning", start_angle, end_angle, angle)
                         if start_angle is None or (
-                            start_angle != 0 and end_angle is None
+                                start_angle != 0 and end_angle is None
                         ):
                             obstructed = True
                         else:
@@ -656,7 +669,7 @@ class Substituent(Geometry):
                             perp_vec = np.dot(m, perp_vec)
 
                     if not obstructed:
-                        # print('new B1 atom', atom.name)
+                        # print("new B1 atom", atom.name)
                         start = atom.coords - test_B1_v
                         end = start + test_B1 * (
                             perp_vec / np.linalg.norm(perp_vec)
@@ -686,8 +699,7 @@ class Substituent(Geometry):
 
         if return_vector:
             return vector
-        else:
-            return param_value
+        return param_value
 
     def align_to_bond(self, bond):
         """

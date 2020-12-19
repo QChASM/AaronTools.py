@@ -78,7 +78,6 @@ vbur_parser.add_argument('-r', '--radius',
                          help="radius around center\nDefault: 3.5 Ångström"
 )
 
-
 vbur_parser.add_argument('-m', '--method',
                          default="Lebedev",
                          type=lambda x: x.capitalize() if x.lower() == "lebedev" else x.upper(),

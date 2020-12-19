@@ -614,3 +614,9 @@ def perp_vector(vec):
     raise NotImplementedError(
         "cannot determine vector perpendicular to %i-dimensional array" % vec.ndim
     )
+
+def get_filename(path):
+    """returns the name of the file without parent directories or extension"""
+    fname = os.path.basename(path)
+    fname, _ = os.path.splitext(fname)
+    return fname
