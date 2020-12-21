@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from sys import exit, stdin
+import sys
 
 from AaronTools.component import Component
 from AaronTools.fileIO import FileReader, read_types
@@ -24,7 +24,7 @@ def get_matching_ligands(name):
                     name_info = name_info.replace("%s:%s" % (info, lig_info[i+1]), "")
                     coordinating_elements = lig_info[i+1].split(",")
 
-            if len(name_info) == 0:
+            if not name_info:
                 name_info = None
 
     return Component.list(name_regex=name_info, coordinating_elements=coordinating_elements)
@@ -34,12 +34,13 @@ maplig_parser = argparse.ArgumentParser(
     description="replace a ligand on an organometallic system",
     formatter_class=argparse.RawTextHelpFormatter,
 )
+
 maplig_parser.add_argument(
     "infile",
     metavar="input file",
     type=str,
     nargs="*",
-    default=[stdin],
+    default=[sys.stdin],
     help="a coordinate file",
 )
 
@@ -51,12 +52,12 @@ maplig_parser.add_argument(
     default=False,
     required=False,
     dest="list_avail",
-    metavar="elements:X[,Y...] | name:RegEx", 
-    help="list available ligands\n" + \
-         "elements:X[,Y] can be used to only list ligands that coordinate\n" + \
-         "with the specified elements - must match exactly\n" + \
-         "name:RegEx can be used to only list ligands with names matching\n" + \
-         "the supplied regular expression - matches are case-insensitive",
+    metavar="elements:X[,Y...] | name:RegEx",
+    help="list available ligands\n" +
+    "elements:X[,Y] can be used to only list ligands that coordinate\n" +
+    "with the specified elements - must match exactly\n" +
+    "name:RegEx can be used to only list ligands with names matching\n" +
+    "the supplied regular expression - matches are case-insensitive",
 )
 
 maplig_parser.add_argument(
@@ -78,12 +79,12 @@ maplig_parser.add_argument(
     default=None,
     required=False,
     dest="ligand",
-    help="ligand used to replace the current one\n" + \
-         "n[,m...] are the 1-indexed positions of the coordinating atoms of the\n" + \
-         "ligand that is being replaced\n" + \
-         "if these indices are not provided, they will the guessed\n" + \
-         "elements:X[,Y] or name:RegEx can be used in place of ligand\n" + \
-         "to swap ligands matching these criteria (see --list option)",
+    help="ligand used to replace the current one\n" +
+    "n[,m...] are the 1-indexed positions of the coordinating atoms of the\n" +
+    "ligand that is being replaced\n" +
+    "if these indices are not provided, they will the guessed\n" +
+    "elements:X[,Y] or name:RegEx can be used in place of ligand\n" +
+    "to swap ligands matching these criteria (see --list option)",
 )
 
 maplig_parser.add_argument(
@@ -104,11 +105,11 @@ if args.list_avail is not False:
     for i, name in enumerate(sorted(get_matching_ligands(args.list_avail))):
         s += "%-35s" % name
         if (i + 1) % 3 == 0:
-       # if (i + 1) % 1 == 0:
+        # if (i + 1) % 1 == 0:
             s += "\n"
 
     print(s.strip())
-    exit(0)
+    sys.exit(0)
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -118,9 +119,9 @@ for infile in args.infile:
             f = FileReader(infile)
     else:
         if args.input_format is not None:
-            f = FileReader(("from stdin", args.input_format[0], stdin))
+            f = FileReader(("from stdin", args.input_format[0], infile))
         else:
-            f = FileReader(("from stdin", "xyz", stdin))
+            f = FileReader(("from stdin", "xyz", infile))
 
     cat = Geometry(f)
     # TODO: change this if to a regex
@@ -136,34 +137,33 @@ for infile in args.infile:
         for lig_name in lig_names:
             ligands = [Component(lig_name)]
             cat_copy = cat.copy()
-            
+
             if key_atoms != []:
                 key = cat_copy.find(key_atoms)
             else:
                 key = []
-            
+
             original_ligands = [l for l in ligands]
-    
+
             lig_keys = sum([len(ligand.key_atoms) for ligand in ligands])
             while len(key) > lig_keys:
                 ligands.extend(l.copy() for l in original_ligands)
                 lig_keys += sum([len(ligand.key_atoms) for ligand in original_ligands])
-                
+
             j = 0
             while len(key) < sum([len(ligand.key_atoms) for ligand in ligands]):
                 if j >= len(cat.components["ligand"]):
                     raise RuntimeError(
                         "new ligand appears to have a higher denticity than old ligands combined"
                     )
-                else:
-                    key.extend(cat.components["ligand"][j].key_atoms)
-                    j += 1
-    
+
+                key.extend(cat.components["ligand"][j].key_atoms)
+                j += 1
+
             cat_copy.map_ligand(ligands, key)
-            
+
             if isinstance(args.outfile, str):
                 cat_copy.write(append=False, outfile=args.outfile.replace("$LIGAND", lig_name))
             else:
                 s = cat_copy.write(append=False, outfile=False)
                 print(s)
-

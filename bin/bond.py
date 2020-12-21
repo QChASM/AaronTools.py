@@ -49,7 +49,6 @@ bond_parser.add_argument(
 bond_parser.add_argument(
     "-if", "--input-format",
     type=str,
-    nargs=1,
     default=None,
     choices=read_types,
     dest="input_format",
@@ -106,12 +105,12 @@ args = bond_parser.parse_args()
 for f in args.infile:
     if isinstance(f, str):
         if args.input_format is not None:
-            infile = FileReader((f, args.input_format[0], None))
+            infile = FileReader((f, args.input_format, None))
         else:
             infile = FileReader(f)
     else:
         if args.input_format is not None:
-            infile = FileReader(("from stdin", args.input_format[0], f))
+            infile = FileReader(("from stdin", args.input_format, f))
         else:
             infile = FileReader(("from stdin", "xyz", f))
 
@@ -143,15 +142,20 @@ for f in args.infile:
 
     if len(args.set_ang) + len(args.change) > 0:
         s = geom.write(append=True, outfile=args.outfile[0])
-        if not args.outfile[0]:
-            print(s)
+        if args.outfile:
+            geom.write(
+                append=True, 
+                outfile=args.outfile.replace("$INFILE", get_filename(f))
+            )
+        else:
+            print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
         if not args.outfile:
             print(out)
         else:
             with open(
-                    args.outfile.replace("$INFILE", get_filename(args.outfile)),
-                    "w"
+                    args.outfile.replace("$INFILE", get_filename(f)),
+                    "a"
             ) as f:
                 f.write(out)

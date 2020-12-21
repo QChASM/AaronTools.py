@@ -112,9 +112,9 @@ for infile in args.infile:
             geom.ring_substitute(list(key), ring_geom)
 
     if args.outfile:
-        s = geom.write(
-            append=False,
-            outfile=args.outfile.replace("$INFILE", get_filename(args.outfile))
+        geom.write(
+            append=True,
+            outfile=args.outfile.replace("$INFILE", get_filename(infile))
         )
     else:
         print(geom.write(outfile=False))

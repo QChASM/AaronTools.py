@@ -212,6 +212,8 @@ class TestCLS(TestWithTimer):
         ]
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
+        # print(out.decode("utf-8"))
+        # print(err.decode("utf-8"))
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
@@ -828,7 +830,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_grabThermo"))
+    suite.addTest(TestCLS("test_substitute"))
     return suite
 
 

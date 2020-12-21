@@ -6,6 +6,7 @@ from warnings import warn
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.utils.utils import get_filename
 
 vsepr_choices = [
     "linear_1",
@@ -158,6 +159,9 @@ for f in args.infile:
             )
 
     if args.outfile:
-        s = geom.write(append=True, outfile=args.outfile)
+        geom.write(
+            append=True, 
+            outfile=args.outfile.replace("$INFILE", get_filename(f))
+        )
     else:
         print(geom.write(outfile=False))

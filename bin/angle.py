@@ -167,16 +167,20 @@ for f in args.infile:
     out = out.rstrip()
 
     if len(args.set_ang) + len(args.change) > 0:
-        s = geom.write(append=True, outfile=args.outfile)
-        if not args.outfile:
-            print(s)
+        if args.outfile:
+            geom.write(
+                append=True,
+                outfile=args.outfile.replace("$INFILE", get_filename(f))
+            )
+        else:
+            print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
         if not args.outfile:
             print(out)
         else:
             with open(
-                    args.outfile.replace("$INFILE", get_filename(args.outfile)),
-                    "w"
+                    args.outfile.replace("$INFILE", get_filename(f)),
+                    "a"
             ) as f:
                 f.write(out)

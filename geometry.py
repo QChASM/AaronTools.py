@@ -136,13 +136,14 @@ class Geometry:
         """get Geometry from string
         form=iupac -> iupac to smiles from opsin API
                        --> form=smiles
-        form=smiles -> structure from cactvs API"""
+        form=smiles -> structure from cactvs API/RDKit
+        """
 
         def get_cactus_sd(smiles):
-            url_sd = "{}/chemical/structure/{}/file?format=sdf".format(
+            url_sd = "{}/chemical/structure/{}/file?format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            print(url_sd)
+            # print(url_sd)
             s_sd = (
                 urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
             )
@@ -163,6 +164,7 @@ class Geometry:
         try:
             import rdkit.Chem.AllChem as rdk
 
+            scale_coords = False
             m = rdk.MolFromSmiles(smiles)
             if m is None and not strict_use_rdkit:
                 s_sd = get_cactus_sd(smiles)
@@ -175,9 +177,11 @@ class Geometry:
                     "Could not load {} with RDKit".format(smiles)
                 )
         except ImportError:
+            scale_coords = True
             s_sd = get_cactus_sd(smiles)
 
         f = FileReader((name, "sd", s_sd))
+
         return cls(f, refresh_connected=False)
 
     # attribute access
@@ -1079,6 +1083,8 @@ class Geometry:
         self.refresh_ranks()
 
     def detect_components(self):
+        from AaronTools.component import Component
+
         self.components = []
         self.center = []
 
@@ -1110,7 +1116,7 @@ class Geometry:
             name = self.name + ".{:g}".format(
                 min([float(a.name) for a in frag])
             )
-            self.components[i] = AaronTools.component.Component(frag, name)
+            self.components[i] = Component(frag, name)
         self.rebuild()
         return
 
@@ -2044,8 +2050,9 @@ class Geometry:
 
     # geometry manipulation
     def append_structure(self, structure):
+        from AaronTools.component import Component
         if not isinstance(structure, Geometry):
-            structure = AaronTools.component.Component(structure)
+            structure = Component(structure)
         if not self.components:
             self.detect_components()
         self.components += [structure]
@@ -2570,6 +2577,7 @@ class Geometry:
         if attached_to==None, replace the smallest fragment containing `target`
         minimize - bool, rotate sub to lower LJ potential
         """
+        from AaronTools.component import Component
         # set up substituent
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
@@ -2664,7 +2672,7 @@ class Geometry:
         geom.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
 
         # clean up changes
-        if isinstance(geom, AaronTools.component.Component):
+        if isinstance(geom, Component):
             self.substituents += [sub]
             self.detect_backbone(to_center=self.backbone)
             self.rebuild()

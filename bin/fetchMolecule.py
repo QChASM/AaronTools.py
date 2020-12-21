@@ -46,6 +46,10 @@ if args.smiles is not None:
 elif args.iupac is not None:
     geom = Geometry.from_string(args.iupac, form="iupac")
 
-s = geom.write(append=True, outfile=args.outfile)
 if not args.outfile:
-    print(s)
+    print(geom.write(outfile=False))
+else:
+    geom.write(
+        append=True, 
+        outfile=args.outfile
+    )

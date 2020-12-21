@@ -25,7 +25,7 @@ class TestFromString(TestWithTimer):
         os.path.join(prefix, "test_files", "chiral_ring.xyz")
     )
 
-    def is_COCH3(self, sub):
+    def is_COCH3(self, sub, thresh=0.03):
         ref = TestFromString.COCH3
         ref.refresh_connected()
         sub.refresh_connected()
@@ -34,7 +34,7 @@ class TestFromString(TestWithTimer):
         ref.atoms = ref.reorder(start=ref.atoms[0])[0]
         sub.atoms = sub.reorder(start=sub.atoms[0])[0]
         self.assertTrue(
-            validate(sub, ref, thresh=0.03, heavy_only=True, sort=False)
+            validate(sub, ref, thresh=thresh, heavy_only=True, sort=False, debug=False)
         )
 
     def is_NO2(self, sub):
@@ -65,13 +65,15 @@ class TestFromString(TestWithTimer):
             )
             self.is_NO2(sub)
 
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             # I still want to test CACTVS things because sometimes they change stuff
             # that breaks our stuff
-            if os.getenv("USER", False) == "ajs99778":
+            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
+                "ajs99778", "normn"
+            ]):
                 sub = Substituent.from_string("acetyl", form="iupac")
                 print(sub.write(outfile=False))
-                self.is_COCH3(sub)
+                self.is_COCH3(sub, thresh=0.3)
 
                 sub = Substituent.from_string("nitro", form="iupac")
                 print(sub.write(outfile=False))
@@ -102,7 +104,9 @@ class TestFromString(TestWithTimer):
             )
 
         except:
-            if os.getenv("USER", False) == "ajs99778":
+            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
+                "ajs99778", "normn"
+            ]):
                 geom = Geometry.from_string(
                     "(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac"
                 )
@@ -125,16 +129,18 @@ class TestFromString(TestWithTimer):
                 "benzene", end_length=1, end_atom="C", form="iupac"
             )
             ref = self.benzene
-            self.assertTrue(validate(ring, ref, thresh="loose"))
+            self.assertTrue(validate(ring, ref, thresh="loose", debug=True))
 
         except ImportError:
-            if os.getenv("USER", False) == "ajs99778":
+            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
+                "ajs99778", "normn"
+            ]):
                 ring = Ring.from_string(
                     "benzene", end_length=1, end_atom="C", form="iupac"
                 )
                 print(ring.write(outfile=False))
                 ref = self.benzene
-                self.assertTrue(validate(ring, ref, thresh="loose"))
+                self.assertTrue(validate(ring, ref, thresh="loose", debug=True))
 
             else:
                 self.skipTest("RDKit not installed, CACTVS is not tested")

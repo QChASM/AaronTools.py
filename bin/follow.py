@@ -5,10 +5,9 @@ from warnings import warn
 
 import numpy as np
 from AaronTools.fileIO import FileReader
-
-# from AaronTools.const import UNIT
 from AaronTools.geometry import Geometry
 from AaronTools.pathway import Pathway
+from AaronTools.utils.utils import get_filename
 
 
 def width(n):
@@ -122,17 +121,9 @@ follow_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$i in file name will be replaced with zero-padded numbers\n" +
-    "Default: stdout',
+    "Default: stdout",
 )
-"""
-follow_parser.add_argument('-e', '--energy-scale', \
-                            action='store_const', \
-                            const=True, \
-                            default=False, \
-                            required=False, \
-                            dest='nrg_scale', \
-                            help='scale is in units of kcal instead of Angstrom')
-"""
+
 args = follow_parser.parse_args()
 
 fr = FileReader(args.input_file, just_geom=False)
@@ -173,23 +164,16 @@ for i, mode in enumerate(modes):
     dX = np.zeros((len(geom.atoms), 3))
     # figure out how much we'll have to scale each mode
     for j, combo in enumerate(mode):
-        if False:
-            """if args.nrg_scale:
-            nrg = scale[i][j]*UNIT.mDYNEA0_TO_KCAL
-            #scale this mode by 0.35 kcal (or whatever the user asked for)
-            x_factor = np.sqrt(2.*nrg/fr.other['frequency'].data[combo].forcek)
-            """
-        else:
-            max_norm = 0
-            for k, v in enumerate(
+        max_norm = 0
+        for k, v in enumerate(
                 fr.other["frequency"].data[combo].vector
-            ):
-                n = np.linalg.norm(v)
-                if n > max_norm:
-                    max_norm = n
+        ):
+            n = np.linalg.norm(v)
+            if n > max_norm:
+                max_norm = n
 
-            # scale this mode by 0.35 (or whatever the user asked for)/max_norm
-            x_factor = scale[i][j] / max_norm
+        # scale this mode by 0.35 (or whatever the user asked for)/max_norm
+        x_factor = scale[i][j] / max_norm
 
         if args.reverse:
             x_factor *= -1
@@ -239,12 +223,16 @@ for i, mode in enumerate(modes):
                 "animating mode %s scaled to displace at most [%s]"
                 % (
                     repr(mode),
-                    ", ".join(str(S.var_func[key](t)) for key in other_vars),
+                    ", ".join(str(pathway.var_func[key](t)) for key in other_vars),
                 )
             )
-            s = followed_geom.write(append, outfile=outfile)
-            if not outfile:
-                print(s)
+            if args.outfile:
+                followed_geom.write(
+                    append=False,
+                    outfile=outfile.replace("$INFILE", get_filename(args.input_file))
+                )
+            else:
+                print(followed_geom.write(outfile=False))
 
     else:
         w = width(len(modes))
@@ -258,6 +246,10 @@ for i, mode in enumerate(modes):
         )
 
         outfile = outfiles[i]
-        s = followed_geom.write(append, outfile=outfile)
-        if not outfile:
-            print(s)
+        if args.outfile:
+            followed_geom.write(
+                append=True,
+                outfile=outfile.replace("$INFILE", get_filename(args.input_file))
+            )
+        else:
+            print(followed_geom.write(outfile=False))

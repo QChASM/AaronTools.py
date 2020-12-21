@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import sys
-import numpy as np
 import argparse
 from warnings import warn
+import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader
@@ -161,7 +161,7 @@ if len(nrg_list) < len(geom_list):
 #align all input geometries to the reference
 for geom, nrg in zip(geom_list, nrg_list):
     centroid = geom.COM(mass_weight=True)
-    geom.coord_shift(vector = -1 * centroid)
+    geom.coord_shift(vector=-1 * centroid)
     geom.RMSD(ref=ref_geom, align=True)
 
 #interpolate between the structures
@@ -187,7 +187,7 @@ if args.print_max or args.print_min:
         dnrg_dt = pathway.dvar_func_dt["energy"](t) * pathway.dvar_func_dt["energy"](t + dt)
         if dnrg_dt <= 0 and pathway.dvar_func_dt["energy"](t) > 0 and args.print_max:
             max_n_min_ts.append(t)
-        if dnrg_dt <= 0 and pathway.dvar_func_dt["energy"](t) < 0 and args.print_min:
+        elif dnrg_dt <= 0 and pathway.dvar_func_dt["energy"](t) < 0 and args.print_min:
             max_n_min_ts.append(t)
 
     for i, t in enumerate(max_n_min_ts):

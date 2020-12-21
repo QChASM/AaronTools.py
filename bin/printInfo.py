@@ -4,8 +4,8 @@ import sys
 import argparse
 import numpy as np
 
-from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.utils.utils import get_filename
 
 info_parser = argparse.ArgumentParser(
     description="print information in Gaussian, ORCA, or Psi4 output files",
@@ -55,7 +55,7 @@ info_parser.add_argument(
     required=False,
     dest="info",
     help="information to print\n" +
-         "Default is all info"
+    "Default is all info"
 )
 
 info_parser.add_argument(
@@ -110,7 +110,7 @@ for f in args.infile:
     else:
         s += "%s:\n" % f
         missing_keys = [key for key in args.info if key not in infile.other.keys()]
-        if len(missing_keys) > 0:
+        if missing_keys:
             s += "\nmissing some info: %s\n" % ", ".join(missing_keys)
 
         for key in infile.other.keys():
@@ -137,9 +137,13 @@ for f in args.infile:
                         s += "\t%-30s =\t%.8f\n" % (key, infile.other[key])
                 elif isinstance(infile.other[key], list):
                     if args.csv:
-                        s += "\"%s\"%s%s\n" % (key, sep, sep.join([str(x) for x in infile.other[key]]))
+                        s += "\"%s\"%s%s\n" % (
+                            key, sep, sep.join([str(x) for x in infile.other[key]])
+                        )
                     else:
-                        s += "\t%-30s =\t%s\n" % (key, ", ".join([str(x) for x in infile.other[key]]))
+                        s += "\t%-30s =\t%s\n" % (
+                            key, ", ".join([str(x) for x in infile.other[key]])
+                        )
                 elif isinstance(infile.other[key], np.ndarray):
                     if args.csv:
                         s += "\"%s\"%s" % (key, sep)
@@ -155,7 +159,10 @@ for f in args.infile:
                             s += "\t\t%s\n" % line
 
 if not args.outfile:
-    print(s)
+    print(s.strip())
 else:
-    with open(args.outfile, "w") as f:
-        f.write(s)
+    with open(
+            args.outfile.replace("$INFILE", get_filename(f)),
+            "a"
+    ) as f:
+        f.write(s.strip())

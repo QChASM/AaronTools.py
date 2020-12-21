@@ -217,14 +217,14 @@ for infile in args.infile:
                 v2 = targ.bond(atom2)
                 rv = v1 + v2
 
-                geom.rotate(rv, angle=pi, targets=frag1+frag2, center=targ)
+                geom.rotate(rv, angle=pi, targets=frag1 + frag2, center=targ)
 
         if args.outfile is None:
             s += geom.write(outfile=False)
             s += "\n"
         else:
             geom.write(
-                outfile=args.outfile.replace("$INFILE", get_filename(args.outfile))
+                outfile=args.outfile.replace("$INFILE", get_filename(infile))
             )
 
 

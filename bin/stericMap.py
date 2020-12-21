@@ -2,18 +2,15 @@
 
 import sys
 import argparse
+import copy
+
 import numpy as np
+import matplotlib.pyplot as plt
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.finders import NotAny
-from AaronTools.utils.utils import rotation_matrix
+from AaronTools.utils.utils import rotation_matrix, get_filename
 
-from warnings import warn
-
-import matplotlib.pyplot as plt
-
-import copy
 
 steric_parser = argparse.ArgumentParser(
     description="create a steric map for a ligand",
@@ -21,7 +18,7 @@ steric_parser = argparse.ArgumentParser(
 )
 
 steric_parser.add_argument(
-    "infile", 
+    "infile",
     metavar="input file",
     type=str,
     nargs="*",
@@ -50,7 +47,7 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
-    "-k", 
+    "-k",
     "--key-atoms",
     default=None,
     required=False,
@@ -60,13 +57,14 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
-    "-c", 
+    "-c",
     "--center",
     action="append",
     default=None,
     required=False,
     dest="center",
-    help="atom the sphere is centered on\nDefault: detect metal center (centroid of all metals if multiple are present)",
+    help="atom the sphere is centered on\n" +
+    "Default: detect metal center (centroid of all metals if multiple are present)",
 )
 
 steric_parser.add_argument(
@@ -99,7 +97,7 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
-    "-ip", 
+    "-ip",
     "--in-plane",
     default=None,
     nargs=3,
@@ -125,7 +123,7 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
-    "-amax", 
+    "-amax",
     "--altitude-maximum",
     default=None,
     type=float,
@@ -164,7 +162,7 @@ vbur_options.add_argument(
     default=20,
     choices=[20, 32, 64, 75, 99, 127],
     dest="rpoints",
-    help="number of radial shells for Lebedev integration\n" + 
+    help="number of radial shells for Lebedev integration\n" +
     "lower values are faster, but at the cost of accuracy\n" +
     "Default: 20"
 )
@@ -181,19 +179,19 @@ vbur_options.add_argument(
 )
 
 vbur_options.add_argument(
-    "-i", 
+    "-i",
     "--minimum-iterations",
     type=int,
     default=25,
     metavar="ITERATIONS",
     dest="min_iter",
     help="minimum iterations - each is a batch of 3000 points\n" +
-    "MC will continue after this until convergence criteria are met\n" + 
+    "MC will continue after this until convergence criteria are met\n" +
     "Default: 25",
 )
 
 vbur_options.add_argument(
-    "-s", 
+    "-s",
     "--scale",
     type=float,
     dest="scale",
@@ -255,7 +253,9 @@ for f in args.infile:
         yr = y_vec
         for i in range(1, 24):
             yr = np.dot(r15, yr)
-            print("in-plane vector rotated by %5.1f degrees: %s" % ((15 * i), " ".join(["%6.3f" % yi for yi in yr])))
+            print("in-plane vector rotated by %5.1f degrees: %s" % (
+                (15 * i), " ".join(["%6.3f" % yi for yi in yr])
+            ))
 
     if args.min is not None:
         min_alt = args.min
@@ -302,12 +302,15 @@ for f in args.infile:
         ax.hlines(0, -args.radius, args.radius, color="k")
         ax.vlines(0, -args.radius, args.radius, color="k")
 
-        ax.text( 0.7 * args.radius,  0.9 * args.radius, "%.1f%%" % vbur[0])
-        ax.text(-0.9 * args.radius,  0.9 * args.radius, "%.1f%%" % vbur[1])
+        ax.text(+0.7 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur[0])
+        ax.text(-0.9 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur[1])
         ax.text(-0.9 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[2])
-        ax.text( 0.7 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[3])
+        ax.text(+0.7 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[3])
 
     if not args.outfile:
         plt.show()
     else:
-        plt.savefig(args.outfile, dpi=500)
+        plt.savefig(
+            args.outfile.replace("$INFILE", get_filename(f)),
+            dpi=500
+        )

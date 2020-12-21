@@ -6,13 +6,14 @@ import argparse
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import *
+from AaronTools.utils.utils import get_filename
 
 vsepr_choices = [
-    "linear_1", 
-    "linear_2", 
-    "bent_2_planar", 
-    "bent_2_tetrahedral", 
-    "trigonal_planar", 
+    "linear_1",
+    "linear_2",
+    "bent_2_planar",
+    "bent_2_tetrahedral",
+    "trigonal_planar",
     "bent_3_tetrahedral",
     "t_shaped",
     "tetrahedral",
@@ -24,53 +25,53 @@ vsepr_choices = [
 ]
 
 find_parser = argparse.ArgumentParser(
-    description="find atoms matching a description and return the list of indices", 
+    description="find atoms matching a description and return the list of indices",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
 find_parser.add_argument(
-    "infile", metavar="input file", 
-    type=str, 
-    nargs="*", 
-    default=[sys.stdin], 
+    "infile", metavar="input file",
+    type=str,
+    nargs="*",
+    default=[sys.stdin],
     help="a coordinate file"
 )
 
 find_parser.add_argument(
-    "-o", "--output", 
-    type=str, 
+    "-o", "--output",
+    type=str,
     default=False,
-    required=False, 
-    dest="outfile", 
+    required=False,
+    dest="outfile",
     help="output destination \nDefault: stdout"
 )
 
 find_parser.add_argument(
-    "-if", "--input-format", 
-    type=str, 
-    default=None, 
-    dest="input_format", 
-    choices=read_types, 
+    "-if", "--input-format",
+    type=str,
+    default=None,
+    dest="input_format",
+    choices=read_types,
     help="file format of input - xyz is assumed if input is stdin",
 )
 
 find_parser.add_argument(
-    "-e", "--element", 
-    type=str, 
-    action="append", 
-    default=[], 
-    required=False, 
-    dest="elements", 
-    help="element symbol", 
-)
-
-find_parser.add_argument(
-    "-n", "--index", 
+    "-e", "--element",
     type=str,
     action="append",
     default=[],
     required=False,
-    dest="ndx", 
+    dest="elements",
+    help="element symbol",
+)
+
+find_parser.add_argument(
+    "-n", "--index",
+    type=str,
+    action="append",
+    default=[],
+    required=False,
+    dest="ndx",
     help="1-index position of atoms in the input file\n"
     "may hyphen separated to denote a range\n"
     "ranges and individual indices may be comma-separated",
@@ -89,25 +90,25 @@ find_parser.add_argument(
 )
 
 find_parser.add_argument(
-    "-wb", "--within-bonds", 
-    type=str, 
+    "-wb", "--within-bonds",
+    type=str,
     nargs=2,
     action="append",
     default=[],
     required=False,
     metavar=("BONDS", "NDX"),
-    dest="within_bonds", 
+    dest="within_bonds",
     help="find atoms within BONDS (integer) bonds from atom NDX",
 )
 
 find_parser.add_argument(
-    "-bt", "--bonded-to", 
-    type=str, 
+    "-bt", "--bonded-to",
+    type=str,
     action="append",
     default=[],
     required=False,
     metavar="NDX",
-    dest="bonded_to", 
+    dest="bonded_to",
     help="find atoms bonded to atom NDX",
 )
 
@@ -149,7 +150,7 @@ find_parser.add_argument(
     action="store_true",
     default=False,
     required=False,
-    dest="main_group", 
+    dest="main_group",
     help="find any main group element (including H)",
 )
 
@@ -162,10 +163,10 @@ find_parser.add_argument(
     choices=vsepr_choices,
     metavar="SHAPE",
     dest="vsepr",
-    help="find atoms with the specified VSEPR shape\n"
-         "shape can be:\n%s" % "".join( 
-            s + ", " if (sum(len(x) for x in vsepr_choices[:i])) % 40 < 21 else s + ",\n"
-            for i, s in enumerate(vsepr_choices)
+    help="find atoms with the specified VSEPR shape\n" +
+    "shape can be:\n%s" % "".join(
+        s + ", " if (sum(len(x) for x in vsepr_choices[:i])) % 40 < 21 else s + ",\n"
+        for i, s in enumerate(vsepr_choices)
     ).strip().strip(","),
 )
 
@@ -276,13 +277,13 @@ for f in args.infile:
 
     if len(args.infile) > 1:
         s += "%s\n" % str(s)
-    
+
     try:
         if args.match_any:
             results = geom.find(geom_finders)
         else:
             results = geom.find(*geom_finders)
-        
+
         if args.invert:
             results = geom.find(NotAny(results))
 
@@ -299,5 +300,8 @@ for f in args.infile:
 if not args.outfile:
     print(s.strip())
 else:
-    with open(args.outfile, "w") as f:
+    with open(
+            args.outfile.replace("$INFILE", get_filename(f)),
+            "a"
+    ) as f:
         f.write(s.strip())

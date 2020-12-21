@@ -3,16 +3,15 @@
 import sys
 import argparse
 import os
+from glob import glob
+from warnings import warn
+
+from numpy import isclose
 
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
-from glob import glob
-
-from numpy import isclose
-
-from warnings import warn
 
 thermo_parser = argparse.ArgumentParser(
     description="print thermal corrections and free energy",
@@ -72,7 +71,7 @@ thermo_parser.add_argument(
 )
 
 thermo_parser.add_argument(
-    "-w0" ,
+    "-w0",
     "--frequency-cutoff",
     type=float,
     default=100.0,
@@ -252,8 +251,11 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
 
 output = output.strip()
 
-if args.outfile is not None:
-    with open(args.outfile, "w") as f:
-        f.write(output)
+if not args.outfile:
+    print(output.strip())
 else:
-    print(output)
+    with open(
+            args.outfile,
+            "a"
+    ) as f:
+        f.write(output.strip())
