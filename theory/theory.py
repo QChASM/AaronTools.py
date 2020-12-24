@@ -26,7 +26,7 @@ from AaronTools.theory import (
     PSI4_SETTINGS,
 )
 from AaronTools.utils.utils import combine_dicts
-from AaronTools.const import UNIT
+from AaronTools.const import UNIT, ELEMENTS
 
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
@@ -446,7 +446,8 @@ class Theory:
         # add implicit solvent
         if self.solvent is not None:
             solvent_info, warning = self.solvent.get_gaussian()
-            warnings.extend(warning)
+            if warning is not None:
+                warnings.extend(warning)
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         other_kw_dict = combine_dicts(
@@ -489,7 +490,7 @@ class Theory:
                         self.geometry
                     )
                     if basis_warning is not None:
-                        warnings.append(warning)
+                        warnings.append(basis_warning)
 
                 if GAUSSIAN_ROUTE in basis_info:
                     out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
@@ -639,8 +640,6 @@ class Theory:
             s += "Constant:\n"
             for var in other_kw_dict[GAUSSIAN_COORDINATES]["constants"]:
                 s += "%4s = %9.5f\n" % tuple(var)
-
-        s = s.rstrip()
 
         if return_warnings:
             return s, warnings
@@ -805,7 +804,7 @@ class Theory:
 
         # comment
         if ORCA_COMMENT not in other_kw_dict:
-            other_kw_dict[ORCA_COMMENT] = self.geometry.comment
+            other_kw_dict[ORCA_COMMENT] = [self.geometry.comment]
         for comment in other_kw_dict[ORCA_COMMENT]:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
@@ -1047,6 +1046,8 @@ class Theory:
         if use_molecule_array:
             # psi4 input is VERY different for sapt jobs with the low-spin
             # combination of fragments
+            monomers = [comp.atoms for comp in self.geometry.components]
+            atoms_in_monomer = []
             seps = []
             for i, m1 in enumerate(self.geometry.components[:-1]):
                 seps.append(0)
@@ -1062,22 +1063,22 @@ class Theory:
                 ]
             )
             s += "    fragment_multiplicities=%s,\n" % repr(
-                theory.multiplicity[1:]
+                self.multiplicity[1:]
             )
-            s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
+            s += "    fragment_charges=%s,\n" % repr(self.charge[1:])
             s += "    geom=["
             i = 0
             for monomer in monomers:
-                print("monomer")
-                for atom in monomer:
-                    print(atom)
-            for monomer in monomers:
                 s += "\n"
                 for atom in monomer:
+                    if atom not in atoms_in_monomer:
+                        atoms_in_monomer.append(atom)
+                    else:
+                        warnings.append("atom in two monomers: %s" % atom.name)
                     ndx = self.geometry.atoms.index(atom)
-                    coord = other_kw_dict[PSI4_COORDINATES][coords][ndx]
+                    coord = other_kw_dict[PSI4_COORDINATES]["coords"][ndx]
                     for val in coord:
-                        s += "    "
+                        s += "       "
                         if isinstance(val, float):
                             if use_bohr:
                                 s += "%9.5f," % (val / UNIT.A0_TO_BOHR)
@@ -1091,28 +1092,41 @@ class Theory:
             s += ")\n\n"
             s += "activate(mol)\n"
 
-        elif isinstance(self.method, SAPTMethod):
-            monomers = [comp.atoms for comp in geom.components]
+            if len(atoms_in_monomer) != len(self.geometry.atoms):
+                from AaronTools.finders import NotAny
+                warnings.append(
+                    "there are atoms not in any monomers: %s" % (
+                        ", ".join([atom.name for atom in self.geometry.find(NotAny(atoms_in_monomer))])
+                    )
+                )
 
+        elif isinstance(self.method, SAPTMethod):
+            monomers = [comp.atoms for comp in self.geometry.components]
+            atoms_in_monomer = []
             for monomer, mult, charge in zip(
-                monomers, theory.multiplicity[1:], theory.charge[1:]
+                monomers, self.multiplicity[1:], self.charge[1:]
             ):
                 s += "    --\n"
                 s += "    %2i %i\n" % (charge, mult)
                 for atom in monomer:
+                    if atom not in atoms_in_monomer:
+                        atoms_in_monomer.append(atom)
+                    else:
+                        warnings.append("atom in two monomers: %s" % atom.name)
                     ndx = self.geometry.atoms.index(atom)
-                    coord = other_kw_dict[PSI4_COORDINATES][coords][ndx]
+                    coord = other_kw_dict[PSI4_COORDINATES]["coords"][ndx]
                     for val in coord:
-                        s += "    "
+                        s += "  "
                         if isinstance(val, float):
                             if use_bohr:
-                                s += " %9.5f," % (val / UNIT.A0_TO_BOHR)
+                                s += " %9.5f" % (val / UNIT.A0_TO_BOHR)
                             else:
-                                s += " %9.5f," % val
+                                s += " %9.5f" % val
                         elif isinstance(val, str):
                             s += "    %9s" % val
                         else:
                             warnings.append("unknown coordinate type: %s" % type(val))
+                    s += "\n"
 
             if "variables" in other_kw_dict[PSI4_COORDINATES]:
                 for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES]["variables"]:
@@ -1121,6 +1135,14 @@ class Theory:
                     s += "     %3s = %9.5f\n" % (name, val)
 
             s += "}\n"
+
+            if len(atoms_in_monomer) != len(self.geometry.atoms):
+                from AaronTools.finders import NotAny
+                warnings.append(
+                    "there are atoms not in any monomers: %s" % (
+                        ", ".join([atom.name for atom in self.geometry.find(NotAny(atoms_in_monomer))])
+                    )
+                )
 
         elif self.geometry is not None:
             for atom, coord in zip(
