@@ -143,7 +143,6 @@ class Geometry:
             url_sd = "{}/chemical/structure/{}/file?format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            # print(url_sd)
             s_sd = (
                 urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
             )
@@ -180,9 +179,15 @@ class Geometry:
             scale_coords = True
             s_sd = get_cactus_sd(smiles)
 
-        f = FileReader((name, "sd", s_sd))
+        try:
+            f = FileReader((name, "sd", s_sd))
+            is_sdf = True
+        except:
+            # for some reason, CACTUS is giving xyz files instead of sdf...
+            is_sdf = False
+            f = FileReader((name, "xyz", s_sd))
 
-        return cls(f, refresh_connected=False)
+        return cls(f, refresh_connected=not is_sdf)
 
     # attribute access
     def _stack_coords(self, atoms=None):
