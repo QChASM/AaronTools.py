@@ -176,11 +176,7 @@ class FileWriter:
 
         # get file content string
         s = theory.make_header(geom, **kwargs)
-        for atom in geom.atoms:
-            if has_frozen:
-                s += fmt.format(atom.element, -atom.flag, *atom.coords)
-            else:
-                s += fmt.format(atom.element, *atom.coords)
+        s += theory.make_molecule(geom, **kwargs)
         s += theory.make_footer(geom, **kwargs)
 
         if outfile is None:
@@ -238,81 +234,8 @@ class FileWriter:
         else:
             monomers = None
 
-        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
-        s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
-        # psi4 input is VERY different for sapt jobs with the low-spin
-        # combination of fragments
-        if (
-            theory.method.sapt
-            and sum(theory.multiplicity[1:]) - len(theory.multiplicity[1:]) + 1
-            > theory.multiplicity[0]
-        ):
-            seps = []
-            for i, m1 in enumerate(monomers[:-1]):
-                seps.append(0)
-                for m2 in monomers[: i + 1]:
-                    seps[-1] += len(m2)
-
-            s += "    fragment_separators=%s,\n" % repr(seps)
-            s += "    elez=%s,\n" % repr(
-                [
-                    ELEMENTS.index(atom.element)
-                    for monomer in monomers
-                    for atom in monomer
-                ]
-            )
-            s += "    fragment_multiplicities=%s,\n" % repr(
-                theory.multiplicity[1:]
-            )
-            s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
-            s += "    geom=["
-            i = 0
-            for monomer in monomers:
-                print("monomer")
-                for atom in monomer:
-                    print(atom)
-            for monomer in monomers:
-                s += "\n"
-                for atom in monomer:
-                    if use_bohr:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
-                            atom.coords / UNIT.A0_TO_BOHR
-                        )
-                    else:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
-                            atom.coords
-                        )
-
-            s += "    ],\n"
-            s += ")\n\n"
-            s += "activate(mol)\n"
-
-        elif theory.method.sapt:
-            if monomers is None:
-                monomers = [comp.atoms for comp in geom.components]
-
-            for monomer, mult, charge in zip(
-                monomers, theory.multiplicity[1:], theory.charge[1:]
-            ):
-                s += "--\n"
-                s += "%2i %i\n" % (charge, mult)
-                for atom in monomer:
-                    coords = atom.coords
-                    if use_bohr:
-                        coords = coords / UNIT.A0_TO_BOHR
-                    s += fmt.format(atom.element, *coords)
-
-            s += "}\n"
-
-        else:
-            for atom in geom.atoms:
-                coords = atom.coords
-                if use_bohr:
-                    coords = coords / UNIT.A0_TO_BOHR
-                s += fmt.format(atom.element, *coords)
-
-            s += "}\n"
-
+        s = theory.make_header(geom, style="psi4", **kwargs)
+        s += theory.make_molecule(geom, style="psi4", **kwargs)
         s += theory.make_footer(geom, style="psi4", **kwargs)
 
         if outfile is None:
@@ -690,7 +613,7 @@ class FileReader:
                         gradient[i] = np.array([float(x) for x in info[1:]])
 
                     self.other["forces"] = -gradient
-                
+
                 elif "SAPT Results" in line:
                     self.skip_lines(f, 1)
                     n += 1
@@ -705,10 +628,10 @@ class FileReader:
                             item = line[:26].strip()
                             val = 1e-3 * float(line[34:47])
                             self.other[item] = val
-                
+
                 elif "SCF energy" in line:
                     self.other["SCF energy"] = float(line.split()[-1])
-                
+
                 elif "correlation energy" in line and "=" in line:
                     item = line.split("=")[0].strip()
                     self.other[item] = float(line.split()[-1])
@@ -969,6 +892,30 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def get_params(f, n):
+            rv = []
+            self.skip_lines(f, 2)
+            n += 3
+            line = f.readline()
+            if "Definition" in line:
+                definition = True
+            else:
+                definition = False
+            self.skip_lines(f, 1)
+            n += 2
+            line = f.readline()
+            while "--" not in line:
+                line = line.split()
+                param = line[1]
+                if definition:
+                    val = float(line[3])
+                else:
+                    val = float(line[2])
+                rv.append((param, val))
+                line = f.readline()
+                n += 1
+            return rv, n
+
         self.all_geom = []
         line = f.readline()
         self.other["archive"] = ""
@@ -998,7 +945,7 @@ class FileReader:
                 self.other["archive"] += line.strip()
 
             # geometry
-            if re.search("(Standard|Input) orientation:", line):
+            if re.search("(Standard|Input|Z-Matrix) orientation:", line):
                 if get_all and len(self.atoms) > 0:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
@@ -1009,6 +956,9 @@ class FileReader:
                 line = f.readline()
                 n += 1
                 continue
+                        # z-matrix parameters
+            if re.search("Optimized Parameters", line):
+                self.other["params"], n = get_params(f, n)
             if "Symbolic Z-matrix:" in line:
                 line = f.readline()
                 n += 1
@@ -1218,7 +1168,7 @@ class FileReader:
                             else:
                                 job_type.append(FrequencyJob())
                                 continue
-                            
+
                             other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                             for opt in options:
                                 if opt.lower().startswith("grid"):
@@ -1245,7 +1195,7 @@ class FileReader:
                             else:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
-                    
+
                     theory = Theory(
                         charge=self.other["charge"],
                         multiplicity=self.other["multiplicity"],

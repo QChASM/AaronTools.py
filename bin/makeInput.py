@@ -205,14 +205,17 @@ opt_type.add_argument(
 
 opt_type.add_argument(
     "-ca", "--constrained-atoms",
+    nargs=1,
     type=str,
+    action="append",
     default=None,
     dest="atoms",
     help="comma- or hyphen-separated list of atoms (1-indexed) to constrain during optimization",
 )
 
 opt_type.add_argument(
-    "-cb", "--constrained-bonds",
+    "-cb", "--constrain-bond",
+    nargs=1,
     action="append",
     default=None,
     dest="bonds",
@@ -221,8 +224,9 @@ opt_type.add_argument(
 )
 
 opt_type.add_argument(
-    "-cang", "--constrained-angles",
+    "-cang", "--constrain-angle",
     type=str,
+    nargs=1,
     action="append",
     default=None,
     dest="angles",
@@ -231,13 +235,77 @@ opt_type.add_argument(
 )
 
 opt_type.add_argument(
-    "-ct", "--constrain-torsions",
+    "-ct", "--constrain-torsion",
     type=str,
+    nargs=1,
     action="append",
     default=None,
     dest="torsions",
     help="list of comma-separated atom quartets\n" +
     "the torsional angle defined by each quartet will be constrained during optimization",
+)
+
+opt_type.add_argument(
+    "-cx", "--constrained-x",
+    nargs=1,
+    type=str,
+    action="append",
+    default=None,
+    dest="x",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the x coordinate of",
+)
+
+opt_type.add_argument(
+    "-cy", "--constrained-y",
+    nargs=1,
+    type=str,
+    action="append",
+    default=None,
+    dest="y",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the y coordinate of",
+)
+
+opt_type.add_argument(
+    "-cz", "--constrained-z",
+    nargs=1,
+    type=str,
+    action="append",
+    default=None,
+    dest="z",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the z coordinate of",
+)
+
+opt_type.add_argument(
+    "-gx", "--grouped-x",
+    nargs=2,
+    type=str,
+    action="append",
+    default=None,
+    dest="xgroup",
+    metavar=("atoms", "value"),
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same yz plane",
+)
+
+opt_type.add_argument(
+    "-gy", "--grouped-y",
+    nargs=2,
+    type=str,
+    action="append",
+    default=None,
+    dest="ygroup",
+    metavar=("atoms", "value"),
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xz plane",
+)
+
+opt_type.add_argument(
+    "-gz", "--grouped-z",
+    nargs=2,
+    type=str,
+    action="append",
+    default=None,
+    dest="zgroup",
+    metavar=("atoms", "value"),
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xy plane",
 )
 
 freq_type = theory_parser.add_argument_group("Frequency options")
@@ -342,7 +410,7 @@ psi4_options.add_argument(
     action="append",
     nargs="+",
     default=[],
-    dest=PSI4_COORDINATES,
+    dest=PSI4_MOLECULE,
     metavar=("SETTING", "VALUE"),
     help="options to add to the molecule section\n" +
     "example: --molecule units bohr\ninput file(s) should not be right after --molecule",
@@ -377,7 +445,7 @@ gaussian_options.add_argument(
     default=[],
     dest=GAUSSIAN_POST,
     metavar="input",
-    help="line to add to the end of the file (e.g. for nboRead)",
+    help="line to add to the end of the file (e.g. for NBORead)",
 )
 
 args = theory_parser.parse_args()
@@ -394,7 +462,7 @@ if blocks:
         kwargs[ORCA_BLOCKS][block_name].append("\t".join(block[1:]))
 
 for pos in [
-        PSI4_SETTINGS, PSI4_COORDINATES, PSI4_JOB, PSI4_OPTKING,
+        PSI4_SETTINGS, PSI4_MOLECULE, PSI4_JOB, PSI4_OPTKING,
         GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE
     ]:
     opts = getattr(args, pos)
@@ -548,7 +616,9 @@ for f in args.infile:
         if args.optimize:
             constraints = {}
             if args.atoms is not None:
-                constraints["atoms"] = geom.find(args.atoms)
+                constraints["atoms"] = []
+                for constraint in args.atoms:
+                    constraints["atoms"].extend(geom.find(constraint))
 
             if args.bonds is not None:
                 constraints["bonds"] = []
@@ -557,7 +627,7 @@ for f in args.infile:
                     if len(bonded_atoms) != 2:
                         raise RuntimeError(
                             "not exactly 2 atoms specified in a bond constraint\n" +
-                            "use the format --constrained-bonds 1,2 3,4"
+                            "use the format --constrain-bond 1,2"
                         )
                     constraints["bonds"].append(bonded_atoms)
 
@@ -568,7 +638,7 @@ for f in args.infile:
                     if len(angle_atoms) != 3:
                         raise RuntimeError(
                             "not exactly 3 atoms specified in a angle constraint\n" +
-                            "use the format --constrained-bonds 1,2,3 4,5,6"
+                            "use the format --constrain-angle 1,2,3"
                         )
                     constraints["angles"].append(angle_atoms)
 
@@ -579,9 +649,39 @@ for f in args.infile:
                     if len(torsion_atoms) != 4:
                         raise RuntimeError(
                             "not exactly 4 atoms specified in a torsion constraint\n" +
-                            "use the format --constrained-torsions 1,2,3,4 5,6,7,8"
+                            "use the format --constrain-torsion 1,2,3,4"
                         )
                     constraints["torsions"].append(torsion_atoms)
+
+            if args.x is not None:
+                constraints["x"] = []
+                for constraint in args.x:
+                    constraints["x"].extend(geom.find(constraint))
+
+            if args.y is not None:
+                constraints["y"] = []
+                for constraint in args.y:
+                    constraints["y"].extend(geom.find(constraint))
+
+            if args.z is not None:
+                constraints["z"] = []
+                for constraint in args.z:
+                    constraints["z"].extend(geom.find(constraint))
+
+            if args.xgroup is not None:
+                constraints["xgroup"] = []
+                for constraint, val in args.xgroup:
+                    constraints["xgroup"].append((geom.find(constraint), float(val)))
+
+            if args.ygroup is not None:
+                constraints["ygroup"] = []
+                for constraint, val in args.ygroup:
+                    constraints["ygroup"].append((geom.find(constraint), float(val)))
+
+            if args.zgroup is not None:
+                constraints["zgroup"] = []
+                for constraint, val in args.zgroup:
+                    constraints["zgroup"].append((geom.find(constraint), float(val)))
 
             if not constraints.keys():
                 constraints = None

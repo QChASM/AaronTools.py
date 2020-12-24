@@ -7,21 +7,13 @@ class Method:
     used to ensure the proper keyword is used
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
-    def __init__(self, name, is_semiempirical=False, sapt=False):
+    def __init__(self, name, is_semiempirical=False):
         """
         name: str, functional name
         is_semiemperical: bool, basis set is not required
-        sapt: bool, whether or not the method is a SAPT method
-              if it is a sapt method, the Theory()'s charge and multiplicity
-              should be a list, with the first item in the list being the overall
-              charge and multiplicity and subsequent items being the charge and
-              multiplicity of the monomers
-              a list of monomers can be given the the Geometry.write() method,
-              otherwise the Geometry()'s components attribute will be used
         """
         self.name = name
         self.is_semiempirical = is_semiempirical
-        self.sapt = sapt
 
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""
@@ -83,3 +75,18 @@ class Method:
             return ("M06-L", None)
 
         return self.name.replace('ω', 'w'), None
+
+
+class SAPTMethod(Method):
+    """
+    method used to differentiate between regular methods and sapt
+    methods because the molecule will need to be split into monomers
+    if using a sapt method, the geometry given to Theory or Geometry.write
+    should have a 'components' attribute with each monomer being a coordinate
+    the charge and multiplicity given to Theory should be a list, with the first
+    item in each list being the overall charge/multiplicity and the subsequent items
+    being the charge/multiplicity of the monomers (components)
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    

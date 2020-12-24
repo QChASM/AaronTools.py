@@ -410,3 +410,18 @@ class ChiralCentres(Finder):
 
 #alternative spelling
 ChiralCenters = ChiralCentres
+
+
+class FlaggedAtoms(Finder):
+    """
+    atoms with a non-zero flag
+    """
+    # useful for finding constrained atoms
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        return "atoms with flag set to 1"
+
+    def get_matching_atoms(self, atoms, geometry):
+        return [atom for atom in atoms if atom.flag]

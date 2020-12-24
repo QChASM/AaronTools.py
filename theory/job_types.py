@@ -1,12 +1,16 @@
 """various job types for Theory() instances"""
 
+from warnings import warn
+
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
+    GAUSSIAN_COORDINATES,
     GAUSSIAN_ROUTE,
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
     PSI4_JOB,
+    PSI4_COORDINATES,
     PSI4_OPTKING,
     PSI4_SETTINGS,
 )
@@ -41,11 +45,33 @@ class OptimizationJob(JobType):
             geometry=None,
     ):
         """use transition_state=True to do a TS optimization
-        constraints - dict with 'atoms', 'bonds', 'angles' and 'torsions' as keys
-                      constraints['atoms']: list(Atom) - atoms to constrain
-                      constraints['bonds']: list(list(Atom, len=2)) - distances to constrain
-                      constraints['angles']: list(list(Atom, len=3)) - 1-3 angles to constrain
-                      constraints['torsions']: list(list(Atom, len=4)) - constrained dihedral angles
+        constraints - dict with keys:
+                      **** available for ORCA, Gaussian, and Psi4 ****
+                      'atoms': atom identifiers/finders - atoms to constrain
+                      'bonds': list(atom idenifiers/finders) - distances to constrain
+                               each atom identifier in the list should result in exactly 2 atoms
+                      'angles': list(atom idenifiers/finders) - 1-3 angles to constrain
+                                each atom identifier should result in exactly 3 atoms
+                      'torsions': list(atom identifiers/finders) - constrained dihedral angles
+                                  each atom identifier should result in exactly 4 atoms
+                      **** available for Gaussian and Psi4 ****
+                      'x': list(atom identifiers/finders) - constrain the x coordinate of
+                           these atoms
+                      similarly, 'y' and 'z' are also accepted
+                      'xgroup': list(tuple(list(atom idenifiers), x_val, hold)) -
+                            constrain the x coordinate of these atoms to be the same
+                            x_val - set x-coordinate to this value
+                            hold - hold this value constant during the optimization
+                                   if 'hold' is omitted, the value will not be held
+                                   constant during the optimization
+                            e.g. 'xgroup':[("1-6", 0, False), ("13-24", 3.25, False)]
+                            this will keep atoms 1-6 and 13-24 in parallel planes, while also
+                            allowing those planes to move
+                      'ygroup' and 'zgroup' are also available, with analagous options
+
+                      *** NOTE ***
+                      for Gaussian, 'bonds', 'angles', and 'torsions' constraints cannot be mixed
+                      with 'x', 'y', 'z', 'xgroup', 'ygroup', or 'zgroup' constraints
         geometry    - Geoemtry, will be set when using an AaronTools FileWriter"""
         super().__init__()
 
@@ -60,49 +86,240 @@ class OptimizationJob(JobType):
         else:
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
 
+        coords = self.geometry.coords.tolist()
+        vars = []
+        consts = []
+        use_zmat = False
+
+        group_count = 1
+
         if (
                 self.constraints is not None and
                 any(
                     self.constraints[key] for key in self.constraints.keys()
                 )
         ):
-            out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
+            for key in self.constraints:
+                if key not in [
+                        "x",
+                        "y",
+                        "z",
+                        "xgroup",
+                        "ygroup",
+                        "zgroup",
+                        "atoms",
+                        "bonds",
+                        "angles",
+                        "torsions",
+                ]:
+                    raise NotImplementedError(
+                        "%s constraints cannot be generated for Gaussian" % key
+                    )
             out[GAUSSIAN_CONSTRAINTS] = []
 
-            if "atoms" in self.constraints:
-                for atom in self.constraints["atoms"]:
+            if "x" in self.constraints and self.constraints["x"]:
+                x_atoms = self.geometry.find(self.constraints["x"])
+                for i, atom in enumerate(self.geometry.atoms):
+                    if atom in x_atoms:
+                        var_name = "x%i" % (i + 1)
+                        consts.append((var_name, atom.coords[0]))
+                        coords[i] = [var_name, coords[i][1], coords[i][2]]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "y" in self.constraints and self.constraints["y"]:
+                y_atoms = self.geometry.find(self.constraints["y"])
+                for i, atom in enumerate(self.geometry.atoms):
+                    if atom in y_atoms:
+                        var_name = "y%i" % (i + 1)
+                        consts.append((var_name, atom.coords[1]))
+                        coords[i] = [coords[i][0], var_name, coords[i][2]]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "z" in self.constraints and self.constraints["z"]:
+                z_atoms = self.geometry.find(self.constraints["z"])
+                for i, atom in enumerate(self.geometry.atoms):
+                    if atom in z_atoms:
+                        var_name = "z%i" % (i + 1)
+                        consts.append((var_name, atom.coords[2]))
+                        coords[i] = [coords[i][0], coords[i][1], var_name]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "xgroup" in self.constraints:
+                for constraint in self.constraints["xgroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    x_atoms = self.geometry.find(finders)
+                    var_name = "gx%i" % group_count
+                    group_count += 1
+                    if hold:
+                        consts.append([var_name, val])
+                    else:
+                        vars.append([var_name, val])
+                    for i, atom in enumerate(self.geometry.atoms):
+                        if atom in x_atoms:
+                            coords[i] = [var_name, coords[i][1], coords[i][2]]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "ygroup" in self.constraints:
+                for constraint in self.constraints["ygroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    y_atoms = self.geometry.find(finders)
+                    var_name = "gy%i" % group_count
+                    group_count += 1
+                    if hold:
+                        consts.append([var_name, val])
+                    else:
+                        vars.append([var_name, val])
+                    for i, atom in enumerate(self.geometry.atoms):
+                        if atom in y_atoms:
+                            coords[i] = [coords[i][0], var_name, coords[i][2]]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "zgroup" in self.constraints:
+                for constraint in self.constraints["zgroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    z_atoms = self.geometry.find(finders)
+                    var_name = "gz%i" % group_count
+                    group_count += 1
+                    if hold:
+                        consts.append([var_name, val])
+                    else:
+                        vars.append([var_name, val])
+                    for i, atom in enumerate(self.geometry.atoms):
+                        if atom in z_atoms:
+                            coords[i] = [coords[i][0], coords[i][1], var_name]
+
+                if not use_zmat:
+                    use_zmat = True
+                    out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
+
+            if "atoms" in self.constraints and self.constraints["atoms"]:
+                atoms = self.geometry.find(self.constraints["atoms"])
+                for atom in atoms:
                     ndx = self.geometry.atoms.index(atom) + 1
-                    out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
+                    if not use_zmat:
+                        out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
+                    else:
+                        for j, coord in enumerate(coords[ndx - 1]):
+                            if isinstance(coord, str):
+                                var_name = coord
+                                for k, var in enumerate(vars):
+                                    if var[0] == coord and not var[0].startswith("g"):
+                                        vars.pop(k)
+                                        break
+                                else:
+                                    var_name = "%s%i" % (["x" ,"y", "z"][j], ndx)
+                                    coords[ndx - 1][j] = var_name
+                            else:
+                                var_name = "%s%i" % (["x" ,"y", "z"][j], ndx)
+                                coords[ndx - 1][j] = var_name
+                            if not any(const[0] == var_name for const in consts):
+                                consts.append([var_name, atom.coords[j]])
+
+                if not use_zmat:
+                    if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
+                        out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
-                    atom1, atom2 = constraint
+                    atom1, atom2 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
                     ndx2 = self.geometry.atoms.index(atom2) + 1
-                    out[GAUSSIAN_CONSTRAINTS].append(
-                        "B %2i %2i F" % (ndx1, ndx2)
-                    )
+                    if not use_zmat:
+                        out[GAUSSIAN_CONSTRAINTS].append(
+                            "B %2i %2i F" % (ndx1, ndx2)
+                        )
+                    else:
+                        raise NotImplementedError(
+                            "cannot apply bond constraints when using Cartesian Z-Matrix, which" +
+                            " is necessitated by x, y, or z constraints"
+                        )
+
+                if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
+                    out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
-                    atom1, atom2, atom3 = constraint
+                    atom1, atom2, atom3 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
                     ndx2 = self.geometry.atoms.index(atom2) + 1
                     ndx3 = self.geometry.atoms.index(atom3) + 1
-                    out[GAUSSIAN_CONSTRAINTS].append(
-                        "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
-                    )
+                    if not use_zmat:
+                        out[GAUSSIAN_CONSTRAINTS].append(
+                            "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
+                        )
+                    else:
+                        raise NotImplementedError(
+                            "cannot apply angle constraints when using Cartesian Z-Matrix, which" +
+                            " is necessitated by x, y, or z constraints"
+                        )
+
+                if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
+                    out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
-                    atom1, atom2, atom3, atom4 = constraint
+                    atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
                     ndx2 = self.geometry.atoms.index(atom2) + 1
                     ndx3 = self.geometry.atoms.index(atom3) + 1
                     ndx4 = self.geometry.atoms.index(atom4) + 1
-                    out[GAUSSIAN_CONSTRAINTS].append(
-                        "D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)
-                    )
+                    if not use_zmat:
+                        out[GAUSSIAN_CONSTRAINTS].append(
+                            "D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)
+                        )
+                    else:
+                        raise NotImplementedError(
+                            "cannot apply torsion constraints when using Cartesian Z-Matrix," +
+                            "which is necessitated by x, y, or z constraints"
+                        )
+
+                if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
+                    out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
+
+        if consts or vars:
+            for i, coord in enumerate(coords):
+                for j, ax in enumerate(["x", "y", "z"]):
+                    if isinstance(coord[j], float):
+                        var_name = "%s%i" % (ax, i + 1)
+                        vars.append((var_name, coord[j]))
+                        coord[j] = var_name
+
+        if consts or vars:
+            for coord in coords:
+                coord.insert(0, 0)
+
+        out[GAUSSIAN_COORDINATES] = {
+            "coords": coords,
+            "variables": vars,
+            "constants": consts,
+        }
 
         return out
 
@@ -119,18 +336,27 @@ class OptimizationJob(JobType):
                     self.constraints[key] for key in self.constraints.keys()
                 )
         ):
-
+            for key in self.constraints:
+                if key not in [
+                        "atoms",
+                        "bonds",
+                        "angles",
+                        "torsions",
+                ]:
+                    raise NotImplementedError(
+                        "%s constraints cannot be generated for ORCA" % key
+                    )
             out[ORCA_BLOCKS] = {"geom": ["Constraints"]}
             if "atoms" in self.constraints:
                 for constraint in self.constraints["atoms"]:
-                    atom1 = constraint
+                    atom1 = self.geometry.find(constraint)[0]
                     ndx1 = self.geometry.atoms.index(atom1)
                     out_str = "    {C %2i C}" % (ndx1)
                     out[ORCA_BLOCKS]["geom"].append(out_str)
 
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
-                    atom1, atom2 = constraint
+                    atom1, atom2 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
                     out_str = "    {B %2i %2i C}" % (ndx1, ndx2)
@@ -138,7 +364,7 @@ class OptimizationJob(JobType):
 
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
-                    atom1, atom2, atom3 = constraint
+                    atom1, atom2, atom3 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
@@ -147,7 +373,7 @@ class OptimizationJob(JobType):
 
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
-                    atom1, atom2, atom3, atom4 = constraint
+                    atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
@@ -169,6 +395,14 @@ class OptimizationJob(JobType):
         else:
             out = {PSI4_JOB: {"optimize": []}}
 
+        coords = self.geometry.coords.tolist()
+        vars = []
+        group_count = 1
+
+        freeze_str = ""
+        freeze_str += "freeze_list = \"\"\"\n"
+        add_freeze_list = False
+
         # constraints
         if (
                 self.constraints is not None and
@@ -176,27 +410,144 @@ class OptimizationJob(JobType):
                     [self.constraints[key] for key in self.constraints.keys()]
                 )
         ):
+            for key in self.constraints:
+                if key not in [
+                        "x",
+                        "y",
+                        "z",
+                        "xgroup",
+                        "ygroup",
+                        "zgroup",
+                        "atoms",
+                        "bonds",
+                        "angles",
+                        "torsions",
+                ]:
+                    raise NotImplementedError(
+                        "%s constraints cannot be generated for Psi4" % key
+                    )
             out[PSI4_OPTKING] = {}
             if (
-                    "atoms" in self.constraints
-                    and self.constraints["atoms"]
+                    "x" in self.constraints and
+                    self.constraints["x"] and
+                    self.geometry is not None
             ):
-                out_str = ""
-                if (
-                        self.constraints["atoms"]
-                        and self.geometry is not None
-                ):
-                    out_str += 'freeze_list = """\n'
-                    for atom in self.constraints["atoms"]:
-                        out_str += "    %2i xyz\n" % (
-                            self.geometry.atoms.index(atom) + 1
-                        )
+                add_freeze_list = True
+                atoms = self.geometry.find(self.constraints["x"])
+                for atom in atoms:
+                    freeze_str += "    %2i x\n" % (
+                        self.geometry.atoms.index(atom) + 1
+                    )
 
-                    out_str += '"""\n'
-                    out_str += "    \n"
+            if (
+                    "y" in self.constraints and
+                    self.constraints["y"] and
+                    self.geometry is not None
+            ):
+                add_freeze_list = True
+                atoms = self.geometry.find(self.constraints["y"])
+                for atom in atoms:
+                    freeze_str += "    %2i y\n" % (
+                        self.geometry.atoms.index(atom) + 1
+                    )
 
-                out[PSI4_BEFORE_GEOM] = [out_str]
+            if (
+                    "z" in self.constraints and
+                    self.constraints["z"] and
+                    self.geometry is not None
+            ):
+                add_freeze_list = True
+                atoms = self.geometry.find(self.constraints["z"])
+                for atom in atoms:
+                    freeze_str += "    %2i z\n" % (
+                        self.geometry.atoms.index(atom) + 1
+                    )
 
+            if (
+                    "atoms" in self.constraints and
+                    self.constraints["atoms"] and
+                    self.geometry is not None
+            ):
+                add_freeze_list = True
+                atoms = self.geometry.find(self.constraints["atoms"])
+                for atom in atoms:
+                    freeze_str += "    %2i xyz\n" % (
+                        self.geometry.atoms.index(atom) + 1
+                    )
+
+            if "xgroup" in self.constraints:
+                for constraint in self.constraints["xgroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    x_atoms = self.geometry.find(finders)
+                    var_name = "gx%i" % group_count
+                    group_count += 1
+                    if hold:
+                        add_freeze_list = True
+                        for i, atom in enumerate(y_atoms):
+                            freeze_str += "    %2i x\n" % (
+                                self.geometry.atoms.index(atom) + 1
+                            )
+                            coords[i][0] = val
+                    else:
+                        vars.append([var_name, val, True])
+                        for i, atom in enumerate(self.geometry.atoms):
+                            if atom in x_atoms:
+                                coords[i] = [coords[i][0], coords[i][1], var_name]
+
+            if "ygroup" in self.constraints:
+                for constraint in self.constraints["ygroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    y_atoms = self.geometry.find(finders)
+                    var_name = "gy%i" % group_count
+                    group_count += 1
+                    if hold:
+                        add_freeze_list = True
+                        for i, atom in enumerate(y_atoms):
+                            freeze_str += "    %2i y\n" % (
+                                self.geometry.atoms.index(atom) + 1
+                            )
+                            coords[i][1] = val
+                    else:
+                        vars.append([var_name, val, True])
+                        for i, atom in enumerate(self.geometry.atoms):
+                            if atom in y_atoms:
+                                coords[i] = [coords[i][0], coords[i][1], var_name]
+
+            if "zgroup" in self.constraints:
+                for constraint in self.constraints["zgroup"]:
+                    if len(constraint) == 3:
+                        finders, val, hold = constraint
+                    else:
+                        finders, val = constraint
+                        hold = False
+                    z_atoms = self.geometry.find(finders)
+                    var_name = "gz%i" % group_count
+                    group_count += 1
+                    if hold:
+                        add_freeze_list = True
+                        for i, atom in enumerate(z_atoms):
+                            freeze_str += "    %2i z\n" % (
+                                self.geometry.atoms.index(atom) + 1
+                            )
+                            coords[i][2] = val
+                    else:
+                        vars.append([var_name, val, True])
+                        for i, atom in enumerate(self.geometry.atoms):
+                            if atom in z_atoms:
+                                coords[i] = [coords[i][0], coords[i][1], var_name]
+
+            if add_freeze_list:
+                freeze_str += '"""\n'
+                freeze_str += "    \n"
+                out[PSI4_BEFORE_GEOM] = [freeze_str]
                 out[PSI4_OPTKING]["frozen_cartesian"] = ["$freeze_list"]
 
             if "bonds" in self.constraints:
@@ -206,7 +557,7 @@ class OptimizationJob(JobType):
                 ):
                     out_str = '("\n'
                     for bond in self.constraints["bonds"]:
-                        atom1, atom2 = bond
+                        atom1, atom2 = self.geometry.find(bond)
                         out_str += "        %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
@@ -223,7 +574,7 @@ class OptimizationJob(JobType):
                 ):
                     out_str = '("\n'
                     for angle in self.constraints["angles"]:
-                        atom1, atom2, atom3 = angle
+                        atom1, atom2, atom3 = self.geometry.find(angle)
                         out_str += "        %2i %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
@@ -241,7 +592,7 @@ class OptimizationJob(JobType):
                 ):
                     out_str += '("\n'
                     for torsion in self.constraints["torsions"]:
-                        atom1, atom2, atom3, atom4 = torsion
+                        atom1, atom2, atom3, atom4 = self.geometry.find(torsion)
                         out_str += "        %2i %2i %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
@@ -252,6 +603,12 @@ class OptimizationJob(JobType):
                     out_str += '    ")\n'
 
                     out[PSI4_OPTKING]["frozen_dihedral"] = [out_str]
+
+        if vars:
+            out[PSI4_COORDINATES] = {
+                "coords": coords,
+                "variables": vars,
+            }
 
         return out
 

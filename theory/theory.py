@@ -19,18 +19,20 @@ from AaronTools.theory import (
     PSI4_BEFORE_GEOM,
     PSI4_BEFORE_JOB,
     PSI4_COMMENT,
+    PSI4_MOLECULE,
     PSI4_COORDINATES,
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
 )
 from AaronTools.utils.utils import combine_dicts
+from AaronTools.const import UNIT
 
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
 from .job_types import JobType
-from .method import KNOWN_SEMI_EMPIRICAL, Method
+from .method import KNOWN_SEMI_EMPIRICAL, Method, SAPTMethod
 
 
 class Theory:
@@ -263,6 +265,74 @@ class Theory:
 
         raise NotImplementedError("no get_header method for style: %s" % style)
 
+    def make_molecule(
+            self,
+            geom=None,
+            style="gaussian",
+            conditional_kwargs=None,
+            **kwargs,
+    ):
+        """
+        geom: Geometry()
+        style: gaussian, psi4
+        conditional_kwargs: dict() of keyword: value pairs
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
+        """
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        if self.basis is not None:
+            self.basis.refresh_elements(geom)
+
+        kwargs = combine_dicts(self.kwargs, kwargs)
+
+        other_kw_dict = {}
+        for keyword in kwargs:
+            if (
+                    keyword.startswith("PSI4_")
+                    or keyword.startswith("ORCA_")
+                    or keyword.startswith("GAUSSIAN_")
+            ):
+                new_kw = eval(keyword)
+                other_kw_dict[new_kw] = kwargs[keyword]
+
+            elif hasattr(self, keyword):
+                if keyword == "method":
+                    self.method = Method(kwargs[keyword])
+
+                elif keyword == "basis":
+                    self.basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "grid":
+                    self.grid = IntegrationGrid(kwargs[keyword])
+
+                elif keyword == "empirical_dispersion":
+                    self.grid = EmpiricalDispersion(kwargs[keyword])
+
+                elif keyword == "job_type":
+                    if isinstance(kwargs[keyword], JobType):
+                        self.job_type = [kwargs[keyword]]
+                    else:
+                        self.job_type = kwargs[keyword]
+
+                elif keyword in self.ACCEPTED_INIT_KW:
+                    setattr(self, keyword, kwargs[keyword])
+
+            else:
+                other_kw_dict[keyword] = kwargs[keyword]
+
+        if style == "gaussian":
+            return self.get_gaussian_molecule(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "psi4":
+            return self.get_psi4_molecule(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        NotImplementedError("no get_molecule method for style: %s" % style)
+
     def make_footer(
             self,
             geom=None,
@@ -453,10 +523,10 @@ class Theory:
                         other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
 
                 if (
-                        len(other_kw_dict[GAUSSIAN_ROUTE][option]) > 1
+                        other_kw_dict[GAUSSIAN_ROUTE][option]
                         or (
-                            len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
-                            and (
+                            other_kw_dict[GAUSSIAN_ROUTE][option] and
+                            len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1 and (
                                 "=" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                                 or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                             )
@@ -472,7 +542,10 @@ class Theory:
                             out_str += x
                     out_str += ")"
 
-                elif len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1:
+                elif (
+                        other_kw_dict[GAUSSIAN_ROUTE][option] and
+                        len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
+                ):
                     out_str += "=%s" % other_kw_dict[GAUSSIAN_ROUTE][option][0]
 
                 out_str += " "
@@ -500,6 +573,79 @@ class Theory:
             return out_str, warnings
 
         return out_str
+
+    def get_gaussian_molecule(
+            self,
+            return_warnings=False,
+            conditional_kwargs=None,
+            **other_kw_dict,
+    ):
+        """
+        get molecule specification for gaussian input files
+        """
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_gaussian()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        if GAUSSIAN_COORDINATES not in other_kw_dict:
+            other_kw_dict[GAUSSIAN_COORDINATES] = {}
+
+        if "coords" not in other_kw_dict[GAUSSIAN_COORDINATES]:
+            other_kw_dict[GAUSSIAN_COORDINATES]["coords"] = self.geometry.coords
+
+        s = ""
+
+        for atom, coord in zip(
+                self.geometry.atoms,
+                other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
+        ):
+            s += "%2s" % atom.element
+            for val in coord:
+                s += "  "
+                if isinstance(val, float):
+                    s += " %9.5f" % val
+                elif isinstance(val, str):
+                    s += " %5s" % val
+                elif isinstance(val, int):
+                    s += " %3i" % val
+                else:
+                    warnings.append("unknown coordinate type: %s" % type(val))
+            s += "\n"
+
+        if (
+                "variables" in other_kw_dict[GAUSSIAN_COORDINATES] and
+                other_kw_dict[GAUSSIAN_COORDINATES]["variables"]
+        ):
+            s += "Variable:\n"
+            for var in other_kw_dict[GAUSSIAN_COORDINATES]["variables"]:
+                s += "%4s = %9.5f\n" % tuple(var)
+
+        if (
+                "constants" in other_kw_dict[GAUSSIAN_COORDINATES] and
+                other_kw_dict[GAUSSIAN_COORDINATES]["constants"]
+        ):
+            s += "Constant:\n"
+            for var in other_kw_dict[GAUSSIAN_COORDINATES]["constants"]:
+                s += "%4s = %9.5f\n" % tuple(var)
+
+        s = s.rstrip()
+
+        if return_warnings:
+            return s, warnings
+
+        return s
 
     def get_gaussian_footer(
             self,
@@ -735,7 +881,6 @@ class Theory:
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
         warnings = []
-        use_bohr = False
 
         # add implicit solvent
         if self.solvent is not None:
@@ -745,7 +890,7 @@ class Theory:
 
         # get basis info if method is not semi empirical
         if not self.method.is_semiempirical and self.basis is not None:
-            basis_info = self.basis.get_psi4_basis_info(self.method.sapt)
+            basis_info = self.basis.get_psi4_basis_info(isinstance(self.method, SAPTMethod))
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -771,7 +916,7 @@ class Theory:
                                 "%s", "mp2"
                             )
 
-                        elif self.method.sapt:
+                        elif isinstance(self.method, SAPTMethod):
                             basis_info[key][i] = basis_info[key][i].replace(
                                 "%s", "sapt"
                             )
@@ -800,7 +945,7 @@ class Theory:
 
         # comment
         if PSI4_COMMENT not in combined_dict:
-            combined_dict[PSI4_COMMENT] = self.geometry.comment
+            combined_dict[PSI4_COMMENT] = [self.geometry.comment]
         for comment in combined_dict[PSI4_COMMENT]:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
@@ -821,49 +966,190 @@ class Theory:
                     out_str += "\n"
                 out_str += "\n"
 
+        if return_warnings:
+            return out_str, warnings
+
+        return out_str
+
+    def get_psi4_molecule(
+            self,
+            return_warnings=False,
+            conditional_kwargs=None,
+            **other_kw_dict,
+    ):
+        """
+        get molecule specification for gaussian input files
+        """
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        use_bohr = False
+        use_molecule_array = False
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_psi4()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+        if PSI4_COORDINATES not in other_kw_dict:
+            other_kw_dict[PSI4_COORDINATES] = {}
+
+        if "coords" not in other_kw_dict[PSI4_COORDINATES]:
+            other_kw_dict[PSI4_COORDINATES]["coords"] = self.geometry.coords
+
+        s = ""
         if (
-                self.method.sapt
-                and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
-                > self.multiplicity[0]
+                isinstance(self.method, SAPTMethod) and
+                sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1 > self.multiplicity[0]
         ):
-            out_str += "mol = psi4.core.Molecule.from_arrays(\n"
-            out_str += "    molecular_multiplicity=%i,\n" % self.multiplicity[0]
-            out_str += "    molecular_charge=%i,\n" % self.charge[0]
-            if PSI4_COORDINATES in combined_dict:
-                for keyword in combined_dict[PSI4_COORDINATES]:
-                    if combined_dict[keyword]:
-                        out_str += "    %s=%s,\n" % (keyword, repr(combined_dict[keyword][0]))
+            use_molecule_array = True
+            s += "mol = psi4.core.Molecule.from_arrays(\n"
+            s += "    molecular_multiplicity=%i,\n" % self.multiplicity[0]
+            s += "    molecular_charge=%i,\n" % self.charge[0]
+            if PSI4_MOLECULE in other_kw_dict:
+                for keyword in other_kw_dict[PSI4_MOLECULE]:
+                    if other_kw_dict[keyword]:
+                        s += "    %s=%s,\n" % (keyword, repr(other_kw_dict[keyword][0]))
 
         else:
-            out_str += "molecule {\n"
-            if self.method.sapt:
-                out_str += "%2i %i\n" % (self.charge[0], self.multiplicity[0])
+            s += "molecule {\n"
+            if isinstance(self.method, SAPTMethod):
+                s += "    %2i %i\n" % (self.charge[0], self.multiplicity[0])
             else:
-                out_str += "%2i %i\n" % (self.charge, self.multiplicity)
+                s += "    %2i %i\n" % (self.charge, self.multiplicity)
 
-            if PSI4_COORDINATES in combined_dict:
-                for keyword in combined_dict[PSI4_COORDINATES]:
+            if PSI4_MOLECULE in other_kw_dict:
+                for keyword in other_kw_dict[PSI4_MOLECULE]:
                     if "pubchem" in keyword.lower():
                         self.geometry = None
-                    if combined_dict[PSI4_COORDINATES][keyword]:
-                        opt = combined_dict[PSI4_COORDINATES][keyword][0]
+                    if other_kw_dict[PSI4_MOLECULE][keyword]:
+                        opt = other_kw_dict[PSI4_MOLECULE][keyword][0]
                         if (
                                 "pubchem" in keyword.lower() and
                                 not keyword.strip().endswith(":")
                         ):
                             keyword = keyword.strip() + ":"
-                        out_str += "%s %s\n" % (keyword.strip(), opt)
+                            self.geometry = None
+                        s += "     %s %s\n" % (keyword.strip(), opt)
                         if keyword == "units":
                             if opt.lower() in ["bohr", "au", "a.u."]:
                                 use_bohr = True
 
                     else:
-                        out_str += "%s\n" % keyword
+                        s += "     %s\n" % keyword
+
+        if use_molecule_array:
+            # psi4 input is VERY different for sapt jobs with the low-spin
+            # combination of fragments
+            seps = []
+            for i, m1 in enumerate(self.geometry.components[:-1]):
+                seps.append(0)
+                for m2 in monomers[:i + 1]:
+                    seps[-1] += len(m2)
+
+            s += "    fragment_separators=%s,\n" % repr(seps)
+            s += "    elez=%s,\n" % repr(
+                [
+                    ELEMENTS.index(atom.element)
+                    for monomer in monomers
+                    for atom in monomer
+                ]
+            )
+            s += "    fragment_multiplicities=%s,\n" % repr(
+                theory.multiplicity[1:]
+            )
+            s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
+            s += "    geom=["
+            i = 0
+            for monomer in monomers:
+                print("monomer")
+                for atom in monomer:
+                    print(atom)
+            for monomer in monomers:
+                s += "\n"
+                for atom in monomer:
+                    ndx = self.geometry.atoms.index(atom)
+                    coord = other_kw_dict[PSI4_COORDINATES][coords][ndx]
+                    for val in coord:
+                        s += "    "
+                        if isinstance(val, float):
+                            if use_bohr:
+                                s += "%9.5f," % (val / UNIT.A0_TO_BOHR)
+                            else:
+                                s += "%9.5f," % val
+                        else:
+                            warnings.append("unknown coordinate type: %s" % type(val))
+                    s += "\n"
+
+            s += "    ],\n"
+            s += ")\n\n"
+            s += "activate(mol)\n"
+
+        elif isinstance(self.method, SAPTMethod):
+            monomers = [comp.atoms for comp in geom.components]
+
+            for monomer, mult, charge in zip(
+                monomers, theory.multiplicity[1:], theory.charge[1:]
+            ):
+                s += "    --\n"
+                s += "    %2i %i\n" % (charge, mult)
+                for atom in monomer:
+                    ndx = self.geometry.atoms.index(atom)
+                    coord = other_kw_dict[PSI4_COORDINATES][coords][ndx]
+                    for val in coord:
+                        s += "    "
+                        if isinstance(val, float):
+                            if use_bohr:
+                                s += " %9.5f," % (val / UNIT.A0_TO_BOHR)
+                            else:
+                                s += " %9.5f," % val
+                        elif isinstance(val, str):
+                            s += "    %9s" % val
+                        else:
+                            warnings.append("unknown coordinate type: %s" % type(val))
+
+            if "variables" in other_kw_dict[PSI4_COORDINATES]:
+                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES]["variables"]:
+                    if use_bohr and angstrom:
+                        val /= UNIT.A0_TO_BOHR
+                    s += "     %3s = %9.5f\n" % (name, val)
+
+            s += "}\n"
+
+        elif self.geometry is not None:
+            for atom, coord in zip(
+                    self.geometry.atoms,
+                    other_kw_dict[PSI4_COORDINATES]["coords"]
+            ):
+                s += "    %2s" % atom.element
+                for val in coord:
+                    s += "    "
+                    if isinstance(val, float):
+                        s += " %9.5f" % val
+                    elif isinstance(val, str):
+                        s += " %9s" % val
+                    else:
+                        warnings.append("unknown coordinate type: %s" % type(val))
+                s += "\n"
+
+            if "variables" in other_kw_dict[PSI4_COORDINATES]:
+                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES]["variables"]:
+                    if use_bohr and angstrom:
+                        val /= UNIT.A0_TO_BOHR
+                    s += "     %3s = %9.5f\n" % (name, val)
+
+            s += "}\n"
 
         if return_warnings:
-            return out_str, use_bohr, warnings
+            return s, warnings
 
-        return out_str, use_bohr
+        return s
 
     def get_psi4_footer(
             self,
@@ -918,10 +1204,12 @@ class Theory:
             out_str += "set {\n"
             for setting in other_kw_dict[PSI4_SETTINGS]:
                 if other_kw_dict[PSI4_SETTINGS][setting]:
-                    out_str += "    %-20s    %s\n" % (
-                        setting,
-                        other_kw_dict[PSI4_SETTINGS][setting][0],
-                    )
+                    if isinstance(other_kw_dict[PSI4_SETTINGS][setting], str):
+                        val = other_kw_dict[PSI4_SETTINGS][setting]
+                    else:
+                        val = other_kw_dict[PSI4_SETTINGS][setting][0]
+
+                    out_str += "    %-20s    %s\n" % (setting, val)
 
             out_str += "}\n\n"
 
