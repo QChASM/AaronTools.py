@@ -1109,6 +1109,7 @@ class Theory:
                 s += "    --\n"
                 s += "    %2i %i\n" % (charge, mult)
                 for atom in monomer:
+                    s += "    %2s" % atom.element
                     if atom not in atoms_in_monomer:
                         atoms_in_monomer.append(atom)
                     else:
@@ -1116,7 +1117,7 @@ class Theory:
                     ndx = self.geometry.atoms.index(atom)
                     coord = other_kw_dict[PSI4_COORDINATES]["coords"][ndx]
                     for val in coord:
-                        s += "  "
+                        s += "     "
                         if isinstance(val, float):
                             if use_bohr:
                                 s += " %9.5f" % (val / UNIT.A0_TO_BOHR)
@@ -1151,7 +1152,7 @@ class Theory:
             ):
                 s += "    %2s" % atom.element
                 for val in coord:
-                    s += "    "
+                    s += "     "
                     if isinstance(val, float):
                         s += " %9.5f" % val
                     elif isinstance(val, str):
