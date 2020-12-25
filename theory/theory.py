@@ -427,7 +427,10 @@ class Theory:
                 GAUSSIAN_COMMENT not in other_kw_dict
                 or not other_kw_dict[GAUSSIAN_COMMENT]
         ):
-            other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
+            if self.geometry.comment:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -804,7 +807,10 @@ class Theory:
 
         # comment
         if ORCA_COMMENT not in other_kw_dict:
-            other_kw_dict[ORCA_COMMENT] = [self.geometry.comment]
+            if self.geometry.comment:
+                other_kw_dict[ORCA_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[ORCA_COMMENT] = [self.geometry.name]
         for comment in other_kw_dict[ORCA_COMMENT]:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
@@ -944,7 +950,10 @@ class Theory:
 
         # comment
         if PSI4_COMMENT not in combined_dict:
-            combined_dict[PSI4_COMMENT] = [self.geometry.comment]
+            if self.geometry.comment:
+                combined_dict[PSI4_COMMENT] = [self.geometry.comment]
+            else:
+                combined_dict[PSI4_COMMENT] = [self.geometry.name]
         for comment in combined_dict[PSI4_COMMENT]:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
