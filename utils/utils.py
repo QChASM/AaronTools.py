@@ -615,8 +615,12 @@ def perp_vector(vec):
         "cannot determine vector perpendicular to %i-dimensional array" % vec.ndim
     )
 
-def get_filename(path):
+
+def get_filename(path, include_parent_dir=False):
     """returns the name of the file without parent directories or extension"""
-    fname = os.path.basename(path)
+    if include_parent_dir:
+        fname = os.path.basename(path)
+    else:
+        fname = path
     fname, _ = os.path.splitext(fname)
     return fname

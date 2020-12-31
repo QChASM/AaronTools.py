@@ -615,7 +615,7 @@ class Theory:
                 self.geometry.atoms,
                 other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
-            s += "%2s" % atom.element
+            s += "%-2s" % atom.element
             for val in coord:
                 s += "  "
                 if isinstance(val, float):
@@ -986,13 +986,14 @@ class Theory:
             **other_kw_dict,
     ):
         """
-        get molecule specification for gaussian input files
+        get molecule specification for psi4 input files
         """
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
         warnings = []
         use_bohr = False
+        pubchem = False
         use_molecule_array = False
         if self.job_type is not None:
             for job in self.job_type[::-1]:
@@ -1034,8 +1035,6 @@ class Theory:
 
             if PSI4_MOLECULE in other_kw_dict:
                 for keyword in other_kw_dict[PSI4_MOLECULE]:
-                    if "pubchem" in keyword.lower():
-                        self.geometry = None
                     if other_kw_dict[PSI4_MOLECULE][keyword]:
                         opt = other_kw_dict[PSI4_MOLECULE][keyword][0]
                         if (
@@ -1043,7 +1042,7 @@ class Theory:
                                 not keyword.strip().endswith(":")
                         ):
                             keyword = keyword.strip() + ":"
-                            self.geometry = None
+                            pubchem = True
                         s += "     %s %s\n" % (keyword.strip(), opt)
                         if keyword == "units":
                             if opt.lower() in ["bohr", "au", "a.u."]:
@@ -1154,7 +1153,7 @@ class Theory:
                     )
                 )
 
-        elif self.geometry is not None:
+        elif not pubchem:
             for atom, coord in zip(
                     self.geometry.atoms,
                     other_kw_dict[PSI4_COORDINATES]["coords"]
@@ -1176,6 +1175,8 @@ class Theory:
                         val /= UNIT.A0_TO_BOHR
                     s += "     %3s = %9.5f\n" % (name, val)
 
+            s += "}\n"
+        else:
             s += "}\n"
 
         if return_warnings:
@@ -1267,11 +1268,11 @@ class Theory:
         if self.empirical_dispersion is not None:
             method += self.empirical_dispersion.get_psi4()[0]
 
-        # after job stuff - replaceFUNCTIONAL with method
+        # after job stuff - replace METHOD with method
         if PSI4_BEFORE_JOB in other_kw_dict:
             for opt in other_kw_dict[PSI4_BEFORE_JOB]:
-                if "$FUNCTIONAL" in opt:
-                    opt = opt.replace("$FUNCTIONAL", "'%s'" % method)
+                if "$METHOD" in opt:
+                    opt = opt.replace("$METHOD", "'%s'" % method)
 
                 out_str += opt
                 out_str += "\n"
@@ -1297,15 +1298,15 @@ class Theory:
                     if key not in known_kw:
                         known_kw.append(key)
                         out_str += ", "
-                        out_str += keyword.replace("$FUNCTIONAL", "'%s'" % method)
+                        out_str += keyword.replace("$METHOD", "'%s'" % method)
 
                 out_str += ")\n"
 
-        # after job stuff - replaceFUNCTIONAL with method
+        # after job stuff - replace METHOD with method
         if PSI4_AFTER_JOB in other_kw_dict:
             for opt in other_kw_dict[PSI4_AFTER_JOB]:
-                if "$FUNCTIONAL" in opt:
-                    opt = opt.replace("$FUNCTIONAL", "'%s'" % method)
+                if "$METHOD" in opt:
+                    opt = opt.replace("$METHOD", "'%s'" % method)
 
                 out_str += opt
                 out_str += "\n"

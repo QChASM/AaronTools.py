@@ -138,7 +138,7 @@ class TestFromString(TestWithTimer):
                 ring = Ring.from_string(
                     "benzene", end_length=1, end_atom="C", form="iupac"
                 )
-                print(ring.write(outfile=False))
+                print(ring.comment)
                 ref = self.benzene
                 self.assertTrue(validate(ring, ref, thresh="loose", debug=True))
 

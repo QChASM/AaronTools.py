@@ -140,11 +140,19 @@ class Geometry:
         """
 
         def get_cactus_sd(smiles):
-            url_sd = "{}/chemical/structure/{}/file?format=sdf&astyle=kekule&dim=3D&file=".format(
+            url_sd = "{}/cgi-bin/translate.tcl?smiles={}&format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            s_sd = (
+            s_sd_get = (
                 urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
+            )
+            tmp_url = re.search(
+                "User-defined exchange format file: <a href=\"(.*)\"",
+                s_sd_get
+            ).group(1)
+            new_url = "{}{}".format(CACTUS_HOST, tmp_url)
+            s_sd = (
+                urlopen(new_url, context=ssl.SSLContext()).read().decode("utf8")
             )
             return s_sd
 

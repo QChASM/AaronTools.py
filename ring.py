@@ -111,7 +111,6 @@ class Ring(Geometry):
 
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""
-
         def linearly_connected(atom_list):
             """returns true if every atom in atom_list is connected to another atom in
             the list without backtracking"""
@@ -185,6 +184,6 @@ class Ring(Geometry):
             )
 
         else:
-            self.comment = ",".join(
-                [str(self.atoms.index(a) + 1) for a in self.atoms]
+            self.comment = "E:" + ",".join(
+                [str(self.atoms.index(a) + 1) for a in self.end]
             )
