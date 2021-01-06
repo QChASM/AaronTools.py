@@ -2,10 +2,12 @@
 import os
 import re
 from glob import glob
+import numpy as np
 
-from AaronTools.const import AARONLIB, AARONTOOLS
+from AaronTools.const import AARONLIB, AARONTOOLS, VDW_RADII, BONDI_RADII
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.utils import rotation_matrix
 
 
 class Component(Geometry):
@@ -307,3 +309,87 @@ class Component(Geometry):
         self.change_dihedral(
             start, end, angle, fix=4, adjust=True, as_group=True
         )
+
+    def cone_angle(self, center, method="tolman", return_vector=False, radii="umn"):
+        """
+        returns cone angle in degrees
+        center - Atom() that this component is coordinating
+        method (str) can be:
+            'Tolman' - Tolman cone angle for asymmetric ligands
+        radii: 'bondi' - Bondi vdW radii
+               'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+               dict() with elements as keys and radii as values
+        """
+        from AaronTools.finders import BondedTo
+
+        key = self.find("key")
+        
+        center = self.find_exact(center)[0]
+
+        L_axis = self.COM(key) - center.coords
+        L_axis /= np.linalg.norm(L_axis)
+
+        asdf = center.coords + L_axis
+
+        print(".note L")
+        print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
+
+        if radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        elif isinstance(radii, dict):
+            radii_dict = radii
+
+        total_angle = 0
+
+        if method.lower() == "tolman":
+            for key_atom in key:
+                bonded_atoms = self.find(BondedTo(key_atom))
+                for bonded_atom in bonded_atoms:
+                    frag = self.get_fragment(bonded_atom, key)
+    
+                    tolman_angle = None
+                    for atom in frag:
+                        v = center.bond(atom)
+                        # asdf = v + center.coords
+                        # print(atom.name)
+                        # print(".note v")
+                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
+                        b = np.dot(v, L_axis) * L_axis
+                        # asdf = b + center.coords
+                        # print(".note b")
+                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
+                        alpha_tc = np.sin(radii_dict[atom.element] / np.linalg.norm(v))
+                        rv = np.cross(b, v)
+                        rv /= np.linalg.norm(rv)
+                        # asdf = rv + center.coords
+                        # print(".note rv")
+                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
+    
+                        R = rotation_matrix(-alpha_tc, rv)
+    
+                        rb = np.dot(R, v)
+    
+                        rb_n = rb / np.linalg.norm(rb)
+                        dv = rb_n - L_axis
+                        c2 = np.linalg.norm(dv)**2
+                        # print("c", np.sqrt(c2))
+                        # asdf = dv + center.coords + L_axis
+                        # asdf2 = center.coords + L_axis
+                        # print(".note dv")
+                        # print(".arrow %f %f %f   %f %f %f" % (*asdf2, *asdf))
+                        test_angle = np.arccos((c2 - 2) / -2)
+                        # print("angle", np.rad2deg(test_angle))
+                        if tolman_angle is None or test_angle > tolman_angle:
+                            tolman_angle = test_angle
+    
+                        rb += center.coords
+                        print(".note rb")
+                        print(".arrow %f %f %f   %f %f %f" % (*center.coords, *rb))
+    
+                    print('')
+                    total_angle += 2 * tolman_angle / (len(bonded_atoms) * len(key))
+
+        return np.rad2deg(total_angle)
+
