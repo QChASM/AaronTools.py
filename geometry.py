@@ -1558,7 +1558,9 @@ class Geometry:
                 return 0
             sigma = a.rij(b)
             epsilon = a.eij(b)
-            s_d_6 = (sigma / dist) ** 6
+            # this seems to be marginally faster than **6
+            s_d_2 = (sigma / dist) ** 2
+            s_d_6 = s_d_2 * s_d_2 * s_d_2
             return epsilon * (s_d_6 ** 2 - s_d_6)
 
         energy = 0

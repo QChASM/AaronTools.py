@@ -916,9 +916,57 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def get_modredundant(f, n):
+            """read constraints for modredundant section"""
+            rv = {}
+            line = f.readline()
+            n += 1
+            while line.strip():
+                atom_match = re.search("X\s+(\d+)\s+F", line)
+                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+F", line)
+                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                torsion_match = re.search("D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                if atom_match:
+                    if "atoms" not in rv:
+                        rv["atoms"] = ""
+                    else:
+                        rv["atoms"] += ","
+                    rv["atoms"] += atom_match.group(1)
+                elif bond_match:
+                    if "bonds" not in rv:
+                        rv["bonds"] = []
+                    rv["bonds"].append(",".join([bond_match.group(1), bond_match.group(2)]))
+                elif angle_match:
+                    if "angles" not in rv:
+                        rv["angles"] = []
+                    rv["angles"].append(
+                        ",".join([
+                            angle_match.group(1),
+                            angle_match.group(2),
+                            angle_match.group(3)
+                        ])
+                    )
+                elif torsion_match:
+                    if "torsions" not in rv:
+                        rv["torsions"] = []
+                    rv["torsions"].append(
+                        ",".join([
+                            torsion_match.group(1),
+                            torsion_match.group(2),
+                            torsion_match.group(3),
+                            torsion_match.group(4)
+                        ])
+                    )
+
+                line = f.readline()
+                n+=1
+
+            return rv, n
+
         self.all_geom = []
         line = f.readline()
         self.other["archive"] = ""
+        constraints = {}
         self.other["opt_steps"] = 0
         found_archive = False
         n = 1
@@ -952,6 +1000,10 @@ class FileReader:
                     ]
                 self.other["opt_steps"] += 1
                 self.atoms, n = get_atoms(f, n)
+
+            if re.search("The following ModRedundant input section has been read:", line):
+                constraints, n = get_modredundant(f, n)
+
             if just_geom:
                 line = f.readline()
                 n += 1
@@ -1116,7 +1168,11 @@ class FileReader:
                             elif option_lower.startswith("opt="):
                                 options = ["".join(option.split("=")[1:])]
                             else:
-                                job_type.append(OptimizationJob())
+                                if not constraints:
+                                    # if we didn't read constraints, try using flagged atoms instead
+                                    from AaronTools.finders import FlaggedAtoms
+                                    constraints = {"atoms": FlaggedAtoms}
+                                job_type.append(OptimizationJob(constraints=constraints))
                                 continue
 
                             other_kwargs[GAUSSIAN_ROUTE]["opt"] = []
@@ -1130,7 +1186,7 @@ class FileReader:
                                     ].append(opt)
 
                             job_type.append(
-                                OptimizationJob(transition_state=ts)
+                                OptimizationJob(transition_state=ts, constraints=constraints)
                             )
 
                         elif option_lower.startswith("freq"):
