@@ -15,4 +15,5 @@ However, users are strongly urged to use the Python version since it has far mor
 If you use AaronTools, please cite:
 "QChASM: Quantum Chemistry Automation and Structure Manipulation" <a href="http://dx.doi.org/10.1002/wcms.1510" target="_blank"><i>WIREs Comp. Mol. Sci.</i> (in press, 2021)</a>
 
+## Contact
 If you have any questions, feel free to contact us at qchasm@uga.edu
