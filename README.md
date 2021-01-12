@@ -11,4 +11,8 @@ A description of the Python AaronTools implementation is described in this publi
 A Perl implementation of AaronTools is also <a href="https://github.com/QChASM/AaronTools">available here.</a>
 However, users are strongly urged to use the Python version since it has far more powerful features and, unlike the Perl version, will continue to be developed and supported.
 
+## Citation
+If you use AaronTools, please cite:
+"QChASM: Quantum Chemistry Automation and Structure Manipulation" <a href="http://dx.doi.org/10.1002/wcms.1510" target="_blank"><i>WIREs Comp. Mol. Sci.</i> (in press, 2021)</a>
+
 If you have any questions, feel free to contact us at qchasm@uga.edu
