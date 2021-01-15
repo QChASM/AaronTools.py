@@ -772,8 +772,11 @@ thermochemistry from test_files/normal.log at 298.00 K:
         if len(err) != 0:
             raise RuntimeError(err)
 
-        ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
-            test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
+       # ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
+       #     test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
+
+        ref = """                      Filename    Step        Max Disp       Max Force        RMS Disp       RMS Force
+            test_files/opt_running.log       4     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
 
         ref_lines = ref.splitlines()
         ref_status_line = ref_lines[1]
@@ -783,7 +786,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         # don't include filename in test b/c that will be different
         for ref_item, test_item in zip(
-            ref_status_line.split()[-6:], test_line.split()[-6:]
+            ref_status_line.split()[-7:], test_line.split()[-7:]
         ):
             # print(ref_item, test_item)
             self.assertTrue(ref_item == test_item)
