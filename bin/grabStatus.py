@@ -69,13 +69,14 @@ for f in args.infile:
         x in co.gradient for x in header_vals
     ):
         header_vals = [x for x in sorted(co.gradient.keys())]
-        header = "                      Filename  " + "  ".join(
+        header = "                      Filename    Step  " + "  ".join(
             ["%14s" % crit for crit in header_vals]
         )
         header += "\n"
         s += header
 
     s += "%30s" % f
+    s += "%8s" % co.opt_steps
 
     for crit in header_vals:
         col = "%.2e/%s" % (
