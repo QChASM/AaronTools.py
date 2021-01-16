@@ -30,14 +30,27 @@ translate_parser.add_argument(
     help="file format of input - xyz is assumed if input is stdin"
 )
 
-translate_parser.add_argument(
+target_specifier = translate_parser.add_argument_group("atoms to move")
+target_specifier.add_argument(
     "-t", "--targets",
     type=str,
     default=None,
     required=False,
     dest="targets",
-    metavar="targets",
-    help="atoms to move (default: whole structure)"
+    metavar="atoms",
+    help="move atoms with specified indices\n"
+    "Default: whole structure"
+)
+
+target_specifier.add_argument(
+    "-f", "--fragment",
+    type=str,
+    default=None,
+    required=False,
+    dest="fragments",
+    metavar="atoms",
+    help="move fragments containing specified atoms\n"
+    "Default: whole structure"
 )
 
 translate_parser.add_argument(
@@ -137,17 +150,18 @@ for f in args.infile:
 
     geom = Geometry(infile)
 
-    # targets = None means whole geometry is used
+    # targets to move
+    targets = []
     if args.targets is not None:
-        targets = geom.find(args.targets)
-    else:
+        targets.extend(geom.find(args.targets))
+    
+    if args.fragments is not None:
+        for atom in geom.find(args.fragments):
+            frag_atoms = geom.get_all_connected(atom)
+            targets.extend([frag_atom for frag_atom in frag_atoms if frag_atom not in targets])
+    
+    if not targets:
         targets = None
-
-    # fragment = None means whole geometry is moved
-    if args.fragment is not None:
-        fragment = geom.find(args.fragment)
-    else:
-        fragment = None
 
     # start with com or centroid where it is
     if args.com or not args.cent:
@@ -177,7 +191,7 @@ for f in args.infile:
 
     translate_vector = destination - start
 
-    geom.coord_shift(translate_vector, targets=fragment)
+    geom.coord_shift(translate_vector, targets=targets)
 
     if args.outfile:
         geom.write(

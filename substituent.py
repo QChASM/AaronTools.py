@@ -429,12 +429,12 @@ class Substituent(Geometry):
         L_axis = atom2.bond(atom1)
         L_axis /= np.linalg.norm(L_axis)
 
-        if radii.lower() == "bondi":
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
-        elif isinstance(radii, dict):
-            radii_dict = radii
 
         param_value = None
         vector = None

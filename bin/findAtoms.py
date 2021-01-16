@@ -188,6 +188,14 @@ find_parser.add_argument(
     help="find chiral centers",
 )
 
+find_parser.add_argument(
+    "-f", "--fragment",
+    type=str,
+    default=None,
+    dest="fragments",
+    help="fragments containing the specified atoms"
+)
+
 finder_combination = find_parser.add_argument_group(
     "match method (Default is atoms matching all)"
 )
@@ -256,7 +264,6 @@ for f in args.infile:
     geom = Geometry(infile)
 
     geom_finders = [x for x in finders]
-
     # some finders require and atom upon instantiation
     # add those once we have the geometry
     for ad in args.atom_dist:
@@ -274,6 +281,11 @@ for f in args.infile:
     for bt in args.bonded_to:
         for atom in geom.find(bt):
             geom_finders.append(BondedTo(atom))
+    
+    if args.fragments:
+        for atom in geom.find(args.fragments):
+            frag_atoms = geom.get_all_connected(atom)
+            geom_finders.append(frag_atoms)
 
     if len(args.infile) > 1:
         s += "%s\n" % str(s)

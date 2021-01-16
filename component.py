@@ -315,7 +315,10 @@ class Component(Geometry):
         returns cone angle in degrees
         center - Atom() that this component is coordinating
         method (str) can be:
-            'Tolman' - Tolman cone angle for asymmetric ligands
+            'Tolman' - Tolman cone angle for asymmetric ligands (doi 10.1021/ja00808a009)
+                       NOTE: this does not make assumptions about the geometry
+                       NOTE: only works with monodentate and bidentate ligands
+            'exact' - cone angle from Allen et. al. (doi 10.1002/jcc.23217)
         radii: 'bondi' - Bondi vdW radii
                'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
                dict() with elements as keys and radii as values
@@ -328,68 +331,309 @@ class Component(Geometry):
 
         L_axis = self.COM(key) - center.coords
         L_axis /= np.linalg.norm(L_axis)
-
-        asdf = center.coords + L_axis
-
-        print(".note L")
-        print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
-
-        if radii.lower() == "bondi":
+        
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
-        elif isinstance(radii, dict):
-            radii_dict = radii
 
         total_angle = 0
 
         if method.lower() == "tolman":
+            if len(key) > 2:
+                raise NotImplementedError("Tolman cone angle not implemented for tridentate or more ligands")
             for key_atom in key:
+                L_axis =  center.bond(key_atom)
+                L_axis /= np.linalg.norm(L_axis)
                 bonded_atoms = self.find(BondedTo(key_atom))
                 for bonded_atom in bonded_atoms:
-                    frag = self.get_fragment(bonded_atom, key)
+                    frag = self.get_fragment(bonded_atom, key_atom)
+                    
+                    use_bridge = False
+                    if any(k in frag for k in key):
+                        # fragment on bidentate ligands that connects to
+                        # the other coordinating atom
+                        k = self.find(frag, key)[0]
+                        # the bridge might be part of a ring (e.g. BPY)
+                        # to avoid double counting the bridge, check if the 
+                        # first atom in the fragment is the first atom on the
+                        # path from one key atom to the other
+                        bridge_path = self.shortest_path(k, key_atom)
+                        if frag[0] in bridge_path:
+                            use_bridge = True
+                    
+                    if use_bridge:
+                        # angle between one L-M bond and L-M-L bisecting vector
+                        tolman_angle = center.angle(k, key_atom) / 2
+                    
+                    else:
+                        tolman_angle = None
+                        for atom in frag:
+                            v = center.bond(atom)
+                            b = np.dot(v, L_axis) * L_axis
+                            beta_tc = np.sin(radii_dict[atom.element] / np.linalg.norm(v))
+                            rv = np.cross(b, v)
+                            if np.linalg.norm(rv) > 1e-3:
+                                # atom is along the L axis
+                                # this probably shouldn't happen for phosphine ligands...
+                                rv /= np.linalg.norm(rv)
+                                R = rotation_matrix(-beta_tc, rv)
+            
+                                rb = np.dot(R, v)
+            
+                                rb_n = rb / np.linalg.norm(rb)
+                                dv = rb_n - L_axis
+                                c2 = np.linalg.norm(dv)**2
+                                test_angle = np.arccos((c2 - 2) / -2)
+                            else:
+                                test_angle = beta_tc
+                            if tolman_angle is None or test_angle > tolman_angle:
+                                tolman_angle = test_angle
     
-                    tolman_angle = None
-                    for atom in frag:
-                        v = center.bond(atom)
-                        # asdf = v + center.coords
-                        # print(atom.name)
-                        # print(".note v")
-                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
-                        b = np.dot(v, L_axis) * L_axis
-                        # asdf = b + center.coords
-                        # print(".note b")
-                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
-                        alpha_tc = np.sin(radii_dict[atom.element] / np.linalg.norm(v))
-                        rv = np.cross(b, v)
-                        rv /= np.linalg.norm(rv)
-                        # asdf = rv + center.coords
-                        # print(".note rv")
-                        # print(".arrow %f %f %f   %f %f %f" % (*center.coords, *asdf))
-    
-                        R = rotation_matrix(-alpha_tc, rv)
-    
-                        rb = np.dot(R, v)
-    
-                        rb_n = rb / np.linalg.norm(rb)
-                        dv = rb_n - L_axis
-                        c2 = np.linalg.norm(dv)**2
-                        # print("c", np.sqrt(c2))
-                        # asdf = dv + center.coords + L_axis
-                        # asdf2 = center.coords + L_axis
-                        # print(".note dv")
-                        # print(".arrow %f %f %f   %f %f %f" % (*asdf2, *asdf))
-                        test_angle = np.arccos((c2 - 2) / -2)
-                        # print("angle", np.rad2deg(test_angle))
-                        if tolman_angle is None or test_angle > tolman_angle:
-                            tolman_angle = test_angle
-    
-                        rb += center.coords
-                        print(".note rb")
-                        print(".arrow %f %f %f   %f %f %f" % (*center.coords, *rb))
-    
-                    print('')
                     total_angle += 2 * tolman_angle / (len(bonded_atoms) * len(key))
 
-        return np.rad2deg(total_angle)
+            return np.rad2deg(total_angle)
+        
+        elif method.lower() == "exact":
+            L_axis = self.COM(key) - center.coords
+            L_axis /= np.linalg.norm(L_axis)
+            # angle between L_axis and tangent to atom's vdw radius that passes through center
+            beta = np.zeros(len(self.atoms), dtype=float)
+            
+            test_one_atom_axis = None
+            max_beta = None
+            for i, atom in enumerate(self.atoms):
+                beta[i] = np.arcsin(radii_dict[atom.element] / atom.dist(center))
+                if max_beta is None or beta[i] > max_beta:
+                    max_beta = beta[i]
+                    test_one_atom_axis = center.bond(atom)
+
+            # check to see if all other atoms are in the shadow of one atom
+            # e.g. cyano, carbonyl
+            overshadowed_list = []
+            for i, atom in enumerate(self.atoms):
+                rhs = beta[i]
+                
+                if np.dot(
+                        center.bond(atom), test_one_atom_axis
+                ) / (
+                        center.dist(atom) * np.linalg.norm(test_one_atom_axis)
+                ) <= 1:
+                    rhs += np.arccos(
+                        np.dot(
+                            center.bond(atom), test_one_atom_axis
+                        ) / (
+                            center.dist(atom) * np.linalg.norm(test_one_atom_axis)
+                        )
+                    )
+                lhs = max_beta
+                if lhs >= rhs:
+                    # print(atom, "is overshadowed")
+                    overshadowed_list.append(atom)
+                    break
+            
+            # all atoms are in the cone - we're done
+            if len(overshadowed_list) == len(self.atoms):
+                return np.rad2deg(2 * max_beta)
+            
+            overshadowed_list = []
+            for i, atom1 in enumerate(self.atoms):
+                for j, atom2 in enumerate(self.atoms[:i]):
+                    rhs = beta[i]
+                    
+                    if np.dot(
+                            center.bond(atom1), center.bond(atom2)
+                        ) / (
+                            center.dist(atom1) * center.dist(atom2)
+                    ) <= 1:
+                        rhs += np.arccos(
+                            np.dot(
+                                center.bond(atom1), center.bond(atom2)
+                            ) / (
+                                center.dist(atom1) * center.dist(atom2)
+                            )
+                        )
+                    lhs = beta[j]
+                    if lhs >= rhs:
+                        overshadowed_list.append(atom1)
+                        break
+            # winow list to ones that aren't in the shadow of another
+            atom_list = [atom for atom in self.atoms if atom not in overshadowed_list]
+            
+            # check pairs of atoms
+            max_a = None
+            max_ij = None
+            aij = None
+            bij = None
+            cij = None
+            for i, atom1 in enumerate(atom_list):
+                ndx_i = self.atoms.index(atom1)
+                for j, atom2 in enumerate(atom_list[:i]):
+                    ndx_j = self.atoms.index(atom2)
+                    beta_ij = np.arccos(
+                        np.dot(center.bond(atom1), center.bond(atom2)) / (atom1.dist(center) * atom2.dist(center))
+                    )
+
+                    test_alpha = (beta[ndx_i] + beta[ndx_j] + beta_ij) / 2
+                    if max_a is None or test_alpha > max_a:
+                        max_a = test_alpha
+                        max_ij = (i, j)
+                        mi = center.bond(atom1)
+                        mi /= np.linalg.norm(mi)
+                        mj = center.bond(atom2)
+                        mj /= np.linalg.norm(mj)
+
+                        aij = np.sin(0.5 * (beta_ij + beta[ndx_i] - beta[ndx_j])) / np.sin(beta_ij)
+                        bij = np.sin(0.5 * (beta_ij - beta[ndx_i] + beta[ndx_j])) / np.sin(beta_ij)
+                        cij = 0
+                        norm = aij * mi + bij * mj + cij * np.cross(mi, mj) / np.sin(bij)
+
+            r = 0.2 * np.tan(max_a)
+            # print(
+            #     ".cone %.3f %.3f %.3f   0.0 0.0 0.0   %.3f open" % (
+            #         0.2 * norm[0], 0.2 * norm[1], 0.2 * norm[2], r
+            #     )
+            # )
+            
+            overshadowed_list = []
+            rhs = max_a
+            for atom in atom_list:
+                ndx_i = self.atoms.index(atom)
+                lhs = beta[ndx_i] + np.arccos(np.dot(center.bond(atom), norm) / center.dist(atom))
+                if rhs >= lhs:
+                    overshadowed_list.append(atom)
+            
+            # the cone fits all atoms, we're done
+            if len(overshadowed_list) == len(atom_list):
+                return np.rad2deg(2 * max_a)
+            
+            centroid = self.COM()
+            c_vec = centroid - center.coords
+            c_vec /= np.linalg.norm(c_vec)
+
+            min_alpha = None
+            c = 0
+            for i, atom1 in enumerate(atom_list):
+                for j, atom2 in enumerate(atom_list[:i]):
+                    for k, atom3 in enumerate(atom_list[i+1:]):
+                        c += 1
+                        ndx_i = self.atoms.index(atom1)
+                        ndx_j = self.atoms.index(atom2)
+                        ndx_k = self.atoms.index(atom3)
+                        # print(atom1.name, atom2.name, atom3.name)
+
+                        mi = center.bond(atom1)
+                        mi /= np.linalg.norm(center.dist(atom1))
+                        mj = center.bond(atom2)
+                        mj /= np.linalg.norm(center.dist(atom2))
+                        mk = center.bond(atom3)
+                        mk /= np.linalg.norm(center.dist(atom3))
+
+                        gamma_ijk = np.dot(mi, np.cross(mj, mk))
+                        
+                        M = np.column_stack((mi, mj, mk))
+                        
+                        # N = gamma_ijk * np.linalg.inv(M)
+
+                        N = np.column_stack(
+                            (
+                                np.cross(mj, mk),
+                                np.cross(mk, mi),
+                                np.cross(mi, mj)
+                            )
+                        )
+                        
+                        u = np.array(
+                            [
+                                np.cos(beta[ndx_i]),
+                                np.cos(beta[ndx_j]),
+                                np.cos(beta[ndx_k])
+                            ]
+                        )
+                        
+                        v = np.array(
+                            [
+                                np.sin(beta[ndx_i]),
+                                np.sin(beta[ndx_j]),
+                                np.sin(beta[ndx_k])
+                            ]
+                        )
+                        
+                        P = np.dot(N.T, N)
+
+                        A = np.dot(u.T, np.dot(P, u))
+                        B = np.dot(v.T, np.dot(P, v))
+                        C = np.dot(u.T, np.dot(P, v))
+                        
+                        D = gamma_ijk ** 2
+
+                        # beta_ij = np.dot(center.bond(atom1), center.bond(atom2)) 
+                        # beta_ij /= atom1.dist(center) * atom2.dist(center)
+                        # beta_ij = np.arccos(beta_ij)
+                        # beta_jk = np.dot(center.bond(atom2), center.bond(atom3)) 
+                        # beta_jk /= atom2.dist(center) * atom3.dist(center)
+                        # beta_jk = np.arccos(beta_jk)
+                        # beta_ik = np.dot(center.bond(atom1), center.bond(atom3)) 
+                        # beta_ik /= atom1.dist(center) * atom3.dist(center)
+                        # beta_ik = np.arccos(beta_ik)
+                        # 
+                        # D = 1 - np.cos(beta_ij) ** 2 - np.cos(beta_jk) ** 2 - np.cos(beta_ik) ** 2
+                        # D += 2 * np.cos(beta_ik) * np.cos(beta_jk) * np.cos(beta_ij)
+                        # this should be equal to the other D
+                        
+                        t1 = (A - B) ** 2 + 4 * C ** 2
+                        t2 = 2 * (A - B) * (A + B - 2 * D)
+                        t3 = (A + B - 2 * D) ** 2 - 4 * C ** 2
+                        
+                        w_lt = (-t2 - np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (2 * t1)
+                        w_gt = (-t2 + np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (2 * t1)
+                        
+                        alpha1 = np.arccos(w_lt) / 2
+                        alpha2 = (2 * np.pi - np.arccos(w_lt)) / 2
+                        alpha3 = np.arccos(w_gt) / 2
+                        alpha4 = (2 * np.pi - np.arccos(w_gt)) / 2
+                        
+                        for alpha in [alpha1, alpha2, alpha3, alpha4]:
+                            if alpha < max_a:
+                                continue
+                            
+                            if min_alpha is not None and alpha >= min_alpha:
+                                continue
+                            
+                            lhs = A * np.cos(alpha) ** 2 + B * np.sin(alpha) ** 2
+                            lhs += 2 * C * np.sin(alpha) * np.cos(alpha)
+                            if not np.isclose(lhs, D):
+                                continue
+                            
+                            # print(lhs, D)
+                            
+                            p = np.dot(N, u * np.cos(alpha) + v * np.sin(alpha))
+                            norm = p / gamma_ijk
+                            
+                            for atom in atom_list:
+                                ndx = self.atoms.index(atom)
+                                rhs = beta[ndx]
+                                d = np.dot(center.bond(atom), norm) / center.dist(atom)
+                                if abs(d) < 1:
+                                    rhs += np.arccos(d)
+                                if not alpha >= rhs:
+                                    break
+                            else:
+                                if min_alpha is None or alpha < min_alpha:
+                                    # print("min_alpha set", alpha)
+                                    min_alpha = alpha
+
+                                    r = 2 * np.tan(min_alpha)
+                                    # print(
+                                    #     ".cone %.3f %.3f %.3f   0.0 0.0 0.0   %.3f open" % (
+                                    #         2 * norm[0], 2 * norm[1], 2 * norm[2], r
+                                    #     )
+                                    # )
+
+            return np.rad2deg(2 * min_alpha)
+        
+        else:
+            raise NotImplementedError("cone angle type is not implemented: %s" % method)
 

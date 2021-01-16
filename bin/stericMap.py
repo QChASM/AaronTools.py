@@ -33,7 +33,7 @@ steric_parser.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help="output destination \nDefault: show plot",
+    help="output destination\nDefault: show plot",
 )
 
 steric_parser.add_argument(
@@ -91,6 +91,7 @@ steric_parser.add_argument(
     default=None,
     nargs=3,
     type=float,
+    metavar=("x_oop", "y_oop", "z_oop"),
     dest="oop_vector",
     help="list of three numbers defining a vector perpendicular to\n" +
     "the desired steric map",
@@ -102,6 +103,7 @@ steric_parser.add_argument(
     default=None,
     nargs=3,
     type=float,
+    metavar=("x_ip", "y_ip", "z_ip"),
     dest="ip_vector",
     help="list of three numbers defining the \"y axis\" of the steric map",
 )
