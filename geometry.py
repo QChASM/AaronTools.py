@@ -1409,7 +1409,64 @@ class Geometry:
         if sort:
             this.atoms = this.reorder()[0]
             ref.atoms = ref.reorder()[0]
-            res = _RMSD(ref.atoms, this.atoms)
+            this_ranks = [a._rank for a in this.atoms]
+            ref_ranks = [a._rank for a in ref.atoms]
+            if (
+                    any(this_ranks.count(r) > 1 for r in this_ranks) or
+                    any(ref_ranks.count(r) > 1 for r in ref_ranks)
+            ):
+                # if there are atoms with the same rank, align both ref and this
+                # to their principle axes and use the distance between the atoms
+                # in the structures to determine the order
+                this_atoms = []
+                ref_atoms = [a for a in ref.atoms]
+                _, this_axes = this.get_principle_axes()
+                _, ref_axes = ref.get_principle_axes()
+                this_coords = this.coords - this.COM()
+                ref_coords = ref.coords - ref.COM()
+                # align this to ref using the matrix that aligns this's principle axes
+                # to ref's principle axes
+                H = np.dot(ref_coords.T, this_coords)
+                u, s, vh = np.linalg.svd(H, compute_uv=True)
+                d = 1.
+                if np.linalg.det(np.matmul(vh.T, u.T)) < 0:
+                    d = 1.
+                m = np.diag([1., 1., d])
+                R = np.matmul(vh.T, m)
+                R = np.matmul(R, u.T)
+
+                this_coords = np.dot(this_coords, R)
+                
+                # find the closest atom in this to the closest atom in ref
+                dist = distance_matrix(ref_coords, this_coords)
+                for i, r_a in enumerate(ref.atoms):
+                    min_dist = None
+                    match = None
+                    for j, t_a in enumerate(this.atoms):
+                        if t_a.element != r_a.element:
+                            continue
+                        if t_a in this_atoms:
+                            continue
+
+                        if min_dist is None or dist[i,j] < min_dist:
+                            min_dist = dist[i,j]
+                            match = t_a
+                    if match is not None:
+                        this_atoms.append(match)
+                    else:
+                        ref_atoms.remove(r_a)
+                
+                # if we didn't find any matches or not all atoms are matched,
+                # use the original order
+                # otherwise, use the order determined by distances
+                if len(ref_atoms) == len(this_atoms) and ref_atoms:
+                    res = _RMSD(ref_atoms, this_atoms)
+                else:
+                    res = _RMSD(ref.atoms, this.atoms)
+
+            else:
+                res = _RMSD(ref.atoms, this.atoms)
+            
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
 
@@ -3704,3 +3761,4 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
+

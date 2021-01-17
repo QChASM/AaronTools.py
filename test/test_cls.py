@@ -225,7 +225,7 @@ class TestCLS(TestWithTimer):
                     host, context=ssl.SSLContext()
                 )
                 # name resolved, but something wrong with server
-                if response.status >= 500:
+                if response.status >= 5:
                     return
         except urllib.error.URLError:
             # can't resolve name or some other connectivity error
