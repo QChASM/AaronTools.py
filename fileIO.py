@@ -29,12 +29,52 @@ ERRORS = {
     "Atoms too close": "CLASH",
     "The combination of multiplicity": "CHARGEMULT",
     "Bend failed for angle": "REDUND",
+    "Linear angle in Bend": "REDUND",
+    "Error in internal coordinate system": "COORD",
     "galloc: could not allocate memory": "GALLOC",
     "Error imposing constraints": "CONSTR",
     "End of file reading basis center.": "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
     "Unknown message": "UNKNOWN",
+}
+ERROR_ORCA = {
+    # "SCF_CONV": "",
+    # "CONV_CDS": "",
+    # "CONV_LINK": "",
+    # "FBX": "",
+    # "CHK": "",
+    # "EIGEN": "",
+    # "QUOTA": "",
+    # "CLASH": "",
+    # "CHARGEMULT": "",
+    # "REDUND": "",
+    # "REDUND": "",
+    # "GALLOC": "",
+    # "CONSTR": "",
+    # "BASIS": "",
+    # "ATOM": "",
+    # "MEM": "",
+    # "UNKNOWN": "",
+}
+ERROR_PSI4 = {
+    # "SCF_CONV": "",
+    # "CONV_CDS": "",
+    # "CONV_LINK": "",
+    # "FBX": "",
+    # "CHK": "",
+    # "EIGEN": "",
+    # "QUOTA": "",
+    # "CLASH": "",
+    # "CHARGEMULT": "",
+    # "REDUND": "",
+    # "REDUND": "",
+    # "GALLOC": "",
+    # "CONSTR": "",
+    # "BASIS": "",
+    # "ATOM": "",
+    # "MEM": "",
+    # "UNKNOWN": "",
 }
 
 
@@ -655,6 +695,13 @@ class FileReader:
                     else:
                         self.other[item] = float(line.split()[-2])
 
+                if "error" not in self.other:
+                    for err in ERROR.values():
+                        if err in ERROR_PSI4 and ERROR_PSI4[err] in line:
+                            self.other["error"] = ERRORS[err]
+                            self.other["error_msg"] = line.strip()
+                            break
+
                 line = f.readline()
                 n += 1
 
@@ -861,7 +908,12 @@ class FileReader:
                     self.other["finished"] = True
 
                 # TODO E_ZPVE
-                # TODO error
+                if "error" not in self.other:
+                    for err in ERROR.values():
+                        if err in ERROR_ORCA and ERROR_ORCA[err] in line:
+                            self.other["error"] = ERRORS[err]
+                            self.other["error_msg"] = line.strip()
+                            break
 
                 line = f.readline()
                 n += 1
@@ -1327,10 +1379,10 @@ class FileReader:
                     else:
                         if "comment" not in other:
                             other["comment"] = ""
-
                         other["comment"] += "%s\n" % line
-
-                other["comment"] = other["comment"].strip()
+                other["comment"] = (
+                    other["comment"].strip() if "comment" in other else ""
+                )
                 line = f.readline()
                 if len(line.split()) > 1:
                     line = line.split()
@@ -1536,15 +1588,17 @@ class Frequency:
         self.by_frequency = {}
         self.is_TS = None
 
-        if isinstance(data[0], Frequency.Data):
+        if data and isinstance(data[0], Frequency.Data):
             self.data = data
             self.sort_frequencies()
             return
-        else:
+        elif data:
             if hpmodes is None:
                 raise TypeError(
                     "hpmode argument required when data is a string"
                 )
+        else:
+            return
 
         lines = data.split("\n")
         num_head = 0

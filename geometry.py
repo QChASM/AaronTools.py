@@ -981,6 +981,21 @@ class Geometry:
                         angle = get_angle(start, this, norm)
                         angles.setdefault(angle, [])
                         angles[angle] += [c]
+                    if len(angles) == 1 and atoms[shared_idx].connected - set(
+                        [atoms[c] for c in connected]
+                    ):
+                        tmp_center = self.COM(
+                            atoms[shared_idx].connected
+                            - set([atoms[c] for c in connected])
+                        )
+                        start = atoms[shared_idx].coords - tmp_center
+                        norm = np.cross(start, tmp_center)
+                        angles = {}
+                        for c in connected:
+                            this = atoms[c].coords - tmp_center
+                            angle = get_angle(start, this, norm)
+                            angles.setdefault(angle, [])
+                            angles[angle] += [c]
                     for i, angle in enumerate(sorted(angles.keys())):
                         new_partitions[rank].setdefault(rank + i, [])
                         new_partitions[rank][rank + i] += angles[angle]
@@ -1712,7 +1727,9 @@ class Geometry:
                 targets = self.atoms
             else:
                 if len(center) == 1:
-                    targets = [atom for atom in self.atoms if atom not in center]
+                    targets = [
+                        atom for atom in self.atoms if atom not in center
+                    ]
                 else:
                     targets = [atom for atom in self.atoms]
         else:
@@ -2167,7 +2184,7 @@ class Geometry:
             return self._fix_connectivity(frag, copy=True)
         return frag
 
-    def remove_fragment(self, start, avoid, add_H=True):
+    def remove_fragment(self, start, avoid=None, add_H=True):
         """
         Removes a fragment of the geometry
         Returns:
@@ -2181,18 +2198,18 @@ class Geometry:
 
         """
         start = self.find(start)
-        avoid = self.find(avoid)
+        if avoid is not None:
+            avoid = self.find(avoid)
         frag = self.get_fragment(start, avoid)[len(start) :]
         self -= frag
+        rv = start + frag
 
         # replace start with H
-        rv = start + frag
-        for a in start:
-            if not add_H:
-                break
-            a.element = "H"
-            a._set_radii()
-            self.change_distance(a, a.connected - set(frag), fix=2)
+        if add_H:
+            for a in start:
+                a.element = "H"
+                a._set_radii()
+                self.change_distance(a, a.connected - set(frag), fix=2)
         return rv
 
     def coord_shift(self, vector, targets=None):
