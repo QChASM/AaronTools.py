@@ -116,6 +116,16 @@ class Config(configparser.ConfigParser):
         # for passing to Theory(*args, **kwargs)
         self._args = []
         self._kwargs = {}
+        self.infile = infile
+        # metadata is username and project name
+        self.metadata = {
+            "user": self.get(
+                "DEFAULT",
+                "user",
+                fallback=self.get("HPC", "user", fallback=os.environ["USER"]),
+            ),
+            "project": self.get("DEFAULT", "project", fallback=""),
+        }
 
     def optionxform(self, option):
         return str(option)
@@ -203,11 +213,11 @@ class Config(configparser.ConfigParser):
             for key, val in self[attr].items():
                 config[attr][key] = val
         for attr in [
-            "_interpolation",
             "_changes",
             "_changed_list",
             "_args",
             "_kwargs",
+            "metadata",
         ]:
             config.__dict__[attr] = self.__dict__[attr]
         return config
@@ -258,11 +268,12 @@ class Config(configparser.ConfigParser):
         """
         Reads configuration information from `infile` after pulling defaults
         """
-        for filename in [
+        filenames = [
             os.path.join(AARONTOOLS, "config.ini"),
             os.path.join(AARONLIB, "config.ini"),
             infile,
-        ]:
+        ]
+        for filename in filenames:
             if not quiet:
                 if os.path.isfile(filename):
                     print("    ✓", end="  ")
@@ -533,6 +544,10 @@ class Config(configparser.ConfigParser):
             structure = self["Geometry"]["structure"]
         try:
             structure = AaronTools.geometry.Geometry(structure)
+        except FileNotFoundError:
+            structure = AaronTools.geometry.Geometry(
+                os.path.join(self["DEFAULT"]["top_dir"], structure)
+            )
         except IndexError:
             structure = AaronTools.geometry.Geometry.from_string(structure)
             self._changes[""] = ({}, None)

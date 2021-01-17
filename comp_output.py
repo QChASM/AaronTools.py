@@ -163,6 +163,9 @@ class CompOutput:
 
         rot = [temp for temp in self.rotational_temperature if temp != 0]
         T = temperature if temperature is not None else self.temperature
+        if T == 0:
+            return 0, 0, 0
+
         mass = self.mass
         sigmar = self.rotational_symmetry_number
         if sigmar is None and len(self.geometry.atoms) == 1:
@@ -254,7 +257,6 @@ class CompOutput:
         Ev *= PHYSICAL.GAS_CONSTANT
         Sv *= PHYSICAL.GAS_CONSTANT
 
-        Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
         Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
         Hcorr = Ecorr + (
             PHYSICAL.GAS_CONSTANT * T / (UNIT.HART_TO_KCAL * 1000)
