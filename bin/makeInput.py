@@ -752,7 +752,7 @@ for f in args.infile:
     if args.outfile:
         geom.write(
             append=True,
-            outfile=args.outfile.replace("$INFILE", get_filename(infile)),
+            outfile=args.outfile.replace("$INFILE", get_filename(f)),
             style=style,
             theory=theory,
             **other_kwargs

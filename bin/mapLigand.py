@@ -6,6 +6,7 @@ import sys
 from AaronTools.component import Component
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
+from AaronTools.utils.utils import get_filename
 
 def get_matching_ligands(name):
     name_info = name
@@ -163,7 +164,10 @@ for infile in args.infile:
             cat_copy.map_ligand(ligands, key)
 
             if isinstance(args.outfile, str):
-                cat_copy.write(append=False, outfile=args.outfile.replace("$LIGAND", lig_name))
+                outfile = args.outfile.replace("$INFILE", get_filename(infile))
+                outfile = outfile.replace("$LIGAND", lig_name)
+                print(outfile)
+                cat_copy.write(append=False, outfile=outfile)
             else:
                 s = cat_copy.write(append=False, outfile=False)
                 print(s)

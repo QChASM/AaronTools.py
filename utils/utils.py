@@ -616,9 +616,9 @@ def perp_vector(vec):
     )
 
 
-def get_filename(path, include_parent_dir=False):
+def get_filename(path, include_parent_dir=True):
     """returns the name of the file without parent directories or extension"""
-    if include_parent_dir:
+    if not include_parent_dir:
         fname = os.path.basename(path)
     else:
         fname = path
