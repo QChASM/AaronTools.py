@@ -167,8 +167,8 @@ for infile in args.infile:
                         frag1, frag2 = qualifying_fragments
                         atom1 = geom.find(frag1, BondedTo(targ))[0]
                         atom2 = geom.find(frag2, BondedTo(targ))[0]
-                        v1 = targ.bond(atom1)
-                        v2 = targ.bond(atom2)
+                        v1 = targ.bond(atom1) / targ.dist(atom1)
+                        v2 = targ.bond(atom2) / targ.dist(atom2)
                         rv = v1 + v2
 
                         geom.rotate(rv, angle=pi, targets=frag1+frag2, center=targ)
@@ -213,8 +213,8 @@ for infile in args.infile:
                 frag1, frag2 = qualifying_fragments
                 atom1 = geom.find(frag1, BondedTo(targ))[0]
                 atom2 = geom.find(frag2, BondedTo(targ))[0]
-                v1 = targ.bond(atom1)
-                v2 = targ.bond(atom2)
+                v1 = targ.bond(atom1) / targ.dist(atom1)
+                v2 = targ.bond(atom2) / targ.dist(atom2)
                 rv = v1 + v2
 
                 geom.rotate(rv, angle=pi, targets=frag1 + frag2, center=targ)

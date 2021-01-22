@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from copy import deepcopy
+from getpass import getuser
 from warnings import warn
 
 import AaronTools
@@ -122,7 +123,7 @@ class Config(configparser.ConfigParser):
             "user": self.get(
                 "DEFAULT",
                 "user",
-                fallback=self.get("HPC", "user", fallback=os.environ["USER"]),
+                fallback=self.get("HPC", "user", fallback=getuser()),
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }

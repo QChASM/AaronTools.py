@@ -696,9 +696,9 @@ class FileReader:
                         self.other[item] = float(line.split()[-2])
 
                 if "error" not in self.other:
-                    for err in ERROR.values():
-                        if err in ERROR_PSI4 and ERROR_PSI4[err] in line:
-                            self.other["error"] = ERRORS[err]
+                    for err in ERROR_PSI4:
+                        if err in line:
+                            self.other["error"] = ERROR_PSI4[err]
                             self.other["error_msg"] = line.strip()
                             break
 
@@ -909,9 +909,9 @@ class FileReader:
 
                 # TODO E_ZPVE
                 if "error" not in self.other:
-                    for err in ERROR.values():
-                        if err in ERROR_ORCA and ERROR_ORCA[err] in line:
-                            self.other["error"] = ERRORS[err]
+                    for err in ERROR_ORCA:
+                        if err in line:
+                            self.other["error"] = ERROR_ORCA[err]
                             self.other["error_msg"] = line.strip()
                             break
 
