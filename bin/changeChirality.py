@@ -10,7 +10,6 @@ from numpy import prod, pi
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import BondedTo, ChiralCenters
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename
 
 
 changechiral_parser = argparse.ArgumentParser(
@@ -223,9 +222,7 @@ for infile in args.infile:
             s += geom.write(outfile=False)
             s += "\n"
         else:
-            geom.write(
-                outfile=args.outfile.replace("$INFILE", get_filename(infile))
-            )
+            geom.write(outfile=args.outfile)
 
 
 if args.outfile is None or args.list_info:

@@ -132,7 +132,9 @@ output_options.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help="output destination\nDefault: stdout"
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
 )
 
 args = rmsd_parser.parse_args()
@@ -214,7 +216,10 @@ for f in args.infile:
     elif args.csv:
         s = delim.join([ref_geom.name, geom.name, "%f" % rmsd])
         if args.outfile:
-            with open(args.outfile, "a") as f:
+            with open(
+                    args.outfile.replace("$INFILE", get_filename(f)),
+                    "a"
+            ) as f:
                 f.write(s + "\n")
         else:
             print(s)

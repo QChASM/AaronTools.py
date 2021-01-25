@@ -120,7 +120,8 @@ follow_parser.add_argument(
     required=False,
     dest="outfile",
     help="output destination\n" +
-    "$i in file name will be replaced with zero-padded numbers\n" +
+    "$i in file name will be replaced with zero-padded numbers if --animate is used\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
     "Default: stdout",
 )
 

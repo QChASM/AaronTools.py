@@ -33,7 +33,9 @@ steric_parser.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help="output destination\nDefault: show plot",
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: show plot",
 )
 
 steric_parser.add_argument(

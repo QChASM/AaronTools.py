@@ -7,7 +7,6 @@ from warnings import warn
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import NotAny
-from AaronTools.utils.utils import get_filename
 
 
 vbur_parser = argparse.ArgumentParser(
@@ -188,8 +187,5 @@ for f in args.infile:
 if not args.outfile:
     print(s.strip())
 else:
-    with open(
-            args.outfile.replace("$INFILE", get_filename(infile)),
-            "a"
-    ) as f:
+    with open(args.outfile, "a") as f:
         f.write(s.strip())

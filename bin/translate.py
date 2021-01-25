@@ -131,7 +131,9 @@ translate_parser.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help="output destination\nDefault: stdout"
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
 )
 
 args = translate_parser.parse_args()

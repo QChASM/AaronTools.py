@@ -117,7 +117,9 @@ angle_parser.add_argument(
     required=False,
     dest="outfile",
     metavar="output destination",
-    help="output destination\nDefault: stdout"
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
 )
 
 args = angle_parser.parse_args()

@@ -101,6 +101,7 @@ makeconf_parser.add_argument(
     help="output destination\n" +
     "$i in the filename will be replaced with conformer number\n" +
     "if a directory is given, default is \"conformer-$i.xyz\" in that directory\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
     "Default: stdout"
 )
 

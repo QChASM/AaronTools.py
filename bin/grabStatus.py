@@ -107,4 +107,4 @@ else:
             args.outfile,
             "a"
     ) as f:
-        f.write(s.strip())
+        f.write(s.rstrip())

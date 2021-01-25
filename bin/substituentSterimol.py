@@ -75,7 +75,9 @@ sterimol_parser.add_argument(
     required=False,
     metavar="output destination",
     dest="outfile",
-    help="output destination\nDefault: stdout"
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
 )
 
 args = sterimol_parser.parse_args()

@@ -96,7 +96,10 @@ maplig_parser.add_argument(
     required=False,
     metavar="output destination",
     dest="outfile",
-    help="output destination\n$LIGAND will be replaced with ligand name\nDefault: stdout",
+    help="output destination\n" +
+    "$LIGAND will be replaced with ligand name\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout",
 )
 
 args = maplig_parser.parse_args()

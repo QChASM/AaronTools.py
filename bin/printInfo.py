@@ -5,7 +5,6 @@ import argparse
 import numpy as np
 
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename
 
 info_parser = argparse.ArgumentParser(
     description="print information in Gaussian, ORCA, or Psi4 output files",
@@ -161,8 +160,5 @@ for f in args.infile:
 if not args.outfile:
     print(s.strip())
 else:
-    with open(
-            args.outfile.replace("$INFILE", get_filename(f)),
-            "a"
-    ) as f:
+    with open(args.outfile, "a") as f:
         f.write(s.strip())

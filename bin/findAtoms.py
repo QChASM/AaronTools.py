@@ -6,7 +6,6 @@ import argparse
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import *
-from AaronTools.utils.utils import get_filename
 
 vsepr_choices = [
     "linear_1",
@@ -43,7 +42,8 @@ find_parser.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help="output destination \nDefault: stdout"
+    help="output destination\n" +
+    "Default: stdout"
 )
 
 find_parser.add_argument(
@@ -312,8 +312,5 @@ for f in args.infile:
 if not args.outfile:
     print(s.strip())
 else:
-    with open(
-            args.outfile.replace("$INFILE", get_filename(f)),
-            "a"
-    ) as f:
+    with open(args.outfile, "a") as f:
         f.write(s.strip())
