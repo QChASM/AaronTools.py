@@ -44,7 +44,7 @@ ring_parser.add_argument(
 
 ring_parser.add_argument(
     "-r", "--ring",
-    metavar="atom1 atom2 ring",
+    metavar=("atom1", "atom2", "ring"),
     type=str,
     nargs=3,
     action="append",
