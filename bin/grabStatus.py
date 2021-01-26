@@ -101,7 +101,7 @@ for f in args.infile:
 
 
 if not args.outfile:
-    print(s.strip())
+    print(s.rstrip())
 else:
     with open(
             args.outfile,
