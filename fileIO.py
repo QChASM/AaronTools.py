@@ -803,8 +803,8 @@ class FileReader:
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
                     freq_str = "VIBRATIONAL FREQUENCIES\n"
-                    self.skip_lines(f, 4)
-                    n += 5
+                    self.skip_lines(f, 2)
+                    n += 3
                     line = f.readline()
                     while not (stage == "IR" and line == "\n") and line:
                         if "--" not in line and line != "\n":
@@ -1664,12 +1664,18 @@ class Frequency:
         # block column 0 is the index of the mode
         # block column 1 is the frequency in 1/cm
         # skip line one b/c its just "VIBRATIONAL FREQUENCIES" with the way we got the lines
-        for n, line in enumerate(lines[1:]):
+        for n, line in enumerate(lines):
             if line == "NORMAL MODES":
                 break
 
-            freq = line.split()[1]
-            self.data += [Frequency.Data(float(freq))]
+            if not line.strip():
+                continue
+
+            try:
+                freq = line.split()[1]
+                self.data += [Frequency.Data(float(freq))]
+            except (ValueError, IndexError):
+                pass
 
         # all 3N modes are printed with six modes in each block
         # each column corresponds to one mode
@@ -1678,7 +1684,7 @@ class Frequency:
         carryover = 0
         start = 0
         stop = 6
-        for i, line in enumerate(lines[n + 2 :]):
+        for i, line in enumerate(lines[n + 1 :]):
             if "IR SPECTRUM" in line:
                 break
 
@@ -1699,16 +1705,6 @@ class Frequency:
                 displacements[:, k], (len(self.data) // 3, 3)
             )
 
-        # purge rotational and translational modes
-        n_data = len(self.data)
-        k = 0
-        while k < n_data:
-            if self.data[k].frequency == 0:
-                del self.data[k]
-                n_data -= 1
-            else:
-                k += 1
-
         for k, line in enumerate(lines):
             if line.strip() == "IR SPECTRUM":
                 intensity_start = k + 2
@@ -1717,10 +1713,18 @@ class Frequency:
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        for t, line in enumerate(lines[intensity_start:-1]):
+        for line in lines[intensity_start:]:
+            if not line.strip():
+                continue
             ir_info = line.split()
             inten = float(ir_info[2])
-            self.data[t].intensity = inten
+            ndx = int(ir_info[0].strip(":"))
+            self.data[ndx].intensity = inten
+        
+        
+        for mode in self.data[::-1]:
+            if mode.intensity is None and np.isclose(mode.frequency, 0):
+                self.data.remove(mode)
 
     def parse_lines(self, lines, hpmodes):
         num_head = 0
