@@ -535,26 +535,9 @@ for f in args.infile:
     if args.basis is not None:
         basis_sets = []
         for basis in args.basis:
-            aux_type = None
-            elements = None
-            i = 0
-            while i < len(basis):
-                if (
-                        any(ele == basis[i] for ele in ELEMENTS) or
-                        any(x == basis[i].lower() for x in ["tm", "!tm", "all"])
-                ):
-                    if elements is None:
-                        elements = [basis[i]]
-                    else:
-                        elements.append(basis[i])
-                elif "aux" in basis[i].lower():
-                    i += 1
-                    aux_type = basis[i]
-                else:
-                    basis_sets.append(Basis(basis[i], elements, aux_type))
-                    break
-
-                i += 1
+            basis_sets.append(
+                BasisSet.parse_basis_str(" ".join(basis))[0]
+            )
 
     elif args.use_prev:
         if "method" in infile.other:
@@ -571,21 +554,9 @@ for f in args.infile:
     if args.ecp is not None:
         ecps = []
         for ecp in args.ecp:
-            elements = None
-            i = 0
-            while i < len(ecp):
-                if (
-                        any(ele == ecp[i] for ele in ELEMENTS) or
-                        any(x == ecp[i].lower() for x in ["tm", "!tm", "all"])
-                ):
-                    if elements is None:
-                        elements = [ecp[i]]
-                    else:
-                        elements.append(ecp[i])
-                else:
-                    ecps.append(ECP(ecp[i], elements))
-
-                i += 1
+            ecps.append(
+                BasisSet.parse_basis_str(" ".join(ecp), cls=ECP)[0]
+            )
 
     elif args.use_prev:
         if "theory" in infile.other:
