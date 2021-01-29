@@ -6,7 +6,6 @@ import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.const import ELEMENTS
 from AaronTools.theory import *
 from AaronTools.utils.utils import combine_dicts, get_filename
 
@@ -123,7 +122,15 @@ theory_options.add_argument(
     required=False,
     default=None,
     dest="basis",
-    help="basis set or list of elements and basis set (e.g. C O N aug-cc-pvtz)",
+    help="basis set or list of elements and basis set (e.g. C O N aug-cc-pvtz)\n" +
+    "elements can be prefixed with ! to exclude them from the basis\n" +
+    "tm is a synonym for d-block elements\n" +
+    "auxilliary basis sets can be specified by putting aux X before the basis\n" +
+    "set name, where X is the auxilliary type (e.g. aux JK cc-pVDZ for cc-pVDZ/JK)\n" +
+    "a path to a file containing a basis set definition (like one\n" +
+    "downloaded from basissetexchange.org) can be placed after the\n" +
+    "basis set name\n" +
+    "the file's contents should be appropriate for the software package you are using"
 )
 
 theory_options.add_argument(
@@ -134,7 +141,13 @@ theory_options.add_argument(
     required=False,
     default=None,
     dest="ecp",
-    help="ECP or list of elements and ECP (e.g. Pt LANL2DZ)",
+    help="ECP or list of elements and ECP (e.g. Pt LANL2DZ)\n" +
+    "elements can be prefixed with ! to exclude them from the ECP\n" +
+    "tm is a synonym for d-block elements\n" +
+    "a path to a file containing a basis set definition (like one\n" +
+    "downloaded from basissetexchange.org) can be placed after the\n" +
+    "basis set name\n" +
+    "the file's contents should be appropriate for the software package you are using"
 )
 
 theory_options.add_argument(
@@ -254,7 +267,8 @@ opt_type.add_argument(
     action="append",
     default=None,
     dest="x",
-    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the x coordinate of",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the x coordinate of\n" +
+    "available for Gaussian and Psi4",
 )
 
 opt_type.add_argument(
@@ -264,7 +278,8 @@ opt_type.add_argument(
     action="append",
     default=None,
     dest="y",
-    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the y coordinate of",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the y coordinate of\n" +
+    "available for Gaussian and Psi4",
 )
 
 opt_type.add_argument(
@@ -274,7 +289,8 @@ opt_type.add_argument(
     action="append",
     default=None,
     dest="z",
-    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the z coordinate of",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the z coordinate of\n" +
+    "available for Gaussian and Psi4",
 )
 
 opt_type.add_argument(
@@ -285,7 +301,8 @@ opt_type.add_argument(
     default=None,
     dest="xgroup",
     metavar=("atoms", "value"),
-    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same yz plane",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same yz plane\n" +
+    "available for Gaussian and Psi4",
 )
 
 opt_type.add_argument(
@@ -296,7 +313,8 @@ opt_type.add_argument(
     default=None,
     dest="ygroup",
     metavar=("atoms", "value"),
-    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xz plane",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xz plane\n" +
+    "available for Gaussian and Psi4",
 )
 
 opt_type.add_argument(
@@ -307,7 +325,8 @@ opt_type.add_argument(
     default=None,
     dest="zgroup",
     metavar=("atoms", "value"),
-    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xy plane",
+    help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xy plane\n" +
+    "available for Gaussian and Psi4",
 )
 
 freq_type = theory_parser.add_argument_group("Frequency options")

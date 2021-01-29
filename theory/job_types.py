@@ -1,7 +1,5 @@
 """various job types for Theory() instances"""
 
-from warnings import warn
-
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,

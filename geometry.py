@@ -2595,7 +2595,7 @@ class Geometry:
                 "`fix` must be 0, 1, or 4 (supplied: {})".format(fix)
             )
 
-    def minimize_sub_torsion(self, geom=None, all_frags=False):
+    def minimize_sub_torsion(self, geom=None, all_frags=False, increment=30):
         """rotate substituents to try to minimize LJ potential
         geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
@@ -2606,10 +2606,7 @@ class Geometry:
         if not hasattr(self, "substituents") or self.substituents is None:
             self.detect_substituents()
 
-        increment = 30
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
-            if i > len(self.substituents):
-                increment = 5
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(
