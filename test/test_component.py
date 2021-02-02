@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import unittest
+import numpy as np
 
 from AaronTools.component import Component
 from AaronTools.geometry import Geometry
@@ -110,10 +111,11 @@ ONLYSOME = False
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestComponent("test_detect_backbone"))
+    # suite.addTest(TestComponent("test_detect_backbone"))
     # suite.addTest(TestComponent("test_sub_rotate"))
     # suite.addTest(TestComponent("test_substitute"))
-    suite.addTest(TestComponent("test_minimize_torsion"))
+    # suite.addTest(TestComponent("test_minimize_torsion"))
+    suite.addTest(TestComponent("test_cone_angle"))
     return suite
 
 

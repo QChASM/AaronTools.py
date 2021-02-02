@@ -76,6 +76,8 @@ class TestCLS(TestWithTimer):
             os.path.join(prefix, "ref_files", "change_chirality_cls", "*.xyz")
         )
     )
+    cone_bidentate_2 = os.path.join(prefix, "test_files", "bpy.xyz")
+    cone_bidentate_3 = os.path.join(prefix, "test_files", "dppe.xyz")
 
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
     # CLS stored in $PYTHONHOME/bin if installed via pip
@@ -830,10 +832,43 @@ thermochemistry from test_files/normal.log at 298.00 K:
                 print(ref_item, test_item)
             self.assertTrue(ref_item == test_item)
 
+    def test_coneAngle(self):
+        """test coneAngle.py"""
+        
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "coneAngle.py"),
+            "-r", "bondi",
+            TestCLS.cone_bidentate_3,
+            "-k", "2,3",
+            "-m", "exact",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        angle = float(out)       
+        self.assertTrue(abs(angle - 218.6) <= 0.1)
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "coneAngle.py"),
+            "-r", "bondi",
+            TestCLS.cone_bidentate_2,
+            "-k", "2,3",
+            "-m", "exact",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        angle = float(out)       
+        self.assertTrue(abs(angle - 194.6) <= 0.1)
+
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_substitute"))
+    suite.addTest(TestCLS("test_mapLigand"))
     return suite
 
 

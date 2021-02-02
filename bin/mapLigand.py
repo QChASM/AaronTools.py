@@ -11,8 +11,13 @@ from AaronTools.utils.utils import get_filename
 def get_matching_ligands(name):
     name_info = name
     coordinating_elements = None
+    denticity = None
     if isinstance(name_info, str):
-        if "name:" not in name_info.lower() and "elements:" not in name_info.lower():
+        if (
+                "name:" not in name_info.lower() and
+                "elements:" not in name_info.lower() and
+                "denticity:" not in name_info.lower()
+        ):
             name_info = "^%s$" % name_info
         else:
             lig_info = name.split(":")
@@ -25,10 +30,18 @@ def get_matching_ligands(name):
                     name_info = name_info.replace("%s:%s" % (info, lig_info[i+1]), "")
                     coordinating_elements = lig_info[i+1].split(",")
 
+                elif info.lower() == "denticity" and i+1 < len(lig_info):
+                    name_info = name_info.replace("%s:%s" % (info, lig_info[i+1]), "")
+                    denticity = int(lig_info[i+1])
+
             if not name_info:
                 name_info = None
 
-    return Component.list(name_regex=name_info, coordinating_elements=coordinating_elements)
+    return Component.list(
+        name_regex=name_info,
+        coordinating_elements=coordinating_elements,
+        denticity=denticity
+    )
 
 
 maplig_parser = argparse.ArgumentParser(
@@ -172,5 +185,5 @@ for infile in args.infile:
                 print(outfile)
                 cat_copy.write(append=False, outfile=outfile)
             else:
-                s = cat_copy.write(append=False, outfile=False)
+                s = cat_copy.write(outfile=False)
                 print(s)

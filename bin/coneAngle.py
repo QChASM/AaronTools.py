@@ -77,11 +77,19 @@ cone_parser.add_argument(
 )
 
 cone_parser.add_argument(
-    "-v", "--vdw-radii",
+    "-r", "--vdw-radii",
     default="umn",
     choices=["umn", "bondi"],
     dest="radii",
     help="VDW radii to use in calculation\nDefault: umn",
+)
+
+cone_parser.add_argument(
+    "-b", "--cone-bild",
+    action="store_true",
+    default=False,
+    dest="print_cones",
+    help="print Chimera bild file containing cones",
 )
 
 args = cone_parser.parse_args()
@@ -111,12 +119,25 @@ for f in args.infile:
         center=geom.find(args.center),
         method=args.method,
         radii=args.radii,
+        return_cones=args.print_cones,
     )
+
+    if args.print_cones:
+        angle, cones = angle
 
     if len(args.infile) > 1:
         s += "%20s:\t" % f
 
     s += "%4.1f\n" % angle
+    
+    if args.print_cones:
+        s += ".transparency 0.5\n"
+        for cone in cones:
+            print(cone)
+            apex, base, radius = cone
+            s += ".cone   %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f   %.3f open\n" % (
+                *apex, *base, radius
+            )
 
 if not args.outfile:
     print(s.rstrip())
