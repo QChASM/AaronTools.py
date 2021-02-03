@@ -14,7 +14,7 @@ cone_parser = argparse.ArgumentParser(
 )
 
 cone_parser = argparse.ArgumentParser(
-    description="print Gaussian, ORCA, or Psi4 input file",
+    description="print ligand cone angle",
     formatter_class=argparse.RawTextHelpFormatter
 )
 

@@ -11,7 +11,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "sd", "out", "dat", "fchk"]
+read_types = ["xyz", "log", "com", "sd", "sdf", "out", "dat", "fchk", "mol"]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -58,7 +58,8 @@ ERROR_ORCA = {
     # "UNKNOWN": "",
 }
 ERROR_PSI4 = {
-    # "SCF_CONV": "",
+    "PsiException: Could not converge SCF iterations": "SCF_CONV",
+    "psi4.driver.p4util.exceptions.SCFConvergenceError: Could not converge SCF iterations": "SCF_CONV",
     # "CONV_CDS": "",
     # "CONV_LINK": "",
     # "FBX": "",
@@ -66,15 +67,15 @@ ERROR_PSI4 = {
     # "EIGEN": "",
     # "QUOTA": "",
     # "CLASH": "",
-    # "CHARGEMULT": "",
+    "qcelemental.exceptions.ValidationError: Inconsistent or unspecified chg/mult": "CHARGEMULT",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
     # "CONSTR": "",
     # "BASIS": "",
-    # "ATOM": "",
-    # "MEM": "",
-    # "UNKNOWN": "",
+    "qcelemental.exceptions.NotAnElementError": "ATOM",
+    "psi4.driver.p4util.exceptions.ValidationError: set_memory()": "MEM",
+    "*** Psi4 encountered an error. Buy a developer more coffee!": "UNKNOWN",
 }
 
 
@@ -344,7 +345,7 @@ class FileReader:
         if self.content is not None:
             if self.file_type == "log":
                 self.read_log(f, get_all, just_geom)
-            elif self.file_type == "sd":
+            elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
                 self.read_sd(f)
             elif self.file_type == "xyz":
                 self.read_xyz(f, get_all)
@@ -384,7 +385,7 @@ class FileReader:
             self.read_log(f, get_all, just_geom)
         elif self.file_type == "com":
             self.read_com(f)
-        elif self.file_type == "sd":
+        elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
             self.read_sd(f)
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)

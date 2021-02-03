@@ -56,6 +56,18 @@ bond_parser.add_argument(
 )
 
 bond_parser.add_argument(
+    "-o", "--output",
+    type=str,
+    default=False,
+    required=False,
+    dest="outfile",
+    metavar="output destination",
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
+)
+
+bond_parser.add_argument(
     "-m", "--measure",
     metavar=("atom1", "atom2"),
     action="append",
@@ -90,17 +102,6 @@ bond_parser.add_argument(
     help="set distance to the amount specified"
 )
 
-bond_parser.add_argument(
-    "-o", "--output",
-    type=str,
-    default=False,
-    required=False,
-    dest="outfile",
-    metavar="output destination",
-    help="output destination\n" +
-    "$INFILE will be replaced with the name of the input file\n" +
-    "Default: stdout"
-)
 
 args = bond_parser.parse_args()
 
@@ -143,7 +144,6 @@ for f in args.infile:
     out = out.rstrip()
 
     if len(args.set_ang) + len(args.change) > 0:
-        s = geom.write(append=True, outfile=args.outfile[0])
         if args.outfile:
             geom.write(
                 append=True, 

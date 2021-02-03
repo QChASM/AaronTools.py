@@ -181,6 +181,16 @@ find_parser.add_argument(
 )
 
 find_parser.add_argument(
+    "-ct", "--closer-to",
+    nargs=2,
+    metavar=("THIS_NDX", "THAN_NDX"),
+    action="append",
+    default=[],
+    dest="closer_to",
+    help="atoms that are fewer bonds from THIS_NDX than THAN_NDX",
+)
+
+find_parser.add_argument(
     "-c", "--chiral-center",
     action="store_true",
     default=False,
@@ -281,6 +291,10 @@ for f in args.infile:
     for bt in args.bonded_to:
         for atom in geom.find(bt):
             geom_finders.append(BondedTo(atom))
+    
+    for ct in args.closer_to:
+        atom1, atom2 = geom.find(ct)
+        geom_finders.append(CloserTo(atom1, atom2))
     
     if args.fragments:
         for atom in geom.find(args.fragments):

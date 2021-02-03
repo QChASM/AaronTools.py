@@ -71,6 +71,32 @@ class Theory:
         "method",
     ]
 
+    # if there's a setting that should be an array and Psi4 errors out
+    # if it isn't an array, put it in this list (lower case)
+    # generally happens if the setting value isn't a string
+    # don't add settings that need > 1 value in the array
+    FORCED_PSI4_ARRAY = [
+        "cubeprop_orbitals",
+        "docc",
+        "frac_occ",
+    ]
+    
+    # commonly used settings that do not take array values
+    FORCED_PSI4_SINGLE = [
+        "reference",
+        "scf_type",
+        "freeze_core",
+        "diag_method",
+        "ex_level",
+        "fci",
+        "maxiter",
+        "t",
+        "p",
+        "opt_type",
+        "dft_radial_points",
+        "dft_spherical_points",
+    ]
+
     def __init__(
             self,
             charge=0,
@@ -1240,7 +1266,25 @@ class Theory:
                     if isinstance(other_kw_dict[PSI4_SETTINGS][setting], str):
                         val = other_kw_dict[PSI4_SETTINGS][setting]
                     else:
-                        val = other_kw_dict[PSI4_SETTINGS][setting][0]
+                        if (
+                                len(other_kw_dict[PSI4_SETTINGS][setting]) == 1 and
+                                (
+                                    not any(
+                                        array_setting == setting.strip().lower()
+                                        for array_setting in self.FORCED_PSI4_ARRAY
+                                    )
+                                    or any(
+                                        single_setting == setting.strip().lower()
+                                        for single_setting in self.FORCED_PSI4_SINGLE
+                                    )
+                                )
+                        ):
+                            val = other_kw_dict[PSI4_SETTINGS][setting][0]
+                        else:
+                            # array of values
+                            val = "["
+                            val += ",".join(["%s" % v for v in other_kw_dict[PSI4_SETTINGS][setting]])
+                            val += "]"
 
                     out_str += "    %-20s    %s\n" % (setting, val)
 

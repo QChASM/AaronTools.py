@@ -76,6 +76,7 @@ class TestCLS(TestWithTimer):
             os.path.join(prefix, "ref_files", "change_chirality_cls", "*.xyz")
         )
     )
+    chiral_ring_mirror = os.path.join(prefix, "test_files", "chiral_ring_mirror.xyz")
     cone_bidentate_2 = os.path.join(prefix, "test_files", "bpy.xyz")
     cone_bidentate_3 = os.path.join(prefix, "test_files", "dppe.xyz")
 
@@ -260,6 +261,27 @@ class TestCLS(TestWithTimer):
             "7",
             "8",
             "benzene",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        fr = FileReader(("out", "xyz", out.decode("utf-8")))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref1, sort=True)
+        self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
+
+    def test_mirror(self):
+        """test mirror.py"""
+        ref1 = Geometry(TestCLS.chiral_ring_mirror)
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "mirror.py"),
+            TestCLS.change_chir_1, "-xy"
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
@@ -868,7 +890,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_mapLigand"))
+    suite.addTest(TestCLS("test_mirror"))
     return suite
 
 
