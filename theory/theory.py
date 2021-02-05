@@ -872,10 +872,17 @@ class Theory:
         if ORCA_BLOCKS in other_kw_dict:
             for keyword in other_kw_dict[ORCA_BLOCKS]:
                 if any(other_kw_dict[ORCA_BLOCKS][keyword]):
-                    out_str += "%%%s\n" % keyword
-                    for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
-                        out_str += "    %s\n" % opt
-                    out_str += "end\n"
+                    if keyword == "base":
+                        out_str += "%%%s " % keyword
+                        if isinstance(other_kw_dict[ORCA_BLOCKS][keyword], str):
+                            out_str += "\"%s\"\n" % other_kw_dict[ORCA_BLOCKS][keyword]
+                        else:
+                            out_str += "\"%s\"\n" % other_kw_dict[ORCA_BLOCKS][keyword][0]
+                    else:
+                        out_str += "%%%s\n" % keyword
+                        for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
+                            out_str += "    %s\n" % opt
+                        out_str += "end\n"
 
             out_str += "\n"
 

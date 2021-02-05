@@ -57,17 +57,26 @@ ERROR_ORCA = {
     # "MEM": "",
     # "UNKNOWN": "",
 }
+
+# some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
 ERROR_PSI4 = {
     "PsiException: Could not converge SCF iterations": "SCF_CONV",
     "psi4.driver.p4util.exceptions.SCFConvergenceError: Could not converge SCF iterations": "SCF_CONV",
+    "OptimizationConvergenceError": "OPT_CONV",
+    "TDSCFConvergenceError": "TDCF_CONV",
+    "The INTCO_EXCEPTion handler": "INT_COORD",
+    # ^ this is basically psi4's FBX
+    
     # "CONV_CDS": "",
     # "CONV_LINK": "",
     # "FBX": "",
     # "CHK": "",
     # "EIGEN": "",
     # "QUOTA": "",
-    # "CLASH": "",
+    "qcelemental.exceptions.ValidationError: Following atoms are too close:": "CLASH",
     "qcelemental.exceptions.ValidationError: Inconsistent or unspecified chg/mult": "CHARGEMULT",
+    "MissingMethodError": "INVALID_METHOD",
+    "ValidationError": "INPUT",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
@@ -541,7 +550,7 @@ class FileReader:
                     and "rotational_temperature" not in self.other
                 ):
                     self.other["rotational_temperature"] = [
-                        float(x) for x in line.split()[-8:-1:3]
+                        float(x) if is_num(x) else 0 for x in line.split()[-8:-1:3]
                     ]
                     self.other["rotational_temperature"] = [
                         x
