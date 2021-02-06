@@ -38,24 +38,27 @@ ERRORS = {
     "malloc failed.": "MEM",
     "Unknown message": "UNKNOWN",
 }
+
 ERROR_ORCA = {
-    # "SCF_CONV": "",
+    "SCF NOT CONVERGED AFTER": "SCF_CONV",
+    # ORCA doesn't actually exit if the SCF doesn't converge...
     # "CONV_CDS": "",
-    # "CONV_LINK": "",
+    "The optimization did not converge but reached the maximum number": "OPT_CONV",
+    # ORCA still prints the normal finish line if opt doesn't converge...
     # "FBX": "",
     # "CHK": "",
-    # "EIGEN": "",
+    # "EIGEN": "", <- ORCA doesn't seem to have this
     # "QUOTA": "",
-    # "CLASH": "",
-    # "CHARGEMULT": "",
+    "Zero distance between atoms": "CLASH", # <- only get an error if atoms are literally on top of each other
+    "Error : multiplicity": "CHARGEMULT",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
     # "CONSTR": "",
-    # "BASIS": "",
-    # "ATOM": "",
-    # "MEM": "",
-    # "UNKNOWN": "",
+    "The basis set was either not assigned or not available for this element": "BASIS",
+    "Element name/number, dummy atom or point charge expected": "ATOM",
+    "Error  (ORCA_SCF): Not enough memory available!": "MEM",
+    "ORCA finished with error return": "UNKNOWN", 
 }
 
 # some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
@@ -66,25 +69,24 @@ ERROR_PSI4 = {
     "TDSCFConvergenceError": "TDCF_CONV",
     "The INTCO_EXCEPTion handler": "INT_COORD",
     # ^ this is basically psi4's FBX
-    
     # "CONV_CDS": "",
     # "CONV_LINK": "",
     # "FBX": "",
     # "CHK": "",
-    # "EIGEN": "",
+    # "EIGEN": "", <- psi4 doesn't seem to have this
     # "QUOTA": "",
+    # "ValidationError:": "INPUT", <- generic input error, CHARGEMULT and CLASH would also get caught by this
     "qcelemental.exceptions.ValidationError: Following atoms are too close:": "CLASH",
     "qcelemental.exceptions.ValidationError: Inconsistent or unspecified chg/mult": "CHARGEMULT",
     "MissingMethodError": "INVALID_METHOD",
-    "ValidationError": "INPUT",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
     # "CONSTR": "",
-    # "BASIS": "",
+    "psi4.driver.qcdb.exceptions.BasisSetNotFound: BasisSet::construct: Unable to find a basis set for": "BASIS",
     "qcelemental.exceptions.NotAnElementError": "ATOM",
     "psi4.driver.p4util.exceptions.ValidationError: set_memory()": "MEM",
-    "*** Psi4 encountered an error. Buy a developer more coffee!": "UNKNOWN",
+# ERROR_PSI4[""] = "UNKNOWN",
 }
 
 
@@ -710,7 +712,6 @@ class FileReader:
                         if err in line:
                             self.other["error"] = ERROR_PSI4[err]
                             self.other["error_msg"] = line.strip()
-                            break
 
                 line = f.readline()
                 n += 1
