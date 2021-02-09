@@ -82,7 +82,7 @@ if args.xy_plane:
     eye[2, 2] *= -1
 
 if np.sum(eye) == 3:
-    raise RuntimeError("no plane was specified")
+    eye[0, 0] *= -1
 
 for f in args.infile:
     if isinstance(f, str):

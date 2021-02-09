@@ -12,7 +12,7 @@ from warnings import warn
 import numpy as np
 
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
-from AaronTools.fileIO import FileReader
+from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import rotation_matrix
 
@@ -27,8 +27,8 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Subs", "*.xyz")
-    BUILTIN = os.path.join(AARONTOOLS, "Substituents", "*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Subs")
+    BUILTIN = os.path.join(AARONTOOLS, "Substituents")
     CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
 
     try:
@@ -93,14 +93,23 @@ class Substituent(Geometry):
                     LookupError(
                         "Substituent not found in library: " + str(self.name)
                     )
-        else:  # or we can create from file
+        else:
+            # or we can create from file
             # find substituent xyz file
             fsub = None
-            for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-                match = sub + ".xyz" == os.path.basename(f)
-                if match:
-                    fsub = f
+            for lib in [Substituent.AARON_LIBS, Substituent.BUILTIN]:
+                for f in os.listdir(lib):
+                    name, ext = os.path.splitext(f)
+                    if not any(".%s" % x == ext for x in read_types):
+                        continue
+                    match = sub == name
+                    if match:
+                        fsub = os.path.join(lib, f)
+                        break
+                
+                if fsub:
                     break
+
             # or assume we were given a file name instead
             if not fsub and ".xyz" in sub:
                 fsub = sub
@@ -322,12 +331,22 @@ class Substituent(Geometry):
         return rv
 
     @classmethod
-    def list(cls):
+    def list(cls, include_ext=False):
         """list substituents available from AaronTools or the user's library"""
         names = []
-        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
-            name = os.path.splitext(os.path.basename(f))[0]
-            names.append(name)
+        for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            for f in os.listdir(lib):
+                name, ext = os.path.splitext(os.path.basename(f))
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
+                
+                if name in names:
+                    continue
+                
+                if include_ext:
+                    names.append(name + ext)
+                else:
+                    names.append(name)
 
         return names
 
@@ -345,53 +364,55 @@ class Substituent(Geometry):
         test_sub = self.copy()
         test_sub.refresh_ranks()
 
-        for f in glob(Substituent.AARON_LIBS) + glob(Substituent.BUILTIN):
-            filename = os.path.basename(f)
-            match = re.search(r"^([\s\S]+).xyz", filename)
-            name = match.group(1)
-            # test number of atoms against cache
-            if (
-                    name in sub_lengths
-                    and len(test_sub.atoms) != sub_lengths[name]
-            ):
-                continue
-            ref_sub = Substituent(name)
-            ref_sub.refresh_connected()
-            ref_sub.refresh_ranks()
-            # add to cache
-            sub_lengths[ref_sub.name] = len(ref_sub.atoms)
-            cache_changed = True
+        for lib in [Substituent.AARON_LIBS, Substituent.BUILTIN]:
+            for filename in os.listdir(lib):
+                name, ext = os.path.splitext(filename)
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
 
-            # want same number of atoms
-            if len(test_sub.atoms) != len(ref_sub.atoms):
-                continue
-
-            for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
-                # want correct elements
-                if a.element != b.element:
-                    break
-                # and correct connections
-                if len(a.connected) != len(b.connected):
-                    break
-                # and correct connected elements
-                failed = False
-                for i, j in zip(
-                        sorted([aa.element for aa in a.connected]),
-                        sorted([bb.element for bb in b.connected]),
+                # test number of atoms against cache
+                if (
+                        name in sub_lengths
+                        and len(test_sub.atoms) != sub_lengths[name]
                 ):
-                    if i != j:
-                        failed = True
+                    continue
+                ref_sub = Substituent(name)
+                ref_sub.refresh_connected()
+                ref_sub.refresh_ranks()
+                # add to cache
+                sub_lengths[ref_sub.name] = len(ref_sub.atoms)
+                cache_changed = True
+    
+                # want same number of atoms
+                if len(test_sub.atoms) != len(ref_sub.atoms):
+                    continue
+    
+                for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
+                    # want correct elements
+                    if a.element != b.element:
                         break
-                if failed:
+                    # and correct connections
+                    if len(a.connected) != len(b.connected):
+                        break
+                    # and correct connected elements
+                    failed = False
+                    for i, j in zip(
+                            sorted([aa.element for aa in a.connected]),
+                            sorted([bb.element for bb in b.connected]),
+                    ):
+                        if i != j:
+                            failed = True
+                            break
+                    if failed:
+                        break
+                else:
+                    # if found, save name and conf info
+                    self.name = ref_sub.name
+                    self.comment = ref_sub.comment
+                    self.conf_angle = ref_sub.conf_angle
+                    self.conf_num = ref_sub.conf_num
+                    found = True
                     break
-            else:
-                # if found, save name and conf info
-                self.name = ref_sub.name
-                self.comment = ref_sub.comment
-                self.conf_angle = ref_sub.conf_angle
-                self.conf_num = ref_sub.conf_num
-                found = True
-                break
 
         # update cache
         if cache_changed:

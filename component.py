@@ -8,7 +8,8 @@ from AaronTools.const import AARONLIB, AARONTOOLS, VDW_RADII, BONDI_RADII
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.finders import BondedTo, CloserTo
-
+from AaronTools.fileIO import read_types
+from AaronTools.utils.utils import get_filename
 
 class Component(Geometry):
     """
@@ -22,8 +23,8 @@ class Component(Geometry):
     :key_atoms:     list(Atom) the atoms used for mapping
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Ligands", "*.xyz")
-    BUILTIN = os.path.join(AARONTOOLS, "Ligands", "*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Ligands")
+    BUILTIN = os.path.join(AARONTOOLS, "Ligands")
 
     def __init__(
         self,
@@ -45,12 +46,22 @@ class Component(Geometry):
         self.key_atoms = []
 
         if isinstance(structure, str) and not os.access(structure, os.R_OK):
-            if structure.endswith(".xyz"):
-                structure = structure[:-4]
-            for f in glob(Component.AARON_LIBS) + glob(Component.BUILTIN):
-                match = structure + ".xyz" == os.path.basename(f)
-                if match:
-                    structure = f
+            for ext in read_types:
+                if structure.endswith(".%s" % ext):
+                    structure = structure[:-(1 + len(ext))]
+
+            for lib in [Component.AARON_LIBS, Component.BUILTIN]:
+                for f in os.listdir(lib):
+                    name, ext = os.path.splitext(f)
+                    if not any(".%s" % x == ext for x in read_types):
+                        continue
+                    
+                    match = structure == name
+                    if match:
+                        structure = os.path.join(lib, f)
+                        break
+                    
+                if structure == os.path.join(lib, f):
                     break
             else:
                 raise FileNotFoundError(
@@ -90,39 +101,55 @@ class Component(Geometry):
             name_regex=None,
             coordinating_elements=None,
             denticity=None,
+            include_ext=False,
     ):
         names = []
-        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
-            name = os.path.splitext(os.path.basename(f))[0]
-            name_ok = True
-            elements_ok = True
-            denticity_ok = True
-
-            if (
-                name_regex is not None
-                and re.search(name_regex, name, re.IGNORECASE) is None
-            ):
-                name_ok = False
-
-            if coordinating_elements is not None:
-                geom = cls(name)
-                elements = [atom.element for atom in geom.find("key")]
-                if not all(
-                    elements.count(x) == coordinating_elements.count(x)
-                    for x in coordinating_elements
-                ) or not all(
-                    coordinating_elements.count(x) == elements.count(x)
-                    for x in elements
+        for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            for f in os.listdir(lib):
+                name, ext = os.path.splitext(f)
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
+                
+                if name in names:
+                    continue
+                
+                name_ok = True
+                elements_ok = True
+                denticity_ok = True
+    
+                if (
+                    name_regex is not None
+                    and re.search(name_regex, name, re.IGNORECASE) is None
                 ):
-                    elements_ok = False
-
-            if denticity is not None:
-                geom = cls(name)
-                if len(geom.find("key")) != denticity:
-                    denticity_ok = False
-
-            if name_ok and elements_ok and denticity_ok:
-                names.append(name)
+                    name_ok = False
+    
+                if coordinating_elements is not None:
+                    geom = Geometry(
+                        os.path.join(lib, name + ext),
+                        refresh_connected=False,
+                        refresh_ranks=False,
+                    )
+                    # geom = cls(name)
+                    elements = [geom.atoms[i].element for i in geom.other["key_atoms"]]
+                    if not all(
+                        elements.count(x) == coordinating_elements.count(x)
+                        for x in coordinating_elements
+                    ) or not all(
+                        coordinating_elements.count(x) == elements.count(x)
+                        for x in elements
+                    ):
+                        elements_ok = False
+    
+                if denticity is not None:
+                    geom = cls(name)
+                    if len(geom.find("key")) != denticity:
+                        denticity_ok = False
+    
+                if name_ok and elements_ok and denticity_ok:
+                    if include_ext:
+                        names.append(name + ext)
+                    else:
+                        names.append(name)
 
         return names
 

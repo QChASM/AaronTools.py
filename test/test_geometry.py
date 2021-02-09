@@ -657,7 +657,7 @@ class TestGeometry(TestWithTimer):
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
-        mol2.ring_substitute(["7", "8"], Ring("cyclohexane-chair.1"))
+        mol2.ring_substitute(["7", "8"], Ring("cyclohexane"))
         rmsd = mol2.RMSD(ref2, align=True, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 

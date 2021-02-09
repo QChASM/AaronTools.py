@@ -1110,23 +1110,27 @@ class Geometry:
         self.fix_comment()
         self.refresh_ranks()
 
-    def detect_components(self):
+    def detect_components(self, center=None):
         from AaronTools.component import Component
 
         self.components = []
-        self.center = []
+        if center is None:
+            self.center = []
+        else:
+            self.center = self.find(center)
 
         # get center
-        for a in self.atoms:
-            if a.element in TMETAL.keys():
-                # detect transition metal center
-                if a not in self.center:
-                    self.center += [a]
-                a.add_tag("center")
-            if "center" in a.tags:
-                # center provided by comment line in xyz file
-                if a not in self.center:
-                    self.center += [a]
+        if not self.center:
+            for a in self.atoms:
+                if a.element in TMETAL.keys():
+                    # detect transition metal center
+                    if a not in self.center:
+                        self.center += [a]
+                    a.add_tag("center")
+                if "center" in a.tags:
+                    # center provided by comment line in xyz file
+                    if a not in self.center:
+                        self.center += [a]
 
         # label key atoms:
         for i, a in enumerate(self.atoms):
@@ -2811,9 +2815,15 @@ class Geometry:
                 rv += [sub]
         return rv
 
-    def ring_substitute(self, targets, ring_fragment):
-        """take ring, reorient it, put it on self and replace targets with atoms
-        on the ring fragment"""
+    def ring_substitute(self, targets, ring_fragment, minimize=False, flip_walk=True):
+        """
+        take ring, reorient it, put it on self and replace targets with atoms
+        on the ring fragment
+        ring_fragment - Ring instance or name of ring in the library
+        minimize - try other rings with the same name (appended with a number)
+                   in the library to see if they fit better
+        flip_walk - also flip the rings when minimizing to see if that fits better
+        """
 
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
@@ -2897,6 +2907,15 @@ class Geometry:
 
             ring.rotate(rv, ra, center=ring.end[0])
 
+        def clashing(geom, ring):
+            from AaronTools.finders import NotAny
+            geom_coords = geom.coordinates(NotAny(ring.atoms))
+            dist_mat = distance_matrix(geom_coords, ring.coords)
+            if np.any(dist_mat < 0.75):
+                return True
+            
+            return False
+
         from AaronTools.ring import Ring
 
         if not isinstance(ring_fragment, Ring):
@@ -2910,7 +2929,94 @@ class Geometry:
             ring_fragment.find_end(len(walk), start=ring_fragment.end)
 
         if len(walk) == len(ring_fragment.end) and len(walk) != 2:
-            attach_short(self, walk, ring_fragment)
+            if not minimize:
+                attach_short(self, walk, ring_fragment)
+            else:
+                # to minimize, check VSEPR on self's atoms attached to targets
+                # lower deviation is better
+                # do this for the original ring and also try flipping the ring
+                # ring is flipped by reversing walk
+                # check for other rings in the library with ring.\d+
+                # e.g. cyclohexane.2
+                vsepr1, _ = walk[1].get_vsepr()
+                vsepr2, _ = walk[-2].get_vsepr()
+                geom = self.copy()
+                walk = geom.find([atom.name for atom in walk])
+                frag = ring_fragment.copy()
+                attach_short(geom, walk, frag)
+                new_vsepr1, score1 = walk[1].get_vsepr()
+                new_vsepr2, score2 = walk[-2].get_vsepr()
+                
+                min_diff = score1 + score2
+                min_ring = 0
+                
+                print("%s score: %.3f" % (ring_fragment.name, score1 + score2))
+                
+                if flip_walk:
+                    geom = self.copy()
+                    walk = geom.find([atom.name for atom in walk])[::-1]
+                    frag = ring_fragment.copy()
+                    attach_short(geom, walk, frag)
+                    new_vsepr1, score1 = walk[1].get_vsepr()
+                    new_vsepr2, score2 = walk[-2].get_vsepr()
+                    
+                    if score1 + score2 < min_diff and not clashing(geom, frag):
+                        min_ring = 1
+                        min_diff = score1 + score2
+                
+                    print("flipped %s score: %.3f" % (ring_fragment.name, score1 + score2))
+
+                # check other rings in library
+                # for these, flip the ring end instead of walk
+                for ring_name in Ring.list():
+                    if re.search("%s\.\d+" % ring_fragment.name, ring_name):
+                        test_ring_0 = Ring(ring_name)
+                        
+                        geom = self.copy()
+                        walk = geom.find([atom.name for atom in walk])
+                        if len(test_ring_0.end) != len(walk):
+                            test_ring_0.find_end(len(walk), start=test_ring_0.end)
+                        
+                        frag = test_ring_0.copy()
+                        attach_short(geom, walk, frag)
+                        new_vsepr1, score1 = walk[1].get_vsepr()
+                        new_vsepr2, score2 = walk[-2].get_vsepr()
+                        
+                        if score1 + score2 < min_diff and not clashing(geom, frag):
+                            min_ring = test_ring_0
+                            min_diff = score1 + score2
+                
+                        print("%s score: %.3f" % (ring_name, score1 + score2))
+                        
+                        if flip_walk:
+                            test_ring_1 = Ring(ring_name)
+                            test_ring_1.end.reverse()
+                            
+                            geom = self.copy()
+                            walk = geom.find([atom.name for atom in walk])
+                            if len(test_ring_0.end) != len(walk):
+                                test_ring_0.find_end(len(walk), start=test_ring_0.end)
+                            
+                            frag = test_ring_1.copy()
+                            attach_short(geom, walk, frag)
+                            new_vsepr1, score1 = walk[1].get_vsepr()
+                            new_vsepr2, score2 = walk[-2].get_vsepr()
+                            
+                            print("flipped %s score: %.3f" % (ring_name, score1 + score2))
+                            
+                            if score1 + score2 < min_diff and not clashing(geom, frag):
+                                min_ring = test_ring_1
+                                min_diff = score1 + score2
+
+                if not isinstance(min_ring, Ring) and min_ring == 0:
+                    walk = self.shortest_path(*targets)
+                    attach_short(self, walk, ring_fragment)
+                elif not isinstance(min_ring, Ring) and min_ring == 1:
+                    walk = self.shortest_path(*targets)[::-1]
+                    attach_short(self, walk, ring_fragment)
+                else:
+                    walk = self.shortest_path(*targets)
+                    attach_short(self, walk, min_ring)
 
         elif not walk[1:-1]:
             raise ValueError(

@@ -23,6 +23,18 @@ ring_parser.add_argument(
 )
 
 ring_parser.add_argument(
+    "-o", "--output",
+    type=str,
+    default=False,
+    required=False,
+    metavar="output destination",
+    dest="outfile",
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
+)
+
+ring_parser.add_argument(
     "-ls", "--list",
     action="store_const",
     const=True,
@@ -56,15 +68,23 @@ ring_parser.add_argument(
 )
 
 ring_parser.add_argument(
-    "-o", "--output",
-    type=str,
+    "-m", "--minimize",
+    action="store_const",
+    const=True,
     default=False,
     required=False,
-    metavar="output destination",
-    dest="outfile",
-    help="output destination\n" +
-    "$INFILE will be replaced with the name of the input file\n" +
-    "Default: stdout"
+    dest="minimize",
+    help="try to minimize structure difference"
+)
+
+ring_parser.add_argument(
+    "-f", "--flip-rings",
+    action="store_const",
+    const=True,
+    default=False,
+    required=False,
+    dest="flip",
+    help="also try swapping target order when minimizing"
 )
 
 args = ring_parser.parse_args()
@@ -97,13 +117,11 @@ for infile in args.infile:
     targets = {}
 
     for sub_info in args.substitutions:
-        atom1 = geom.find(sub_info[0])[0]
-        atom2 = geom.find(sub_info[1])[0]
         ring = sub_info[2]
 
         ring_geom = Ring(ring)
 
-        key = (atom1, atom2)
+        key = ",".join(sub_info[:2])
         if key in targets:
             targets[key].append(ring_geom)
         else:
@@ -111,7 +129,12 @@ for infile in args.infile:
 
     for key in targets:
         for ring_geom in targets[key]:
-            geom.ring_substitute(list(key), ring_geom)
+            geom.ring_substitute(
+                key,
+                ring_geom,
+                minimize=args.minimize,
+                flip_walk=args.flip,
+            )
 
     if args.outfile:
         geom.write(

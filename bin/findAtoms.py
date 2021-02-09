@@ -37,6 +37,16 @@ find_parser.add_argument(
 )
 
 find_parser.add_argument(
+    "-if", "--input-format",
+    type=str,
+    default=None,
+    dest="input_format",
+    choices=read_types,
+    help="file format of input - xyz is assumed if input is stdin",
+)
+
+
+find_parser.add_argument(
     "-o", "--output",
     type=str,
     default=False,
@@ -47,12 +57,13 @@ find_parser.add_argument(
 )
 
 find_parser.add_argument(
-    "-if", "--input-format",
-    type=str,
-    default=None,
-    dest="input_format",
-    choices=read_types,
-    help="file format of input - xyz is assumed if input is stdin",
+    "-d",
+    "--delimiter",
+    required=False,
+    dest="delim",
+    default="comma",
+    choices=["comma", "semicolon", "tab", "space"],
+    help="delimiter for output atom indices"
 )
 
 find_parser.add_argument(
@@ -256,6 +267,15 @@ for nb in args.num_neighbors:
 if args.chiral:
     finders.append(ChiralCenters())
 
+if args.delim == "comma":
+    delim = ","
+elif args.delim == "space":
+    delim = " "
+elif args.delim == "tab":
+    delim = "\t"
+elif args.delim == "semicolon":
+    delim = ";"
+
 s = ""
 
 for f in args.infile:
@@ -313,11 +333,11 @@ for f in args.infile:
         if args.invert:
             results = geom.find(NotAny(results))
 
-        s += ",".join(atom.name for atom in results)
+        s += delim.join(atom.name for atom in results)
         s += "\n"
     except LookupError as e:
         if args.invert:
-            s += ",".join(atom.name for atom in geom.atoms)
+            s += delim.join(atom.name for atom in geom.atoms)
             s += "\n"
         else:
             s += "%s\n" % str(e)

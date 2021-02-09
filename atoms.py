@@ -624,7 +624,7 @@ class Atom:
             try_shapes["octahedral"] = Atom.get_shape("octahedral")
 
         else:
-            return None
+            return None, None
 
         # make a copy of the atom and the atoms bonded to it
         # set each bond length to 1 to more easily compare to the

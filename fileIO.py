@@ -11,7 +11,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "sd", "sdf", "out", "dat", "fchk", "mol"]
+read_types = ["xyz", "log", "com", "gjf", "sd", "sdf", "mol", "out", "dat", "fchk"]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -169,7 +169,7 @@ class FileWriter:
                 out = cls.write_com(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing 'com' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                    "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "inp":
             if "theory" in kwargs:
@@ -249,7 +249,7 @@ class FileWriter:
 
     @classmethod
     def write_inp(cls, geom, theory, outfile=None, **kwargs):
-        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
+        fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         s = theory.make_header(geom, style="orca", **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
@@ -360,7 +360,7 @@ class FileReader:
                 self.read_sd(f)
             elif self.file_type == "xyz":
                 self.read_xyz(f, get_all)
-            elif self.file_type == "com":
+            elif any(self.file_type == ext for ext in ["com", "gjf"]):
                 self.read_com(f)
             elif self.file_type == "out":
                 self.read_orca_out(f, get_all, just_geom)
@@ -394,7 +394,7 @@ class FileReader:
             self.read_xyz(f, get_all)
         elif self.file_type == "log":
             self.read_log(f, get_all, just_geom)
-        elif self.file_type == "com":
+        elif any(self.file_type == ext for ext in ["com", "gjf"]):
             self.read_com(f)
         elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
             self.read_sd(f)
@@ -443,22 +443,37 @@ class FileReader:
     def read_sd(self, f, get_all=False):
         self.all_geom = []
         lines = f.readlines()
-        self.comment = lines[0].strip()
-        counts = lines[3].split()
-        natoms = int(counts[0])
-        nbonds = int(counts[1])
-        self.atoms = []
-        for line in lines[4 : 4 + natoms]:
-            atom_info = line.split()
-            self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
-
-        for line in lines[4 + natoms : 4 + natoms + nbonds]:
-            a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
-            self.atoms[a1].connected.add(self.atoms[a2])
-            self.atoms[a2].connected.add(self.atoms[a1])
-
-        for i, a in enumerate(self.atoms):
-            a.name = str(i + 1)
+        progress = 0
+        for i, line in enumerate(lines):
+            progress += 1
+            if "$$$$" in line:
+                progress = 0
+                if get_all:
+                    self.all_geom.append([deepcopy(self.comment), deepcopy(self.geometry)])
+                
+                continue
+            
+            if progress == 3:
+                self.comment = line.strip()
+            
+            if progress == 4:
+                counts = line.split()
+                natoms = int(counts[0])
+                nbonds = int(counts[1])
+            
+            if progress == 5:
+                self.atoms = []
+                for line in lines[i : i + natoms]:
+                    atom_info = line.split()
+                    self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+        
+                for line in lines[i + natoms : i + natoms + nbonds]:
+                    a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
+                    self.atoms[a1].connected.add(self.atoms[a2])
+                    self.atoms[a2].connected.add(self.atoms[a1])
+    
+                for j, a in enumerate(self.atoms):
+                    a.name = str(j + 1)
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):

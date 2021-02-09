@@ -102,6 +102,15 @@ maplig_parser.add_argument(
 )
 
 maplig_parser.add_argument(
+    "-c",
+    "--center",
+    required=False,
+    default=None,
+    dest="center",
+    help="catalyst center the ligand is bonded to\nDefault: any transition metal"
+)
+
+maplig_parser.add_argument(
     "-o",
     "--output",
     type=str,
@@ -141,6 +150,10 @@ for infile in args.infile:
             f = FileReader(("from stdin", "xyz", infile))
 
     cat = Geometry(f)
+    
+    if args.center:
+        cat.detect_components(center=args.center)
+    
     # TODO: change this if to a regex
     if '=' in args.ligand:
         key_atoms = args.ligand.split("=")[0]
@@ -182,7 +195,6 @@ for infile in args.infile:
             if isinstance(args.outfile, str):
                 outfile = args.outfile.replace("$INFILE", get_filename(infile))
                 outfile = outfile.replace("$LIGAND", lig_name)
-                print(outfile)
                 cat_copy.write(append=False, outfile=outfile)
             else:
                 s = cat_copy.write(outfile=False)
