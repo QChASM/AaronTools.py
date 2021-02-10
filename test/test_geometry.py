@@ -9,6 +9,7 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
+from AaronTools.component import Component
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
@@ -678,8 +679,8 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(validate(mol, ref, thresh="loose"))
 
     def test_map_ligand(self):
-        monodentate = AaronTools.component.Component(TestGeometry.monodentate)
-        tridentate = AaronTools.component.Component(TestGeometry.tridentate)
+        monodentate = Component(TestGeometry.monodentate)
+        tridentate = Component(TestGeometry.tridentate)
         debug = False
 
         # import cProfile
@@ -883,8 +884,8 @@ class TestGeometry(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestGeometry("test_map_ligand"))
-    suite.addTest(TestGeometry("test_examine_constraints"))
+    suite.addTest(TestGeometry("test_map_ligand"))
+    # suite.addTest(TestGeometry("test_examine_constraints"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
     # suite.addTest(TestGeometry("test_RMSD"))

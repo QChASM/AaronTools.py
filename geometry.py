@@ -1146,7 +1146,7 @@ class Geometry:
         # rename
         for i, frag in enumerate(self.components):
             name = self.name + ".{:g}".format(
-                min([float(a.name) for a in frag])
+                min([float(a.name) if utils.is_num(a.name) else frag.index(a) for a in frag])
             )
             self.components[i] = Component(frag, name)
         self.rebuild()
@@ -1440,7 +1440,7 @@ class Geometry:
                 R = np.matmul(R, u.T)
 
                 this_coords = np.dot(this_coords, R)
-                
+
                 # find the closest atom in this to the closest atom in ref
                 dist = distance_matrix(ref_coords, this_coords)
                 for i, r_a in enumerate(ref.atoms):
@@ -1459,7 +1459,7 @@ class Geometry:
                         this_atoms.append(match)
                     else:
                         ref_atoms.remove(r_a)
-                
+
                 # if we didn't find any matches or not all atoms are matched,
                 # use the original order
                 # otherwise, use the order determined by distances
@@ -1470,7 +1470,7 @@ class Geometry:
 
             else:
                 res = _RMSD(ref.atoms, this.atoms)
-            
+
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
 
@@ -2815,7 +2815,7 @@ class Geometry:
                 rv += [sub]
         return rv
 
-    def ring_substitute(self, targets, ring_fragment, minimize=False, flip_walk=True):
+    def ring_substitute(self, targets, ring_fragment, minimize=False, flip_walk=False):
         """
         take ring, reorient it, put it on self and replace targets with atoms
         on the ring fragment
@@ -2913,7 +2913,7 @@ class Geometry:
             dist_mat = distance_matrix(geom_coords, ring.coords)
             if np.any(dist_mat < 0.75):
                 return True
-            
+
             return False
 
         from AaronTools.ring import Ring
@@ -2941,72 +2941,88 @@ class Geometry:
                 vsepr1, _ = walk[1].get_vsepr()
                 vsepr2, _ = walk[-2].get_vsepr()
                 geom = self.copy()
-                walk = geom.find([atom.name for atom in walk])
+                test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
                 frag = ring_fragment.copy()
-                attach_short(geom, walk, frag)
-                new_vsepr1, score1 = walk[1].get_vsepr()
-                new_vsepr2, score2 = walk[-2].get_vsepr()
-                
-                min_diff = score1 + score2
+                attach_short(geom, test_walk, frag)
+                new_vsepr1, score1 = test_walk[1].get_vsepr()
+                new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                new_vsepr3, score3 = frag.end[0].get_vsepr()
+                new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                score = score1 + score2 + score3 + score4
+
+                min_diff = score
                 min_ring = 0
-                
-                print("%s score: %.3f" % (ring_fragment.name, score1 + score2))
-                
+
+                # print("%s score: %.3f" % (ring_fragment.name, score))
+
                 if flip_walk:
                     geom = self.copy()
-                    walk = geom.find([atom.name for atom in walk])[::-1]
+                    test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]][::-1]
                     frag = ring_fragment.copy()
-                    attach_short(geom, walk, frag)
-                    new_vsepr1, score1 = walk[1].get_vsepr()
-                    new_vsepr2, score2 = walk[-2].get_vsepr()
-                    
-                    if score1 + score2 < min_diff and not clashing(geom, frag):
+                    attach_short(geom, test_walk, frag)
+                    new_vsepr1, score1 = test_walk[1].get_vsepr()
+                    new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                    new_vsepr3, score3 = frag.end[0].get_vsepr()
+                    new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                    score = score1 + score2 + score3 + score4
+
+                    if score < min_diff and not clashing(geom, frag):
                         min_ring = 1
-                        min_diff = score1 + score2
-                
-                    print("flipped %s score: %.3f" % (ring_fragment.name, score1 + score2))
+                        min_diff = score
+
+                    # print("flipped %s score: %.3f" % (ring_fragment.name, score))
 
                 # check other rings in library
                 # for these, flip the ring end instead of walk
                 for ring_name in Ring.list():
                     if re.search("%s\.\d+" % ring_fragment.name, ring_name):
                         test_ring_0 = Ring(ring_name)
-                        
+
                         geom = self.copy()
-                        walk = geom.find([atom.name for atom in walk])
+                        test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
                         if len(test_ring_0.end) != len(walk):
                             test_ring_0.find_end(len(walk), start=test_ring_0.end)
-                        
+
                         frag = test_ring_0.copy()
-                        attach_short(geom, walk, frag)
-                        new_vsepr1, score1 = walk[1].get_vsepr()
-                        new_vsepr2, score2 = walk[-2].get_vsepr()
-                        
-                        if score1 + score2 < min_diff and not clashing(geom, frag):
+                        attach_short(geom, test_walk, frag)
+                        new_vsepr1, score1 = test_walk[1].get_vsepr()
+                        new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                        new_vsepr3, score3 = frag.end[0].get_vsepr()
+                        new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                        score = score1 + score2 + score3 + score4
+
+                        if score < min_diff and not clashing(geom, frag):
                             min_ring = test_ring_0
-                            min_diff = score1 + score2
-                
-                        print("%s score: %.3f" % (ring_name, score1 + score2))
-                        
+                            min_diff = score
+
+                        # print("%s score: %.3f" % (ring_name, score))
+
                         if flip_walk:
                             test_ring_1 = Ring(ring_name)
                             test_ring_1.end.reverse()
-                            
+
                             geom = self.copy()
-                            walk = geom.find([atom.name for atom in walk])
+                            test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
                             if len(test_ring_0.end) != len(walk):
                                 test_ring_0.find_end(len(walk), start=test_ring_0.end)
-                            
+
                             frag = test_ring_1.copy()
-                            attach_short(geom, walk, frag)
-                            new_vsepr1, score1 = walk[1].get_vsepr()
-                            new_vsepr2, score2 = walk[-2].get_vsepr()
-                            
-                            print("flipped %s score: %.3f" % (ring_name, score1 + score2))
-                            
-                            if score1 + score2 < min_diff and not clashing(geom, frag):
+                            attach_short(geom, test_walk, frag)
+                            new_vsepr1, score1 = test_walk[1].get_vsepr()
+                            new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                            new_vsepr3, score3 = frag.end[0].get_vsepr()
+                            new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                            score = score1 + score2 + score3 + score4
+
+                            # print("flipped %s score: %.3f" % (ring_name, score))
+
+                            if score < min_diff and not clashing(geom, frag):
                                 min_ring = test_ring_1
-                                min_diff = score1 + score2
+                                min_diff = score
 
                 if not isinstance(min_ring, Ring) and min_ring == 0:
                     walk = self.shortest_path(*targets)
@@ -3219,7 +3235,7 @@ class Geometry:
                 self.get_fragment(atom, target) for atom in target.connected
             ]
 
-            if new_shape != old_shape:
+            if new_shape != old_shape or change_hydrogens == 0:
                 if change_hydrogens < 0:
                     # remove extra hydrogens
                     shape_object = get_corresponding_shape(
@@ -3305,6 +3321,7 @@ class Geometry:
 
                 previous_positions = []
                 for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                    # print(j, frag)
                     if j == 0:
                         continue
                     v1 = target.bond(frag[0])
@@ -3416,11 +3433,12 @@ class Geometry:
             ligand.coord_shift(shift)
             remove_centers = []
 
+            old_walk = False
             # bend around key axis
             try:
                 old_walk = old_ligand.shortest_path(*old_keys)
 
-            except ValueError:
+            except (LookupError, ValueError):
                 # for some ferrocene ligands, AaronTools misidentifies the Fe
                 # as another metal center
                 # we'll remove any centers that are on the path between the key atoms
@@ -3428,24 +3446,50 @@ class Geometry:
                 # attribute, even though the center has the ligand atoms in its
                 # connected attribute, so refresh_connected
                 self.refresh_connected()
-                old_walk = self.shortest_path(
-                    *old_keys,
-                    avoid=[
-                        a
-                        for a in self.center
-                        if any(k.is_connected(a) for k in old_keys)
+                # print("old keys:", old_keys)
+                # print("old ligand:\n", old_ligand)
+                frag = old_ligand.get_fragment(
+                    old_keys[0], stop=[
+                        atom for atom in old_keys[0].connected if atom not in old_ligand.atoms
                     ]
                 )
-                remove_centers = [c for c in self.center if c in old_walk]
-
-            if len(old_walk) == 2:
+                if all(atom in frag for atom in old_keys):
+                    # for atom in frag:
+                    #     print("frag:", atom)
+                    old_walk = self.shortest_path(
+                        *old_keys,
+                        avoid=[
+                            a
+                            for a in self.center
+                            if any(k.is_connected(a) for k in old_keys)
+                        ]
+                    )
+                    remove_centers = [c for c in self.center if c in old_walk]
+    
+            if old_walk and len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
                     for c in k.connected:
                         old_con.add(c)
                 old_vec = old_ligand.COM(targets=old_con) - center
-            else:
+            elif old_walk:
                 old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
+            else:
+                old_vec = np.zeros(3)
+                for atom in old_keys:
+                    if any(bonded_atom not in old_ligand.atoms for bonded_atom in atom.connected):
+                        v = atom.coords - self.COM(
+                            targets=[
+                                bonded_atom for bonded_atom in atom.connected
+                                if bonded_atom not in old_ligand.atoms
+                            ]
+                        )
+                        v /= np.linalg.norm(v)
+                        old_vec += v
+                        # print(atom)
+                
+                # print("vec:", old_vec)
+                old_vec /= np.linalg.norm(old_vec)
 
             new_walk = ligand.shortest_path(*new_keys)
             if len(new_walk) == 2:
@@ -3495,7 +3539,7 @@ class Geometry:
         def map_more_key(self, old_ligand, ligand, old_keys, new_keys):
             # backbone fragments separated by rotatable bonds
             frag_list = ligand.get_frag_list(max_order=1)
-            ligand.write("ligand")
+            # ligand.write("ligand")
 
             remove_centers = []
 
@@ -3584,11 +3628,36 @@ class Geometry:
                 + ",".join([i.name for i in new_keys])
             )
 
-        old_ligands = []
+        # print("current components:")
+        # for comp in self.components:
+        #     print(comp)
+
+        old_ligand = []
+        remove_components = []
         for k in old_keys:
-            for c in self.components:
-                if k in c.atoms:
-                    old_ligands += [c]
+            for i, c in enumerate(self.components):
+                if k in c.atoms and k not in old_ligand:
+                    old_ligand.extend(c.atoms)
+                    remove_components.append(i)
+
+        for i in remove_components:
+            # print(remove_components)
+            # print("removing:")
+            # print(self.components[i])
+            self.components.pop(i)
+            for j in range(0, len(remove_components)):
+                if remove_components[j] > i:
+                    remove_components[j] -= 1
+
+        # print("after removal:")
+        # for comp in self.components:
+        #     print(comp)
+
+        old_ligand = Geometry(old_ligand)
+        
+        # print("old ligand:")
+        # print(old_ligand)
+        
         start = 0
         end = None
         remove_centers = []
@@ -3599,7 +3668,7 @@ class Geometry:
             elif len(ligand.key_atoms) == 2:
                 remove_centers.extend(
                     map_2_key(
-                        old_ligands[start],
+                        old_ligand,
                         ligand,
                         old_keys[start:end],
                         new_keys[start:end],
@@ -3609,7 +3678,7 @@ class Geometry:
                 remove_centers.extend(
                     map_more_key(
                         self,
-                        old_ligands[start],
+                        old_ligand,
                         ligand,
                         old_keys[start:end],
                         new_keys[start:end],
@@ -3621,15 +3690,9 @@ class Geometry:
                 a.add_tag("ligand")
             start = end
 
-        # remove old
-        for ol in old_ligands:
-            try:
-                self.components.remove(ol)
-            except ValueError:
-                continue
-            for atom in self.atoms:
-                if atom.connected & set(ol.atoms):
-                    atom.connected = atom.connected - set(ol.atoms)
+        for atom in self.atoms:
+            if atom.connected & set(old_ligand.atoms):
+                atom.connected = atom.connected - set(old_ligand.atoms)
 
         # remove extraneous centers, i.e. from ferrocene ligands
         for rc in remove_centers:
@@ -3637,8 +3700,11 @@ class Geometry:
 
         # add new
         for ligand in ligands:
+            # print("adding ligand")
+            # print(ligand)
             self.components += [ligand]
         rv = ligands
+        
         self.rebuild()
         # rotate monodentate to relieve clashing
         for ligand in self.components:
@@ -3659,6 +3725,9 @@ class Geometry:
             self.minimize()
 
         self.refresh_ranks()
+        
+        # print(self)
+        
         return rv
 
     def remove_clash(self, sub_list=None):
