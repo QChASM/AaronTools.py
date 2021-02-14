@@ -221,33 +221,37 @@ class TestCLS(TestWithTimer):
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
 
-        # don't run smiles/iupac tests if we can't connect to the host site
-        try:
-            for host in [CACTUS_HOST, OPSIN_HOST]:
-                response = urllib.request.urlopen(
-                    host, context=ssl.SSLContext()
-                )
-                # name resolved, but something wrong with server
-                if response.status >= 5:
-                    return
-        except urllib.error.URLError:
-            # can't resolve name or some other connectivity error
-            return
-
-        args = [
-            sys.executable,
-            os.path.join(self.aarontools_bin, "substitute.py"),
-            TestCLS.benzene,
-            "-s",
-            "12=smiles:O=[N.]=O",
-            "-s",
-            "11=iupac:chloro",
-        ]
-        proc = Popen(args, stdout=PIPE, stderr=PIPE)
-        out, err = proc.communicate()
-        fr = FileReader(("out", "xyz", out.decode("utf-8")))
-        mol = Geometry(fr)
-        self.assertTrue(validate(mol, ref, thresh=2e-1))
+        # I don't want to run these tests anymore
+        # sometimes the server timeout stuff doesn't seem to work and
+        # the test hangs for > 30 seconds
+        # - Tony
+        # # don't run smiles/iupac tests if we can't connect to the host site
+        # try:
+        #     for host in [CACTUS_HOST, OPSIN_HOST]:
+        #         response = urllib.request.urlopen(
+        #             host, context=ssl.SSLContext()
+        #         )
+        #         # name resolved, but something wrong with server
+        #         if response.status >= 5:
+        #             return
+        # except urllib.error.URLError:
+        #     # can't resolve name or some other connectivity error
+        #     return
+        # 
+        # args = [
+        #     sys.executable,
+        #     os.path.join(self.aarontools_bin, "substitute.py"),
+        #     TestCLS.benzene,
+        #     "-s",
+        #     "12=smiles:O=[N.]=O",
+        #     "-s",
+        #     "11=iupac:chloro",
+        # ]
+        # proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        # out, err = proc.communicate()
+        # fr = FileReader(("out", "xyz", out.decode("utf-8")))
+        # mol = Geometry(fr)
+        # self.assertTrue(validate(mol, ref, thresh=2e-1))
 
     def test_closeRing(self):
         """test closeRing.py"""
@@ -890,7 +894,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_mirror"))
+    suite.addTest(TestCLS("test_grabThermo"))
     return suite
 
 

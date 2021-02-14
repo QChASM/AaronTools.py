@@ -470,9 +470,9 @@ def rotation_matrix(theta, axis):
     axis = axis / np.linalg.norm(axis)
     dim = len(axis)
     outer_prod = np.dot(np.transpose([axis]), [axis])
-    outer_prod = [[i * (1 - np.cos(theta)) for i in m] for m in outer_prod]
+    outer_prod *= (1 - np.cos(theta))
     iden = np.identity(dim)
-    cos_comp = [[np.cos(theta) * i for i in ii] for ii in iden]
+    cos_comp = iden * np.cos(theta)
     sin_comp = np.zeros((dim, dim))
     for i in range(0, dim):
         for j in range(0, dim):

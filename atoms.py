@@ -260,21 +260,22 @@ class Atom:
         """
         # atomic number
         z = ELEMENTS.index(self.element)
-        s = "%03i" % z
         heavy = [
             ELEMENTS.index(x.element)
             for x in self.connected
             if x.element != "H"
         ]
-        # number of non-hydrogen connections:
-        s += "%02i" % len(heavy)
+        # number of non-hydrogen connections
         # number of bonds with heavy atoms and their element
+        t = []
         for h in sorted(set(heavy)):
-            s += "%03i" % h
-            s += "%02i" % heavy.count(h)
+            t.extend([h, heavy.count(h)])
+
         # number of connected hydrogens
         nH = len(self.connected) - len(heavy)
-        s += "%02i" % nH
+
+        fmt = "%03i%02i" + (len(set(heavy)) * "%03i%02i") + "%02i"
+        s = fmt % (z, len(heavy), *t, nH)
 
         return s
 

@@ -64,7 +64,7 @@ for f in args.infile:
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f))
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_connected=False, refresh_ranks=False)
     if args.comment:
         geom.comment = args.comment
     else:

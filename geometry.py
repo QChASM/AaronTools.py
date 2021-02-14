@@ -63,6 +63,8 @@ class Geometry:
         self.components = components
         self.other = {}
         self._iter_idx = None
+        self._sigmat = None
+        self._epsmat = None
 
         self.debug = False
 
@@ -854,6 +856,14 @@ class Geometry:
         atoms = []
         ranks = []
 
+        # using the catalyst's center can make it difficult
+        # to compare C2 symmetric ligands
+        # center = list(filter(lambda x: "center" in x.tags, self))
+        # if center:
+        #     center = self.COM(targets=center)
+        # else:
+        center = self.COM()
+
         def neighbors_rank(ranks):
             # partitions key is product of rank and neighbors' rank
             # use prime numbers for product so products are distinct
@@ -941,13 +951,7 @@ class Geometry:
                 partitions[rank][rank] += [i]
 
             new_partitions = partitions.copy()
-            # using the catalyst's center can make it difficult
-            # to compare C2 symmetric ligands
-            # center = list(filter(lambda x: "center" in x.tags, self))
-            # if center:
-            #     center = self.COM(targets=center)
-            # else:
-            center = self.COM()
+
             # norm = self.get_principle_axes()
             # norm = norm[1][:, 0] - center
             for rank, rank_dict in partitions.items():
@@ -1608,50 +1612,52 @@ class Geometry:
 
         return np.linalg.eigh(I_CM)
 
-    def LJ_energy(self, other=None, approximate=True):
+    def LJ_energy(self, other=None, use_prev_params=False):
         """
         computes LJ energy using autodock parameters
-        approximate - ignore atoms that are farther than 1.5x the
-                      sum of their VDW radii from each other
+        use_prev_params - use same sigma/epsilon as the last time LJ_energy was called
+                          useful for methods that make repetitive LJ_energy calls, like
+                          minimize_torsion
         """
 
-        if other is None:
+        if use_prev_params and self._sigmat is not None and self._sigmat.shape != (len(self), len(other)):
+            sigmat = self._sigmat
+            epsmat = self._epsmat
+        else:
+            sigmat = np.array([[a.rij(b) for a in self.atoms] for b in self.atoms])
+            epsmat = np.array([[a.eij(b) for a in self.atoms] for b in self.atoms])
+
+        if other is None or other is self:
             D = distance_matrix(self.coords, self.coords)
+            np.fill_diagonal(D, 1)
+
 
         else:
             if hasattr(other, "coords"):
                 D = distance_matrix(self.coords, other.coords)
                 other = other.atoms
+
+                sigmat = np.array([[a.rij(b) for a in other] for b in self.atoms])
+                epsmat = np.array([[a.eij(b) for a in other] for b in self.atoms])
             else:
                 D = distance_matrix(
                     self.coords, np.array([a.coords for a in other])
                 )
 
-        def calc_LJ(a, b, dist, approximate):
-            if approximate and dist > 1.5 * (a._vdw + b._vdw):
-                # optimization thing - if the atoms are far apart,
-                # the LJ energy is around 0
-                return 0
-            sigma = a.rij(b)
-            epsilon = a.eij(b)
-            # this seems to be marginally faster than **6
-            s_d_2 = (sigma / dist) ** 2
-            s_d_6 = s_d_2 * s_d_2 * s_d_2
-            return epsilon * (s_d_6 ** 2 - s_d_6)
+        self._sigmat = sigmat
+        self._epsmat = epsmat
 
-        energy = 0
-        for i, a in enumerate(self.atoms):
-            if other is None:
-                tmp = self.atoms[:i]
-            else:
-                tmp = other
+        repmat = sigmat / D
+        repmat = repmat ** 2
+        repmat = repmat ** 3
+        attmat = repmat ** 2
 
-            for j, b in enumerate(tmp):
-                if a is b:
-                    continue
-                energy += calc_LJ(a, b, D[i, j], approximate)
+        if other is None or other is self:
+            nrgmat = np.tril(epsmat * (attmat - repmat), -1)
+        else:
+            nrgmat = epsmat * (attmat - repmat)
 
-        return energy
+        return np.sum(nrgmat)
 
     def examine_constraints(self, thresh=None):
         """
@@ -2315,7 +2321,11 @@ class Geometry:
         if isinstance(dist, str):
             dist = float(dist)
         if dist is None:
-            new_dist = a1._radii + a2._radii
+            if hasattr(a1, "_radii") and hasattr(a2, "_radii"):
+                new_dist = a1._radii + a2._radii
+            else:
+                warn("no radii for one of:\n%s\n%s" % (a1, a2))
+                return
         elif adjust:
             new_dist = a1.dist(a2) + dist
         else:
@@ -2634,20 +2644,55 @@ class Geometry:
         :geom: calculate LJ potential between self and another geometry-like
             object, instead of just within self
         """
-        targets = self.find(targets)
-        if geom is None:
-            geom = self
+        targets = Geometry(
+            self.find(targets),
+            refresh_connected=False,
+            refresh_ranks=False,
+        )
+
+        if geom is None or geom is self:
+            from AaronTools.finders import NotAny
+            try:
+                geom = Geometry(
+                    self.find(NotAny(targets)),
+                    refresh_connected=False,
+                    refresh_ranks=False,
+                )
+            except LookupError:
+                return
+
         E_min = None
         angle_min = None
+        # copied an reorganized some stuff from Geometry.rotate for
+        # performance reasons
+        if hasattr(center, "__iter__") and all(isinstance(x, float) for x in center):
+            center_coords = center
+        else:
+            center_coords = self.COM(center)
+
+        axis = axis / np.linalg.norm(axis)
+        q = np.hstack(([np.cos(np.deg2rad(increment) / 2)], axis * np.sin(np.deg2rad(increment) / 2)))
+        q /= np.linalg.norm(q)
+        qs = q[0]
+        qv = q[1:]
 
         # rotate targets by increment and save lowest energy
         angle = 0
+        xyz = targets.coords
         for inc in range(0, 360, increment):
             angle += increment
-            self.rotate(
-                axis, np.rad2deg(increment), targets=targets, center=center
-            )
-            energy = self.LJ_energy(geom)
+
+            xyz -= center_coords
+            xprod = np.cross(qv, xyz)
+            qs_xprod = 2 * qs * xprod
+            qv_xprod = 2 * np.cross(qv, xprod)
+
+            xyz += qs_xprod + qv_xprod
+            xyz += center_coords
+            for t, coord in zip(targets.atoms, xyz):
+                t.coords = coord
+
+            energy = targets.LJ_energy(other=geom, use_prev_params=True)
 
             if E_min is None or energy < E_min:
                 E_min = energy
@@ -2655,7 +2700,7 @@ class Geometry:
 
         # rotate to min angle
         self.rotate(
-            axis, np.rad2deg(angle_min - angle), targets=targets, center=center
+            axis, np.deg2rad(angle_min - angle), targets=targets, center=center
         )
 
         return
@@ -3465,7 +3510,7 @@ class Geometry:
                         ]
                     )
                     remove_centers = [c for c in self.center if c in old_walk]
-    
+
             if old_walk and len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
@@ -3487,7 +3532,7 @@ class Geometry:
                         v /= np.linalg.norm(v)
                         old_vec += v
                         # print(atom)
-                
+
                 # print("vec:", old_vec)
                 old_vec /= np.linalg.norm(old_vec)
 
@@ -3628,10 +3673,6 @@ class Geometry:
                 + ",".join([i.name for i in new_keys])
             )
 
-        # print("current components:")
-        # for comp in self.components:
-        #     print(comp)
-
         old_ligand = []
         remove_components = []
         for k in old_keys:
@@ -3641,23 +3682,13 @@ class Geometry:
                     remove_components.append(i)
 
         for i in remove_components:
-            # print(remove_components)
-            # print("removing:")
-            # print(self.components[i])
             self.components.pop(i)
             for j in range(0, len(remove_components)):
                 if remove_components[j] > i:
                     remove_components[j] -= 1
 
-        # print("after removal:")
-        # for comp in self.components:
-        #     print(comp)
-
         old_ligand = Geometry(old_ligand)
-        
-        # print("old ligand:")
-        # print(old_ligand)
-        
+
         start = 0
         end = None
         remove_centers = []
@@ -3700,11 +3731,9 @@ class Geometry:
 
         # add new
         for ligand in ligands:
-            # print("adding ligand")
-            # print(ligand)
             self.components += [ligand]
         rv = ligands
-        
+
         self.rebuild()
         # rotate monodentate to relieve clashing
         for ligand in self.components:
@@ -3718,16 +3747,14 @@ class Geometry:
                     start = key.coords
                     end = self.COM(key.connected)
                 axis = end - start
-                self.minimize_torsion(targets, axis, center=key, increment=8)
+                self.minimize_torsion(targets, axis, center=key, increment=10)
 
         self.remove_clash()
         if minimize:
             self.minimize()
 
         self.refresh_ranks()
-        
-        # print(self)
-        
+
         return rv
 
     def remove_clash(self, sub_list=None):

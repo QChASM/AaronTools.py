@@ -376,16 +376,35 @@ class Substituent(Geometry):
                         and len(test_sub.atoms) != sub_lengths[name]
                 ):
                     continue
-                ref_sub = Substituent(name)
-                ref_sub.refresh_connected()
-                ref_sub.refresh_ranks()
+                
+                # use Geometry until we've done all the checks we can do without
+                # determining connectivity
+                # (for performance reasons)
+                init_ref = Geometry(
+                    os.path.join(lib, name + ext),
+                    refresh_connected=False,
+                    refresh_ranks=False,
+                )
                 # add to cache
-                sub_lengths[ref_sub.name] = len(ref_sub.atoms)
+                sub_lengths[name] = len(init_ref.atoms)
                 cache_changed = True
     
                 # want same number of atoms
-                if len(test_sub.atoms) != len(ref_sub.atoms):
+                if len(test_sub.atoms) != len(init_ref.atoms):
                     continue
+
+                # same number of each element
+                ref_eles = [atom.element for atom in init_ref.atoms]
+                test_eles = [atom.element for atom in test_sub.atoms]
+                ref_counts = {ele:ref_eles.count(ele) for ele in set(ref_eles)}
+                test_counts = {ele:test_eles.count(ele) for ele in set(test_eles)}
+                if ref_counts != test_counts:
+                    continue
+
+                ref_sub = Substituent(init_ref, detect=False)
+                ref_sub.name = name
+                ref_sub.refresh_connected()
+                ref_sub.refresh_ranks()
     
                 for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
                     # want correct elements
@@ -409,8 +428,10 @@ class Substituent(Geometry):
                     # if found, save name and conf info
                     self.name = ref_sub.name
                     self.comment = ref_sub.comment
-                    self.conf_angle = ref_sub.conf_angle
-                    self.conf_num = ref_sub.conf_num
+                    conf_info = re.search(r"CF:(\d+),(\d+)", ref_sub.comment)
+                    if conf_info is not None:
+                        self.conf_num = int(conf_info.group(1))
+                        self.conf_angle = np.deg2rad(float(conf_info.group(2)))
                     found = True
                     break
 
