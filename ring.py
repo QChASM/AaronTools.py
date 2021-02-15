@@ -48,6 +48,8 @@ class Ring(Geometry):
             # find ring xyz file
             fring = None
             for lib in [Ring.AARON_LIBS, Ring.BUILTIN]:
+                if not os.path.exists(lib):
+                    continue
                 for f in os.listdir(lib):
                     name, ext = os.path.splitext(f)
                     if not any(".%s" % x == ext for x in read_types):
@@ -111,6 +113,8 @@ class Ring(Geometry):
     def list(cls, include_ext=False):
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            if not os.path.exists(lib):
+                continue
             for f in os.listdir(lib):
                 name, ext = os.path.splitext(os.path.basename(f))
                 if not any(".%s" % x == ext for x in read_types):

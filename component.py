@@ -51,6 +51,8 @@ class Component(Geometry):
                     structure = structure[:-(1 + len(ext))]
 
             for lib in [Component.AARON_LIBS, Component.BUILTIN]:
+                if not os.path.exists(lib):
+                    continue
                 for f in os.listdir(lib):
                     name, ext = os.path.splitext(f)
                     if not any(".%s" % x == ext for x in read_types):
@@ -105,6 +107,8 @@ class Component(Geometry):
     ):
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            if not os.path.exists(lib):
+                continue
             for f in os.listdir(lib):
                 name, ext = os.path.splitext(f)
                 if not any(".%s" % x == ext for x in read_types):

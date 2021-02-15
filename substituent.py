@@ -98,6 +98,8 @@ class Substituent(Geometry):
             # find substituent xyz file
             fsub = None
             for lib in [Substituent.AARON_LIBS, Substituent.BUILTIN]:
+                if not os.path.exists(lib):
+                    continue
                 for f in os.listdir(lib):
                     name, ext = os.path.splitext(f)
                     if not any(".%s" % x == ext for x in read_types):
@@ -335,6 +337,8 @@ class Substituent(Geometry):
         """list substituents available from AaronTools or the user's library"""
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            if not os.path.exists(lib):
+                continue
             for f in os.listdir(lib):
                 name, ext = os.path.splitext(os.path.basename(f))
                 if not any(".%s" % x == ext for x in read_types):
@@ -365,6 +369,8 @@ class Substituent(Geometry):
         test_sub.refresh_ranks()
 
         for lib in [Substituent.AARON_LIBS, Substituent.BUILTIN]:
+            if not os.path.exists(lib):
+                continue
             for filename in os.listdir(lib):
                 name, ext = os.path.splitext(filename)
                 if not any(".%s" % x == ext for x in read_types):

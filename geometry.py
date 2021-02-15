@@ -1892,6 +1892,7 @@ class Geometry:
 
                 xyz = np.array([x, y, z]).T
                 if basis is not None:
+                    # determine what quadrant this point is in, add it to the appropriate bin
                     map_xyz = np.dot(xyz, basis)
                     for p in map_xyz:
                         if p[0] > 0 and p[1] > 0:
@@ -1912,6 +1913,7 @@ class Geometry:
                             if basis is None:
                                 buried_points += 1
                             else:
+                                # determine what quadrant the point is in
                                 if map_xyz[k, 0] > 0 and map_xyz[k, 1] > 0:
                                     buried_points[0] += 1
                                 elif map_xyz[k, 0] <= 0 and map_xyz[k, 1] > 0:
@@ -1971,6 +1973,7 @@ class Geometry:
                     for d, r in zip(d_row, radius_list):
                         if d < r:
                             if basis is not None:
+                                # determine what quadrant the point is in for steric map stuff
                                 if map_agrid_r[j, 0] > 0 and map_agrid_r[j, 1] > 0:
                                     inside_weights[0][j] = aweight
                                 elif map_agrid_r[j, 0] < 0 and map_agrid_r[j, 1] > 0:
@@ -1992,8 +1995,10 @@ class Geometry:
                         shell_values[i] = np.sum(inside_weights)
 
             if basis is not None:
+                # return a list of buried volume in each quadrant
                 return [300 * np.dot(shell_values[k] * rgrid ** 2, rweights) / (radius ** 3) for k in range(0, 4)]
             else:
+                # return buried volume
                 return 300 * np.dot(shell_values * rgrid ** 2, rweights) / (radius ** 3)
 
     def steric_map(
@@ -3113,8 +3118,8 @@ class Geometry:
 
         def get_corresponding_shape(target, shape_object, frags):
             """
-            returns shape object, but where atoms[1:] are ordered
-            corresping to target.connected
+            returns shape object, but where shape_object.atoms are lined up with
+            target.connected as much as possible
             """
             shape_object.coord_shift(
                 target.coords - shape_object.atoms[0].coords
@@ -3122,6 +3127,7 @@ class Geometry:
             if len(frags) == 0:
                 return shape_object
 
+            # to minimize changes to the structure, things are aligned to the largest fragment
             max_frag = sorted(frags, key=len, reverse=True)[0]
             angle = target.angle(shape_object.atoms[1], max_frag[0])
             v1 = target.bond(max_frag[0])
@@ -3130,6 +3136,8 @@ class Geometry:
             v2 /= np.linalg.norm(v2)
             rv = np.cross(v1, v2)
 
+            # could have numerical issues
+            # avoid those, but check to see if the angle is 180 degrees
             if abs(np.linalg.norm(rv)) < 10 ** -3 or abs(angle) < 10 ** -3:
                 if np.dot(v1, v2) == -1:
                     rv = np.array([v1[2], v1[0], v1[1]])
@@ -3139,6 +3147,9 @@ class Geometry:
             if abs(np.linalg.norm(rv)) > 10 ** -3 and abs(angle) > 10 ** -3:
                 shape_object.rotate(rv, -angle, center=target)
 
+            # rotate about the vector from the center (target atom) to the first
+            # atom in shape (which will be the largest fragment) to get the shape object
+            # as lined up with the rest of the connected atoms as possible
             rv = target.bond(shape_object.atoms[1])
             min_dev = None
             min_angle = 0
@@ -3204,6 +3215,11 @@ class Geometry:
         )
 
         if adjust_hydrogens is True:
+            # try to determine how many hydrogens to add based on how many hydrogens are currently
+            # bonded and what the saturation of the atoms is
+            # e.g. C(H3) -> N(H?)
+            # C's saturation is 4, it's missing one
+            # N's saturation is 3, it should be missing one: N(H2)
             if hasattr(target, "_saturation") and hasattr(
                     new_atom, "_saturation"
             ):
@@ -3222,9 +3238,12 @@ class Geometry:
                 )
 
         elif isinstance(adjust_hydrogens, tuple):
+            # tuple of (change in hydrogens, vsepr shape) was given
             change_hydrogens, new_shape = adjust_hydrogens
 
         else:
+            # no change was requested, only the element will change
+            # and maybe bond lengths
             change_hydrogens = 0
             new_shape = None
 
@@ -3250,6 +3269,10 @@ class Geometry:
                 else:
                     new_connectivity = None
 
+                # if we're changing the number of hydrogens, but no shape was specified,
+                # we will remove hydrogens one by one and see what shape we end up with
+                # shape changes are based on rules like adding a bond to a trigonal planar
+                # atom will cause it to be tetrahedral (e.g. carbocation gaining a hydride)
                 for i in range(0, abs(change_hydrogens)):
                     shape = Atom.new_shape(
                         shape, new_connectivity, np.sign(change_hydrogens)
@@ -3267,6 +3290,8 @@ class Geometry:
                     len(shape_object.atoms[1:]) - len(target.connected)
                     != change_hydrogens
             ):
+                # insufficient to change the shape
+                # we cannot delete random fragments
                 raise RuntimeError(
                     "number of positions changed by %i, but a change of %i hydrogens was attempted"
                     % (
@@ -3296,11 +3321,16 @@ class Geometry:
                         self -= H_atom
                         removed_Hs += 1
 
+                # get fragments after hydrogens have been removed
                 frags = [
                     self.get_fragment(atom, target)
                     for atom in target.connected
                 ]
 
+                # align the shape object
+                # the shape object's first atom will be on top of target
+                # the second will be lined up with the largest fragment on target
+                # the rest are rotated to minimize deviation from the remaining groups
                 shape_object = get_corresponding_shape(
                     target, shape_object, frags
                 )
@@ -3368,6 +3398,8 @@ class Geometry:
                 for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
                     # print(j, frag)
                     if j == 0:
+                        # skip the first fragment
+                        # that's already aligned with one of the atoms on shape_object
                         continue
                     v1 = target.bond(frag[0])
                     max_overlap = None
@@ -3377,6 +3409,7 @@ class Geometry:
                             continue
                         v2 = shape_object.atoms[0].bond(position)
                         d = np.dot(v1, v2)
+                        # determine by max. bond overlap
                         if max_overlap is None or d > max_overlap:
                             max_overlap = d
                             corresponding_position = i
@@ -3409,6 +3442,7 @@ class Geometry:
 
         target.element = new_element
 
+        # these methods are normally called when an atom is instantiated
         target._set_radii()
         target._set_connectivity()
         target._set_saturation()
