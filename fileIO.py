@@ -335,9 +335,8 @@ class FileReader:
 
         # get file name and extention
         if isinstance(fname, str):
-            fname = fname.rsplit(".", 1)
-            self.name = fname[0]
-            self.file_type = fname[1].lower()
+            self.name, self.file_type = os.path.splitext(fname)
+            self.file_type = self.file_type.lower()[1:]
         elif isinstance(fname, (tuple, list)):
             self.name = fname[0]
             self.file_type = fname[1]
