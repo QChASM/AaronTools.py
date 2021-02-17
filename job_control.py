@@ -239,6 +239,17 @@ class SubmitProcess:
 
         self.submit_out, self.submit_err = proc.communicate()
 
+        if len(self.submit_err) != 0 and QUEUE_TYPE == "SLURM":
+            args = ["sbatch"]
+            proc = subprocess.Popen(
+                args,
+                stdin=open(job_file, "r"),
+                cwd=self.directory,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.submit_out, self.submit_err = proc.communicate()
+
         if len(self.submit_err) != 0:
             raise RuntimeError(
                 "error with submitting job %s: %s"
