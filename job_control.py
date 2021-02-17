@@ -219,7 +219,7 @@ class SubmitProcess:
         if QUEUE_TYPE == "LSF":
             args = ["bsub", "<", job_file]
         elif QUEUE_TYPE == "SLURM":
-            args = ["sbatch", "<", job_file]
+            args = ["sbatch", job_file]
         elif QUEUE_TYPE == "PBS":
             args = ["qsub", job_file]
         elif QUEUE_TYPE == "SGE":
