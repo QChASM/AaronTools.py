@@ -216,8 +216,10 @@ class SubmitProcess:
         with open(job_file, "w") as f:
             f.write(tm)
 
+        stdin = None
         if QUEUE_TYPE == "LSF":
-            args = ["bsub", "<", job_file]
+            args = ["bsub"]
+            stdin = open(job_file, "r")
         elif QUEUE_TYPE == "SLURM":
             args = ["sbatch", job_file]
         elif QUEUE_TYPE == "PBS":
@@ -233,22 +235,12 @@ class SubmitProcess:
         proc = subprocess.Popen(
             args,
             cwd=self.directory,
+            stdin=stdin,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
 
         self.submit_out, self.submit_err = proc.communicate()
-
-        if len(self.submit_err) != 0 and QUEUE_TYPE == "SLURM":
-            args = ["sbatch"]
-            proc = subprocess.Popen(
-                args,
-                stdin=open(job_file, "r"),
-                cwd=self.directory,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            self.submit_out, self.submit_err = proc.communicate()
 
         if len(self.submit_err) != 0:
             raise RuntimeError(
