@@ -38,6 +38,7 @@ class Component(Geometry):
         """
         comp is either a file, a geometry, or an atom list
         """
+        super().__init__()
         self.name = name
         self.comment = comment
         self.other = {}

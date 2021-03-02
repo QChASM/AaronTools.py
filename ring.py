@@ -28,6 +28,7 @@ class Ring(Geometry):
         end is a list of atoms that defines which part of the ring is not part of the fragment
         """
 
+        super().__init__()
         if isinstance(frag, (Geometry, list)):
             # we can create ring object from a geometry
             if isinstance(frag, Ring):

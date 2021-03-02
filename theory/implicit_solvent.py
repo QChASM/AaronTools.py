@@ -407,6 +407,12 @@ class ImplicitSolvent:
         self.name = solvent_model
         self.solvent = solvent
 
+    def __repr__(self):
+        return "%s(%s)" % (self.name.upper(), self.solvent.lower())
+
+    def __eq__(self, other):
+        return repr(self) == repr(other)
+
     def get_gaussian(self):
         """returns dict() with solvent information for gaussian input files"""
         # need to check if solvent model is available

@@ -77,6 +77,11 @@ class Basis:
                         ele_selection.append(AnyNonTransitionMetal())
                     else:
                         ele_selection.append(AnyTransitionMetal())
+                elif ele.lower() == "!tm" and ele != "!Tm":
+                    if not_any:
+                        ele_selection.append(AnyNonTransitionMetal())
+                    else:
+                        ele_selection.append(AnyNonTransitionMetal())
                 elif isinstance(ele, str) and ele in ELEMENTS:
                     if not_any:
                         not_anys.append(ele)
@@ -85,7 +90,7 @@ class Basis:
                 else:
                     warn("element not known: %s" % repr(ele))
 
-            if not ele_selection:
+            if not ele_selection and not not_anys:
                 #if only not_anys were given, fall back to the default elements
                 ele_selection = self.default_elements
 
@@ -97,6 +102,39 @@ class Basis:
 
     def __repr__(self):
         return "%s(%s)" % (self.name, " ".join(self.elements))
+
+    def __lt__(self, other):
+        if self.name < other.name:
+            return True
+        elif self.name == other.name and self.elements and other.elements:
+            return self.elements[0] < other.elements[0]
+        return False
+
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        
+        if self.get_gaussian(self.name).lower() != other.get_gaussian(other.name).lower():
+            return False
+        
+        if self.aux_type != other.aux_type:
+            return False
+        
+        for obj, obj2 in zip([self, other], [other, self]):
+            for finder in obj.ele_selection:
+                if isinstance(finder, str):
+                    if finder not in obj2.ele_selection:
+                        print("bad ele", finder)
+                        return False
+                else:
+                    for finder2 in obj2.ele_selection:
+                        if repr(finder) == repr(finder2):
+                            break
+                    else:
+                        print("finder not in other", finder, obj2.ele_selection)
+                        return False
+        
+        return True
 
     def refresh_elements(self, geometry):
         """sets self's elements for the geometry"""
@@ -245,7 +283,7 @@ class BasisSet:
                 basis_sets.append(
                     cls(
                         basis_name,
-                        elements,
+                        elements=elements,
                         aux_type=aux_type,
                         user_defined=user_defined,
                     )
@@ -257,6 +295,31 @@ class BasisSet:
             i += 1
 
         return basis_sets
+
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        if self.basis and other.basis:  
+            if len(self.basis) != len(other.basis):
+                return False
+            for b1, b2 in zip(sorted(self.basis), sorted(other.basis)):
+                if b1 != b2:
+                    return False
+        else:
+            if self.basis != other.basis:
+                return False
+        
+        if self.ecp and other.ecp:
+            if len(self.ecp) != len(other.ecp):
+                return False
+            for b1, b2 in zip(sorted(self.ecp), sorted(other.ecp)):
+                if b1 != b2:
+                    return False
+        else:
+            if bool(self.ecp) != bool(other.ecp):
+                return False
+        
+        return True
 
     def add_ecp(self, ecp):
         """add ecp to this BasisSet

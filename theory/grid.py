@@ -23,6 +23,13 @@ class IntegrationGrid:
         """
         self.name = name
 
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        if self.name == other.name:
+            return True
+        return self.get_gaussian[0] == other.get_gaussian[0]
+
     def get_gaussian(self):
         """
         gets gaussian integration grid info and a warning as tuple(dict, str or None)

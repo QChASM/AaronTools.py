@@ -92,6 +92,7 @@ class Atom:
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None
     ):
+        object.__setattr__(self, "_hashed", False)
         if coords is None:
             coords = []
         if tags is None:
@@ -188,6 +189,28 @@ class Atom:
         except KeyError:
             warn("Radii not found for element: %s" % self.element)
         return
+
+    def __setattr__(self, attr, val):
+        if (
+                (attr == "_hashed" and val) or
+                (attr != "_hashed" and attr.startswith("_")) or
+                not self._hashed
+        ):
+            object.__setattr__(self, attr, val)
+        else:
+            raise RuntimeError(
+                "%s has been hashed and can no longer be changed\n" % self.name +
+                "setattr was called to set %s to %s" % (attr, val)
+            )
+
+    def __delattr__(self, attr):
+        if not self._hashed:
+            object.__del__(self, attr)
+        else:
+            raise RuntimeError(
+                "%s has been hashed and can no longer be changed\n" % self.name +
+                "del was called to delete %s" % attr
+            )
 
     def _set_vdw(self):
         """Sets atomic radii"""
@@ -286,6 +309,8 @@ class Atom:
                 continue
             if key == "constraint":
                 continue
+            if key == "_hashed":
+                continue
             try:
                 rv.__dict__[key] = val.copy()
             except AttributeError:
@@ -321,7 +346,7 @@ class Atom:
 
     def bond(self, other):
         """returns the vector self-->other"""
-        return other.coords - self.coords
+        return np.array(other.coords) - np.array(self.coords)
 
     def dist(self, other):
         """returns the distance between self and other"""

@@ -41,7 +41,8 @@ class Theory:
     The creation of a Theory object does not depend on the specific QM software
     that is determined when the file is written
 
-    attribute names are the same as initialization keywords
+    attribute names are the same as initialization keywords (with the exception of ecp, which
+    is added to the basis attribute)
     valid initialization keywords are:
     geometry                -   AaronTools Geometry
     charge                  -   total charge
@@ -200,13 +201,50 @@ class Theory:
             elif attr == "basis":
                 super().__setattr__(attr, BasisSet(val))
             elif attr == "empirical_dispersion":
-                super.__setattr__(attr, EmpiricalDispersion(val))
+                super().__setattr__(attr, EmpiricalDispersion(val))
             elif attr == "grid":
                 super().__setattr__(attr, IntegrationGrid(val))
             else:
                 super().__setattr__(attr, val)
         else:
             super().__setattr__(attr, val)
+
+    def __eq__(self, other):
+        if self.method != other.method:
+            # print("method")
+            return False
+        if self.charge != other.charge:
+            # print("charge")
+            return False
+        if self.multiplicity != other.multiplicity:
+            # print("multiplicity")
+            return False
+        if self.basis != other.basis:
+            # print("basis")
+            return False
+        if self.empirical_dispersion != other.empirical_dispersion:
+            # print("disp")
+            return False
+        if self.grid != other.grid:
+            # print("grid")
+            return False
+        if self.solvent != other.solvent:
+            # print("solvent")
+            return False
+        if self.processors != other.processors:
+            # print("procs")
+            return False
+        if self.memory != other.memory:
+            # print("mem")
+            return False
+        if self.job_type and other.job_type:
+            if len(self.job_type) != len(other.job_type):
+                return False
+            for job1, job2 in zip(self.job_type, other.job_type):
+                if job1 != job2:
+                    return False
+        
+        return True
 
     def make_header(
             self,

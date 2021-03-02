@@ -56,6 +56,7 @@ class Geometry:
         :refresh_connected: usually True - determine connectivity
         :refresh_ranks: usually True - rank atoms, only False when loading from database
         """
+        object.__setattr__(self, "_hashed", False)
         self.name = name
         self.comment = comment
         self.atoms = []
@@ -213,7 +214,7 @@ class Geometry:
             atoms = self.find(atoms)
         rv = np.zeros((len(atoms), 3), dtype=float)
         for i, a in enumerate(atoms):
-            rv[i] = a.coords[:]
+            rv[i] = np.array(a.coords[:])
         return rv
 
     @property
@@ -249,14 +250,74 @@ class Geometry:
         """
         two geometries equal if:
             same number of atoms
-            coordinates of atoms similar (now distance, soon RMSD)
+            same numbers of elements
+            coordinates of atoms similar
         """
         if id(self) == id(other):
             return True
         if len(self.atoms) != len(other.atoms):
             return False
-        rmsd = self.RMSD(other)
+
+        self_eles = [atom.element for atom in self.atoms]
+        other_eles = [atom.element for atom in other.atoms]
+        self_counts = {ele:self_eles.count(ele) for ele in set(self_eles)}
+        other_counts = {ele:other_eles.count(ele) for ele in set(other_eles)}
+        if self_counts != other_counts:
+            return False
+
+        rmsd = self.RMSD(other, sort=False)
         return rmsd < COORD_THRESHOLD
+
+    def __setattr__(self, attr, val):
+        if (
+                (attr == "_hashed" and val) or
+                (attr != "_hashed" and attr.startswith("_")) or
+                not self._hashed
+        ):
+            object.__setattr__(self, attr, val)
+        else:
+            raise RuntimeError(
+                "%s has been hashed and can no longer be changed\n" % self.name +
+                "setattr was called to set %s to %s" % (attr, val)
+            )
+
+    def __delattr__(self, attr):
+        if not self._hashed:
+            object.__del__(self, attr)
+        else:
+            raise RuntimeError(
+                "%s has been hashed and can no longer be changed\n" % self.name +
+                "del was called to delete %s" % attr
+            )
+
+    def __hash__(self):
+        # hash depends on atom elements, connectivity, order, and coordinates
+        # reorient along principle axes
+        coords = self.coords
+        coords -= self.COM()
+        _, ax = self.get_principle_axes()
+        coords = np.dot(coords, ax)
+        
+        t = []
+        for atom, coord in zip(self.atoms, coords):
+            # only use the first 3 decimal places of coordinates b/c numerical issues
+            t.append((int(atom.get_neighbor_id()), tuple([int(x * 1e3) for x in coord])))
+            # make sure atoms don't move
+            # if atoms move, the hash value could change making it impossible to access
+            # items in a dictionary with this instance as the key
+            if not isinstance(atom.coords, tuple):
+                atom.coords = tuple(atom.coords)
+            if not isinstance(atom.connected, frozenset):
+                atom.connected = frozenset(atom.connected)
+            atom._hashed = True
+        
+        # make sure self's atoms don't change
+        if not isinstance(self.atoms, tuple):
+            self.atoms = tuple(self.atoms)
+        # _hashed == True can cause errors for setting to deleting certain attributes
+        self._hashed = True
+
+        return hash(tuple(t))
 
     def __add__(self, other):
         if isinstance(other, Atom):
@@ -336,7 +397,7 @@ class Geometry:
         atoms = self._fix_connectivity(atoms)
         if hasattr(self, "components") and self.components is not None:
             self.fix_comment()
-        return Geometry(atoms, name, comment)
+        return Geometry([a.copy() for a in atoms], name, comment)
 
     def parse_comment(self):
         """
@@ -1285,7 +1346,7 @@ class Geometry:
         if targets:
             targets = self.find(targets)
         else:
-            targets = self.atoms
+            targets = list(self.atoms)
         # screen hydrogens if necessary
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
@@ -1599,7 +1660,7 @@ class Geometry:
                 mass = a.mass()
             else:
                 mass = 1
-            coords = a.coords - COM
+            coords = np.array(a.coords) - COM
             I_CM[0, 0] += mass * (coords[1] ** 2 + coords[2] ** 2)
             I_CM[1, 1] += mass * (coords[0] ** 2 + coords[2] ** 2)
             I_CM[2, 2] += mass * (coords[0] ** 2 + coords[1] ** 2)
@@ -2772,7 +2833,7 @@ class Geometry:
         #   attached_to == sub.end
         #   sub_attach will eventually be sub.atoms[0]
         # move attached_to to the origin
-        shift = attached_to.coords.copy()
+        shift = np.array([x for x in attached_to.coords])
         geom.coord_shift(-1 * shift)
         # align substituent to current bond
         bond = geom.bond(attached_to, sub_attach)

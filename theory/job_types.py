@@ -15,10 +15,18 @@ from AaronTools.theory import (
 
 
 class JobType:
-    """parent class of all job types"""
+    """
+    parent class of all job types
+    initialization keywords should be the same as attribute names
+    """
 
     def __init__(self):
         pass
+
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        return self.get_psi4() == other.get_psi4()
 
     def get_gaussian(self):
         """overwrite to return dict with GAUSSIAN_* keys"""

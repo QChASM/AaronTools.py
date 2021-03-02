@@ -24,6 +24,26 @@ class EmpiricalDispersion:
 
         self.name = name
 
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        if self.name == other.name:
+            return True
+        for d in [
+                ["grimme d2", "d2", "-d2", "gd2"],
+                ["grimme d3", "d3", "-d3", "gd3"],
+                ["becke-johnson damped grimme d3", "d3bj", "-d3bj", "gd3bj"],
+                ["becke-johnson damped modified grimme d3", "d3mbj", "-d3mbj"],
+                ["petersson-frisch", "pfd"],
+                ["grimme d4", "d4", "-d4", "gd4"],
+                ["nonlocal approximation", "nl", "nla", "-nl"],
+                ["coupled-cluster doubles", "ccd"],
+        ]:
+            if self.name.lower() in d and other.name.lower() in d:
+                return True
+        
+        return False
+
     def get_gaussian(self):
         """Acceptable dispersion methods for Gaussian are:
         Grimme D2
