@@ -18,7 +18,10 @@ class Method:
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        return self.get_gaussian()[0] == other.get_gaussian()[0] and self.is_semiempirical == other.is_semiempirical
+        return (
+            self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+            self.is_semiempirical == other.is_semiempirical
+        )
 
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""

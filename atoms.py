@@ -92,7 +92,7 @@ class Atom:
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None
     ):
-        object.__setattr__(self, "_hashed", False)
+        super().__setattr__("_hashed", False)
         if coords is None:
             coords = []
         if tags is None:
@@ -193,22 +193,22 @@ class Atom:
     def __setattr__(self, attr, val):
         if (
                 (attr == "_hashed" and val) or
-                (attr != "_hashed" and attr.startswith("_")) or
+                (attr != "element" and attr != "coords") or
                 not self._hashed
         ):
-            object.__setattr__(self, attr, val)
+            super().__setattr__(attr, val)
         else:
             raise RuntimeError(
-                "%s has been hashed and can no longer be changed\n" % self.name +
+                "Atom %s's Geometry has been hashed and can no longer be changed\n" % self.name +
                 "setattr was called to set %s to %s" % (attr, val)
             )
 
     def __delattr__(self, attr):
-        if not self._hashed:
-            object.__del__(self, attr)
+        if not self._hashed or (attr != "element" and attr != "coords"):
+            super().__del__(attr)
         else:
             raise RuntimeError(
-                "%s has been hashed and can no longer be changed\n" % self.name +
+                "Atom %s's Geometry has been hashed and can no longer be changed\n" % self.name +
                 "del was called to delete %s" % attr
             )
 

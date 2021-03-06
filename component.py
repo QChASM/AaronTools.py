@@ -54,6 +54,7 @@ class Component(Geometry):
             for lib in [Component.AARON_LIBS, Component.BUILTIN]:
                 if not os.path.exists(lib):
                     continue
+                flig = None
                 for f in os.listdir(lib):
                     name, ext = os.path.splitext(f)
                     if not any(".%s" % x == ext for x in read_types):
@@ -61,15 +62,16 @@ class Component(Geometry):
                     
                     match = structure == name
                     if match:
-                        structure = os.path.join(lib, f)
+                        flig = os.path.join(lib, f)
                         break
                     
-                if structure == os.path.join(lib, f):
+                if flig:
                     break
             else:
                 raise FileNotFoundError(
                     "Cannot find ligand in library:", structure
                 )
+            structure = flig
         super().__init__(structure, name, comment)
 
         if tag is not None:

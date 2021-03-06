@@ -3,8 +3,7 @@ from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE
 
 
 class ImplicitSolvent:
-    """this isn't really used
-    solvents should be added by directly using other_kw_dict"""
+    """implicit solvent info"""
 
     KNOWN_GAUSSIAN_SOLVENTS = [
         "Water",
@@ -417,6 +416,10 @@ class ImplicitSolvent:
         """returns dict() with solvent information for gaussian input files"""
         # need to check if solvent model is available
         warnings = []
+        if self.solvent.lower() == "gas":
+            # all gas, no solvent
+            return (dict(), warnings)
+
         if not any(
                 self.name.upper() == model
                 for model in [
@@ -476,6 +479,9 @@ class ImplicitSolvent:
     def get_orca(self):
         """returns dict() with solvent information for orca input files"""
         warnings = []
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
         if not any(
                 self.name.upper() == model
                 for model in ["SMD", "CPCM", "C-PCM", "PCM"]
@@ -530,6 +536,10 @@ class ImplicitSolvent:
 
     def get_psi4(self):
         """returns dict() with solvent information for psi4 input files"""
+
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
         raise NotImplementedError(
             "ImplicitSolvent cannot generate Psi4 solvent settings yet"
         )
