@@ -203,15 +203,6 @@ class Atom:
                 "setattr was called to set %s to %s" % (attr, val)
             )
 
-    def __delattr__(self, attr):
-        if not self._hashed or (attr != "element" and attr != "coords"):
-            super().__del__(attr)
-        else:
-            raise RuntimeError(
-                "Atom %s's Geometry has been hashed and can no longer be changed\n" % self.name +
-                "del was called to delete %s" % attr
-            )
-
     def _set_vdw(self):
         """Sets atomic radii"""
         try:

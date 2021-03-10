@@ -56,6 +56,7 @@ class Geometry:
         :refresh_connected: usually True - determine connectivity
         :refresh_ranks: usually True - rank atoms, only False when loading from database
         """
+        super().__setattr__("_hashed", False)
         self.name = name
         self.comment = comment
         self.atoms = []
@@ -300,8 +301,46 @@ class Geometry:
     def __len__(self):
         return len(self.atoms)
 
-    def get_hashable(self):
-        return HashableGeometry(self) 
+    def __setattr__(self, attr, val):
+        if attr == "_hashed" and not val:
+            raise RuntimeError("can only set %s to True" % attr)
+
+        if not self._hashed or (self._hashed and attr != "atoms"):
+            super().__setattr__(attr, val)
+        else:
+            raise RuntimeError("cannot change atoms attribute of HashableGeometry")
+
+    def __hash__(self):
+        # hash depends on atom elements, connectivity, order, and coordinates
+        # reorient using principle axes
+        coords = self.coords
+        coords -= self.COM()
+        mat = np.matmul(coords.T, coords)
+        vals = np.linalg.svd(mat, compute_uv=False)
+        
+        t = [int(v * 3) for v in vals]
+        for atom, coord in zip(self.atoms, coords):
+            # only use the first 3 decimal places of coordinates b/c numerical issues
+            t.append(int(atom.get_neighbor_id()))
+            if not atom._hashed:
+                atom.connected = frozenset(atom.connected)
+                atom.coords.setflags(write=False)
+                atom._hashed = True
+            # make sure atoms don't move
+            # if atoms move, the hash value could change making it impossible to access
+            # items in a dictionary with this instance as the key
+
+        if not self._hashed:
+            warn(
+                "%s %s has been hashed and will no longer be editable\n" % (
+                    self.__class__.__name__, self.name
+                ) +
+                "use Geometry.copy to get an editable duplicate of this instance"
+            )
+            self.atoms = tuple(self.atoms)
+            self._hashed = True
+
+        return hash(tuple(t))
 
     def tag(self, tag, targets=None):
         if targets is None:
@@ -848,7 +887,7 @@ class Geometry:
                     a.connected.add(b)
                     b.connected.add(a)
 
-    def refresh_ranks(self, invariant=False):
+    def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
             a._rank = r
@@ -4007,56 +4046,3 @@ class Geometry:
                     sub.rotate(reverse=True)
         return conf_spec, True
 
-
-
-class HashableGeometry(Geometry):
-    """
-    Geometry subclass where the atoms cannot move or change element
-    can be hashed
-    """
-    def __init__(self, *args, **kwargs):
-        super().__setattr__("_initialized", False)
-        super().__init__(*args, **kwargs)
-        
-        atoms = tuple(atom.copy() for atom in self.atoms)
-        for a1, a2 in zip(atoms, self.atoms):
-            for bonded_atom in a2.connected:
-                if bonded_atom not in self.atoms:
-                    continue
-                a1.connected.add(atoms[self.atoms.index(bonded_atom)])
-        
-        self.atoms = atoms
-        
-        for atom in self.atoms:
-            atom.connected = frozenset(atom.connected)
-            atom.coords.setflags(write=False)
-            atom._hashed = True
-
-        self._initialized = True
-
-    def __setattr__(self, attr, val):
-        if attr == "_initialized" and not val:
-            raise RuntimeError("can only set %s to True" % attr)
-
-        if not self._initialized or (self._initialized and attr != "atoms"):
-            super().__setattr__(attr, val)
-        else:
-            raise RuntimeError("cannot change atoms attribute of HashableGeometry")
-
-    def __hash__(self):
-        # hash depends on atom elements, connectivity, order, and coordinates
-        # reorient along principle axes
-        coords = self.coords
-        coords -= self.COM()
-        _, ax = self.get_principle_axes()
-        coords = np.dot(coords, ax)
-        
-        t = []
-        for atom, coord in zip(self.atoms, coords):
-            # only use the first 3 decimal places of coordinates b/c numerical issues
-            t.append((int(atom.get_neighbor_id()), tuple([int(x * 1e3) for x in coord])))
-            # make sure atoms don't move
-            # if atoms move, the hash value could change making it impossible to access
-            # items in a dictionary with this instance as the key
-
-        return hash(tuple(t))

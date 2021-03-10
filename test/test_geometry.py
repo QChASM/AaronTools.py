@@ -406,12 +406,12 @@ class TestGeometry(TestWithTimer):
         cat.fix_comment()
         self.assertEqual(
             cat.comment,
-            "C:1 K:2,3;14;35,36 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
         )
         cat.substitute("Me", "4")
         self.assertEqual(
             cat.comment,
-            "C:1 K:2,3;14;35,36 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
         )
 
     # geometry measurement
@@ -476,18 +476,6 @@ class TestGeometry(TestWithTimer):
         test = Geometry(TestGeometry.benzene)
         res = ref.RMSD(test, targets="C", ref_targets="C")
         self.assertTrue(res < rmsd_tol(ref))
-
-        # same molecule, slightly different structure
-        mol1 = Geometry(TestGeometry.lig_1)
-        mol2 = Geometry(TestGeometry.lig_2)
-        self.assertTrue(
-            np.isclose(
-                mol1.RMSD(mol2, heavy_only=True, sort=True),
-                0.2557,
-                rtol=0,
-                atol=1e-3,
-            )
-        )
 
     def test_vbur_MC(self):
         """
