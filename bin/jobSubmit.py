@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
-import sys
+from warnings import warn
 
 from AaronTools.config import Config
-from AaronTools.const import AARONLIB, AARONTOOLS, HOME
-from AaronTools.fileIO import FileReader, read_types
-from AaronTools.geometry import Geometry
 from AaronTools.job_control import SubmitProcess
 
 config = Config(quiet=True)
@@ -22,6 +18,7 @@ submit_parser = argparse.ArgumentParser(
     description="submit a QM computation to the queue",
     formatter_class=argparse.RawTextHelpFormatter,
 )
+
 submit_parser.add_argument(
     "infile",
     metavar="input file",
@@ -101,7 +98,7 @@ args = submit_parser.parse_args()
 
 for i, f in enumerate(args.infile):
     # TODO: if processors etc. is not specified, read the input file to see if
-    #      processors were specified
+    #       processors were specified
 
     processors = args.processors
     memory = args.memory
@@ -140,4 +137,4 @@ for i, f in enumerate(args.infile):
             submit_process.submit(wait=False, quiet=False)
 
     except Exception as e:
-        print("failed to submit %s: %s" % (f, str(e)))
+        warn("failed to submit %s: %s" % (f, str(e)))

@@ -13,6 +13,7 @@ rotate_parser = argparse.ArgumentParser(
     description="rotate a fragment or molecule's coordinates",
     formatter_class=argparse.RawTextHelpFormatter,
 )
+
 rotate_parser.add_argument(
     "infile",
     metavar="input file",
@@ -26,7 +27,6 @@ rotate_parser.add_argument(
     "-if",
     "--input-format",
     type=str,
-    nargs=1,
     default=None,
     choices=read_types,
     dest="input_format",
@@ -60,7 +60,6 @@ rot_atoms.add_argument(
     metavar="target",
     help="rotate fragment containing target",
 )
-
 
 rotate_parser.add_argument(
     "-c",
@@ -101,7 +100,6 @@ def_vector.add_argument(
     "-x",
     "--axis",
     type=str,
-    nargs=1,
     default=None,
     required=False,
     dest="axis",
@@ -117,8 +115,8 @@ def_vector.add_argument(
     required=False,
     dest="group",
     metavar="targets",
-    help="rotate about axis from origin (or center specified with '--center')\n"
-    + "to the centroid of the specified atoms",
+    help="rotate about axis from origin (or center specified with '--center')\n" +
+    "to the centroid of the specified atoms",
 )
 
 def_vector.add_argument(
@@ -136,7 +134,6 @@ rotate_parser.add_argument(
     "-a",
     "--angle",
     type=float,
-    nargs=1,
     default=None,
     required=None,
     dest="angle",
@@ -159,26 +156,24 @@ rotate_parser.add_argument(
     "-n",
     "--number",
     type=int,
-    nargs=1,
     default=None,
     required=False,
     dest="num",
     metavar="num",
-    help="when angle is specified, rotate num times by angle\n"
-    + "when angle is not specified, rotate 360/num degrees num times",
+    help="when angle is specified, rotate num times by angle\n" +
+    "when angle is not specified, rotate 360/num degrees num times",
 )
 
 rotate_parser.add_argument(
     "-o",
     "--output",
     type=str,
-    nargs=1,
-    default=[False],
+    default=False,
     required=False,
     dest="outfile",
-    help="output destination\n"
-    + "$INFILE, $AXIS, $ANGLE will be replaced with the name of the\n"
-    + "input file, rotation axis, and angle or rotation, respectively\nDefault: stdout",
+    help="output destination\n" +
+    "$INFILE, $AXIS, $ANGLE will be replaced with the name of the\n" +
+    "input file, rotation axis, and angle or rotation, respectively\nDefault: stdout",
 )
 
 args = rotate_parser.parse_args()
@@ -187,13 +182,13 @@ if args.angle is None and args.num is None:
     raise ValueError("must specified one of ('--angle', '--number')")
 elif args.num is None and args.angle is not None:
     args.num = 1
-    args.angle = args.angle[0]
+    args.angle = args.angle
 elif args.num is not None and args.angle is None:
-    args.num = args.num[0]
+    args.num = args.num
     args.angle = 360.0 / args.num
 elif args.num is not None and args.angle is not None:
-    args.num = args.num[0]
-    args.angle = args.angle[0]
+    args.num = args.num
+    args.angle = args.angle
 
 if not args.radians:
     args.angle = np.deg2rad(args.angle)
@@ -201,12 +196,12 @@ if not args.radians:
 for f in args.infile:
     if isinstance(f, str):
         if args.input_format is not None:
-            infile = FileReader((f, args.input_format[0], None))
+            infile = FileReader((f, args.input_format, None))
         else:
             infile = FileReader(f)
     else:
         if args.input_format is not None:
-            infile = FileReader(("from stdin", args.input_format[0], f))
+            infile = FileReader(("from stdin", args.input_format, f))
         else:
             infile = FileReader(("from stdin", "xyz", f))
 
@@ -228,14 +223,15 @@ for f in args.infile:
         vector = a1.bond(a2)
         if center is None:
             warn(
-                "center set to the coordinates of atom %s; using --center/-c none will override this"
+                "center set to the coordinates of atom %s; " +
+                "using --center/-c none will override this"
                 % a1.name
             )
             center = a1
 
     elif args.axis is not None:
         vector = np.zeros(3)
-        vector[["x", "y", "z"].index(args.axis[0])] = 1.0
+        vector[["x", "y", "z"].index(args.axis)] = 1.0
 
     elif args.group is not None:
         vector = geom.COM(targets=args.group)
@@ -266,8 +262,8 @@ for f in args.infile:
     for i in range(0, args.num):
         geom.rotate(vector, args.angle, targets=targets, center=center)
 
-        if args.outfile[0] is not False:
-            outfile = args.outfile[0]
+        if args.outfile is not False:
+            outfile = args.outfile
             outfile = outfile.replace("$INFILE", os.path.basename(f))
             outfile = outfile.replace(
                 "$AXIS", ".".join(["%.3f" % x for x in vector])
@@ -281,7 +277,7 @@ for f in args.infile:
                 os.makedirs(parent_dir)
 
         else:
-            outfile = args.outfile[0]
+            outfile = args.outfile
 
         s = geom.write(append=True, outfile=outfile)
         if not outfile:

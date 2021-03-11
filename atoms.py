@@ -92,6 +92,7 @@ class Atom:
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None
     ):
+        super().__setattr__("_hashed", False)
         if coords is None:
             coords = []
         if tags is None:
@@ -189,6 +190,19 @@ class Atom:
             warn("Radii not found for element: %s" % self.element)
         return
 
+    def __setattr__(self, attr, val):
+        if (
+                (attr == "_hashed" and val) or
+                (attr != "element" and attr != "coords") or
+                not self._hashed
+        ):
+            super().__setattr__(attr, val)
+        else:
+            raise RuntimeError(
+                "Atom %s's Geometry has been hashed and can no longer be changed\n" % self.name +
+                "setattr was called to set %s to %s" % (attr, val)
+            )
+
     def _set_vdw(self):
         """Sets atomic radii"""
         try:
@@ -260,21 +274,22 @@ class Atom:
         """
         # atomic number
         z = ELEMENTS.index(self.element)
-        s = "%03i" % z
         heavy = [
             ELEMENTS.index(x.element)
             for x in self.connected
             if x.element != "H"
         ]
-        # number of non-hydrogen connections:
-        s += "%02i" % len(heavy)
+        # number of non-hydrogen connections
         # number of bonds with heavy atoms and their element
+        t = []
         for h in sorted(set(heavy)):
-            s += "%03i" % h
-            s += "%02i" % heavy.count(h)
+            t.extend([h, heavy.count(h)])
+
         # number of connected hydrogens
         nH = len(self.connected) - len(heavy)
-        s += "%02i" % nH
+
+        fmt = "%03i%02i" + (len(set(heavy)) * "%03i%02i") + "%02i"
+        s = fmt % (z, len(heavy), *t, nH)
 
         return s
 
@@ -284,6 +299,8 @@ class Atom:
             if key == "connected":
                 continue
             if key == "constraint":
+                continue
+            if key == "_hashed":
                 continue
             try:
                 rv.__dict__[key] = val.copy()
@@ -320,7 +337,7 @@ class Atom:
 
     def bond(self, other):
         """returns the vector self-->other"""
-        return other.coords - self.coords
+        return np.array(other.coords) - np.array(self.coords)
 
     def dist(self, other):
         """returns the distance between self and other"""
@@ -624,7 +641,7 @@ class Atom:
             try_shapes["octahedral"] = Atom.get_shape("octahedral")
 
         else:
-            return None
+            return None, None
 
         # make a copy of the atom and the atoms bonded to it
         # set each bond length to 1 to more easily compare to the

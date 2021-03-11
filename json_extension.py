@@ -1,13 +1,27 @@
 import json
 
+from inspect import signature
+
 import numpy as np
 
 from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
+from AaronTools.finders import AnyNonTransitionMetal, AnyTransitionMetal, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.theory import (
+    Theory,
+    ImplicitSolvent,
+    OptimizationJob,
+    FrequencyJob,
+    ForceJob,
+    SinglePointJob,
+    BasisSet,
+    Basis,
+    ECP,
+)
 
 
 class ATEncoder(json.JSONEncoder):
@@ -24,6 +38,8 @@ class ATEncoder(json.JSONEncoder):
             return self._encode_comp_output(obj)
         elif isinstance(obj, Frequency):
             return self._encode_frequency(obj)
+        elif isinstance(obj, Theory):
+            return self._encode_theory(obj)
         else:
             super().default(obj)
 
@@ -121,6 +137,92 @@ class ATEncoder(json.JSONEncoder):
         rv["data"] = data
         return rv
 
+    def _encode_theory(self, obj):
+        rv = {"_type": obj.__class__.__name__}
+        
+        if obj.method:
+            rv["method"] = obj.method.name
+            rv["semi-empirical"] = obj.method.is_semiempirical
+        if obj.grid:
+            rv["grid"] = obj.grid.name
+        if obj.empirical_dispersion:
+            rv["disp"] = obj.empirical_dispersion.name
+        if obj.solvent:
+            rv["solvent model"] = obj.solvent.name
+            rv["solvent"] = obj.solvent.solvent
+        if obj.processors:
+            rv["nproc"] = obj.processors
+        if obj.memory:
+            rv["mem"] = obj.memory
+        if obj.kwargs:
+            rv["other"] = obj.kwargs
+
+        if obj.job_type:
+            rv["jobs"] = {}
+            for job in obj.job_type:
+                job_type = job.__class__.__name__
+                rv["jobs"][job_type] = {}
+                for arg in signature(job.__init__).parameters:
+                    if arg == "self" or arg == "geometry" or "*" in arg:
+                        continue
+                    try:
+                        rv["jobs"][job_type][arg] = getattr(job, arg)
+                    except AttributeError:
+                        pass
+                
+        if obj.basis.basis:
+            rv["basis"] = {"name": [], "elements":[], "file":[], "auxiliary":[]}
+            for basis in obj.basis.basis:
+                rv["basis"]["name"].append(basis.name)
+                rv["basis"]["elements"].append([])
+                for ele in basis.ele_selection:
+                    if isinstance(ele, str):
+                        rv["basis"]["elements"][-1].append(ele)
+                    elif isinstance(ele, AnyTransitionMetal):
+                        rv["basis"]["elements"][-1].append("tm")
+                    elif isinstance(ele, AnyNonTransitionMetal):
+                        rv["basis"]["elements"][-1].append("!tm")
+                        
+                if basis.not_anys:
+                    for ele in basis.not_anys:
+                        if isinstance(ele, str):
+                            rv["basis"]["elements"][-1].append("!%s" % ele)
+                        elif isinstance(ele, AnyTransitionMetal):
+                            rv["basis"]["elements"][-1].append("!tm")
+                        elif isinstance(ele, AnyNonTransitionMetal):
+                            rv["basis"]["elements"][-1].append("!!tm")
+
+
+                rv["basis"]["file"].append(basis.user_defined)
+                rv["basis"]["auxiliary"].append(basis.aux_type)
+
+        if obj.basis.ecp:
+            rv["ecp"] = {"name": [], "elements":[], "file":[]}
+            for basis in obj.basis.ecp:
+                rv["ecp"]["name"].append(basis.name)
+                for ele in basis.ele_selection:
+                    if isinstance(ele, str):
+                        rv["ecp"]["elements"].append(ele)
+                    elif isinstance(ele, AnyTransitionMetal):
+                        rv["ecp"]["elements"].append("tm")
+                    elif isinstance(ele, AnyNonTransitionMetal):
+                        rv["ecp"]["elements"].append("!tm")
+                    else:
+                        rv["ecp"]["elements"].append([])
+                        
+                if basis.not_anys:
+                    for ele in basis.not_anys:
+                        if isinstance(ele, str):
+                            rv["ecp"]["elements"][-1].append("!%s" % ele)
+                        elif isinstance(ele, AnyTransitionMetal):
+                            rv["ecp"]["elements"][-1].append("!tm")
+                        elif isinstance(ele, AnyNonTransitionMetal):
+                            rv["ecp"]["elements"][-1].append("tm")
+
+                rv["ecp"]["file"].append(basis.user_defined)
+
+        return rv
+
 
 class ATDecoder(json.JSONDecoder):
     with_progress = False
@@ -143,6 +245,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_frequency(obj)
         if obj["_type"] == "CompOutput":
             return self._decode_comp_output(obj)
+        if obj["_type"] == "Theory":
+            return self._decode_theory(obj)
 
     def _decode_atom(self, obj):
         kwargs = {}
@@ -214,4 +318,73 @@ class ATDecoder(json.JSONDecoder):
         rv = CompOutput()
         for key in keys:
             rv.__dict__[key] = obj[key]
+        return rv
+
+    def _decode_theory(self, obj):
+        rv = Theory()
+        if "method" in obj:
+            rv.method = obj["method"]
+            if "semi-empirical" in obj:
+                rv.method.is_semiempirical = obj["semi-empirical"]
+        
+        if "grid" in obj:
+            rv.grid = obj["grid"]
+        
+        if "solvent model" in obj and "solvent" in obj:
+            rv.solvent = ImplicitSolvent(obj["solvent model"], obj["solvent"])
+        
+        if "disp" in obj:
+            rv.empirical_dispersion = obj["disp"]
+        
+        if "nproc" in obj:
+            rv.processors = obj["nproc"]
+        
+        if "mem" in obj:
+            rv.memory = obj["mem"]
+        
+        if "jobs" in obj:
+            jobs = []
+            for job in obj["jobs"]:
+                if job == "OptimizationJob":
+                    jobs.append(OptimizationJob(**obj["jobs"][job]))
+                elif job == "FrequencyJob":
+                    jobs.append(FrequencyJob(**obj["jobs"][job]))
+                elif job == "SinglePointJob":
+                    jobs.append(SinglePointJob(**obj["jobs"][job]))
+                elif job == "ForceJob":
+                    jobs.append(ForceJob(**obj["jobs"][job]))
+        
+        if "basis" in obj or "ecp" in obj:
+            rv.basis = BasisSet([], [])
+        
+        if "basis" in obj:
+            for name, aux_type, file, elements in zip(
+                    obj["basis"]["name"],
+                    obj["basis"]["auxiliary"],
+                    obj["basis"]["file"],
+                    obj["basis"]["elements"],
+            ):
+                rv.basis.basis.append(
+                    Basis(
+                        name,
+                        elements=elements,
+                        aux_type=aux_type,
+                        user_defined=file,
+                    )
+                ) 
+
+        if "ecp" in obj:
+            for name, file, elements in zip(
+                    obj["ecp"]["name"],
+                    obj["ecp"]["file"],
+                    obj["ecp"]["elements"],
+            ):
+                rv.basis.ecp.append(
+                    ECP(
+                        name,
+                        elements=elements,
+                        user_defined=file,
+                    )
+                )
+        
         return rv

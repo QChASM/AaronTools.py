@@ -6,7 +6,7 @@ import re
 from glob import glob
 
 from AaronTools.const import AARONLIB, AARONTOOLS
-from AaronTools.fileIO import FileReader
+from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 
 
@@ -18,8 +18,8 @@ class Ring(Geometry):
         end
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Rings", "*.xyz")
-    BUILTIN = os.path.join(AARONTOOLS, "Rings", "*.xyz")
+    AARON_LIBS = os.path.join(AARONLIB, "Rings")
+    BUILTIN = os.path.join(AARONTOOLS, "Rings")
 
     def __init__(self, frag, name=None, end=None):
         """
@@ -28,6 +28,7 @@ class Ring(Geometry):
         end is a list of atoms that defines which part of the ring is not part of the fragment
         """
 
+        super().__init__()
         if isinstance(frag, (Geometry, list)):
             # we can create ring object from a geometry
             if isinstance(frag, Ring):
@@ -46,22 +47,31 @@ class Ring(Geometry):
 
         else:  # or we can create from file
             # find ring xyz file
-            fsub = None
-            for f in glob(Ring.AARON_LIBS) + glob(Ring.BUILTIN):
-                match = frag + ".xyz" == os.path.basename(f)
-                if match:
-                    fsub = f
+            fring = None
+            for lib in [Ring.AARON_LIBS, Ring.BUILTIN]:
+                if not os.path.exists(lib):
+                    continue
+                for f in os.listdir(lib):
+                    name, ext = os.path.splitext(f)
+                    if not any(".%s" % x == ext for x in read_types):
+                        continue
+                    match = frag == name
+                    if match:
+                        fring = os.path.join(lib, f)
+                        break
+                
+                if fring:
                     break
             # or assume we were given a file name instead
-            if not fsub and ".xyz" in frag:
-                fsub = frag
+            if not fring and ".xyz" in frag:
+                fring = frag
                 frag = os.path.basename(frag).rstrip(".xyz")
 
-            if fsub is None:
+            if fring is None:
                 raise RuntimeError("ring name not recognized: %s" % frag)
 
             # load in atom info
-            from_file = FileReader(fsub)
+            from_file = FileReader(fring)
             self.name = frag
             self.comment = from_file.comment
             self.atoms = from_file.atoms
@@ -101,17 +111,33 @@ class Ring(Geometry):
             return cls(ring, name=name)
 
     @classmethod
-    def list(cls):
+    def list(cls, include_ext=False):
         names = []
-        for f in glob(cls.AARON_LIBS) + glob(cls.BUILTIN):
-            name = os.path.splitext(os.path.basename(f))[0]
-            names.append(name)
+        for lib in [cls.AARON_LIBS, cls.BUILTIN]:
+            if not os.path.exists(lib):
+                continue
+            for f in os.listdir(lib):
+                name, ext = os.path.splitext(os.path.basename(f))
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
+                
+                if name in names:
+                    continue
+                
+                if include_ext:
+                    names.append(name + ext)
+                else:
+                    names.append(name)
 
         return names
 
+    def copy(self):
+        dup = super().copy()
+        dup.end = dup.find([atom.name for atom in self.end])
+        return dup
+
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""
-
         def linearly_connected(atom_list):
             """returns true if every atom in atom_list is connected to another atom in
             the list without backtracking"""
@@ -185,6 +211,6 @@ class Ring(Geometry):
             )
 
         else:
-            self.comment = ",".join(
-                [str(self.atoms.index(a) + 1) for a in self.atoms]
+            self.comment = "E:" + ",".join(
+                [str(self.atoms.index(a) + 1) for a in self.end]
             )

@@ -3,10 +3,10 @@ import itertools
 import re
 import ssl
 import urllib.parse
-from collections import deque
-from copy import deepcopy
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from collections import deque
+from copy import deepcopy
 from warnings import warn
 
 import numpy as np
@@ -39,13 +39,13 @@ class Geometry:
     Primes()
 
     def __init__(
-        self,
-        structure="",
-        name="",
-        comment="",
-        components=None,
-        refresh_connected=True,
-        refresh_ranks=True,
+            self,
+            structure="",
+            name="",
+            comment="",
+            components=None,
+            refresh_connected=True,
+            refresh_ranks=True,
     ):
         """
         :structure: can be a Geometry(), a FileReader(), a file name, or a
@@ -56,6 +56,7 @@ class Geometry:
         :refresh_connected: usually True - determine connectivity
         :refresh_ranks: usually True - rank atoms, only False when loading from database
         """
+        super().__setattr__("_hashed", False)
         self.name = name
         self.comment = comment
         self.atoms = []
@@ -63,6 +64,8 @@ class Geometry:
         self.components = components
         self.other = {}
         self._iter_idx = None
+        self._sigmat = None
+        self._epsmat = None
 
         self.debug = False
 
@@ -136,15 +139,23 @@ class Geometry:
         """get Geometry from string
         form=iupac -> iupac to smiles from opsin API
                        --> form=smiles
-        form=smiles -> structure from cactvs API"""
+        form=smiles -> structure from cactvs API/RDKit
+        """
 
         def get_cactus_sd(smiles):
-            url_sd = "{}/chemical/structure/{}/file?format=sdf".format(
+            url_sd = "{}/cgi-bin/translate.tcl?smiles={}&format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            print(url_sd)
-            s_sd = (
+            s_sd_get = (
                 urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
+            )
+            tmp_url = re.search(
+                "User-defined exchange format file: <a href=\"(.*)\"",
+                s_sd_get
+            ).group(1)
+            new_url = "{}{}".format(CACTUS_HOST, tmp_url)
+            s_sd = (
+                urlopen(new_url, context=ssl.SSLContext()).read().decode("utf8")
             )
             return s_sd
 
@@ -163,6 +174,7 @@ class Geometry:
         try:
             import rdkit.Chem.AllChem as rdk
 
+            scale_coords = False
             m = rdk.MolFromSmiles(smiles)
             if m is None and not strict_use_rdkit:
                 s_sd = get_cactus_sd(smiles)
@@ -175,10 +187,18 @@ class Geometry:
                     "Could not load {} with RDKit".format(smiles)
                 )
         except ImportError:
+            scale_coords = True
             s_sd = get_cactus_sd(smiles)
 
-        f = FileReader((name, "sd", s_sd))
-        return cls(f, refresh_connected=False)
+        try:
+            f = FileReader((name, "sd", s_sd))
+            is_sdf = True
+        except:
+            # for some reason, CACTUS is giving xyz files instead of sdf...
+            is_sdf = False
+            f = FileReader((name, "xyz", s_sd))
+
+        return cls(f, refresh_connected=not is_sdf)
 
     # attribute access
     def _stack_coords(self, atoms=None):
@@ -230,13 +250,22 @@ class Geometry:
         """
         two geometries equal if:
             same number of atoms
-            coordinates of atoms similar (now distance, soon RMSD)
+            same numbers of elements
+            coordinates of atoms similar
         """
         if id(self) == id(other):
             return True
         if len(self.atoms) != len(other.atoms):
             return False
-        rmsd = self.RMSD(other)
+
+        self_eles = [atom.element for atom in self.atoms]
+        other_eles = [atom.element for atom in other.atoms]
+        self_counts = {ele:self_eles.count(ele) for ele in set(self_eles)}
+        other_counts = {ele:other_eles.count(ele) for ele in set(other_eles)}
+        if self_counts != other_counts:
+            return False
+
+        rmsd = self.RMSD(other, sort=False)
         return rmsd < COORD_THRESHOLD
 
     def __add__(self, other):
@@ -271,6 +300,47 @@ class Geometry:
 
     def __len__(self):
         return len(self.atoms)
+
+    def __setattr__(self, attr, val):
+        if attr == "_hashed" and not val:
+            raise RuntimeError("can only set %s to True" % attr)
+
+        if not self._hashed or (self._hashed and attr != "atoms"):
+            super().__setattr__(attr, val)
+        else:
+            raise RuntimeError("cannot change atoms attribute of HashableGeometry")
+
+    def __hash__(self):
+        # hash depends on atom elements, connectivity, order, and coordinates
+        # reorient using principle axes
+        coords = self.coords
+        coords -= self.COM()
+        mat = np.matmul(coords.T, coords)
+        vals = np.linalg.svd(mat, compute_uv=False)
+        
+        t = [int(v * 3) for v in vals]
+        for atom, coord in zip(self.atoms, coords):
+            # only use the first 3 decimal places of coordinates b/c numerical issues
+            t.append(int(atom.get_neighbor_id()))
+            if not atom._hashed:
+                atom.connected = frozenset(atom.connected)
+                atom.coords.setflags(write=False)
+                atom._hashed = True
+            # make sure atoms don't move
+            # if atoms move, the hash value could change making it impossible to access
+            # items in a dictionary with this instance as the key
+
+        if not self._hashed:
+            warn(
+                "%s %s has been hashed and will no longer be editable\n" % (
+                    self.__class__.__name__, self.name
+                ) +
+                "use Geometry.copy to get an editable duplicate of this instance"
+            )
+            self.atoms = tuple(self.atoms)
+            self._hashed = True
+
+        return hash(tuple(t))
 
     def tag(self, tag, targets=None):
         if targets is None:
@@ -317,7 +387,7 @@ class Geometry:
         atoms = self._fix_connectivity(atoms)
         if hasattr(self, "components") and self.components is not None:
             self.fix_comment()
-        return Geometry(atoms, name, comment)
+        return Geometry([a.copy() for a in atoms], name, comment)
 
     def parse_comment(self):
         """
@@ -658,9 +728,9 @@ class Geometry:
                             rv += _find(i)
 
             elif (
-                isinstance(arg, str)
-                and len(arg.split("-")) > 1
-                and not re.search("[A-Za-z]", arg)
+                    isinstance(arg, str)
+                    and len(arg.split("-")) > 1
+                    and not re.search("[A-Za-z]", arg)
             ):
                 # print('range list')
                 rv += _find_between(arg)
@@ -817,14 +887,14 @@ class Geometry:
                     a.connected.add(b)
                     b.connected.add(a)
 
-    def refresh_ranks(self, invariant=False):
+    def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
             a._rank = r
         return
 
     def canonical_rank(
-        self, heavy_only=False, break_ties=True, update=True, invariant=True
+            self, heavy_only=False, break_ties=True, update=True, invariant=True
     ):
         """
         determine canonical ranking for atoms
@@ -836,6 +906,14 @@ class Geometry:
         primes = Primes.list(len(self.atoms))
         atoms = []
         ranks = []
+
+        # using the catalyst's center can make it difficult
+        # to compare C2 symmetric ligands
+        # center = list(filter(lambda x: "center" in x.tags, self))
+        # if center:
+        #     center = self.COM(targets=center)
+        # else:
+        center = self.COM()
 
         def neighbors_rank(ranks):
             # partitions key is product of rank and neighbors' rank
@@ -924,13 +1002,7 @@ class Geometry:
                 partitions[rank][rank] += [i]
 
             new_partitions = partitions.copy()
-            # using the catalyst's center can make it difficult
-            # to compare C2 symmetric ligands
-            # center = list(filter(lambda x: "center" in x.tags, self))
-            # if center:
-            #     center = self.COM(targets=center)
-            # else:
-            center = self.COM()
+
             # norm = self.get_principle_axes()
             # norm = norm[1][:, 0] - center
             for rank, rank_dict in partitions.items():
@@ -1075,7 +1147,7 @@ class Geometry:
             atoms_left -= set(connected)
             stack += sorted(connected)
 
-            if len(stack) == 0 and len(atoms_left) > 0:
+            if not stack and atoms_left:
                 stack += [sorted(atoms_left)[0]]
                 atoms_left -= set(stack)
 
@@ -1093,21 +1165,27 @@ class Geometry:
         self.fix_comment()
         self.refresh_ranks()
 
-    def detect_components(self, debug=False):
+    def detect_components(self, center=None):
+        from AaronTools.component import Component
+
         self.components = []
-        self.center = []
+        if center is None:
+            self.center = []
+        else:
+            self.center = self.find(center)
 
         # get center
-        for a in self.atoms:
-            if a.element in TMETAL.keys():
-                # detect transition metal center
-                if a not in self.center:
-                    self.center += [a]
-                a.add_tag("center")
-            if "center" in a.tags:
-                # center provided by comment line in xyz file
-                if a not in self.center:
-                    self.center += [a]
+        if not self.center:
+            for a in self.atoms:
+                if a.element in TMETAL.keys():
+                    # detect transition metal center
+                    if a not in self.center:
+                        self.center += [a]
+                    a.add_tag("center")
+                if "center" in a.tags:
+                    # center provided by comment line in xyz file
+                    if a not in self.center:
+                        self.center += [a]
 
         # label key atoms:
         for i, a in enumerate(self.atoms):
@@ -1123,9 +1201,9 @@ class Geometry:
         # rename
         for i, frag in enumerate(self.components):
             name = self.name + ".{:g}".format(
-                min([float(a.name) for a in frag])
+                min([float(a.name) if utils.is_num(a.name) else frag.index(a) for a in frag])
             )
-            self.components[i] = AaronTools.component.Component(frag, name)
+            self.components[i] = Component(frag, name)
         self.rebuild()
         return
 
@@ -1258,7 +1336,7 @@ class Geometry:
         if targets:
             targets = self.find(targets)
         else:
-            targets = self.atoms
+            targets = list(self.atoms)
         # screen hydrogens if necessary
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
@@ -1278,16 +1356,16 @@ class Geometry:
         return center
 
     def RMSD(
-        self,
-        ref,
-        align=False,
-        heavy_only=False,
-        sort=False,
-        targets=None,
-        ref_targets=None,
-        debug=False,
-        weights=None,
-        ref_weights=None,
+            self,
+            ref,
+            align=False,
+            heavy_only=False,
+            sort=False,
+            targets=None,
+            ref_targets=None,
+            debug=False,
+            weights=None,
+            ref_weights=None,
     ):
         """
         calculates the RMSD between two geometries
@@ -1390,7 +1468,64 @@ class Geometry:
         if sort:
             this.atoms = this.reorder()[0]
             ref.atoms = ref.reorder()[0]
-            res = _RMSD(ref.atoms, this.atoms)
+            this_ranks = [a._rank for a in this.atoms]
+            ref_ranks = [a._rank for a in ref.atoms]
+            if (
+                    any(this_ranks.count(r) > 1 for r in this_ranks) or
+                    any(ref_ranks.count(r) > 1 for r in ref_ranks)
+            ):
+                # if there are atoms with the same rank, align both ref and this
+                # to their principle axes and use the distance between the atoms
+                # in the structures to determine the order
+                this_atoms = []
+                ref_atoms = [a for a in ref.atoms]
+                _, this_axes = this.get_principle_axes()
+                _, ref_axes = ref.get_principle_axes()
+                this_coords = this.coords - this.COM()
+                ref_coords = ref.coords - ref.COM()
+                # align this to ref using the matrix that aligns this's principle axes
+                # to ref's principle axes
+                H = np.dot(ref_coords.T, this_coords)
+                u, s, vh = np.linalg.svd(H, compute_uv=True)
+                d = 1.
+                if np.linalg.det(np.matmul(vh.T, u.T)) < 0:
+                    d = 1.
+                m = np.diag([1., 1., d])
+                R = np.matmul(vh.T, m)
+                R = np.matmul(R, u.T)
+
+                this_coords = np.dot(this_coords, R)
+
+                # find the closest atom in this to the closest atom in ref
+                dist = distance_matrix(ref_coords, this_coords)
+                for i, r_a in enumerate(ref.atoms):
+                    min_dist = None
+                    match = None
+                    for j, t_a in enumerate(this.atoms):
+                        if t_a.element != r_a.element:
+                            continue
+                        if t_a in this_atoms:
+                            continue
+
+                        if min_dist is None or dist[i,j] < min_dist:
+                            min_dist = dist[i,j]
+                            match = t_a
+                    if match is not None:
+                        this_atoms.append(match)
+                    else:
+                        ref_atoms.remove(r_a)
+
+                # if we didn't find any matches or not all atoms are matched,
+                # use the original order
+                # otherwise, use the order determined by distances
+                if len(ref_atoms) == len(this_atoms) and ref_atoms:
+                    res = _RMSD(ref_atoms, this_atoms)
+                else:
+                    res = _RMSD(ref.atoms, this.atoms)
+
+            else:
+                res = _RMSD(ref.atoms, this.atoms)
+
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
 
@@ -1528,48 +1663,52 @@ class Geometry:
 
         return np.linalg.eigh(I_CM)
 
-    def LJ_energy(self, other=None, approximate=True):
+    def LJ_energy(self, other=None, use_prev_params=False):
         """
         computes LJ energy using autodock parameters
-        approximate - ignore atoms that are farther than 1.5x the
-                      sum of their VDW radii from each other
+        use_prev_params - use same sigma/epsilon as the last time LJ_energy was called
+                          useful for methods that make repetitive LJ_energy calls, like
+                          minimize_torsion
         """
 
-        if other is None:
+        if use_prev_params and self._sigmat is not None and self._sigmat.shape != (len(self), len(other)):
+            sigmat = self._sigmat
+            epsmat = self._epsmat
+        else:
+            sigmat = np.array([[a.rij(b) for a in self.atoms] for b in self.atoms])
+            epsmat = np.array([[a.eij(b) for a in self.atoms] for b in self.atoms])
+
+        if other is None or other is self:
             D = distance_matrix(self.coords, self.coords)
+            np.fill_diagonal(D, 1)
+
 
         else:
             if hasattr(other, "coords"):
                 D = distance_matrix(self.coords, other.coords)
                 other = other.atoms
+
+                sigmat = np.array([[a.rij(b) for a in other] for b in self.atoms])
+                epsmat = np.array([[a.eij(b) for a in other] for b in self.atoms])
             else:
                 D = distance_matrix(
                     self.coords, np.array([a.coords for a in other])
                 )
 
-        def calc_LJ(a, b, dist, approximate):
-            if approximate and dist > 1.5 * (a._vdw + b._vdw):
-                # optimization thing - if the atoms are far apart,
-                # the LJ energy is around 0
-                return 0
-            sigma = a.rij(b)
-            epsilon = a.eij(b)
-            s_d_6 = (sigma / dist) ** 6
-            return epsilon * (s_d_6 ** 2 - s_d_6)
+        self._sigmat = sigmat
+        self._epsmat = epsmat
 
-        energy = 0
-        for i, a in enumerate(self.atoms):
-            if other is None:
-                tmp = self.atoms[:i]
-            else:
-                tmp = other
+        repmat = sigmat / D
+        repmat = repmat ** 2
+        repmat = repmat ** 3
+        attmat = repmat ** 2
 
-            for j, b in enumerate(tmp):
-                if a is b:
-                    continue
-                energy += calc_LJ(a, b, D[i, j], approximate)
+        if other is None or other is self:
+            nrgmat = np.tril(epsmat * (attmat - repmat), -1)
+        else:
+            nrgmat = epsmat * (attmat - repmat)
 
-        return energy
+        return np.sum(nrgmat)
 
     def examine_constraints(self, thresh=None):
         """
@@ -1645,17 +1784,18 @@ class Geometry:
         return broken, formed
 
     def percent_buried_volume(
-        self,
-        center=None,
-        targets=None,
-        radius=3.5,
-        radii="umn",
-        scale=1.17,
-        exclude=None,
-        method="lebedev",
-        rpoints=20,
-        apoints=1454,
-        min_iter=25,
+            self,
+            center=None,
+            targets=None,
+            radius=3.5,
+            radii="umn",
+            scale=1.17,
+            exclude=None,
+            method="lebedev",
+            rpoints=20,
+            apoints=1454,
+            min_iter=25,
+            basis=None,
     ):
         """
         calculates % buried volume (%V_bur)
@@ -1676,6 +1816,8 @@ class Geometry:
         min_iter - minimum number of iterations for MC integration
                    each iteration is a batch of 3000 points
                    iterations will continue beyond min_iter if the volume has not converged
+        basis - change of basis matrix
+                will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
         #        split up the shells for the Lebedev integration, but...
@@ -1763,16 +1905,24 @@ class Geometry:
 
         # Monte-Carlo integration
         if method.lower() == "mc":
-            prev_vol = cur_vol = 0
+            if basis is None:
+                prev_vol = cur_vol = 0
+                buried_points = 0
+
+            else:
+                prev_vol = np.zeros(4)
+                cur_vol = np.zeros(4)
+                buried_points = np.zeros(4)
+                tot_points = np.zeros(4)
+
             n_samples = 3000
-            buried_points = 0
             dV = []
             i = 0
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
             while i < min_iter or not (
-                all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4
+                    all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4
             ):
                 i += 1
                 # get a random point uniformly distributed inside the sphere
@@ -1783,27 +1933,56 @@ class Geometry:
                 )
                 r += minr
                 z = np.random.uniform(-1, 1, n_samples)
+
                 theta = np.arcsin(z) + np.pi / 2
                 phi = np.random.uniform(0, 2 * np.pi, n_samples)
+
                 x = r * np.sin(theta) * np.cos(phi)
                 y = r * np.sin(theta) * np.sin(phi)
                 z *= r
 
                 xyz = np.array([x, y, z]).T
-                r_p = np.linalg.norm(xyz)
+                if basis is not None:
+                    # determine what quadrant this point is in, add it to the appropriate bin
+                    map_xyz = np.dot(xyz, basis)
+                    for p in map_xyz:
+                        if p[0] > 0 and p[1] > 0:
+                            tot_points[0] += 1
+                        elif p[0] <= 0 and p[1] > 0:
+                            tot_points[1] += 1
+                        elif p[0] <= 0 and p[1] <= 0:
+                            tot_points[2] += 1
+                        else:
+                            tot_points[3] += 1
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
                 D = distance_matrix(xyz, coords)
-                for d_row in D:
-                    for d, r in zip(d_row, radius_list):
+                for k, d_row in enumerate(D):
+                    for j, (d, r) in enumerate(zip(d_row, radius_list)):
                         if d < r:
-                            buried_points += 1
+                            if basis is None:
+                                buried_points += 1
+                            else:
+                                # determine what quadrant the point is in
+                                if map_xyz[k, 0] > 0 and map_xyz[k, 1] > 0:
+                                    buried_points[0] += 1
+                                elif map_xyz[k, 0] <= 0 and map_xyz[k, 1] > 0:
+                                    buried_points[1] += 1
+                                elif map_xyz[k, 0] <= 0 and map_xyz[k, 1] <= 0:
+                                    buried_points[2] += 1
+                                else:
+                                    buried_points[3] += 1
                             break
 
-                cur_vol = float(buried_points) / float(i * n_samples)
-                dV.append(abs(cur_vol - prev_vol))
-                prev_vol = cur_vol
+                if basis is None:
+                    cur_vol = float(buried_points) / (float(i * n_samples))
+                    dV.append(abs(cur_vol - prev_vol))
+                    prev_vol = cur_vol
+                else:
+                    cur_vol = np.divide(buried_points, tot_points) / 4
+                    dV.append(abs(sum(cur_vol) - sum(prev_vol)))
+                    prev_vol = cur_vol
 
             between_v = cur_vol * (maxr ** 3 - minr ** 3)
             tot_v = radius ** 3
@@ -1813,43 +1992,222 @@ class Geometry:
         else:
             # grab radial grid points and weights for range (minr, maxr)
             rgrid, rweights = utils.gauss_legendre_grid(
-                a=minr, b=maxr, n=rpoints
+                start=minr, stop=maxr, num=rpoints
             )
             # grab Lebedev grid for unit sphere at origin
             agrid, aweights = utils.lebedev_sphere(
-                radius=1, center=np.zeros(3), n=apoints
+                radius=1, center=np.zeros(3), num=apoints
             )
 
-            # value of integral (without 4 pi r^2) for each shell
-            shell_values = np.zeros(rpoints)
-            # loop over radial shells
+            #value of integral (without 4 pi r^2) for each shell
+            if basis is not None:
+                shell_values = np.zeros((4, rpoints))
+            else:
+                shell_values = np.zeros(rpoints)
+            #loop over radial shells
+
             for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
-                inside_weights = np.zeros(apoints)
+                if basis is not None:
+                    inside_weights = np.zeros((4, apoints))
+                else:
+                    inside_weights = np.zeros(apoints)
                 # scale grid point to radius and shift to center
-                agrid_r = agrid * rvalue + center_coords
+                agrid_r = agrid * rvalue
+                if basis is not None:
+                    map_agrid_r = np.dot(agrid_r, basis)
+                agrid_r += center_coords
                 D = distance_matrix(agrid_r, coords)
                 for j, (d_row, aweight) in enumerate(zip(D, aweights)):
                     # add weight if the point is inside of any atom's
                     # scaled VDW radius
                     for d, r in zip(d_row, radius_list):
                         if d < r:
-                            inside_weights[j] = aweight
+                            if basis is not None:
+                                # determine what quadrant the point is in for steric map stuff
+                                if map_agrid_r[j, 0] > 0 and map_agrid_r[j, 1] > 0:
+                                    inside_weights[0][j] = aweight
+                                elif map_agrid_r[j, 0] < 0 and map_agrid_r[j, 1] > 0:
+                                    inside_weights[1][j] = aweight
+                                elif map_agrid_r[j, 0] < 0 and map_agrid_r[j, 1] < 0:
+                                    inside_weights[2][j] = aweight
+                                else:
+                                    inside_weights[3][j] = aweight
+                            else:
+                                inside_weights[j] = aweight
+
                             break
 
-                    # save integral over current shell (without 4 pi r^2)
-                    shell_values[i] = np.sum(inside_weights)
+                    #save integral over current shell (without 4 pi r^2)
+                    if basis is not None:
+                        for k in range(0, 4):
+                            shell_values[k][i] = np.sum(inside_weights[k])
+                    else:
+                        shell_values[i] = np.sum(inside_weights)
 
-            return (
-                300
-                * np.dot(shell_values * rgrid ** 2, rweights)
-                / (radius ** 3)
+            if basis is not None:
+                # return a list of buried volume in each quadrant
+                return [300 * np.dot(shell_values[k] * rgrid ** 2, rweights) / (radius ** 3) for k in range(0, 4)]
+            else:
+                # return buried volume
+                return 300 * np.dot(shell_values * rgrid ** 2, rweights) / (radius ** 3)
+
+    def steric_map(
+            self,
+            center=None,
+            key_atoms=None,
+            radii="umn",
+            radius=3.5,
+            oop_vector=None,
+            ip_vector=None,
+            return_basis=False,
+            num_pts=100,
+            shape="circle",
+    ):
+        """
+        returns x, y, z, min_alt, max_alt or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
+        x - x coordinates for grid
+        y - y coordinates for grid
+        z - altitude levels; points where no atoms are will be -1000
+        min_alt - minimum altitude (above -1000)
+        max_alt - maximum altitute
+        basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
+        atoms - list of atoms that are in the steric map
+        a contour plot can be created with this data - see stericMap.py command line script
+
+        parameters:
+        center - atom, list of atoms, or array specifiying the origin
+        key_atoms - list of ligand key atoms. Atoms on these ligands will be in the steric map.
+        radii - "umn", "bondi", or dict() specifying the VDW radii to use
+        oop_vector - None or array specifying the direction out of the plane of the steric map
+                     if None, oop_vector is determined using the average vector from the key
+                     atoms to the center atom
+        ip_vector - None or array specifying a vector in the plane of the steric map
+                    if None, ip_vector is determined as the plane of best fit through the
+                    key_atoms and the center
+        return_basis - whether or not to return a change of basis matrix
+        num_pts - number of points along x and y axis to use
+        shape - "circle" or "square"
+        """
+
+        # determine center if none was specified
+        if center is None:
+            if self.center is None:
+                self.detect_components()
+            center = self.center
+            center_coords = self.COM(center)
+
+        else:
+            try:
+                center = self.find(center)
+                center_coords = self.COM(center)
+            except LookupError:
+                # assume an array was given
+                center_coords = center
+
+        # VDW radii to use
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        else:
+            raise RuntimeError(
+                "received %s for radii, must be umn or bondi" % radii
             )
+
+        if key_atoms is None:
+            key_atoms = []
+            if self.components is None:
+                self.detect_components()
+
+            for comp in self.components:
+                key_atoms.extend(comp.key_atoms)
+
+        else:
+            key_atoms = self.find(key_atoms)
+
+        targets = []
+        for key in key_atoms:
+            if key not in targets:
+                if isinstance(center, Atom) or (hasattr(center, "__iter__") and all(isinstance(a, Atom) for a in center)):
+                    targets.extend(self.get_fragment(key, center))
+
+                else:
+                    targets.extend(self.get_all_connected(key))
+
+        if oop_vector is None:
+            oop_vector = np.zeros(3)
+            for atom in key_atoms:
+                oop_vector += center_coords - atom.coords
+
+        oop_vector /= np.linalg.norm(oop_vector)
+
+        if ip_vector is None:
+            if len(key_atoms) == 1:
+                ip_vector = utils.perp_vector(oop_vector)
+                x_vec = np.cross(ip_vector, oop_vector)
+            else:
+                coords = [atom.coords for atom in key_atoms]
+                coords.append(center_coords)
+                coords = np.array(coords)
+                ip_vector = utils.perp_vector(coords)
+                x_vec = np.cross(ip_vector, oop_vector)
+                x_vec /= np.linalg.norm(x_vec)
+                ip_vector = -np.cross(x_vec, oop_vector)
+
+        else:
+            x_vec = np.cross(ip_vector, oop_vector)
+
+        basis = np.array([x_vec, ip_vector, oop_vector]).T
+        coords = self.coordinates(targets) - center_coords
+        new_coords = np.dot(coords, basis)
+        dist_ip = distance_matrix(new_coords[:, 0:2], [np.zeros(2)])[:, 0]
+        atoms_within_radius = []
+        radius_list = []
+        for i, atom in enumerate(targets):
+            if shape == "circle" and dist_ip[i] - radii_dict[atom.element] < radius:
+                atoms_within_radius.append(atom)
+                radius_list.append(radii_dict[atom.element])
+            elif shape == "square" and dist_ip[i] - radii_dict[atom.element] < np.sqrt(2) * radius:
+                atoms_within_radius.append(atom)
+                radius_list.append(radii_dict[atom.element])
+
+        atom_coords = np.dot(self.coordinates(atoms_within_radius) - center_coords, basis)
+
+        x = np.linspace(-radius, radius, num=num_pts)
+        y = np.linspace(-radius, radius, num=num_pts)
+        z = -1000 * np.ones((num_pts, num_pts))
+        max_alt = None
+        min_alt = None
+        for i in range(0, num_pts):
+            for j in range(0, num_pts):
+                if shape == "circle" and x[i]**2 + y[j]**2 > radius**2:
+                    continue
+                for k in range(0, len(atoms_within_radius)):
+                    w = np.sqrt((x[i] - atom_coords[k][0])**2 + (y[j] - atom_coords[k][1])**2)
+                    if w < radius_list[k]:
+                        h = np.sqrt(radius_list[k]**2 - w**2)
+                        alt = atom_coords[k, 2] + h
+                        # matplotlib mirrors z?
+                        if alt > z[j, i]:
+                            z[j, i] = alt
+                            if max_alt is None or alt > max_alt:
+                                max_alt = alt
+
+                            if min_alt is None or alt < min_alt:
+                                min_alt = alt
+
+        if return_basis:
+            return x, y, z, min_alt, max_alt, basis, atoms_within_radius
+        return x, y, z, min_alt, max_alt
 
     # geometry manipulation
     def append_structure(self, structure):
+        from AaronTools.component import Component
         if not isinstance(structure, Geometry):
-            structure = AaronTools.component.Component(structure)
+            structure = Component(structure)
         if not self.components:
             self.detect_components()
         self.components += [structure]
@@ -1906,7 +2264,7 @@ class Geometry:
         return atoms
 
     def get_fragment(
-        self, start, stop=None, as_object=False, copy=False, biggest=False
+            self, start, stop=None, as_object=False, copy=False, biggest=False
     ):
         """
         Returns:
@@ -1927,9 +2285,9 @@ class Geometry:
             for stop in itertools.chain(*[s.connected for s in start]):
                 frag = self.get_fragment(start, stop, as_object, copy)
                 if (
-                    best is None
-                    or (len(frag) < len(best) and not biggest)
-                    or (len(frag) > len(best) and biggest)
+                        best is None
+                        or (len(frag) < len(best) and not biggest)
+                        or (len(frag) > len(best) and biggest)
                 ):
                     best = frag
             return best
@@ -1996,7 +2354,7 @@ class Geometry:
         return
 
     def change_distance(
-        self, a1, a2, dist=None, adjust=False, fix=0, as_group=True
+            self, a1, a2, dist=None, adjust=False, fix=0, as_group=True
     ):
         """For setting/adjusting bond length between atoms
         Parameters:
@@ -2019,7 +2377,11 @@ class Geometry:
         if isinstance(dist, str):
             dist = float(dist)
         if dist is None:
-            new_dist = a1._radii + a2._radii
+            if hasattr(a1, "_radii") and hasattr(a2, "_radii"):
+                new_dist = a1._radii + a2._radii
+            else:
+                warn("no radii for one of:\n%s\n%s" % (a1, a2))
+                return
         elif adjust:
             new_dist = a1.dist(a2) + dist
         else:
@@ -2062,6 +2424,8 @@ class Geometry:
         return
 
     def rotate_fragment(self, start, avoid, angle):
+        """rotates the all atoms on the 'start' side of the
+        start-avoid bond about the bond vector by angle"""
         start = self.find(start)[0]
         avoid = self.find(avoid)[0]
         shift = start.coords
@@ -2093,8 +2457,8 @@ class Geometry:
         # shift geometry to place center atom at origin
         if center is not None:
             if not (
-                hasattr(center, "__len__")
-                and all(isinstance(x, float) for x in center)
+                    hasattr(center, "__len__")
+                    and all(isinstance(x, float) for x in center)
             ):
                 tmp = self.find(center)
                 if len(tmp) > 1:
@@ -2137,15 +2501,15 @@ class Geometry:
             self.coord_shift(center)
 
     def change_angle(
-        self,
-        a1,
-        a2,
-        a3,
-        angle,
-        radians=True,
-        adjust=False,
-        fix=0,
-        as_group=True,
+            self,
+            a1,
+            a2,
+            a3,
+            angle,
+            radians=True,
+            adjust=False,
+            fix=0,
+            as_group=True,
     ):
         """For setting/adjusting angle between atoms
         Parameters:
@@ -2301,7 +2665,7 @@ class Geometry:
                 "`fix` must be 0, 1, or 4 (supplied: {})".format(fix)
             )
 
-    def minimize_sub_torsion(self, geom=None, all_frags=False):
+    def minimize_sub_torsion(self, geom=None, all_frags=False, increment=30):
         """rotate substituents to try to minimize LJ potential
         geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
@@ -2312,10 +2676,7 @@ class Geometry:
         if not hasattr(self, "substituents") or self.substituents is None:
             self.detect_substituents()
 
-        increment = 30
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
-            if i > len(self.substituents):
-                increment = 5
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(
@@ -2339,20 +2700,55 @@ class Geometry:
         :geom: calculate LJ potential between self and another geometry-like
             object, instead of just within self
         """
-        targets = self.find(targets)
-        if geom is None:
-            geom = self
+        targets = Geometry(
+            self.find(targets),
+            refresh_connected=False,
+            refresh_ranks=False,
+        )
+
+        if geom is None or geom is self:
+            from AaronTools.finders import NotAny
+            try:
+                geom = Geometry(
+                    self.find(NotAny(targets)),
+                    refresh_connected=False,
+                    refresh_ranks=False,
+                )
+            except LookupError:
+                return
+
         E_min = None
         angle_min = None
+        # copied an reorganized some stuff from Geometry.rotate for
+        # performance reasons
+        if hasattr(center, "__iter__") and all(isinstance(x, float) for x in center):
+            center_coords = center
+        else:
+            center_coords = self.COM(center)
+
+        axis = axis / np.linalg.norm(axis)
+        q = np.hstack(([np.cos(np.deg2rad(increment) / 2)], axis * np.sin(np.deg2rad(increment) / 2)))
+        q /= np.linalg.norm(q)
+        qs = q[0]
+        qv = q[1:]
 
         # rotate targets by increment and save lowest energy
         angle = 0
+        xyz = targets.coords
         for inc in range(0, 360, increment):
             angle += increment
-            self.rotate(
-                axis, np.rad2deg(increment), targets=targets, center=center
-            )
-            energy = self.LJ_energy(geom)
+
+            xyz -= center_coords
+            xprod = np.cross(qv, xyz)
+            qs_xprod = 2 * qs * xprod
+            qv_xprod = 2 * np.cross(qv, xprod)
+
+            xyz += qs_xprod + qv_xprod
+            xyz += center_coords
+            for t, coord in zip(targets.atoms, xyz):
+                t.coords = coord
+
+            energy = targets.LJ_energy(other=geom, use_prev_params=True)
 
             if E_min is None or energy < E_min:
                 E_min = energy
@@ -2360,7 +2756,7 @@ class Geometry:
 
         # rotate to min angle
         self.rotate(
-            axis, np.rad2deg(angle_min - angle), targets=targets, center=center
+            axis, np.deg2rad(angle_min - angle), targets=targets, center=center
         )
 
         return
@@ -2372,6 +2768,7 @@ class Geometry:
         if attached_to==None, replace the smallest fragment containing `target`
         minimize - bool, rotate sub to lower LJ potential
         """
+        from AaronTools.component import Component
         # set up substituent
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
@@ -2426,7 +2823,7 @@ class Geometry:
         #   attached_to == sub.end
         #   sub_attach will eventually be sub.atoms[0]
         # move attached_to to the origin
-        shift = attached_to.coords.copy()
+        shift = np.array([x for x in attached_to.coords])
         geom.coord_shift(-1 * shift)
         # align substituent to current bond
         bond = geom.bond(attached_to, sub_attach)
@@ -2466,7 +2863,7 @@ class Geometry:
         geom.change_distance(attached_to, sub.atoms[0], as_group=True, fix=1)
 
         # clean up changes
-        if isinstance(geom, AaronTools.component.Component):
+        if isinstance(geom, Component):
             self.substituents += [sub]
             self.detect_backbone(to_center=self.backbone)
             self.rebuild()
@@ -2519,9 +2916,15 @@ class Geometry:
                 rv += [sub]
         return rv
 
-    def ring_substitute(self, targets, ring_fragment):
-        """take ring, reorient it, put it on self and replace targets with atoms
-        on the ring fragment"""
+    def ring_substitute(self, targets, ring_fragment, minimize=False, flip_walk=False):
+        """
+        take ring, reorient it, put it on self and replace targets with atoms
+        on the ring fragment
+        ring_fragment - Ring instance or name of ring in the library
+        minimize - try other rings with the same name (appended with a number)
+                   in the library to see if they fit better
+        flip_walk - also flip the rings when minimizing to see if that fits better
+        """
 
         def attach_short(geom, walk, ring_fragment):
             """for when walk < end, rmsd and remove end[1:-1]"""
@@ -2560,7 +2963,7 @@ class Geometry:
             pivot on one end atom to adjust the bond lenth of the other, then do
             the same with the other end atom"""
             if hasattr(ring.end[0], "_radii") and hasattr(
-                walk_end[0], "_radii"
+                    walk_end[0], "_radii"
             ):
                 d1 = ring.end[0]._radii + walk_end[0]._radii
             else:
@@ -2583,7 +2986,7 @@ class Geometry:
             ring.rotate(rv, ra, center=ring.end[-1])
 
             if hasattr(ring.end[-1], "_radii") and hasattr(
-                walk_end[-1], "_radii"
+                    walk_end[-1], "_radii"
             ):
                 d1 = ring.end[-1]._radii + walk_end[-1]._radii
             else:
@@ -2605,6 +3008,15 @@ class Geometry:
 
             ring.rotate(rv, ra, center=ring.end[0])
 
+        def clashing(geom, ring):
+            from AaronTools.finders import NotAny
+            geom_coords = geom.coordinates(NotAny(ring.atoms))
+            dist_mat = distance_matrix(geom_coords, ring.coords)
+            if np.any(dist_mat < 0.75):
+                return True
+
+            return False
+
         from AaronTools.ring import Ring
 
         if not isinstance(ring_fragment, Ring):
@@ -2621,9 +3033,112 @@ class Geometry:
             ring_fragment.find_end(len(walk), start=ring_fragment.end)
 
         if len(walk) == len(ring_fragment.end) and len(walk) != 2:
-            attach_short(self, walk, ring_fragment)
+            if not minimize:
+                attach_short(self, walk, ring_fragment)
+            else:
+                # to minimize, check VSEPR on self's atoms attached to targets
+                # lower deviation is better
+                # do this for the original ring and also try flipping the ring
+                # ring is flipped by reversing walk
+                # check for other rings in the library with ring.\d+
+                # e.g. cyclohexane.2
+                vsepr1, _ = walk[1].get_vsepr()
+                vsepr2, _ = walk[-2].get_vsepr()
+                geom = self.copy()
+                test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
+                frag = ring_fragment.copy()
+                attach_short(geom, test_walk, frag)
+                new_vsepr1, score1 = test_walk[1].get_vsepr()
+                new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                new_vsepr3, score3 = frag.end[0].get_vsepr()
+                new_vsepr4, score4 = frag.end[-1].get_vsepr()
 
-        elif len(walk[1:-1]) == 0:
+                score = score1 + score2 + score3 + score4
+
+                min_diff = score
+                min_ring = 0
+
+                # print("%s score: %.3f" % (ring_fragment.name, score))
+
+                if flip_walk:
+                    geom = self.copy()
+                    test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]][::-1]
+                    frag = ring_fragment.copy()
+                    attach_short(geom, test_walk, frag)
+                    new_vsepr1, score1 = test_walk[1].get_vsepr()
+                    new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                    new_vsepr3, score3 = frag.end[0].get_vsepr()
+                    new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                    score = score1 + score2 + score3 + score4
+
+                    if score < min_diff and not clashing(geom, frag):
+                        min_ring = 1
+                        min_diff = score
+
+                    # print("flipped %s score: %.3f" % (ring_fragment.name, score))
+
+                # check other rings in library
+                # for these, flip the ring end instead of walk
+                for ring_name in Ring.list():
+                    if re.search("%s\.\d+" % ring_fragment.name, ring_name):
+                        test_ring_0 = Ring(ring_name)
+
+                        geom = self.copy()
+                        test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
+                        if len(test_ring_0.end) != len(walk):
+                            test_ring_0.find_end(len(walk), start=test_ring_0.end)
+
+                        frag = test_ring_0.copy()
+                        attach_short(geom, test_walk, frag)
+                        new_vsepr1, score1 = test_walk[1].get_vsepr()
+                        new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                        new_vsepr3, score3 = frag.end[0].get_vsepr()
+                        new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                        score = score1 + score2 + score3 + score4
+
+                        if score < min_diff and not clashing(geom, frag):
+                            min_ring = test_ring_0
+                            min_diff = score
+
+                        # print("%s score: %.3f" % (ring_name, score))
+
+                        if flip_walk:
+                            test_ring_1 = Ring(ring_name)
+                            test_ring_1.end.reverse()
+
+                            geom = self.copy()
+                            test_walk = [geom.atoms[i] for i in [self.atoms.index(atom) for atom in walk]]
+                            if len(test_ring_0.end) != len(walk):
+                                test_ring_0.find_end(len(walk), start=test_ring_0.end)
+
+                            frag = test_ring_1.copy()
+                            attach_short(geom, test_walk, frag)
+                            new_vsepr1, score1 = test_walk[1].get_vsepr()
+                            new_vsepr2, score2 = test_walk[-2].get_vsepr()
+                            new_vsepr3, score3 = frag.end[0].get_vsepr()
+                            new_vsepr4, score4 = frag.end[-1].get_vsepr()
+
+                            score = score1 + score2 + score3 + score4
+
+                            # print("flipped %s score: %.3f" % (ring_name, score))
+
+                            if score < min_diff and not clashing(geom, frag):
+                                min_ring = test_ring_1
+                                min_diff = score
+
+                if not isinstance(min_ring, Ring) and min_ring == 0:
+                    walk = self.shortest_path(*targets)
+                    attach_short(self, walk, ring_fragment)
+                elif not isinstance(min_ring, Ring) and min_ring == 1:
+                    walk = self.shortest_path(*targets)[::-1]
+                    attach_short(self, walk, ring_fragment)
+                else:
+                    walk = self.shortest_path(*targets)
+                    attach_short(self, walk, min_ring)
+
+        elif not walk[1:-1]:
             raise ValueError(
                 "insufficient information to close ring - selected atoms are bonded to each other: %s"
                 % (" ".join(str(a) for a in targets))
@@ -2658,13 +3173,17 @@ class Geometry:
         """
 
         def get_corresponding_shape(target, shape_object, frags):
-            """returns shape object, but where atoms[1:] are ordered corresping to target.connected"""
+            """
+            returns shape object, but where shape_object.atoms are lined up with
+            target.connected as much as possible
+            """
             shape_object.coord_shift(
                 target.coords - shape_object.atoms[0].coords
             )
             if len(frags) == 0:
                 return shape_object
 
+            # to minimize changes to the structure, things are aligned to the largest fragment
             max_frag = sorted(frags, key=len, reverse=True)[0]
             angle = target.angle(shape_object.atoms[1], max_frag[0])
             v1 = target.bond(max_frag[0])
@@ -2673,6 +3192,8 @@ class Geometry:
             v2 /= np.linalg.norm(v2)
             rv = np.cross(v1, v2)
 
+            # could have numerical issues
+            # avoid those, but check to see if the angle is 180 degrees
             if abs(np.linalg.norm(rv)) < 10 ** -3 or abs(angle) < 10 ** -3:
                 if np.dot(v1, v2) == -1:
                     rv = np.array([v1[2], v1[0], v1[1]])
@@ -2682,6 +3203,9 @@ class Geometry:
             if abs(np.linalg.norm(rv)) > 10 ** -3 and abs(angle) > 10 ** -3:
                 shape_object.rotate(rv, -angle, center=target)
 
+            # rotate about the vector from the center (target atom) to the first
+            # atom in shape (which will be the largest fragment) to get the shape object
+            # as lined up with the rest of the connected atoms as possible
             rv = target.bond(shape_object.atoms[1])
             min_dev = None
             min_angle = 0
@@ -2747,10 +3271,15 @@ class Geometry:
         )
 
         if adjust_hydrogens is True:
+            # try to determine how many hydrogens to add based on how many hydrogens are currently
+            # bonded and what the saturation of the atoms is
+            # e.g. C(H3) -> N(H?)
+            # C's saturation is 4, it's missing one
+            # N's saturation is 3, it should be missing one: N(H2)
             if hasattr(target, "_saturation") and hasattr(
-                new_atom, "_saturation"
+                    new_atom, "_saturation"
             ):
-                change_Hs = new_atom._saturation - target._saturation
+                change_hydrogens = new_atom._saturation - target._saturation
                 new_shape = None
             else:
                 raise RuntimeError(
@@ -2765,22 +3294,25 @@ class Geometry:
                 )
 
         elif isinstance(adjust_hydrogens, tuple):
-            change_Hs, new_shape = adjust_hydrogens
+            # tuple of (change in hydrogens, vsepr shape) was given
+            change_hydrogens, new_shape = adjust_hydrogens
 
         else:
-            change_Hs = 0
+            # no change was requested, only the element will change
+            # and maybe bond lengths
+            change_hydrogens = 0
             new_shape = None
 
-        if change_Hs != 0 or new_shape is not None:
+        if change_hydrogens != 0 or new_shape is not None:
             # if we're removing hydrogens, check if we have enough to remove
-            if change_Hs < 0:
-                nH = sum(
+            if change_hydrogens < 0:
+                n_hygrogens = sum(
                     [1 for atom in target.connected if atom.element == "H"]
                 )
-                if nH + change_Hs < 0:
+                if n_hygrogens + change_hydrogens < 0:
                     raise RuntimeError(
                         "cannot remove %i hydrogens from an atom with %i hydrogens"
-                        % (abs(change_Hs), nH)
+                        % (abs(change_hydrogens), n_hygrogens)
                     )
 
             # get vsepr geometry
@@ -2793,9 +3325,13 @@ class Geometry:
                 else:
                     new_connectivity = None
 
-                for i in range(0, abs(change_Hs)):
+                # if we're changing the number of hydrogens, but no shape was specified,
+                # we will remove hydrogens one by one and see what shape we end up with
+                # shape changes are based on rules like adding a bond to a trigonal planar
+                # atom will cause it to be tetrahedral (e.g. carbocation gaining a hydride)
+                for i in range(0, abs(change_hydrogens)):
                     shape = Atom.new_shape(
-                        shape, new_connectivity, np.sign(change_Hs)
+                        shape, new_connectivity, np.sign(change_hydrogens)
                     )
                     if shape is None:
                         raise RuntimeError(
@@ -2807,14 +3343,16 @@ class Geometry:
             shape_object = Geometry(Atom.get_shape(new_shape))
 
             if (
-                len(shape_object.atoms[1:]) - len(target.connected)
-                != change_Hs
+                    len(shape_object.atoms[1:]) - len(target.connected)
+                    != change_hydrogens
             ):
+                # insufficient to change the shape
+                # we cannot delete random fragments
                 raise RuntimeError(
                     "number of positions changed by %i, but a change of %i hydrogens was attempted"
                     % (
                         len(shape_object.atoms[1:]) - len(target.connected),
-                        change_Hs,
+                        change_hydrogens,
                     )
                 )
 
@@ -2823,14 +3361,14 @@ class Geometry:
                 self.get_fragment(atom, target) for atom in target.connected
             ]
 
-            if new_shape != old_shape:
-                if change_Hs < 0:
+            if new_shape != old_shape or change_hydrogens == 0:
+                if change_hydrogens < 0:
                     # remove extra hydrogens
                     shape_object = get_corresponding_shape(
                         target, shape_object, frags
                     )
                     removed_Hs = 1
-                    while removed_Hs <= abs(change_Hs):
+                    while removed_Hs <= abs(change_hydrogens):
                         H_atom = [
                             atom
                             for atom in target.connected
@@ -2839,11 +3377,16 @@ class Geometry:
                         self -= H_atom
                         removed_Hs += 1
 
+                # get fragments after hydrogens have been removed
                 frags = [
                     self.get_fragment(atom, target)
                     for atom in target.connected
                 ]
 
+                # align the shape object
+                # the shape object's first atom will be on top of target
+                # the second will be lined up with the largest fragment on target
+                # the rest are rotated to minimize deviation from the remaining groups
                 shape_object = get_corresponding_shape(
                     target, shape_object, frags
                 )
@@ -2858,7 +3401,7 @@ class Geometry:
                             remove_frags.append(frag2)
 
                 # add Hs if needed
-                if change_Hs > 0:
+                if change_hydrogens > 0:
                     # determine which connected atom is occupying which position on the shape
                     shape_object = get_corresponding_shape(
                         target, shape_object, frags
@@ -2866,7 +3409,7 @@ class Geometry:
 
                     positions = []
                     for j, frag in enumerate(
-                        sorted(frags, key=len, reverse=True)
+                            sorted(frags, key=len, reverse=True)
                     ):
                         v2 = target.bond(frag[0])
                         max_overlap = None
@@ -2886,9 +3429,9 @@ class Geometry:
 
                     # add hydrogens to positions that are not occupied
                     for open_position in [
-                        i + 1
-                        for i in range(0, len(shape_object.atoms[1:]))
-                        if i not in positions
+                            i + 1
+                            for i in range(0, len(shape_object.atoms[1:]))
+                            if i not in positions
                     ]:
                         # add one because the 0th "position" of the shape is the central atom
                         H_atom = Atom(
@@ -2909,7 +3452,10 @@ class Geometry:
 
                 previous_positions = []
                 for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
+                    # print(j, frag)
                     if j == 0:
+                        # skip the first fragment
+                        # that's already aligned with one of the atoms on shape_object
                         continue
                     v1 = target.bond(frag[0])
                     max_overlap = None
@@ -2919,6 +3465,7 @@ class Geometry:
                             continue
                         v2 = shape_object.atoms[0].bond(position)
                         d = np.dot(v1, v2)
+                        # determine by max. bond overlap
                         if max_overlap is None or d > max_overlap:
                             max_overlap = d
                             corresponding_position = i
@@ -2951,6 +3498,7 @@ class Geometry:
 
         target.element = new_element
 
+        # these methods are normally called when an atom is instantiated
         target._set_radii()
         target._set_connectivity()
         target._set_saturation()
@@ -3020,11 +3568,12 @@ class Geometry:
             ligand.coord_shift(shift)
             remove_centers = []
 
+            old_walk = False
             # bend around key axis
             try:
                 old_walk = old_ligand.shortest_path(*old_keys)
 
-            except ValueError:
+            except (LookupError, ValueError):
                 # for some ferrocene ligands, AaronTools misidentifies the Fe
                 # as another metal center
                 # we'll remove any centers that are on the path between the key atoms
@@ -3032,24 +3581,50 @@ class Geometry:
                 # attribute, even though the center has the ligand atoms in its
                 # connected attribute, so refresh_connected
                 self.refresh_connected()
-                old_walk = self.shortest_path(
-                    *old_keys,
-                    avoid=[
-                        a
-                        for a in self.center
-                        if any(k.is_connected(a) for k in old_keys)
+                # print("old keys:", old_keys)
+                # print("old ligand:\n", old_ligand)
+                frag = old_ligand.get_fragment(
+                    old_keys[0], stop=[
+                        atom for atom in old_keys[0].connected if atom not in old_ligand.atoms
                     ]
                 )
-                remove_centers = [c for c in self.center if c in old_walk]
+                if all(atom in frag for atom in old_keys):
+                    # for atom in frag:
+                    #     print("frag:", atom)
+                    old_walk = self.shortest_path(
+                        *old_keys,
+                        avoid=[
+                            a
+                            for a in self.center
+                            if any(k.is_connected(a) for k in old_keys)
+                        ]
+                    )
+                    remove_centers = [c for c in self.center if c in old_walk]
 
-            if len(old_walk) == 2:
+            if old_walk and len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
                     for c in k.connected:
                         old_con.add(c)
                 old_vec = old_ligand.COM(targets=old_con) - center
-            else:
+            elif old_walk:
                 old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
+            else:
+                old_vec = np.zeros(3)
+                for atom in old_keys:
+                    if any(bonded_atom not in old_ligand.atoms for bonded_atom in atom.connected):
+                        v = atom.coords - self.COM(
+                            targets=[
+                                bonded_atom for bonded_atom in atom.connected
+                                if bonded_atom not in old_ligand.atoms
+                            ]
+                        )
+                        v /= np.linalg.norm(v)
+                        old_vec += v
+                        # print(atom)
+
+                # print("vec:", old_vec)
+                old_vec /= np.linalg.norm(old_vec)
 
             new_walk = ligand.shortest_path(*new_keys)
             if len(new_walk) == 2:
@@ -3099,7 +3674,7 @@ class Geometry:
         def map_more_key(self, old_ligand, ligand, old_keys, new_keys):
             # backbone fragments separated by rotatable bonds
             frag_list = ligand.get_frag_list(max_order=1)
-            ligand.write("ligand")
+            # ligand.write("ligand")
 
             remove_centers = []
 
@@ -3188,11 +3763,22 @@ class Geometry:
                 + ",".join([i.name for i in new_keys])
             )
 
-        old_ligands = []
+        old_ligand = []
+        remove_components = []
         for k in old_keys:
-            for c in self.components:
-                if k in c.atoms:
-                    old_ligands += [c]
+            for i, c in enumerate(self.components):
+                if k in c.atoms and k not in old_ligand:
+                    old_ligand.extend(c.atoms)
+                    remove_components.append(i)
+
+        for i in remove_components:
+            self.components.pop(i)
+            for j in range(0, len(remove_components)):
+                if remove_components[j] > i:
+                    remove_components[j] -= 1
+
+        old_ligand = Geometry(old_ligand)
+
         start = 0
         end = None
         remove_centers = []
@@ -3203,7 +3789,7 @@ class Geometry:
             elif len(ligand.key_atoms) == 2:
                 remove_centers.extend(
                     map_2_key(
-                        old_ligands[start],
+                        old_ligand,
                         ligand,
                         old_keys[start:end],
                         new_keys[start:end],
@@ -3213,7 +3799,7 @@ class Geometry:
                 remove_centers.extend(
                     map_more_key(
                         self,
-                        old_ligands[start],
+                        old_ligand,
                         ligand,
                         old_keys[start:end],
                         new_keys[start:end],
@@ -3225,15 +3811,9 @@ class Geometry:
                 a.add_tag("ligand")
             start = end
 
-        # remove old
-        for ol in old_ligands:
-            try:
-                self.components.remove(ol)
-            except ValueError:
-                continue
-            for atom in self.atoms:
-                if atom.connected & set(ol.atoms):
-                    atom.connected = atom.connected - set(ol.atoms)
+        for atom in self.atoms:
+            if atom.connected & set(old_ligand.atoms):
+                atom.connected = atom.connected - set(old_ligand.atoms)
 
         # remove extraneous centers, i.e. from ferrocene ligands
         for rc in remove_centers:
@@ -3243,6 +3823,7 @@ class Geometry:
         for ligand in ligands:
             self.components += [ligand]
         rv = ligands
+
         self.rebuild()
         # rotate monodentate to relieve clashing
         for ligand in self.components:
@@ -3256,13 +3837,14 @@ class Geometry:
                     start = key.coords
                     end = self.COM(key.connected)
                 axis = end - start
-                self.minimize_torsion(targets, axis, center=key, increment=8)
+                self.minimize_torsion(targets, axis, center=key, increment=10)
 
         self.remove_clash()
         if minimize:
             self.minimize()
 
         self.refresh_ranks()
+
         return rv
 
     def remove_clash(self, sub_list=None):
@@ -3468,3 +4050,4 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
+

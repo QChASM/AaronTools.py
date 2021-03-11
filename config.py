@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from copy import deepcopy
+from getpass import getuser
 from warnings import warn
 
 import AaronTools
@@ -25,7 +26,7 @@ from AaronTools.theory import (
     PSI4_BEFORE_GEOM,
     PSI4_BEFORE_JOB,
     PSI4_COMMENT,
-    PSI4_COORDINATES,
+    PSI4_MOLECULE,
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
@@ -56,7 +57,7 @@ THEORY_OPTIONS = [
     "PSI4_BEFORE_GEOM",
     "PSI4_BEFORE_JOB",
     "PSI4_COMMENT",
-    "PSI4_COORDINATES",
+    "PSI4_MOLECULE",
     "PSI4_JOB",
     "PSI4_OPTKING",
     "PSI4_SETTINGS",
@@ -124,7 +125,7 @@ class Config(configparser.ConfigParser):
             "user": self.get(
                 "DEFAULT",
                 "user",
-                fallback=self.get("HPC", "user", fallback=os.environ["USER"]),
+                fallback=self.get("HPC", "user", fallback=getuser()),
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }
@@ -321,7 +322,7 @@ class Config(configparser.ConfigParser):
         two_layer_single_value = [
             PSI4_OPTKING,
             PSI4_SETTINGS,
-            PSI4_COORDINATES,
+            PSI4_MOLECULE,
         ]
 
         # these need to be lists

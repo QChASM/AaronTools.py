@@ -410,3 +410,62 @@ class ChiralCentres(Finder):
 
 #alternative spelling
 ChiralCenters = ChiralCentres
+
+
+class FlaggedAtoms(Finder):
+    """
+    atoms with a non-zero flag
+    """
+    # useful for finding constrained atoms
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        return "flagged atoms"
+
+    def get_matching_atoms(self, atoms, geometry):
+        return [atom for atom in atoms if atom.flag]
+
+
+class CloserTo(Finder):
+    """
+    atoms closer to atom1 than atom2 (based on bonds, not actual distance)
+    """
+    def __init__(self, atom1, atom2, include_ties=False):
+        super().__init__()
+        
+        self.atom1 = atom1
+        self.atom2 = atom2
+        self.include_ties = include_ties
+    
+    def __repr__(self):
+        return "atoms closer to %s than %s" % (self.atom1, self.atom2)
+    
+    def get_matching_atoms(self, atoms, geometry):
+        matching_atoms = []
+        for atom in atoms:
+            if atom is self.atom1 and atom is not self.atom2:
+                matching_atoms.append(atom)
+                continue
+                
+            try:
+                d1 = len(geometry.shortest_path(self.atom1, atom))
+            except LookupError:
+                d1 = False
+            
+            try:
+                d2 = len(geometry.shortest_path(self.atom2, atom))
+            except LookupError:
+                d2 = False
+            
+            if d1 is not False and d2 is not False and d1 <= d2:
+                if self.include_ties:
+                    matching_atoms.append(atom)
+                elif d1 < d2:
+                    matching_atoms.append(atom)
+            
+            elif d1 is not False and d2 is False:
+                matching_atoms.append(atom)
+        
+        return matching_atoms
+    
