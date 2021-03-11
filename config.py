@@ -26,14 +26,15 @@ from AaronTools.theory import (
     PSI4_BEFORE_GEOM,
     PSI4_BEFORE_JOB,
     PSI4_COMMENT,
-    PSI4_MOLECULE,
     PSI4_JOB,
+    PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import (
+    ForceJob,
     FrequencyJob,
     OptimizationJob,
     SinglePointJob,
@@ -488,6 +489,8 @@ class Config(configparser.ConfigParser):
                     theory.job_type += [FrequencyJob()]
             if "single-point" in job_type or "SP" in job_type:
                 theory.job_type += [SinglePointJob()]
+            if "force" in job_type or "gradient" in job_type:
+                theory.job_type += [ForceJob()]
         else:
             theory.job_type = [SinglePointJob()]
         # return updated theory object
@@ -507,7 +510,7 @@ class Config(configparser.ConfigParser):
                     for name in filenames:
                         if name.startswith("TS"):
                             kind = "TS"
-                        elif name.startswith("INT"):
+                        else:
                             kind = "Minimum"
                         name = os.path.join(dirpath, name)
                         structure = AaronTools.geometry.Geometry(name)
@@ -525,7 +528,7 @@ class Config(configparser.ConfigParser):
                 for name in os.listdir(path):
                     if name.startswith("TS"):
                         kind = "TS"
-                    elif name.startswith("INT"):
+                    else:
                         kind = "Minimum"
                     name = os.path.join(path, name)
                     if not os.path.isfile(name):
