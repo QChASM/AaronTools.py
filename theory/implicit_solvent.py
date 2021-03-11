@@ -1,9 +1,9 @@
+"""used to specify implicit solvent info for Theory()"""
 from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE
 
 
 class ImplicitSolvent:
-    """this isn't really used
-    solvents should be added by directly using other_kw_dict"""
+    """implicit solvent info"""
 
     KNOWN_GAUSSIAN_SOLVENTS = [
         "Water",
@@ -406,21 +406,32 @@ class ImplicitSolvent:
         self.name = solvent_model
         self.solvent = solvent
 
+    def __repr__(self):
+        return "%s(%s)" % (self.name.upper(), self.solvent.lower())
+
+    def __eq__(self, other):
+        return repr(self) == repr(other)
+
     def get_gaussian(self):
+        """returns dict() with solvent information for gaussian input files"""
         # need to check if solvent model is available
         warnings = []
+        if self.solvent.lower() == "gas":
+            # all gas, no solvent
+            return (dict(), warnings)
+
         if not any(
-            self.name.upper() == model
-            for model in [
-                "SMD",
-                "CPCM",
-                "PCM",
-                "DIPOLE",
-                "IPCM",
-                "ISODENSITY",
-                "IEFPCM",
-                "SCIPCM",
-            ]
+                self.name.upper() == model
+                for model in [
+                        "SMD",
+                        "CPCM",
+                        "PCM",
+                        "DIPOLE",
+                        "IPCM",
+                        "ISODENSITY",
+                        "IEFPCM",
+                        "SCIPCM",
+                ]
         ):
             warnings.append(
                 "solvent model is not available in Gaussian: %s\nuse one of: %s"
@@ -451,12 +462,12 @@ class ImplicitSolvent:
             solvent = "TetraHydroFuran"
         else:
             if not any(
-                solvent.lower() == gaussian_sol.lower()
-                for gaussian_sol in self.KNOWN_GAUSSIAN_SOLVENTS
+                    solvent.lower() == gaussian_sol.lower()
+                    for gaussian_sol in self.KNOWN_GAUSSIAN_SOLVENTS
             ):
                 warnings.append(
-                    "solvent is unknown to Gaussian: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS"
-                    % solvent
+                    "solvent is unknown to Gaussian: %s\n" % solvent +
+                    "see AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS"
                 )
 
         # route option: scrf(model,solvent=solvent name)
@@ -466,10 +477,14 @@ class ImplicitSolvent:
         )
 
     def get_orca(self):
+        """returns dict() with solvent information for orca input files"""
         warnings = []
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
         if not any(
-            self.name.upper() == model
-            for model in ["SMD", "CPCM", "C-PCM", "PCM"]
+                self.name.upper() == model
+                for model in ["SMD", "CPCM", "C-PCM", "PCM"]
         ):
             warnings.append(
                 "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
@@ -496,23 +511,23 @@ class ImplicitSolvent:
                 solvent = "THF"
             else:
                 if not any(
-                    solvent.lower() == orca_sol.lower()
-                    for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS
+                        solvent.lower() == orca_sol.lower()
+                        for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS
                 ):
                     warnings.append(
-                        "solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS"
-                        % solvent
+                        "solvent is unknown to ORCA: %s\n" % solvent +
+                        "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS"
                     )
 
         else:
             # TODO: look for gaussian/orca pcm solvent names that need to change
             if not any(
-                solvent.lower() == orca_sol.lower()
-                for orca_sol in self.KNOWN_ORCA_SMD_SOLVENTS
+                    solvent.lower() == orca_sol.lower()
+                    for orca_sol in self.KNOWN_ORCA_SMD_SOLVENTS
             ):
                 warnings.append(
-                    "solvent is unknown to ORCA: %s\nsee AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS"
-                    % solvent
+                    "solvent is unknown to ORCA: %s\n" % solvent +
+                    "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS"
                 )
 
         out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
@@ -520,6 +535,11 @@ class ImplicitSolvent:
         return (out, warnings)
 
     def get_psi4(self):
+        """returns dict() with solvent information for psi4 input files"""
+
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
         raise NotImplementedError(
             "ImplicitSolvent cannot generate Psi4 solvent settings yet"
         )

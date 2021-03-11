@@ -1,105 +1,130 @@
 #!/usr/bin/env python3
 
-#TODO: print temperature
-
 import sys
 import argparse
 import os
+from glob import glob
+from warnings import warn
+
+from numpy import isclose
 
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 
-from glob import glob
 
-from numpy import isclose
+thermo_parser = argparse.ArgumentParser(
+    description="print thermal corrections and free energy",
+    formatter_class=argparse.RawTextHelpFormatter
+)
 
-from warnings import warn
+thermo_parser.add_argument(
+    "infile",
+    metavar="frequency output file",
+    type=str,
+    nargs="*",
+    default=[sys.stdin],
+    help="completed QM output file with frequency info"
+)
 
-thermo_parser = argparse.ArgumentParser(description='print thermal corrections and free energy', \
-    formatter_class=argparse.RawTextHelpFormatter)
-thermo_parser.add_argument('infile', metavar='frequency output file', \
-                         type=str, \
-                         nargs='*', \
-                         default=[sys.stdin], \
-                         help='completed QM output file with frequency info')
+thermo_parser.add_argument(
+    "-o",
+    "--output",
+    type=str,
+    default=None,
+    required=False,
+    dest="outfile",
+    help="output destination \nDefault: stdout"
+)
 
-thermo_parser.add_argument('-o', '--output', \
-                        type=str, \
-                        default=None, \
-                        required=False, \
-                        dest='outfile', \
-                        help='output destination \nDefault: stdout')
+thermo_parser.add_argument(
+    "-if",
+    "--input-format",
+    type=str,
+    nargs=1,
+    default=None,
+    dest="input_format",
+    choices=["log", "out", "dat"],
+    help="file format of input - required if input is stdin"
+)
 
-thermo_parser.add_argument('-if', '--input-format', \
-                        type=str, \
-                        nargs=1, \
-                        default=None, \
-                        dest='input_format', \
-                        choices=['log', 'out', 'dat'], \
-                        help="file format of input - required if input is stdin")
+thermo_parser.add_argument(
+    "-sp",
+    "--single-point",
+    type=str,
+    nargs="*",
+    default=[None],
+    required=False,
+    dest="sp_file",
+    help="file containing single-point energy"
+)
 
-thermo_parser.add_argument('-sp', '--single-point', \
-                        type=str, \
-                        nargs='*', \
-                        default=[None], \
-                        required=False, \
-                        dest='sp_file', \
-                        help='file containing single-point energy')
+thermo_parser.add_argument(
+    "-t",
+    "--temperature",
+    type=float,
+    default=None,
+    required=False,
+    dest="temp",
+    help="compute thermal corrections using the specified temperature (K)\n" +
+    "Default: value found in file or 298.15"
+)
 
-thermo_parser.add_argument('-t', '--temperature', \
-                            type=float, \
-                            default=None, \
-                            required=False, \
-                            dest='temp', \
-                            help='compute thermal corrections using the specified temperature (K)\n' + \
-                                 'Default: value found in file or 298.15')
+thermo_parser.add_argument(
+    "-w0",
+    "--frequency-cutoff",
+    type=float,
+    default=100.0,
+    required=False,
+    dest="w0",
+    help="cutoff frequency for quasi free energy corrections (1/cm)\n" +
+    "Default: 100 cm^-1"
+)
 
-thermo_parser.add_argument('-w0' , '--frequency-cutoff', \
-                            type=float, \
-                            default=100.0, \
-                            required=False, \
-                            dest='w0', \
-                            help='cutoff frequency for quasi free energy corrections (1/cm)\nDefault: 100 cm^-1')
+thermo_parser.add_argument(
+    "-csv",
+    "--csv-format",
+    nargs="?",
+    required=False,
+    dest="csv",
+    default=False,
+    choices=["comma", "semicolon", "tab", "space"],
+    help="print output in CSV format with the specified delimiter"
+)
 
-thermo_parser.add_argument('-csv', '--comma-seperated', \
-                            action='store_true', \
-                            required=False, \
-                            dest='csv', \
-                            help='print output in CSV format')
-
-thermo_parser.add_argument('-d', '--delimiter', \
-                        type=str, \
-                        default='comma', \
-                        dest='delimiter', \
-                        choices=['comma', 'semicolon', 'tab', 'space'], \
-                        help="CSV delimiter")
-
-thermo_parser.add_argument('-r', '--recursive', \
-                            metavar='PATTERN', \
-                            type=str, \
-                            nargs='*', \
-                            default=None, \
-                            required=False, \
-                            dest='pattern', \
-                            help='search subdirectories of current directory for files matching PATTERN')
+thermo_parser.add_argument(
+    "-r",
+    "--recursive",
+    metavar="PATTERN",
+    type=str,
+    nargs="*",
+    default=None,
+    required=False,
+    dest="pattern",
+    help="search subdirectories of current directory for files matching PATTERN"
+)
 
 args = thermo_parser.parse_args()
 
+if args.csv is None:
+    args.csv = "comma"
+
 if args.csv:
-    if args.delimiter == 'comma':
-        delim = ','
-    elif args.delimiter == 'semicolon':
-        delim = ';'
-    elif args.delimiter == 'tab':
-        delim = '\t'
-    elif args.delimiter == 'space':
-        delim = ' '
-        
-    output = delim.join(["E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)", \
-                         "ZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)", \
-                         "SP_File", "Thermo_File"])
-    output += '\n'
+    if args.csv == "comma":
+        delim = ","
+    elif args.csv == "semicolon":
+        delim = ";"
+    elif args.csv == "tab":
+        delim = "\t"
+    elif args.csv == "space":
+        delim = " "
+
+    output = delim.join([
+        "E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)",
+        "ZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
+        "SP_File", "Thermo_File"
+    ])
+    output += "\n"
 else:
     output = ""
 
@@ -125,7 +150,7 @@ else:
 if args.sp_file != [None]:
     if args.pattern is None:
         sp_filenames = [f for  f in args.sp_file]
-    
+
     else:
         sp_filenames = []
         if args.infile == [sys.stdin]:
@@ -140,18 +165,18 @@ if args.sp_file != [None]:
                 for pattern in args.sp_file:
                     full_glob = os.path.join(root, pattern)
                     sp_filenames.extend(glob(full_glob))
-    
+
     sp_filenames.sort()
 
     sp_files = [FileReader(f, just_geom=False) for f in sp_filenames]
-    sp_energies = [sp_file.other['energy'] for sp_file in sp_files]
+    sp_energies = [sp_file.other["energy"] for sp_file in sp_files]
 
 else:
     sp_energies = [None for f in infiles]
     sp_filenames = [None for f in infiles]
 
 while len(sp_energies) < len(infiles):
-    sp_energies.extend([sp_file.other['energy'] for sp_file in sp_files])
+    sp_energies.extend([sp_file.other["energy"] for sp_file in sp_files])
     sp_filenames.extend(args.sp_file)
 
 while len(infiles) < len(sp_filenames):
@@ -165,14 +190,16 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
             infile = FileReader(f, just_geom=False)
     else:
         if args.input_format is not None:
-            infile = FileReader(('from stdin', args.input_format[0], f), just_geom=False)
+            infile = FileReader(("from stdin", args.input_format[0], f), just_geom=False)
         else:
             if len(sys.argv) >= 1:
                 thermo_parser.print_help()
-                raise RuntimeError("when no input file is given, stdin is read and a format must be specified")
+                raise RuntimeError(
+                    "when no input file is given, stdin is read and a format must be specified"
+                )
 
     co = CompOutput(infile)
-    
+
     if sp_nrg is None:
         nrg = co.energy
     else:
@@ -181,8 +208,11 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         freq_geom = Geometry(infile)
         rmsd = sp_geom.RMSD(freq_geom)
         if not isclose(rmsd, 0, atol=1e-5):
-            warn("\ngeometries in supposed single-point/thermochemistry pair appear to be different (rmsd = %.5f)\n" % rmsd + 
-                 "%s\n%s" % (sp_geom.name, freq_geom.name))
+            warn(
+                "\ngeometries in supposed single-point/thermochemistry pair appear\n" +
+                "to be different (rmsd = %.5f)\n" % rmsd +
+                "%s\n%s" % (sp_geom.name, freq_geom.name)
+            )
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
     rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
@@ -198,11 +228,13 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         nrg_str = "%.6f" % nrg
         corrections = [co.ZPVE, dH, rrho_dG, qrrho_dG, qharm_dG]
         therm = [nrg + correction for correction in corrections]
-        output += delim.join([nrg_str] + \
-                             ["%.6f" % x for x in therm] + \
-                             ["%.6f" % x for x in corrections] + \
-                             [sp_file if sp_file is not None else f, f])
-        output += '\n'
+        output += delim.join(
+            [nrg_str] +
+            ["%.6f" % x for x in therm] + \
+            ["%.6f" % x for x in corrections] + \
+            [sp_file if sp_file is not None else f, f]
+        )
+        output += "\n"
     else:
         output += "electronic energy of %s = %.6f Eh\n" % (sp_file \
                 if sp_file is not None else f, \
@@ -214,13 +246,16 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         output += "  quasi treatments for entropy (w0=%.1f cm^-1):\n" % args.w0
         output += "    G(Quasi-RRHO)     = %.6f Eh  (dG = %.6f)\n" % (nrg + qrrho_dG, qrrho_dG)
         output += "    G(Quasi-harmonic) = %.6f Eh  (dG = %.6f)\n" % (nrg + qharm_dG, qharm_dG)
-    
-        output += '\n'
-    
+
+        output += "\n"
+
 output = output.strip()
 
-if args.outfile is not None:
-    with open(args.outfile, 'w') as f:
-        f.write(output)
+if not args.outfile:
+    print(output.strip())
 else:
-    print(output) 
+    with open(
+            args.outfile,
+            "a"
+    ) as f:
+        f.write(output.strip())

@@ -11,7 +11,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "sd", "out", "dat", "fchk", "crest"]
+read_types = ["xyz", "log", "com", "gjf", "sd", "sdf", "mol", "out", "dat", "fchk", "crest"]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -39,43 +39,55 @@ ERROR = {
     "malloc failed.": "MEM",
     "Unknown message": "UNKNOWN",
 }
+
 ERROR_ORCA = {
-    # "SCF_CONV": "",
+    "SCF NOT CONVERGED AFTER": "SCF_CONV",
+    # ORCA doesn't actually exit if the SCF doesn't converge...
     # "CONV_CDS": "",
-    # "CONV_LINK": "",
+    "The optimization did not converge but reached the maximum number": "OPT_CONV",
+    # ORCA still prints the normal finish line if opt doesn't converge...
     # "FBX": "",
     # "CHK": "",
-    # "EIGEN": "",
+    # "EIGEN": "", <- ORCA doesn't seem to have this
     # "QUOTA": "",
-    # "CLASH": "",
-    # "CHARGEMULT": "",
+    "Zero distance between atoms": "CLASH", # <- only get an error if atoms are literally on top of each other
+    "Error : multiplicity": "CHARGEMULT",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
     # "CONSTR": "",
-    # "BASIS": "",
-    # "ATOM": "",
-    # "MEM": "",
-    # "UNKNOWN": "",
+    "The basis set was either not assigned or not available for this element": "BASIS",
+    "Element name/number, dummy atom or point charge expected": "ATOM",
+    "Error  (ORCA_SCF): Not enough memory available!": "MEM",
+    "ORCA finished with error return": "UNKNOWN",
 }
+
+# some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
 ERROR_PSI4 = {
-    # "SCF_CONV": "",
+    "PsiException: Could not converge SCF iterations": "SCF_CONV",
+    "psi4.driver.p4util.exceptions.SCFConvergenceError: Could not converge SCF iterations": "SCF_CONV",
+    "OptimizationConvergenceError": "OPT_CONV",
+    "TDSCFConvergenceError": "TDCF_CONV",
+    "The INTCO_EXCEPTion handler": "INT_COORD",
+    # ^ this is basically psi4's FBX
     # "CONV_CDS": "",
     # "CONV_LINK": "",
     # "FBX": "",
     # "CHK": "",
-    # "EIGEN": "",
+    # "EIGEN": "", <- psi4 doesn't seem to have this
     # "QUOTA": "",
-    # "CLASH": "",
-    # "CHARGEMULT": "",
+    # "ValidationError:": "INPUT", <- generic input error, CHARGEMULT and CLASH would also get caught by this
+    "qcelemental.exceptions.ValidationError: Following atoms are too close:": "CLASH",
+    "qcelemental.exceptions.ValidationError: Inconsistent or unspecified chg/mult": "CHARGEMULT",
+    "MissingMethodError": "INVALID_METHOD",
     # "REDUND": "",
     # "REDUND": "",
     # "GALLOC": "",
     # "CONSTR": "",
-    # "BASIS": "",
-    # "ATOM": "",
-    # "MEM": "",
-    # "UNKNOWN": "",
+    "psi4.driver.qcdb.exceptions.BasisSetNotFound: BasisSet::construct: Unable to find a basis set for": "BASIS",
+    "qcelemental.exceptions.NotAnElementError": "ATOM",
+    "psi4.driver.p4util.exceptions.ValidationError: set_memory()": "MEM",
+# ERROR_PSI4[""] = "UNKNOWN",
 }
 
 
@@ -158,7 +170,7 @@ class FileWriter:
                 out = cls.write_com(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
-                    "when writing 'com' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                    "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "inp":
             if "theory" in kwargs:
@@ -217,11 +229,7 @@ class FileWriter:
 
         # get file content string
         s = theory.make_header(geom, **kwargs)
-        for atom in geom.atoms:
-            if has_frozen:
-                s += fmt.format(atom.element, -atom.flag, *atom.coords)
-            else:
-                s += fmt.format(atom.element, *atom.coords)
+        s += theory.make_molecule(geom, **kwargs)
         s += theory.make_footer(geom, **kwargs)
 
         if outfile is None:
@@ -242,7 +250,7 @@ class FileWriter:
 
     @classmethod
     def write_inp(cls, geom, theory, outfile=None, **kwargs):
-        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
+        fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         s = theory.make_header(geom, style="orca", **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
@@ -279,81 +287,8 @@ class FileWriter:
         else:
             monomers = None
 
-        fmt = "{:<3s} {: 10.6f} {: 10.6f} {: 10.6f}\n"
-        s, use_bohr = theory.make_header(geom, style="psi4", **kwargs)
-        # psi4 input is VERY different for sapt jobs with the low-spin
-        # combination of fragments
-        if (
-            theory.method.sapt
-            and sum(theory.multiplicity[1:]) - len(theory.multiplicity[1:]) + 1
-            > theory.multiplicity[0]
-        ):
-            seps = []
-            for i, m1 in enumerate(monomers[:-1]):
-                seps.append(0)
-                for m2 in monomers[: i + 1]:
-                    seps[-1] += len(m2)
-
-            s += "    fragment_separators=%s,\n" % repr(seps)
-            s += "    elez=%s,\n" % repr(
-                [
-                    ELEMENTS.index(atom.element)
-                    for monomer in monomers
-                    for atom in monomer
-                ]
-            )
-            s += "    fragment_multiplicities=%s,\n" % repr(
-                theory.multiplicity[1:]
-            )
-            s += "    fragment_charges=%s,\n" % repr(theory.charge[1:])
-            s += "    geom=["
-            i = 0
-            for monomer in monomers:
-                print("monomer")
-                for atom in monomer:
-                    print(atom)
-            for monomer in monomers:
-                s += "\n"
-                for atom in monomer:
-                    if use_bohr:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
-                            atom.coords / UNIT.A0_TO_BOHR
-                        )
-                    else:
-                        s += "        %10.6f, %10.6f, %10.6f,\n" % tuple(
-                            atom.coords
-                        )
-
-            s += "    ],\n"
-            s += ")\n\n"
-            s += "activate(mol)\n"
-
-        elif theory.method.sapt:
-            if monomers is None:
-                monomers = [comp.atoms for comp in geom.components]
-
-            for monomer, mult, charge in zip(
-                monomers, theory.multiplicity[1:], theory.charge[1:]
-            ):
-                s += "--\n"
-                s += "%2i %i\n" % (charge, mult)
-                for atom in monomer:
-                    coords = atom.coords
-                    if use_bohr:
-                        coords = coords / UNIT.A0_TO_BOHR
-                    s += fmt.format(atom.element, *coords)
-
-            s += "}\n"
-
-        else:
-            for atom in geom.atoms:
-                coords = atom.coords
-                if use_bohr:
-                    coords = coords / UNIT.A0_TO_BOHR
-                s += fmt.format(atom.element, *coords)
-
-            s += "}\n"
-
+        s = theory.make_header(geom, style="psi4", **kwargs)
+        s += theory.make_molecule(geom, style="psi4", **kwargs)
         s += theory.make_footer(geom, style="psi4", **kwargs)
 
         if outfile is None:
@@ -401,9 +336,8 @@ class FileReader:
 
         # get file name and extention
         if isinstance(fname, str):
-            fname = fname.rsplit(".", 1)
-            self.name = fname[0]
-            self.file_type = fname[1].lower()
+            self.name, self.file_type = os.path.splitext(fname)
+            self.file_type = self.file_type.lower()[1:]
         elif isinstance(fname, (tuple, list)):
             self.name = fname[0]
             self.file_type = fname[1]
@@ -422,11 +356,11 @@ class FileReader:
         if self.content is not None:
             if self.file_type == "log":
                 self.read_log(f, get_all, just_geom)
-            elif self.file_type == "sd":
+            elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
                 self.read_sd(f)
             elif self.file_type == "xyz":
                 self.read_xyz(f, get_all)
-            elif self.file_type == "com":
+            elif any(self.file_type == ext for ext in ["com", "gjf"]):
                 self.read_com(f)
             elif self.file_type == "out":
                 self.read_orca_out(f, get_all, just_geom)
@@ -462,9 +396,9 @@ class FileReader:
             self.read_xyz(f, get_all)
         elif self.file_type == "log":
             self.read_log(f, get_all, just_geom)
-        elif self.file_type == "com":
+        elif any(self.file_type == ext for ext in ["com", "gjf"]):
             self.read_com(f)
-        elif self.file_type == "sd":
+        elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
             self.read_sd(f)
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)
@@ -515,22 +449,37 @@ class FileReader:
     def read_sd(self, f, get_all=False):
         self.all_geom = []
         lines = f.readlines()
-        self.comment = lines[0].strip()
-        counts = lines[3].split()
-        natoms = int(counts[0])
-        nbonds = int(counts[1])
-        self.atoms = []
-        for line in lines[4 : 4 + natoms]:
-            atom_info = line.split()
-            self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+        progress = 0
+        for i, line in enumerate(lines):
+            progress += 1
+            if "$$$$" in line:
+                progress = 0
+                if get_all:
+                    self.all_geom.append([deepcopy(self.comment), deepcopy(self.geometry)])
 
-        for line in lines[4 + natoms : 4 + natoms + nbonds]:
-            a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
-            self.atoms[a1].connected.add(self.atoms[a2])
-            self.atoms[a2].connected.add(self.atoms[a1])
+                continue
 
-        for i, a in enumerate(self.atoms):
-            a.name = str(i + 1)
+            if progress == 3:
+                self.comment = line.strip()
+
+            if progress == 4:
+                counts = line.split()
+                natoms = int(counts[0])
+                nbonds = int(counts[1])
+
+            if progress == 5:
+                self.atoms = []
+                for line in lines[i : i + natoms]:
+                    atom_info = line.split()
+                    self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+
+                for line in lines[i + natoms : i + natoms + nbonds]:
+                    a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
+                    self.atoms[a1].connected.add(self.atoms[a2])
+                    self.atoms[a2].connected.add(self.atoms[a1])
+
+                for j, a in enumerate(self.atoms):
+                    a.name = str(j + 1)
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -561,6 +510,9 @@ class FileReader:
         n = 1
         read_geom = False
         while line != "":
+            if "* O   R   C   A *" in line:
+                self.file_type = "out"
+                return self.read_orca_out(f, get_all=get_all, just_geom=just_geom)
             if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
@@ -621,7 +573,7 @@ class FileReader:
                     and "rotational_temperature" not in self.other
                 ):
                     self.other["rotational_temperature"] = [
-                        float(x) for x in line.split()[-8:-1:3]
+                        float(x) if is_num(x) else 0 for x in line.split()[-8:-1:3]
                     ]
                     self.other["rotational_temperature"] = [
                         x
@@ -735,14 +687,52 @@ class FileReader:
 
                     self.other["forces"] = -gradient
 
-                if "error" not in self.other:
-                    for err in ERROR.values():
-                        if err in ERROR_PSI4 and re.search(
-                            ERROR_PSI4[err], line
-                        ):
-                            self.other["error"] = ERROR[err]
-                            self.other["error_msg"] = line.strip()
+                elif "SAPT Results" in line:
+                    self.skip_lines(f, 1)
+                    n += 1
+                    while "Total sSAPT" not in line:
+                        n += 1
+                        line = f.readline()
+                        if "---" in line:
                             break
+                        if len(line.strip()) > 0:
+                            if "Special recipe" in line:
+                                continue
+                            item = line[:26].strip()
+                            val = 1e-3 * float(line[34:47])
+                            self.other[item] = val
+
+                elif "SCF energy" in line:
+                    self.other["SCF energy"] = float(line.split()[-1])
+
+                elif "correlation energy" in line and "=" in line:
+                    item = line.split("=")[0].strip()
+                    self.other[item] = float(line.split()[-1])
+
+                elif "total energy" in line and "=" in line or re.search("\(.\) energy", line):
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    self.other[item] = float(line.split()[-1])
+                    # hopefully the highest level energy gets printed last
+                    self.other["energy"] = self.other[item]
+
+                elif "Total Energy" in line and "=" in line:
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    self.other[item] = float(line.split()[-2])
+                    # hopefully the highest level energy gets printed last
+                    self.other["energy"] = self.other[item]
+
+                elif "Correlation Energy" in line and "=" in line:
+                    item = line.split("=")[0].strip().strip("*").strip()
+                    if "DFT Exchange-Correlation" in item:
+                        self.other[item] = float(line.split()[-1])
+                    else:
+                        self.other[item] = float(line.split()[-2])
+
+                if "error" not in self.other:
+                    for err in ERROR_PSI4:
+                        if err in line:
+                            self.other["error"] = ERROR_PSI4[err]
+                            self.other["error_msg"] = line.strip()
 
                 line = f.readline()
                 n += 1
@@ -750,7 +740,7 @@ class FileReader:
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
 
-        nrg_regex = re.compile("((?:[A-Za-z]+\s+)?E\(.*\))\s*\.\.\.\s*(.*)$")
+        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -780,6 +770,9 @@ class FileReader:
         line = f.readline()
         n = 1
         while line != "":
+            if "Psi4: An Open-Source Ab Initio Electronic Structure Package" in line:
+                self.file_type = "dat"
+                return self.read_psi4_out(f, get_all=get_all, just_geom=just_geom)
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
@@ -797,7 +790,12 @@ class FileReader:
             else:
                 nrg = nrg_regex.match(line)
                 if nrg is not None:
-                    self.other[nrg.group(1)] = float(nrg.group(2))
+                    nrg_type = nrg.group(1)
+                    # for some reason, ORCA prints MP2 correlation energy
+                    # as E(MP2) for CC jobs
+                    if nrg_type == "MP2":
+                        nrg_type = "MP2 CORR"
+                    self.other["E(%s)" % nrg_type] = float(nrg.group(2))
 
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
@@ -809,6 +807,14 @@ class FileReader:
                     line = f.readline()
                     n += 3
                     self.other["SCF energy"] = float(line.split()[3])
+
+                elif "TOTAL ENERGY:" in line:
+                    item = line.split()[-5] + " energy"
+                    self.other[item] = float(line.split()[-2])
+
+                elif "CORRELATION ENERGY" in line and "Eh" in line:
+                    item = line.split()[-6] + " correlation energy"
+                    self.other[item] = float(line.split()[-2])
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
@@ -935,11 +941,9 @@ class FileReader:
 
                 # TODO E_ZPVE
                 if "error" not in self.other:
-                    for err in ERROR.values():
-                        if err in ERROR_ORCA and re.search(
-                            ERROR_ORCA[err], line
-                        ):
-                            self.other["error"] = ERROR[err]
+                    for err in ERROR_ORCA:
+                        if err in line:
+                            self.other["error"] = ERROR_ORCA[err]
                             self.other["error_msg"] = line.strip()
                             break
 
@@ -972,9 +976,81 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def get_params(f, n):
+            rv = []
+            self.skip_lines(f, 2)
+            n += 3
+            line = f.readline()
+            if "Definition" in line:
+                definition = True
+            else:
+                definition = False
+            self.skip_lines(f, 1)
+            n += 2
+            line = f.readline()
+            while "--" not in line:
+                line = line.split()
+                param = line[1]
+                if definition:
+                    val = float(line[3])
+                else:
+                    val = float(line[2])
+                rv.append((param, val))
+                line = f.readline()
+                n += 1
+            return rv, n
+
+        def get_modredundant(f, n):
+            """read constraints for modredundant section"""
+            rv = {}
+            line = f.readline()
+            n += 1
+            while line.strip():
+                atom_match = re.search("X\s+(\d+)\s+F", line)
+                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+F", line)
+                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                torsion_match = re.search("D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                if atom_match:
+                    if "atoms" not in rv:
+                        rv["atoms"] = ""
+                    else:
+                        rv["atoms"] += ","
+                    rv["atoms"] += atom_match.group(1)
+                elif bond_match:
+                    if "bonds" not in rv:
+                        rv["bonds"] = []
+                    rv["bonds"].append(",".join([bond_match.group(1), bond_match.group(2)]))
+                elif angle_match:
+                    if "angles" not in rv:
+                        rv["angles"] = []
+                    rv["angles"].append(
+                        ",".join([
+                            angle_match.group(1),
+                            angle_match.group(2),
+                            angle_match.group(3)
+                        ])
+                    )
+                elif torsion_match:
+                    if "torsions" not in rv:
+                        rv["torsions"] = []
+                    rv["torsions"].append(
+                        ",".join([
+                            torsion_match.group(1),
+                            torsion_match.group(2),
+                            torsion_match.group(3),
+                            torsion_match.group(4)
+                        ])
+                    )
+
+                line = f.readline()
+                n+=1
+
+            return rv, n
+
         self.all_geom = []
         line = f.readline()
         self.other["archive"] = ""
+        constraints = {}
         self.other["opt_steps"] = 0
         found_archive = False
         n = 1
@@ -1009,10 +1085,17 @@ class FileReader:
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
                 self.atoms, n = get_atoms(f, n)
+
+            if re.search("The following ModRedundant input section has been read:", line):
+                constraints, n = get_modredundant(f, n)
+
             if just_geom:
                 line = f.readline()
                 n += 1
                 continue
+                        # z-matrix parameters
+            if re.search("Optimized Parameters", line):
+                self.other["params"], n = get_params(f, n)
             if "Symbolic Z-matrix:" in line:
                 line = f.readline()
                 n += 1
@@ -1137,13 +1220,13 @@ class FileReader:
                 other_kwargs = {GAUSSIAN_ROUTE: {}}
                 route_spec = re.compile("(\w+)=?\((.*)\)")
                 method_and_basis = re.search(
-                    "#([NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
+                    "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
                 )
                 if method_and_basis is not None:
-                    if method_and_basis.group(3):
-                        method_info = method_and_basis.group(3).split("/")
-                    else:
+                    if method_and_basis.group(2):
                         method_info = method_and_basis.group(2).split("/")
+                    else:
+                        method_info = method_and_basis.group(1).split("/")
 
                     method = method_info[0]
                     if len(method_info) > 1:
@@ -1153,6 +1236,8 @@ class FileReader:
 
                     route_options = route.split()
                     job_type = []
+                    grid = None
+                    solvent = None
                     for option in route_options:
                         if option.startswith("#"):
                             continue
@@ -1168,7 +1253,11 @@ class FileReader:
                             elif option_lower.startswith("opt="):
                                 options = ["".join(option.split("=")[1:])]
                             else:
-                                job_type.append(OptimizationJob())
+                                if not constraints:
+                                    # if we didn't read constraints, try using flagged atoms instead
+                                    from AaronTools.finders import FlaggedAtoms
+                                    constraints = {"atoms": FlaggedAtoms}
+                                job_type.append(OptimizationJob(constraints=constraints))
                                 continue
 
                             other_kwargs[GAUSSIAN_ROUTE]["opt"] = []
@@ -1177,12 +1266,12 @@ class FileReader:
                                 if opt.lower() == "ts":
                                     ts = True
                                 else:
-                                    other_kwargs[GAUSSIAN_ROUTE]["opt"].append(
-                                        opt
-                                    )
+                                    other_kwargs[GAUSSIAN_ROUTE][
+                                        "opt"
+                                    ].append(opt)
 
                             job_type.append(
-                                OptimizationJob(transition_state=ts)
+                                OptimizationJob(transition_state=ts, constraints=constraints)
                             )
 
                         elif option_lower.startswith("freq"):
@@ -1211,8 +1300,28 @@ class FileReader:
                         elif option_lower == "sp":
                             job_type.append(SinglePointJob())
 
+                        elif option_lower.startswith("int"):
+                            match = route_spec.search(option)
+                            if match:
+                                options = match.group(2).split(",")
+                            elif option_lower.startswith("freq="):
+                                options = "".join(option.split("=")[1:])
+                            else:
+                                job_type.append(FrequencyJob())
+                                continue
+
+                            other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
+                            for opt in options:
+                                if opt.lower().startswith("grid"):
+                                    grid_name = opt.split("=")[1]
+                                    grid = IntegrationGrid(grid_name)
+                                else:
+                                    other_kwargs[GAUSSIAN_ROUTE][
+                                        "Integral"
+                                    ].append(opt)
+
                         else:
-                            # TODO: parse grid and solvent
+                            # TODO: parse solvent
                             match = route_spec.search(option)
                             if match:
                                 keyword = match.group(1)
@@ -1228,16 +1337,18 @@ class FileReader:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
 
-                        theory = Theory(
-                            charge=self.other["charge"],
-                            multiplicity=self.other["multiplicity"],
-                            job_type=job_type,
-                            basis=basis,
-                            method=method,
-                        )
+                    theory = Theory(
+                        charge=self.other["charge"],
+                        multiplicity=self.other["multiplicity"],
+                        job_type=job_type,
+                        basis=basis,
+                        method=method,
+                        grid=grid,
+                        solvent=solvent,
+                    )
 
-                        self.other["theory"] = theory
-                        self.other["other_kwargs"] = other_kwargs
+                    self.other["theory"] = theory
+                    self.other["other_kwargs"] = other_kwargs
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)

@@ -1,35 +1,37 @@
 import collections.abc
-import copy
+from collections import OrderedDict
 import os
 import re
-from collections import OrderedDict
+import numpy as np
 
 import AaronTools.atoms as Atoms
-import numpy as np
 from AaronTools.const import AARONTOOLS
 
 
 def progress_bar(this, max_num, name=None, width=50):
     if name is None:
-        s = ""
+        out_str = ""
     else:
-        s = "{}: ".format(name)
-    s += "Progress {:3.0f}% ".format(100 * this / max_num)
-    s += "|{:<{width}s}|".format(
+        out_str = "{}: ".format(name)
+    out_str += "Progress {:3.0f}% ".format(100 * this / max_num)
+    out_str += "|{:<{width}s}|".format(
         "#" * int(width * this / max_num), width=width
     )
-    print(s, end="\r")
+    print(out_str, end="\r")
 
 
 def clean_progress_bar(width=50):
     print(" " * 2 * width, end="\r")
 
 
-def proj(v, u):
-    """projection of u into v"""
-    numerator = np.dot(u, v)
-    denominator = np.linalg.norm(v) ** 2
-    return numerator * v / denominator
+def proj(v_vec, u_vec):
+    """
+    projection of u_vec into v_vec
+    v_vec should be a np.array, and u_vec should have the
+    same shape as v_vec"""
+    numerator = np.dot(u_vec, v_vec)
+    denominator = np.linalg.norm(v_vec) ** 2
+    return numerator * v_vec / denominator
 
 
 def quat_matrix(pt1, pt2):
@@ -124,7 +126,7 @@ def uptri2sym(vec, n=None, col_based=False):
 
 def float_vec(word):
     """
-    Turns strings into floatin point vectors
+    Turns strings into floating point vectors
     :word: a comma-delimited string of numbers
 
     if no comma or only one element:
@@ -142,26 +144,28 @@ def float_vec(word):
         val = word
     if len(val) == 1:
         return val[0]
-    else:
-        return np.array(val)
+    return np.array(val)
 
 
 def is_alpha(test):
-    rv = re.search("^[a-zA-Z]+$", test)
-    return bool(rv)
+    """determine if string contains only letters"""
+    return test.isalpha()
 
 
 def is_int(test):
-    rv = re.search("^[+-]?\d+$", test)
+    rv = re.search(r"^[+-]?\d+$", test)
     return bool(rv)
 
 
 def is_num(test):
-    rv = re.search("^[+-]?\d+\.?\d*", test)
+    """determine if string is valid as a number"""
+    rv = re.search(r"^[+-]?\d+\.?\d*", test)
     return bool(rv)
 
 
-def add_dict(this, other, skip=[]):
+def add_dict(this, other, skip=None):
+    if skip is None:
+        skip = []
     for key, val in other.items():
         if key in skip:
             continue
@@ -182,9 +186,9 @@ def resolve_concatenation(*args):
             else:
                 rv.append(args[i])
         return rv
-    else:
-        err_msg = "Cannot concatenate" + " {}" * len(args)
-        raise TypeError(err_msg.format(*[type(a) for a in args]))
+
+    err_msg = "Cannot concatenate" + " {}" * len(args)
+    raise TypeError(err_msg.format(*[type(a) for a in args]))
 
 
 def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
@@ -253,26 +257,25 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
     return out
 
 
-def integrate(fun, a, b, n=101):
+def integrate(fun, start, stop, num=101):
     """numerical integration using Simpson's method
     fun - function to integrate
-    a - integration starts at point a
-    b - integration stops at point b
-    n - number of points used for integration"""
-    import numpy as np
+    start - starting point for integration
+    stop - stopping point for integration
+    num - number of points used for integration"""
 
-    dx = float(b - a) / (n - 1)
-    x_set = np.linspace(a, b, num=n)
-    s = -(fun(a) + fun(b))
+    delta_x = float(stop - start) / (num - 1)
+    x_set = np.linspace(start, stop, num=num)
+    running_sum = -(fun(start) + fun(stop))
     i = 1
     max_4th_deriv = 0
-    while i < n:
+    while i < num:
         if i % 2 == 0:
-            s += 2 * fun(x_set[i])
+            running_sum += 2 * fun(x_set[i])
         else:
-            s += 4 * fun(x_set[i])
+            running_sum += 4 * fun(x_set[i])
 
-        if i < n - 4 and i >= 3:
+        if i < num - 4 and i >= 3:
             sg_4th_deriv = (
                 6 * fun(x_set[i - 3])
                 + 1 * fun(x_set[i - 2])
@@ -282,19 +285,19 @@ def integrate(fun, a, b, n=101):
                 + fun(x_set[i + 2])
                 + 6 * fun(x_set[i + 3])
             )
-            sg_4th_deriv /= 11 * dx ** 4
+            sg_4th_deriv /= 11 * delta_x ** 4
 
             if abs(sg_4th_deriv) > max_4th_deriv:
                 max_4th_deriv = abs(sg_4th_deriv)
 
         i += 1
 
-    s = s * dx / 3.0
+    running_sum *= delta_x / 3.0
 
     # close enough error estimate
-    e = (abs(b - a) ** 5) * max_4th_deriv / (180 * n ** 4)
+    e = (abs(stop - start) ** 5) * max_4th_deriv / (180 * num ** 4)
 
-    return (s, e)
+    return (running_sum, e)
 
 
 def same_cycle(graph, a, b):
@@ -400,8 +403,6 @@ def shortest_path(graph, start, end):
     return path
 
 
-# XXX: for some reason, if _removed defaults to [], it might behave like a global variable
-# def trim_leaves(graph, _removed=[]):
 def trim_leaves(graph, _removed=None):
     from AaronTools.geometry import Geometry
 
@@ -429,26 +430,26 @@ def trim_leaves(graph, _removed=None):
     return graph, set(_removed)
 
 
-def to_closing(s, p):
-    """returns the portion of string s from the beginning to the closing
-    paratheses or bracket denoted by p
-    p can be '(', '{', or '['
+def to_closing(string, brace):
+    """returns the portion of string from the beginning to the closing
+    paratheses or bracket denoted by brace
+    brace can be '(', '{', or '['
     if the closing paratheses is not found, returns None instead"""
-    if p == "(":
-        q = ("(", ")")
-    elif p == "{":
-        q = ("{", "}")
-    elif p == "[":
-        q = ("[", "]")
+    if brace == "(":
+        pair = ("(", ")")
+    elif brace == "{":
+        pair = ("{", "}")
+    elif brace == "[":
+        pair = ("[", "]")
     else:
-        raise RuntimeError("p must be '(', '{', or '['")
+        raise RuntimeError("brace must be '(', '{', or '['")
 
     out = ""
     count = 0
-    for x in s:
-        if x == q[0]:
+    for x in string:
+        if x == pair[0]:
             count += 1
-        elif x == q[1]:
+        elif x == pair[1]:
             count -= 1
 
         out += x
@@ -468,42 +469,42 @@ def rotation_matrix(theta, axis):
         axis = [1, 0, 0]
     axis = axis / np.linalg.norm(axis)
     dim = len(axis)
-    M = np.dot(np.transpose([axis]), [axis])
-    M = [[i * (1 - np.cos(theta)) for i in m] for m in M]
-    I = np.identity(dim)
-    Cos = [[np.cos(theta) * i for i in ii] for ii in I]
-    Sin = np.zeros((dim, dim))
+    outer_prod = np.dot(np.transpose([axis]), [axis])
+    outer_prod *= (1 - np.cos(theta))
+    iden = np.identity(dim)
+    cos_comp = iden * np.cos(theta)
+    sin_comp = np.zeros((dim, dim))
     for i in range(0, dim):
         for j in range(0, dim):
             if i != j:
                 if (i + j) % 2 != 0:
-                    p = 1
-                else:
                     p = -1
+                else:
+                    p = 1
                 if i > j:
                     p = -p
-                Sin[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
+                sin_comp[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
 
     return np.array(
         [
-            [M[i][j] + Cos[i][j] + Sin[i][j] for i in range(0, dim)]
+            [outer_prod[i][j] + cos_comp[i][j] + sin_comp[i][j] for i in range(0, dim)]
             for j in range(0, dim)
         ]
     )
 
 
-def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
+def fibonacci_sphere(radius=1, center=np.zeros(3), num=500):
     """
     returns a grid of points that are equally spaced on a sphere
     with the specified radius and center
-    number of points can be adjusted with n
+    number of points can be adjusted with num
     """
     # generate a grid of points on the unit sphere
-    grid = np.zeros((n, 3))
+    grid = np.zeros((num, 3))
     d_theta = np.pi * (3.0 - np.sqrt(5.0))
-    dy = 2.0 / (n - 1)
+    dy = 2.0 / (num - 1)
 
-    for i in range(0, n):
+    for i in range(0, num):
         y = 1 - i * dy
         r = np.sqrt(1 - y ** 2)
 
@@ -521,18 +522,24 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), n=500):
     return grid
 
 
-def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
+def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
     """
     returns one of the Lebedev grid points (xi, yi, zi)
     and weights (wi) with the specified radius and center.
     Weights do not include r**2, so integral of F(x,y,z)
     over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number
-    of points (n) must be one of 110, 194, 302, 590, 1454, 5810
+    of points (num) must be one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810
     """
     # read grid data  on unit sphere
     grid_file = os.path.join(
-        AARONTOOLS, "utils", "quad_grids", "Leb" + str(n) + ".grid"
+        AARONTOOLS, "utils", "quad_grids", "Leb" + str(num) + ".grid"
     )
+    if not os.path.exists(grid_file):
+        # maybe some other error type?
+        raise NotImplementedError(
+            "cannot use Lebedev grid with %i points\n" % num +
+            "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
+        )
     grid_data = np.loadtxt(grid_file)
     grid = grid_data[:, [0, 1, 2]]
     weights = grid_data[:, 3]
@@ -544,23 +551,76 @@ def lebedev_sphere(radius=1, center=np.zeros(3), n=302):
     return grid, weights
 
 
-def gauss_legendre_grid(a=-1, b=1, n=32):
+def gauss_legendre_grid(start=-1, stop=1, num=32):
     """
     returns a Gauss-Legendre grid points (xi) and weights
-    (wi)for the range a to b. Integral over F(x) is
-    \sum_i{F(xi)wi}. The number of points (n) must be one
+    (wi)for the range start to stop. Integral over F(x) is
+    \sum_i{F(xi)wi}. The number of points (num) must be one
     of 20, 32, 64, 75, 99, 127
     """
     # read grid points on the range [-1,1] and weights
     grid_file = os.path.join(
-        AARONTOOLS, "utils", "quad_grids", "Leg" + str(n) + ".grid"
+        AARONTOOLS, "utils", "quad_grids", "Leg" + str(num) + ".grid"
     )
+    if not os.path.exists(grid_file):
+        # maybe some other error type?
+        raise NotImplementedError(
+            "cannot use Gauss-Legendre grid with %i points\n" % num +
+            "use one of 20, 32, 64, 75, 99, 127"
+        )
     grid_data = np.loadtxt(grid_file)
 
-    # shift grid range to [a,b]
-    grid = grid_data[:, 0] * (b - a) / 2 + a + (b - a) / 2
+    # shift grid range to [start, stop]
+    grid = grid_data[:, 0] * (stop - start) / 2 + start + (stop - start) / 2
 
     # adjust weights for new range
-    weights = grid_data[:, 1] * (b - a) / 2
+    weights = grid_data[:, 1] * (stop - start) / 2
 
     return grid, weights
+
+
+def perp_vector(vec):
+    """
+    returns a vector orthonormal to vec (np.ndarray)
+    if vec is 2D, returns a vector orthonormal to the
+    plane of best for the rows of vec
+    """
+    vec = np.squeeze(vec)
+    if vec.ndim == 1:
+        out_vec = np.zeros(len(vec))
+        for k in range(0, len(vec)):
+            if vec[k] != 0:
+                if k == 0:
+                    out_vec[1] = vec[k]
+                    out_vec[0] = vec[1]
+                else:
+                    out_vec[0] = vec[k]
+                    out_vec[1] = vec[0]
+                break
+        else:
+            # a zero-vector was given
+            return np.ones(len(vec)) / len(vec)
+
+        out = np.cross(out_vec, vec)
+        out /= np.linalg.norm(out)
+        return out
+
+    elif vec.ndim == 2:
+        xyz = vec - np.mean(vec, axis=0)
+        cov_prod = np.dot(xyz.T, xyz)
+        u, s, vh = np.linalg.svd(cov_prod, compute_uv=True)
+        return u[:, -1]
+
+    raise NotImplementedError(
+        "cannot determine vector perpendicular to %i-dimensional array" % vec.ndim
+    )
+
+
+def get_filename(path, include_parent_dir=True):
+    """returns the name of the file without parent directories or extension"""
+    if not include_parent_dir:
+        fname = os.path.basename(path)
+    else:
+        fname = path
+    fname, _ = os.path.splitext(fname)
+    return fname

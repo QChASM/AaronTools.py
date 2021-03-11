@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from copy import deepcopy
+from getpass import getuser
 from warnings import warn
 
 import AaronTools
@@ -25,8 +26,8 @@ from AaronTools.theory import (
     PSI4_BEFORE_GEOM,
     PSI4_BEFORE_JOB,
     PSI4_COMMENT,
-    PSI4_COORDINATES,
     PSI4_JOB,
+    PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
     Theory,
@@ -34,6 +35,7 @@ from AaronTools.theory import (
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import (
     CrestJob,
+    ForceJob,
     FrequencyJob,
     OptimizationJob,
     SinglePointJob,
@@ -57,7 +59,7 @@ THEORY_OPTIONS = [
     "PSI4_BEFORE_GEOM",
     "PSI4_BEFORE_JOB",
     "PSI4_COMMENT",
-    "PSI4_COORDINATES",
+    "PSI4_MOLECULE",
     "PSI4_JOB",
     "PSI4_OPTKING",
     "PSI4_SETTINGS",
@@ -119,7 +121,9 @@ class Config(configparser.ConfigParser):
                     os.path.abspath(infile)
                 )
             if "name" not in self["DEFAULT"]:
-                self["DEFAULT"]["name"] = ".".join(infile.split(".")[:-1])
+                self["DEFAULT"]["name"] = ".".join(
+                    os.path.relpath(infile).split(".")[:-1]
+                )
         # handle substitutions/mapping
         self._changes = {}
         self._changed_list = []
@@ -133,7 +137,7 @@ class Config(configparser.ConfigParser):
             "user": self.get(
                 "DEFAULT",
                 "user",
-                fallback=self.get("HPC", "user", fallback=os.environ["USER"]),
+                fallback=self.get("HPC", "user", fallback=getuser()),
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }
@@ -325,7 +329,7 @@ class Config(configparser.ConfigParser):
         two_layer_single_value = [
             PSI4_OPTKING,
             PSI4_SETTINGS,
-            PSI4_COORDINATES,
+            PSI4_MOLECULE,
         ]
 
         # these need to be lists
@@ -500,6 +504,8 @@ class Config(configparser.ConfigParser):
                     theory.job_type += [FrequencyJob()]
             if "single-point" in job_type or "SP" in job_type:
                 theory.job_type += [SinglePointJob()]
+            if "force" in job_type or "gradient" in job_type:
+                theory.job_type += [ForceJob()]
         else:
             theory.job_type = [SinglePointJob()]
         # return updated theory object
@@ -512,7 +518,7 @@ class Config(configparser.ConfigParser):
                 kind = ""
                 if name.startswith("TS"):
                     kind = "TS"
-                elif name.startswith("INT"):
+                else:
                     kind = "Minimum"
                 if path is not None:
                     name = os.path.join(path, name)

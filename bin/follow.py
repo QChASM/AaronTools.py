@@ -5,10 +5,9 @@ from warnings import warn
 
 import numpy as np
 from AaronTools.fileIO import FileReader
-
-# from AaronTools.const import UNIT
 from AaronTools.geometry import Geometry
 from AaronTools.pathway import Pathway
+from AaronTools.utils.utils import get_filename
 
 
 def width(n):
@@ -51,7 +50,6 @@ follow_parser.add_argument(
     "input_file",
     metavar="input file",
     type=str,
-    nargs=1,
     help='input frequency file (i.e. Gaussian output where "freq" was specified)',
 )
 
@@ -121,29 +119,21 @@ follow_parser.add_argument(
     default=False,
     required=False,
     dest="outfile",
-    help='output destination\n"$i" in file name will be replaced with zero-padded numbers\nDefault: stdout',
+    help="output destination\n" +
+    "$i in file name will be replaced with zero-padded numbers if --animate is used\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout",
 )
-"""
-follow_parser.add_argument('-e', '--energy-scale', \
-                            action='store_const', \
-                            const=True, \
-                            default=False, \
-                            required=False, \
-                            dest='nrg_scale', \
-                            help='scale is in units of kcal instead of Angstrom')
-"""
+
 args = follow_parser.parse_args()
 
-in_file = args.input_file
-
-G_file = args.input_file[0]
-G_AAron_file = FileReader(G_file, just_geom=False)
-G = Geometry(G_AAron_file)
+fr = FileReader(args.input_file, just_geom=False)
+geom = Geometry(fr)
 
 if args.mode is None:
     modes = [
         [i]
-        for i, freq in enumerate(G_AAron_file.other["frequency"].data)
+        for i, freq in enumerate(fr.other["frequency"].data)
         if freq.frequency < 0
     ]
 else:
@@ -172,31 +162,24 @@ for i, mode in enumerate(modes):
             append = True
     else:
         append = False
-    dX = np.zeros((len(G.atoms), 3))
+    dX = np.zeros((len(geom.atoms), 3))
     # figure out how much we'll have to scale each mode
     for j, combo in enumerate(mode):
-        if False:
-            """if args.nrg_scale:
-            nrg = scale[i][j]*UNIT.mDYNEA0_TO_KCAL
-            #scale this mode by 0.35 kcal (or whatever the user asked for)
-            x_factor = np.sqrt(2.*nrg/G_AAron_file.other['frequency'].data[combo].forcek)
-            """
-        else:
-            max_norm = 0
-            for k, v in enumerate(
-                G_AAron_file.other["frequency"].data[combo].vector
-            ):
-                n = np.linalg.norm(v)
-                if n > max_norm:
-                    max_norm = n
+        max_norm = 0
+        for k, v in enumerate(
+                fr.other["frequency"].data[combo].vector
+        ):
+            n = np.linalg.norm(v)
+            if n > max_norm:
+                max_norm = n
 
-            # scale this mode by 0.35 (or whatever the user asked for)/max_norm
-            x_factor = scale[i][j] / max_norm
+        # scale this mode by 0.35 (or whatever the user asked for)/max_norm
+        x_factor = scale[i][j] / max_norm
 
         if args.reverse:
             x_factor *= -1
 
-        dX += x_factor * G_AAron_file.other["frequency"].data[combo].vector
+        dX += x_factor * fr.other["frequency"].data[combo].vector
 
     if args.animate is not None:
         # animate by setting up 3 geometries: -, 0, and +
@@ -206,9 +189,9 @@ for i, mode in enumerate(modes):
         w = width(args.animate[0])
         fmt = "%0" + "%i" % w + "i"
 
-        Xf = G.coords + dX
-        X = G.coords
-        Xr = G.coords - dX
+        Xf = geom.coords + dX
+        X = geom.coords
+        Xr = geom.coords - dX
 
         # make a scales(t) function so we can see the animation progress in the XYZ file comment
         if args.roundtrip:
@@ -221,13 +204,13 @@ for i, mode in enumerate(modes):
                     0,
                     mode_scale,
                 ]
-            S = Pathway(G, np.array([Xf, X, Xr, X, Xf]), other_vars=other_vars)
+            pathway = Pathway(geom, np.array([Xf, X, Xr, X, Xf]), other_vars=other_vars)
 
         else:
             other_vars = {}
             for i, mode_scale in enumerate(scale[i]):
                 other_vars["scale %i"] = [mode_scale, 0, -mode_scale]
-            S = Pathway(G, np.array([Xf, X, Xr]), other_vars=other_vars)
+            pathway = Pathway(geom, np.array([Xf, X, Xr]), other_vars=other_vars)
 
         # print animation frames
         for k, t in enumerate(np.linspace(0, 1, num=args.animate[0])):
@@ -236,30 +219,38 @@ for i, mode in enumerate(modes):
             else:
                 outfile = outfiles[i]
 
-            Gt = S.Geom_func(t)
-            Gt.comment = (
+            followed_geom = pathway.geom_func(t)
+            followed_geom.comment = (
                 "animating mode %s scaled to displace at most [%s]"
                 % (
                     repr(mode),
-                    ", ".join(str(S.var_func[key](t)) for key in other_vars),
+                    ", ".join(str(pathway.var_func[key](t)) for key in other_vars),
                 )
             )
-            s = Gt.write(append, outfile=outfile)
-            if not outfile:
-                print(s)
+            if args.outfile:
+                followed_geom.write(
+                    append=False,
+                    outfile=outfile.replace("$INFILE", get_filename(args.input_file))
+                )
+            else:
+                print(followed_geom.write(outfile=False))
 
     else:
         w = width(len(modes))
         fmt = "%0" + "%i" % w + "i"
 
-        Gm = G.copy()
-        Gm.update_geometry(G.coords + dX)
-        Gm.comment = "following mode %s scaled to displace at most %s" % (
+        followed_geom = geom.copy()
+        followed_geom.update_geometry(geom.coords + dX)
+        followed_geom.comment = "following mode %s scaled to displace at most %s" % (
             repr(mode),
             repr(scale[i]),
         )
 
         outfile = outfiles[i]
-        s = Gm.write(append, outfile=outfile)
-        if not outfile:
-            print(s)
+        if args.outfile:
+            followed_geom.write(
+                append=True,
+                outfile=outfile.replace("$INFILE", get_filename(args.input_file))
+            )
+        else:
+            print(followed_geom.write(outfile=False))

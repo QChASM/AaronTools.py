@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
-from sys import argv, exit, stdin
+import sys
 
-from AaronTools.atoms import Atom
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.utils import get_filename
 
 substitute_parser = argparse.ArgumentParser(
     description="replace an atom or substituent with another",
@@ -17,7 +17,7 @@ substitute_parser.add_argument(
     metavar="input file",
     type=str,
     nargs="*",
-    default=[stdin],
+    default=[sys.stdin],
     help="a coordinate file",
 )
 
@@ -36,7 +36,6 @@ substitute_parser.add_argument(
     "-if",
     "--input-format",
     type=str,
-    nargs=1,
     default=None,
     choices=read_types,
     dest="input_format",
@@ -74,13 +73,14 @@ substitute_parser.add_argument(
 substitute_parser.add_argument(
     "-o",
     "--output",
-    nargs=1,
     type=str,
-    default=[False],
+    default=False,
     required=False,
     metavar="output destination",
     dest="outfile",
-    help="output destination\nDefault: stdout",
+    help="output destination\n" +
+    "$INFILE will be replaced with the name of the input file\n" +
+    "Default: stdout"
 )
 
 args = substitute_parser.parse_args()
@@ -94,19 +94,19 @@ if args.list_avail:
             s += "\n"
 
     print(s.strip())
-    exit(0)
+    sys.exit(0)
 
 for infile in args.infile:
     if isinstance(infile, str):
         if args.input_format is not None:
-            f = FileReader((infile, args.input_format[0], infile))
+            f = FileReader((infile, args.input_format, infile))
         else:
             f = FileReader(infile)
     else:
         if args.input_format is not None:
-            f = FileReader(("from stdin", args.input_format[0], stdin))
+            f = FileReader(("from stdin", args.input_format, infile))
         else:
-            f = FileReader(("from stdin", "xyz", stdin))
+            f = FileReader(("from stdin", "xyz", infile))
 
     geom = Geometry(f)
 
@@ -133,6 +133,10 @@ for infile in args.infile:
             geom.substitute(sub, target, minimize=args.mini)
             geom.refresh_connected()
 
-    s = geom.write(append=False, outfile=args.outfile[0])
-    if not args.outfile[0]:
-        print(s)
+    if args.outfile:
+        geom.write(
+            append=True,
+            outfile=args.outfile.replace("$INFILE", get_filename(infile))
+        )
+    else:
+        print(geom.write(outfile=False))

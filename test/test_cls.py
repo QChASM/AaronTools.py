@@ -76,6 +76,9 @@ class TestCLS(TestWithTimer):
             os.path.join(prefix, "ref_files", "change_chirality_cls", "*.xyz")
         )
     )
+    chiral_ring_mirror = os.path.join(prefix, "test_files", "chiral_ring_mirror.xyz")
+    cone_bidentate_2 = os.path.join(prefix, "test_files", "bpy.xyz")
+    cone_bidentate_3 = os.path.join(prefix, "test_files", "dppe.xyz")
 
     aarontools_bin = os.path.join(os.path.dirname(AaronTools.__file__), "bin")
     # CLS stored in $PYTHONHOME/bin if installed via pip
@@ -212,37 +215,43 @@ class TestCLS(TestWithTimer):
         ]
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
+        # print(out.decode("utf-8"))
+        # print(err.decode("utf-8"))
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
         self.assertTrue(validate(mol, ref))
 
-        # don't run smiles/iupac tests if we can't connect to the host site
-        try:
-            for host in [CACTUS_HOST, OPSIN_HOST]:
-                response = urllib.request.urlopen(
-                    host, context=ssl.SSLContext()
-                )
-                # name resolved, but something wrong with server
-                if response.status >= 500:
-                    return
-        except urllib.error.URLError:
-            # can't resolve name or some other connectivity error
-            return
-
-        args = [
-            sys.executable,
-            os.path.join(self.aarontools_bin, "substitute.py"),
-            TestCLS.benzene,
-            "-s",
-            "12=smiles:O=[N.]=O",
-            "-s",
-            "11=iupac:chloro",
-        ]
-        proc = Popen(args, stdout=PIPE, stderr=PIPE)
-        out, err = proc.communicate()
-        fr = FileReader(("out", "xyz", out.decode("utf-8")))
-        mol = Geometry(fr)
-        self.assertTrue(validate(mol, ref, thresh=2e-1))
+        # I don't want to run these tests anymore
+        # sometimes the server timeout stuff doesn't seem to work and
+        # the test hangs for > 30 seconds
+        # - Tony
+        # # don't run smiles/iupac tests if we can't connect to the host site
+        # try:
+        #     for host in [CACTUS_HOST, OPSIN_HOST]:
+        #         response = urllib.request.urlopen(
+        #             host, context=ssl.SSLContext()
+        #         )
+        #         # name resolved, but something wrong with server
+        #         if response.status >= 5:
+        #             return
+        # except urllib.error.URLError:
+        #     # can't resolve name or some other connectivity error
+        #     return
+        # 
+        # args = [
+        #     sys.executable,
+        #     os.path.join(self.aarontools_bin, "substitute.py"),
+        #     TestCLS.benzene,
+        #     "-s",
+        #     "12=smiles:O=[N.]=O",
+        #     "-s",
+        #     "11=iupac:chloro",
+        # ]
+        # proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        # out, err = proc.communicate()
+        # fr = FileReader(("out", "xyz", out.decode("utf-8")))
+        # mol = Geometry(fr)
+        # self.assertTrue(validate(mol, ref, thresh=2e-1))
 
     def test_closeRing(self):
         """test closeRing.py"""
@@ -256,6 +265,27 @@ class TestCLS(TestWithTimer):
             "7",
             "8",
             "benzene",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        fr = FileReader(("out", "xyz", out.decode("utf-8")))
+        mol = Geometry(fr)
+        rmsd = mol.RMSD(ref1, sort=True)
+        self.assertTrue(rmsd < rmsd_tol(ref1, superLoose=True))
+
+    def test_mirror(self):
+        """test mirror.py"""
+        ref1 = Geometry(TestCLS.chiral_ring_mirror)
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "mirror.py"),
+            TestCLS.change_chir_1, "-xy"
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
@@ -828,10 +858,43 @@ thermochemistry from test_files/normal.log at 298.00 K:
                 print(ref_item, test_item)
             self.assertTrue(ref_item == test_item)
 
+    def test_coneAngle(self):
+        """test coneAngle.py"""
+        
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "coneAngle.py"),
+            "-r", "bondi",
+            TestCLS.cone_bidentate_3,
+            "-k", "2,3",
+            "-m", "exact",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        angle = float(out)       
+        self.assertTrue(abs(angle - 218.6) <= 0.1)
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "coneAngle.py"),
+            "-r", "bondi",
+            TestCLS.cone_bidentate_2,
+            "-k", "2,3",
+            "-m", "exact",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        angle = float(out)       
+        self.assertTrue(abs(angle - 194.6) <= 0.1)
+
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_mapLigand"))
+    suite.addTest(TestCLS("test_grabThermo"))
     return suite
 
 

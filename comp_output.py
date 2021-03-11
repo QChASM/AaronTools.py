@@ -181,18 +181,18 @@ class CompOutput:
         if sigmar is None and len(self.geometry.atoms) == 1:
             sigmar = 3
         mult = self.multiplicity
-        freqs = self.frequency.real_frequencies
+        freqs = np.array(self.frequency.real_frequencies)
 
         vib_unit_convert = (
             PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANCK / PHYSICAL.KB
         )
-        vibtemps = [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
+        vibtemps = np.array([f_i * vib_unit_convert for f_i in freqs if f_i > 0])
         if method == "QHARM":
-            harm_vibtemps = [
+            harm_vibtemps = np.array([
                 f_i * vib_unit_convert if f_i > v0 else v0 * vib_unit_convert
                 for f_i in freqs
                 if f_i > 0
-            ]
+            ])
         else:
             harm_vibtemps = vibtemps
 
@@ -234,35 +234,44 @@ class CompOutput:
             Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
 
         # Vibrational
-        Ev = 0
-        Sv = 0
-        for i, (vib, harm_vib) in enumerate(zip(vibtemps, harm_vibtemps)):
-            Sv_T = harm_vib / (T * (np.exp(harm_vib / T) - 1))
-            Sv_T -= np.log(1 - np.exp(-harm_vib / T))
-            Ev += vib * (1.0 / 2 + 1 / (np.exp(vib / T) - 1))
-
-            if method == "QHARM":
-                Sv += Sv_T
-            else:
-                mu = PHYSICAL.PLANCK
-                mu /= 8 * np.pi ** 2 * freqs[i] * PHYSICAL.SPEED_OF_LIGHT
-                mu = mu * Bav / (mu + Bav)
-                Sr_eff = 1 / 2 + np.log(
-                    np.sqrt(
-                        8
-                        * np.pi ** 3
-                        * mu
-                        * PHYSICAL.KB
-                        * T
-                        / PHYSICAL.PLANCK ** 2
-                    )
+        if method == self.QUASI_HARMONIC:
+            Sv = np.sum(
+                harm_vibtemps / (
+                    T * (np.exp(harm_vibtemps / T) - 1)
+                ) - np.log(1 - np.exp(-harm_vibtemps / T))
+            )
+        elif method == self.RRHO:
+            Sv = np.sum(
+                vibtemps / (
+                    T * (np.exp(vibtemps / T) - 1)
+                ) - np.log(1 - np.exp(-vibtemps / T))
+            )
+        elif method == self.QUASI_RRHO:
+            mu = PHYSICAL.PLANCK
+            mu /= 8 * np.pi ** 2 * freqs * PHYSICAL.SPEED_OF_LIGHT
+            mu = mu * Bav / (mu + Bav)
+            Sr_eff = 1 / 2 + np.log(
+                np.sqrt(
+                    8
+                    * np.pi ** 3
+                    * mu
+                    * PHYSICAL.KB
+                    * T
+                    / PHYSICAL.PLANCK ** 2
                 )
-                if method == self.QUASI_RRHO:
-                    weight = 1 / (1 + (v0 / freqs[i]) ** 4)
-                elif method == self.RRHO:
-                    weight = 1
+            )
 
-                Sv += weight * Sv_T + (1 - weight) * Sr_eff
+            weights = weight = 1 / (1 + (v0 / freqs) ** 4)
+
+            Sv = np.sum(
+                weights * (
+                    harm_vibtemps / (
+                        T * (np.exp(harm_vibtemps / T) - 1)
+                    ) - np.log(1 - np.exp(-harm_vibtemps / T))
+                ) + (1 - weights) * Sr_eff
+            )
+
+        Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
 
         Ev *= PHYSICAL.GAS_CONSTANT
         Sv *= PHYSICAL.GAS_CONSTANT

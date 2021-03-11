@@ -44,10 +44,19 @@ class TestConfig(TestWithTimer):
                 ref = json.load(f)
             self.assertDictEqual(ref, test, msg=config_name)
 
+    def test_parse_changes(self):
+        simple = Config(os.path.join(prefix, "test_files", "simple_subs.ini"))
+        simple._parse_changes()
+        print(simple._changes)
+        rings = Config(os.path.join(prefix, "test_files", "ring_subs.ini"))
+        rings._parse_changes()
+        print(rings._changes)
+
 
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(TestConfig("test_init"))
+    suite.addTest(TestConfig("test_parse_changes"))
     return suite
 
 
