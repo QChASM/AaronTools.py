@@ -76,6 +76,16 @@ class Config(configparser.ConfigParser):
     See help(configparser.ConfigParser) for more information
     """
 
+    SPEC_ATTRS = [
+        "_changes",
+        "_changed_list",
+        "_args",
+        "_kwargs",
+        "conformer",
+        "infile",
+        "metadata",
+    ]
+
     def __init__(self, infile="config.ini", quiet=False, **kwargs):
         """
         infile: the configuration file to read
@@ -130,6 +140,7 @@ class Config(configparser.ConfigParser):
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }
+        self.conformer = 0
 
     def optionxform(self, option):
         return str(option)
@@ -216,14 +227,8 @@ class Config(configparser.ConfigParser):
             config.add_section(attr)
             for key, val in self[attr].items():
                 config[attr][key] = val
-        for attr in [
-            "_changes",
-            "_changed_list",
-            "_args",
-            "_kwargs",
-            "metadata",
-        ]:
-            config.__dict__[attr] = self.__dict__[attr]
+        for attr in self.SPEC_ATTRS:
+            setattr(config, attr, getattr(self, attr))
         return config
 
     def parse_functions(self):
@@ -244,7 +249,7 @@ class Config(configparser.ConfigParser):
                     eval_match = match
                     for attr in attr_patt.findall(match):
                         if ":" in attr:
-                            option, from_section = attr.split(":")
+                            from_section, option = attr.split(":")
                         else:
                             option, from_section = attr, section
                         option = self[from_section][option]
@@ -427,7 +432,7 @@ class Config(configparser.ConfigParser):
         if job_type:
             theory.job_type = []
             job_type = job_type.split(".")
-            if "opt" in job_type[0]:
+            if "opt" in job_type[0] or "conf" in job_type[0]:
                 constraints = None
                 ts = False
                 if len(job_type) > 1:
@@ -473,13 +478,14 @@ class Config(configparser.ConfigParser):
                     elif "ts" == job_type[1]:
                         ts = True
 
-                theory.job_type += [
-                    OptimizationJob(
-                        transition_state=ts,
-                        geometry=geometry,
-                        constraints=constraints,
-                    )
-                ]
+                if "opt" in job_type[0]:
+                    theory.job_type += [
+                        OptimizationJob(
+                            transition_state=ts,
+                            geometry=geometry,
+                            constraints=constraints,
+                        )
+                    ]
             if "freq" in job_type[0]:
                 if self[section].get("temperature", fallback=False):
                     theory.job_type += [
@@ -497,8 +503,25 @@ class Config(configparser.ConfigParser):
         return theory
 
     def get_template(self):
+        def get_multiple(filenames, path=None):
+            rv = []
+            for name in filenames:
+                kind = ""
+                if name.startswith("TS"):
+                    kind = "TS"
+                else:
+                    kind = "Minimum"
+                if path is not None:
+                    name = os.path.join(path, name)
+                if not os.path.isfile(name):
+                    continue
+                geom = AaronTools.geometry.Geometry(name)
+                rv += [(geom, kind)]
+            return rv
+
+        structure = None
+        structure_list = []
         if "Reaction" in self:
-            structures = []
             if "template" in self["Reaction"]:
                 path = os.path.join(
                     AARONLIB,
@@ -507,39 +530,17 @@ class Config(configparser.ConfigParser):
                     self["Reaction"]["template"],
                 )
                 for dirpath, dirnames, filenames in os.walk(path):
-                    for name in filenames:
-                        if name.startswith("TS"):
-                            kind = "TS"
-                        else:
-                            kind = "Minimum"
-                        name = os.path.join(dirpath, name)
-                        structure = AaronTools.geometry.Geometry(name)
-                        structure.name = os.path.relpath(name, path)
-                        structure.name = ".".join(
-                            structure.name.split(".")[:-1]
-                        )
-                        structures += [(structure, kind)]
+                    structure_list += get_multiple(filenames, path=dirpath)
             else:
                 path = os.path.join(
                     AARONLIB,
                     "TS_geoms",
                     self["Reaction"]["reaction"],
                 )
-                for name in os.listdir(path):
-                    if name.startswith("TS"):
-                        kind = "TS"
-                    else:
-                        kind = "Minimum"
-                    name = os.path.join(path, name)
-                    if not os.path.isfile(name):
-                        continue
-                    structure = AaronTools.geometry.Geometry(name)
-                    structure.name = os.path.relpath(name, path)
-                    structure.name = ".".join(structure.name.split(".")[:-1])
-                    structures += [(structure, kind)]
-            return structures
+                for dirpath, dirnames, filenames in os.walk(path):
+                    structure_list += get_multiple(filenames, path=dirpath)
         # get starting structure
-        if "Geometry" not in self or "structure" not in self["Geometry"]:
+        elif "Geometry" not in self or "structure" not in self["Geometry"]:
             structure = "{}.xyz".format(self["Job"]["name"])
             self["Job"]["name"] = os.path.basename(self["Job"]["name"])
             s = "No structure indicated in config. Trying to use {}".format(
@@ -548,37 +549,50 @@ class Config(configparser.ConfigParser):
             print(s, file=sys.stderr)
         else:
             structure = self["Geometry"]["structure"]
-        try:
-            structure = AaronTools.geometry.Geometry(structure)
-        except FileNotFoundError:
-            structure = AaronTools.geometry.Geometry(
-                os.path.join(self["DEFAULT"]["top_dir"], structure)
-            )
-        except IndexError:
-            structure = AaronTools.geometry.Geometry.from_string(structure)
-            self._changes[""] = ({}, None)
-        # adjust structure attributes
-        if "name" in self["Job"]:
-            structure.name = self["Job"]["name"]
-        if "Geometry" in self and "comment" in self["Geometry"]:
-            structure.comment = self["Geometry"]["comment"]
-            structure.parse_comment()
+
+        # create Geometry objects as requeseted by config[Geometry][structure]
+        if structure is not None and os.path.isdir(structure):
+            # if structure is a directory
+            for dirpath, dirnames, filenames in os.walk(structure):
+                structure_list += get_multiple(filenames, path=dirpath)
+        elif structure is not None:
+            try:
+                # if structure is a filename
+                structure = AaronTools.geometry.Geometry(structure)
+            except FileNotFoundError:
+                # if structure is a filename
+                structure = AaronTools.geometry.Geometry(
+                    os.path.join(self["DEFAULT"]["top_dir"], structure)
+                )
+            except IndexError:
+                # if structure is a smiles string
+                structure = AaronTools.geometry.Geometry.from_string(structure)
+                self._changes[""] = ({}, None)
+            # adjust structure attributes
+            if "name" in self["Job"]:
+                structure.name = self["Job"]["name"]
+            if "Geometry" in self and "comment" in self["Geometry"]:
+                structure.comment = self["Geometry"]["comment"]
+                structure.parse_comment()
+            structure_list = [(structure, None)]
+
         # apply functions found in [Geometry] section
-        # structure.write()
-        # os.system("chimera {}.xyz".format(structure.name))
-        if "Geometry" in self:
-            if "&call" in self["Geometry"]:
-                lines = self["Geometry"]["&call"]
-                for line in lines.split("\n"):
-                    if line.strip():
-                        eval(
-                            line.strip(),
-                            {
-                                "structure": structure,
-                                "Geometry": AaronTools.geometry.Geometry,
-                            },
-                        )
-        return structure
+        for structure, kind in structure_list:
+            if "Geometry" in self:
+                if "&call" in self["Geometry"]:
+                    lines = self["Geometry"]["&call"]
+                    for line in lines.split("\n"):
+                        if line.strip():
+                            eval(
+                                line.strip(),
+                                {
+                                    "structure": structure,
+                                    "Geometry": AaronTools.geometry.Geometry,
+                                },
+                            )
+        if len(structure_list) == 1:
+            return structure_list[0]
+        return structure_list
 
     def _parse_includes(self):
         """
@@ -617,18 +631,36 @@ class Config(configparser.ConfigParser):
             spec = {}
         if skip_keys is None:
             skip_keys = []
-        for attr in ["_changes", "_changed_list", "_args", "_kwargs"]:
+        for attr in self.SPEC_ATTRS:
             if attr in skip_keys:
                 continue
-            spec[attr] = self.__dict__[attr]
+            spec[attr] = getattr(self, attr)
         for section in self._sections:
+            if section in ["Results", "Plot"]:
+                # this is just used when displaying results and have no bearing on
+                # how computations are actually run. The user may change values here
+                # to make analysis easier, and we don't want those changes to exclude
+                # fireworks when searching
+                continue
             for key, val in self.items(section=section):
                 if key in skip_keys:
                     continue
-                spec["{}/{}".format(section, key).replace(".", "#")] = val
+                if "." in section:
+                    continue
+                spec["{}/{}".format(section, key)] = val
         return spec
 
-    def for_step(self, step):
+    def read_spec(self, spec):
+        for attr in spec:
+            if attr in self.SPEC_ATTRS:
+                setattr(self, attr, spec[attr])
+            if "/" in attr:
+                section, key = attr.replace("#", ".").split("/")
+                if section not in self:
+                    self.add_section(section)
+                self[section][key] = spec[attr]
+
+    def for_step(self, step=None):
         config = self.copy()
         # find step-specific options
         for section in config._sections:
@@ -644,10 +676,6 @@ class Config(configparser.ConfigParser):
                 except ValueError:
                     key_step = key_step.strip()
                 # screen based on step
-                if key_step == "low" and step < 2 and step != 0:
-                    config[section][key] = val
-                if key_step == "high" and step >= 5:
-                    config[section][key] = val
                 if isinstance(key_step, float) and key_step == float(step):
                     config[section][key] = val
                 # clean up metadata
@@ -663,10 +691,10 @@ class Config(configparser.ConfigParser):
         else:
             config["HPC"]["work_dir"] = config["Job"].get("top_dir")
         config["HPC"]["job_name"] = config["Job"]["name"]
+        if config.conformer:
+            config["HPC"]["job_name"] += "_{}".format(config.conformer)
         if step:
-            config["HPC"]["job_name"] = "{}.{}".format(
-                config["HPC"]["job_name"], step
-            )
+            config["HPC"]["job_name"] += ".{}".format(step)
         # parse user-supplied functions in config file
         config.parse_functions()
         return config
