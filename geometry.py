@@ -2611,6 +2611,9 @@ class Geometry:
             ring_fragment = Ring(ring_fragment)
 
         targets = self.find(targets)
+        # we want to keep atom naming conventions consistent with regular substitutions
+        for atom in ring_fragment.atoms:
+            atom.name = "{}.{}".format(targets[0].name, atom.name)
 
         # find a path between the targets
         walk = self.shortest_path(*targets)
@@ -2637,6 +2640,8 @@ class Geometry:
                     len(walk),
                 )
             )
+        # AaronJr needs to know this when relaxing changes
+        return ring_fragment.atoms
 
     def change_element(
         self, target, new_element, adjust_bonds=False, adjust_hydrogens=False

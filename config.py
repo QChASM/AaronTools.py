@@ -108,7 +108,9 @@ class Config(configparser.ConfigParser):
                     os.path.abspath(infile)
                 )
             if "name" not in self["DEFAULT"]:
-                self["DEFAULT"]["name"] = ".".join(infile.split(".")[:-1])
+                self["DEFAULT"]["name"] = ".".join(
+                    os.path.relpath(infile).split(".")[:-1]
+                )
         # handle substitutions/mapping
         self._changes = {}
         self._changed_list = []
