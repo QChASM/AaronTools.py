@@ -312,6 +312,23 @@ nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
 
+    def test_read_crest(self):
+        fname = os.path.join(prefix, "test_files/good.crest")
+        res = FileReader(fname)
+        self.assertDictEqual(
+            res.other,
+            {
+                "best_energy": -79.18948,
+                "temperature": 298.15,
+                "energy": 0.172,
+                "entropy": 0.006899,
+                "free_energy": -2.057,
+                "best_pop": 70.368,
+                "finished": True,
+                "error": None,
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

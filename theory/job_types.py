@@ -1,3 +1,5 @@
+import itertools as it
+
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_GEN_BASIS,
@@ -243,6 +245,47 @@ class OptimizationJob(JobType):
 
         return out
 
+    def write_aux(self, config):
+        rv = ""
+        if self.constraints:
+            constraints = it.chain.from_iterable(*self.constraints.values())
+            frozen = {
+                str(self.geometry.atoms.index(c) + 1) for c in constraints
+            }
+            frozen = ",".join(sorted(frozen, key=lambda x: int(x)))
+            relaxed = {
+                str(i + 1)
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constraints
+            }
+            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            rv += """\
+            $constrain
+              atoms: {}
+              force constant=0.5
+              reference=ref.xyz
+            $metadyn
+              atoms: {}
+            """.format(
+                frozen, relaxed
+            )
+        for section in config:
+            for option, value in config[section].items():
+                if "charge" in option:
+                    rv += "$chrg {}\n".format(value)
+                if "multiplicity" in option:
+                    rv += "$spin {}\n".format(int(value) - 1)
+                if "temperature" in option:
+                    rv += """\
+                            $thermo
+                                temp={}
+                            """.format(
+                        value
+                    )
+        rv += "$end\n"
+        rv["{}.xcontrol".format(config["HPC"]["job_name"])] = rv
+        return rv
+
 
 class FrequencyJob(JobType):
     """frequnecy job"""
@@ -305,25 +348,63 @@ class SinglePointJob(JobType):
 
 class ForceJob(JobType):
     """force/gradient job"""
+
     def __init__(self, numerical=False):
         super().__init__()
         self.numerical = numerical
-    
+
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE"""
-        out = {GAUSSIAN_ROUTE:{"force":[]}}
+        out = {GAUSSIAN_ROUTE: {"force": []}}
         if self.numerical:
             out[GAUSSIAN_ROUTE]["force"].append("EnGrad")
         return out
-    
+
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
-        return {ORCA_ROUTE:["NumGrad" if self.numerical else "EnGrad"]}
-    
+        return {ORCA_ROUTE: ["NumGrad" if self.numerical else "EnGrad"]}
+
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
-        out = {PSI4_JOB:{"gradient":[]}}
+        out = {PSI4_JOB: {"gradient": []}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
         return out
-        
+
+
+class CrestJob(OptimizationJob):
+    def __init__(
+        self, transition_state=False, constraints=None, geometry=None
+    ):
+        super().__init__(transition_state, constraints, geometry)
+
+    def write_aux(self, config):
+        rv = {}
+        if self.constraints:
+            constraints = it.chain.from_iterable(*self.constraints.values())
+            frozen = {
+                str(self.geometry.atoms.index(c) + 1) for c in constraints
+            }
+            frozen = ",".join(sorted(frozen, key=lambda x: int(x)))
+            relaxed = {
+                str(i + 1)
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constraints
+            }
+            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            rv[
+                ".xcontrol"
+            ] = """\
+            $constrain
+              atoms: {}
+              force constant=0.5
+              reference=ref.xyz
+            $metadyn
+              atoms: {}
+            $end\
+            """.format(
+                frozen, relaxed
+            )
+        rv[".CHRG"] = config["Job"]["charge"]
+        rv[".UHF"] = str(int(config["Job"]["multiplicity"]) - 1)
+        return rv

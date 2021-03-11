@@ -58,6 +58,8 @@ class CompOutput:
         self.opt_steps = None
         self.frequency = None
         self.archive = None
+        self.other = None
+        self.conformers = None
 
         self.gradient, self.E_ZPVE, self.ZPVE = ({}, None, None)
         self.energy, self.enthalpy = (None, None)
@@ -99,17 +101,25 @@ class CompOutput:
         else:
             return
 
-        self.geometry = Geometry(from_file)
+        if from_file.atoms:
+            self.geometry = Geometry(from_file)
         if from_file.all_geom:
             self.opts = []
             for g in from_file.all_geom:
                 self.opts += [Geometry(g[0])]
+        if "conformers" in from_file.other:
+            self.conformers = []
+            for comment, atoms in from_file.other["conformers"]:
+                self.conformers += [Geometry(atoms, comment=comment)]
+            del from_file.other["conformers"]
 
         for k in keys:
             if k in from_file.other:
                 self.__setattr__(k, from_file.other[k])
+                del from_file.other[k]
+        self.other = from_file.other
 
-        if self.rotational_temperature is None:
+        if self.rotational_temperature is None and self.geometry:
             self.compute_rot_temps()
 
         if self.frequency:

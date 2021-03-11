@@ -84,6 +84,10 @@ class TestCompOutput(TestWithTimer):
                 else:
                     self.assertTrue(test[i][j] == r[j])
 
+    def test_crest(self):
+        test = CompOutput(os.path.join(prefix, "test_files", "good.crest"))
+        print(test.__dict__)
+
 
 if __name__ == "__main__":
     unittest.main()

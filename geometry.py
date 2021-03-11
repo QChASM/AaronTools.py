@@ -142,7 +142,6 @@ class Geometry:
             url_sd = "{}/chemical/structure/{}/file?format=sdf".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            print(url_sd)
             s_sd = (
                 urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
             )

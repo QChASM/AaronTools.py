@@ -1,5 +1,5 @@
 """for constructing headers and footers for input files"""
-
+import itertools as it
 import re
 
 from AaronTools.theory import (
@@ -29,7 +29,7 @@ from AaronTools.utils.utils import combine_dicts
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
-from .job_types import JobType
+from .job_types import CrestJob, JobType
 from .method import KNOWN_SEMI_EMPIRICAL, Method
 
 
@@ -465,7 +465,7 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        
+
         return s
 
     def get_gaussian_footer(
@@ -543,7 +543,7 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        
+
         return s
 
     def get_orca_header(
@@ -666,7 +666,7 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        
+
         return s
 
     def get_psi4_header(
@@ -817,7 +817,7 @@ class Theory:
 
         if return_warnings:
             return s, use_bohr, warnings
-        
+
         return s, use_bohr
 
     def get_psi4_footer(
@@ -937,5 +937,10 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-        
+
         return s
+
+    def write_aux(self, config):
+        for job_type in self.job_type:
+            if isinstance(job_type, CrestJob):
+                return job_type.write_aux(config)
