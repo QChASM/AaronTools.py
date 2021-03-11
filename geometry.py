@@ -317,7 +317,7 @@ class Geometry:
         coords -= self.COM()
         mat = np.matmul(coords.T, coords)
         vals = np.linalg.svd(mat, compute_uv=False)
-        
+
         t = [int(v * 3) for v in vals]
         for atom, coord in zip(self.atoms, coords):
             # only use the first 3 decimal places of coordinates b/c numerical issues
@@ -2348,7 +2348,7 @@ class Geometry:
             targets = self.find(targets)
 
         if not isinstance(vector, np.ndarray):
-            vector = np.array(vector, dtype=np.float)
+            vector = np.array(vector, dtype=np.float64)
         for t in targets:
             t.coords += vector
         return

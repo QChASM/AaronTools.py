@@ -58,7 +58,7 @@ ERROR_ORCA = {
     "The basis set was either not assigned or not available for this element": "BASIS",
     "Element name/number, dummy atom or point charge expected": "ATOM",
     "Error  (ORCA_SCF): Not enough memory available!": "MEM",
-    "ORCA finished with error return": "UNKNOWN", 
+    "ORCA finished with error return": "UNKNOWN",
 }
 
 # some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
@@ -449,28 +449,28 @@ class FileReader:
                 progress = 0
                 if get_all:
                     self.all_geom.append([deepcopy(self.comment), deepcopy(self.geometry)])
-                
+
                 continue
-            
+
             if progress == 3:
                 self.comment = line.strip()
-            
+
             if progress == 4:
                 counts = line.split()
                 natoms = int(counts[0])
                 nbonds = int(counts[1])
-            
+
             if progress == 5:
                 self.atoms = []
                 for line in lines[i : i + natoms]:
                     atom_info = line.split()
                     self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
-        
+
                 for line in lines[i + natoms : i + natoms + nbonds]:
                     a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
-    
+
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
 
@@ -1817,7 +1817,7 @@ class Frequency:
                     )
 
         for mode, data in zip(modes, self.data):
-            data.vector = np.array(mode, dtype=np.float)
+            data.vector = np.array(mode, dtype=np.float64)
         return
 
     def sort_frequencies(self):
