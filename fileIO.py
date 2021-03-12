@@ -1586,9 +1586,8 @@ class Frequency:
         :intensity: float
         :vector: (2D array) normal mode vectors
         """
-
         def __init__(
-            self, frequency, intensity=None, vector=None, forcek=None
+            self, frequency, intensity=None, vector=None, forcek=None, symmetry=None,
         ):
             if vector is None:
                 vector = []
@@ -1596,6 +1595,7 @@ class Frequency:
                 forcek = []
             self.frequency = frequency
             self.intensity = intensity
+            self.symmetry = symmetry
             self.vector = np.array(vector)
             self.forcek = np.array(forcek)
 
@@ -1751,7 +1751,7 @@ class Frequency:
         num_head = 0
         idx = -1
         modes = []
-        for line in lines:
+        for k, line in enumerate(lines):
             if "Harmonic frequencies" in line:
                 num_head += 1
                 if hpmodes and num_head == 2:
@@ -1761,8 +1761,8 @@ class Frequency:
             if "Frequencies" in line and (
                 (hpmodes and "---" in line) or ("--" in line and not hpmodes)
             ):
-                for i in float_num.findall(line):
-                    self.data += [Frequency.Data(float(i))]
+                for i, symm in zip(float_num.findall(line), lines[k-1].split()):
+                    self.data += [Frequency.Data(float(i), symmetry=symm)]
                     modes += [[]]
                     idx += 1
                 continue
