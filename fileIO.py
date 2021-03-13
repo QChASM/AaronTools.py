@@ -1678,6 +1678,11 @@ class Frequency:
                 for i, data in enumerate(self.data[-nmodes:]):
                     data.forcek = force_consts[i]
 
+            elif line.strip().startswith("Irrep"):
+                symm = [x for x in line.split()[1:]]
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.symmetry = symm[i]
+
             elif line.strip().startswith("----"):
                 read_displacement = True
                 modes = [[] for i in range(0, nmodes)]
