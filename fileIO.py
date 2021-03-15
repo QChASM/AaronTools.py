@@ -11,14 +11,14 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "gjf", "sd", "sdf", "mol", "out", "dat", "fchk"]
+read_types = ["xyz", "log", "com", "gjf", "sd", "sdf", "mol", "out", "dat", "fchk", "crest"]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
-ERRORS = {
+ERROR = {
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
     "Error termination request processed by link 9999": "CONV_LINK",
@@ -33,7 +33,8 @@ ERRORS = {
     "Error in internal coordinate system": "COORD",
     "galloc: could not allocate memory": "GALLOC",
     "Error imposing constraints": "CONSTR",
-    "End of file reading basis center.": "BASIS",
+    "End of file reading basis center.": "BASIS_READ",
+    "Atomic number out of range for .* basis set.": "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
     "Unknown message": "UNKNOWN",
@@ -320,7 +321,7 @@ class FileReader:
         :fname: either a string specifying the file name of the file to read
             or a tuple of (str(name), str(file_type), str(content))
         :get_all: if true, optimization steps are  also saved in
-            self.other['all_geom']; otherwise only saves last geometry
+            self.all_geom; otherwise only saves last geometry
         :just_geom: if true, does not store other information, such as
             frequencies, only what is needed to construct a Geometry() obj
         """
@@ -367,6 +368,8 @@ class FileReader:
                 self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom)
+            elif self.file_type == "crest":
+                self.read_crest(f)
 
     def read_file(self, get_all=False, just_geom=True):
         """
@@ -403,6 +406,10 @@ class FileReader:
             self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom)
+        elif self.file_type == "crest":
+            self.read_crest(f)
+        elif self.file_type == "xtb":
+            self.read_xtb(f)
 
         f.close()
         return
@@ -1070,12 +1077,13 @@ class FileReader:
                 self.other["archive"] += line.strip()
 
             # geometry
-            if re.search("(Standard|Input|Z-Matrix) orientation:", line):
+            if line.startswith("GradGradGrad"):
+                self.other["opt_steps"] += 1
+            if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
-                self.other["opt_steps"] += 1
                 self.atoms, n = get_atoms(f, n)
 
             if re.search("The following ModRedundant input section has been read:", line):
@@ -1198,9 +1206,9 @@ class FileReader:
             # capture errors
             # only keep first error, want to fix one at a time
             if "error" not in self.other:
-                for err in ERRORS:
-                    if err in line:
-                        self.other["error"] = ERRORS[err]
+                for err in ERROR:
+                    if re.search(err, line):
+                        self.other["error"] = ERROR[err]
                         self.other["error_msg"] = line.strip()
                         break
 
@@ -1350,7 +1358,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
         if not self.other["finished"] and not self.other["error"]:
-            self.other["error"] = ERRORS["Unknown message"]
+            self.other["error"] = ERROR["Unknown message"]
             self.other["error_msg"] = "Unknown message"
         return
 
@@ -1565,6 +1573,42 @@ class FileReader:
                 name=str(n + 1),
             )
             self.atoms.append(atom)
+
+    def read_crest(self, f):
+        line = True
+        while line:
+            line = f.readline()
+            if "terminated normally" in line:
+                self.other["finished"] = True
+                self.other["error"] = None
+            elif "population of lowest" in line:
+                self.other["best_pop"] = float(float_num.findall(line)[0])
+            elif "ensemble free energy" in line:
+                self.other["free_energy"] = float(float_num.findall(line)[0])
+            elif "ensemble entropy" in line:
+                self.other["entropy"] = (
+                    float(float_num.findall(line)[1]) / 1000
+                )
+            elif "ensemble average energy" in line:
+                self.other["energy"] = float(float_num.findall(line)[0])
+            elif "E lowest" in line:
+                self.other["best_energy"] = float(float_num.findall(line)[0])
+            elif "T /K" in line:
+                self.other["temperature"] = float(float_num.findall(line)[0])
+
+        cfname = os.path.join(
+            os.path.dirname(self.name), "crest_conformers.xyz"
+        )
+        if os.access(cfname, os.R_OK):
+            self.other["conformers"] = FileReader(
+                cfname,
+                get_all=True,
+            ).all_geom
+
+    def read_xtb(self, f):
+        line = True
+        while line:
+            line = f.readline()
 
 
 class Frequency:

@@ -1,4 +1,5 @@
 """various job types for Theory() instances"""
+import itertools as it
 
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
@@ -7,8 +8,8 @@ from AaronTools.theory import (
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
-    PSI4_JOB,
     PSI4_COORDINATES,
+    PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
 )
@@ -45,10 +46,10 @@ class OptimizationJob(JobType):
     """optimization job"""
 
     def __init__(
-            self,
-            transition_state=False,
-            constraints=None,
-            geometry=None,
+        self,
+        transition_state=False,
+        constraints=None,
+        geometry=None,
     ):
         """use transition_state=True to do a TS optimization
         constraints - dict with keys:
@@ -99,24 +100,21 @@ class OptimizationJob(JobType):
 
         group_count = 1
 
-        if (
-                self.constraints is not None and
-                any(
-                    self.constraints[key] for key in self.constraints.keys()
-                )
+        if self.constraints is not None and any(
+            self.constraints[key] for key in self.constraints.keys()
         ):
             for key in self.constraints:
                 if key not in [
-                        "x",
-                        "y",
-                        "z",
-                        "xgroup",
-                        "ygroup",
-                        "zgroup",
-                        "atoms",
-                        "bonds",
-                        "angles",
-                        "torsions",
+                    "x",
+                    "y",
+                    "z",
+                    "xgroup",
+                    "ygroup",
+                    "zgroup",
+                    "atoms",
+                    "bonds",
+                    "angles",
+                    "torsions",
                 ]:
                     raise NotImplementedError(
                         "%s constraints cannot be generated for Gaussian" % key
@@ -236,16 +234,23 @@ class OptimizationJob(JobType):
                             if isinstance(coord, str):
                                 var_name = coord
                                 for k, var in enumerate(vars):
-                                    if var[0] == coord and not var[0].startswith("g"):
+                                    if var[0] == coord and not var[
+                                        0
+                                    ].startswith("g"):
                                         vars.pop(k)
                                         break
                                 else:
-                                    var_name = "%s%i" % (["x" ,"y", "z"][j], ndx)
+                                    var_name = "%s%i" % (
+                                        ["x", "y", "z"][j],
+                                        ndx,
+                                    )
                                     coords[ndx - 1][j] = var_name
                             else:
-                                var_name = "%s%i" % (["x" ,"y", "z"][j], ndx)
+                                var_name = "%s%i" % (["x", "y", "z"][j], ndx)
                                 coords[ndx - 1][j] = var_name
-                            if not any(const[0] == var_name for const in consts):
+                            if not any(
+                                const[0] == var_name for const in consts
+                            ):
                                 consts.append([var_name, atom.coords[j]])
 
                 if not use_zmat:
@@ -263,8 +268,8 @@ class OptimizationJob(JobType):
                         )
                     else:
                         raise NotImplementedError(
-                            "cannot apply bond constraints when using Cartesian Z-Matrix, which" +
-                            " is necessitated by x, y, or z constraints"
+                            "cannot apply bond constraints when using Cartesian Z-Matrix, which"
+                            + " is necessitated by x, y, or z constraints"
                         )
 
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
@@ -282,8 +287,8 @@ class OptimizationJob(JobType):
                         )
                     else:
                         raise NotImplementedError(
-                            "cannot apply angle constraints when using Cartesian Z-Matrix, which" +
-                            " is necessitated by x, y, or z constraints"
+                            "cannot apply angle constraints when using Cartesian Z-Matrix, which"
+                            + " is necessitated by x, y, or z constraints"
                         )
 
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
@@ -302,8 +307,8 @@ class OptimizationJob(JobType):
                         )
                     else:
                         raise NotImplementedError(
-                            "cannot apply torsion constraints when using Cartesian Z-Matrix," +
-                            "which is necessitated by x, y, or z constraints"
+                            "cannot apply torsion constraints when using Cartesian Z-Matrix,"
+                            + "which is necessitated by x, y, or z constraints"
                         )
 
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
@@ -336,18 +341,15 @@ class OptimizationJob(JobType):
         else:
             out = {ORCA_ROUTE: ["Opt"]}
 
-        if (
-                self.constraints is not None and
-                any(
-                    self.constraints[key] for key in self.constraints.keys()
-                )
+        if self.constraints is not None and any(
+            self.constraints[key] for key in self.constraints.keys()
         ):
             for key in self.constraints:
                 if key not in [
-                        "atoms",
-                        "bonds",
-                        "angles",
-                        "torsions",
+                    "atoms",
+                    "bonds",
+                    "angles",
+                    "torsions",
                 ]:
                     raise NotImplementedError(
                         "%s constraints cannot be generated for ORCA" % key
@@ -384,7 +386,12 @@ class OptimizationJob(JobType):
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
                     ndx4 = self.geometry.atoms.index(atom4)
-                    out_str = "    {D %2i %2i %2i %2i C}" % (ndx1, ndx2, ndx3, ndx4)
+                    out_str = "    {D %2i %2i %2i %2i C}" % (
+                        ndx1,
+                        ndx2,
+                        ndx3,
+                        ndx4,
+                    )
                     out[ORCA_BLOCKS]["geom"].append(out_str)
 
             out[ORCA_BLOCKS]["geom"].append("end")
@@ -406,37 +413,34 @@ class OptimizationJob(JobType):
         group_count = 1
 
         freeze_str = ""
-        freeze_str += "freeze_list = \"\"\"\n"
+        freeze_str += 'freeze_list = """\n'
         add_freeze_list = False
 
         # constraints
-        if (
-                self.constraints is not None and
-                any(
-                    [self.constraints[key] for key in self.constraints.keys()]
-                )
+        if self.constraints is not None and any(
+            [self.constraints[key] for key in self.constraints.keys()]
         ):
             for key in self.constraints:
                 if key not in [
-                        "x",
-                        "y",
-                        "z",
-                        "xgroup",
-                        "ygroup",
-                        "zgroup",
-                        "atoms",
-                        "bonds",
-                        "angles",
-                        "torsions",
+                    "x",
+                    "y",
+                    "z",
+                    "xgroup",
+                    "ygroup",
+                    "zgroup",
+                    "atoms",
+                    "bonds",
+                    "angles",
+                    "torsions",
                 ]:
                     raise NotImplementedError(
                         "%s constraints cannot be generated for Psi4" % key
                     )
             out[PSI4_OPTKING] = {}
             if (
-                    "x" in self.constraints and
-                    self.constraints["x"] and
-                    self.geometry is not None
+                "x" in self.constraints
+                and self.constraints["x"]
+                and self.geometry is not None
             ):
                 add_freeze_list = True
                 atoms = self.geometry.find(self.constraints["x"])
@@ -446,9 +450,9 @@ class OptimizationJob(JobType):
                     )
 
             if (
-                    "y" in self.constraints and
-                    self.constraints["y"] and
-                    self.geometry is not None
+                "y" in self.constraints
+                and self.constraints["y"]
+                and self.geometry is not None
             ):
                 add_freeze_list = True
                 atoms = self.geometry.find(self.constraints["y"])
@@ -458,9 +462,9 @@ class OptimizationJob(JobType):
                     )
 
             if (
-                    "z" in self.constraints and
-                    self.constraints["z"] and
-                    self.geometry is not None
+                "z" in self.constraints
+                and self.constraints["z"]
+                and self.geometry is not None
             ):
                 add_freeze_list = True
                 atoms = self.geometry.find(self.constraints["z"])
@@ -470,9 +474,9 @@ class OptimizationJob(JobType):
                     )
 
             if (
-                    "atoms" in self.constraints and
-                    self.constraints["atoms"] and
-                    self.geometry is not None
+                "atoms" in self.constraints
+                and self.constraints["atoms"]
+                and self.geometry is not None
             ):
                 add_freeze_list = True
                 atoms = self.geometry.find(self.constraints["atoms"])
@@ -502,7 +506,11 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val, True])
                         for i, atom in enumerate(self.geometry.atoms):
                             if atom in x_atoms:
-                                coords[i] = [coords[i][0], coords[i][1], var_name]
+                                coords[i] = [
+                                    coords[i][0],
+                                    coords[i][1],
+                                    var_name,
+                                ]
 
             if "ygroup" in self.constraints:
                 for constraint in self.constraints["ygroup"]:
@@ -525,7 +533,11 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val, True])
                         for i, atom in enumerate(self.geometry.atoms):
                             if atom in y_atoms:
-                                coords[i] = [coords[i][0], coords[i][1], var_name]
+                                coords[i] = [
+                                    coords[i][0],
+                                    coords[i][1],
+                                    var_name,
+                                ]
 
             if "zgroup" in self.constraints:
                 for constraint in self.constraints["zgroup"]:
@@ -548,7 +560,11 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val, True])
                         for i, atom in enumerate(self.geometry.atoms):
                             if atom in z_atoms:
-                                coords[i] = [coords[i][0], coords[i][1], var_name]
+                                coords[i] = [
+                                    coords[i][0],
+                                    coords[i][1],
+                                    var_name,
+                                ]
 
             if add_freeze_list:
                 freeze_str += '"""\n'
@@ -557,10 +573,7 @@ class OptimizationJob(JobType):
                 out[PSI4_OPTKING]["frozen_cartesian"] = ["$freeze_list"]
 
             if "bonds" in self.constraints:
-                if (
-                        self.constraints["bonds"]
-                        and self.geometry is not None
-                ):
+                if self.constraints["bonds"] and self.geometry is not None:
                     out_str = '("\n'
                     for bond in self.constraints["bonds"]:
                         atom1, atom2 = self.geometry.find(bond)
@@ -574,10 +587,7 @@ class OptimizationJob(JobType):
                     out[PSI4_OPTKING]["frozen_distance"] = [out_str]
 
             if "angles" in self.constraints:
-                if (
-                        self.constraints["angles"]
-                        and self.geometry is not None
-                ):
+                if self.constraints["angles"] and self.geometry is not None:
                     out_str = '("\n'
                     for angle in self.constraints["angles"]:
                         atom1, atom2, atom3 = self.geometry.find(angle)
@@ -592,13 +602,12 @@ class OptimizationJob(JobType):
                     out[PSI4_OPTKING]["frozen_bend"] = [out_str]
 
             if "torsions" in self.constraints:
-                if (
-                        self.constraints["torsions"]
-                        and self.geometry is not None
-                ):
+                if self.constraints["torsions"] and self.geometry is not None:
                     out_str += '("\n'
                     for torsion in self.constraints["torsions"]:
-                        atom1, atom2, atom3, atom4 = self.geometry.find(torsion)
+                        atom1, atom2, atom3, atom4 = self.geometry.find(
+                            torsion
+                        )
                         out_str += "        %2i %2i %2i %2i\n" % (
                             self.geometry.atoms.index(atom1) + 1,
                             self.geometry.atoms.index(atom2) + 1,
@@ -618,13 +627,58 @@ class OptimizationJob(JobType):
 
         return out
 
+    def write_aux(self, config):
+        rv = ""
+        if self.constraints:
+            constraints = it.chain.from_iterable(*self.constraints.values())
+            frozen = {
+                str(self.geometry.atoms.index(c) + 1) for c in constraints
+            }
+            frozen = ",".join(sorted(frozen, key=lambda x: int(x)))
+            relaxed = {
+                str(i + 1)
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constraints
+            }
+            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            rv += """\
+            $constrain
+              atoms: {}
+              force constant=0.5
+              reference=ref.xyz
+            $metadyn
+              atoms: {}
+            """.format(
+                frozen, relaxed
+            )
+        for section in config:
+            for option, value in config[section].items():
+                if "charge" in option:
+                    rv += "$chrg {}\n".format(value)
+                if "multiplicity" in option:
+                    rv += "$spin {}\n".format(int(value) - 1)
+                if "temperature" in option:
+                    rv += """\
+                            $thermo
+                                temp={}
+                            """.format(
+                        value
+                    )
+        rv += "$end\n"
+        rv["{}.xcontrol".format(config["HPC"]["job_name"])] = rv
+        return rv
+
 
 class FrequencyJob(JobType):
     """frequnecy job"""
 
-    def __init__(self, numerical=False, temperature=298.15):
-        """temperature in K for thermochem info that gets printed in output file"""
+    def __init__(self, numerical=False, temperature=None):
+        """
+        temperature in K for thermochem info, defaults to 298.15 K
+        """
         super().__init__()
+        if temperature is None:
+            temperature = 298.15
         self.numerical = numerical
         self.temperature = temperature
 
@@ -680,24 +734,63 @@ class SinglePointJob(JobType):
 
 class ForceJob(JobType):
     """force/gradient job"""
+
     def __init__(self, numerical=False):
         super().__init__()
         self.numerical = numerical
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE"""
-        out = {GAUSSIAN_ROUTE:{"force":[]}}
+        out = {GAUSSIAN_ROUTE: {"force": []}}
         if self.numerical:
             out[GAUSSIAN_ROUTE]["force"].append("EnGrad")
         return out
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
-        return {ORCA_ROUTE:["NumGrad" if self.numerical else "EnGrad"]}
+        return {ORCA_ROUTE: ["NumGrad" if self.numerical else "EnGrad"]}
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
-        out = {PSI4_JOB:{"gradient":[]}}
+        out = {PSI4_JOB: {"gradient": []}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
         return out
+
+
+class CrestJob(OptimizationJob):
+    def __init__(
+        self, transition_state=False, constraints=None, geometry=None
+    ):
+        super().__init__(transition_state, constraints, geometry)
+
+    def write_aux(self, config):
+        rv = {}
+        if self.constraints:
+            constraints = it.chain.from_iterable(*self.constraints.values())
+            frozen = {
+                str(self.geometry.atoms.index(c) + 1) for c in constraints
+            }
+            frozen = ",".join(sorted(frozen, key=lambda x: int(x)))
+            relaxed = {
+                str(i + 1)
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constraints
+            }
+            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            rv[
+                ".xcontrol"
+            ] = """\
+            $constrain
+              atoms: {}
+              force constant=0.5
+              reference=ref.xyz
+            $metadyn
+              atoms: {}
+            $end\
+            """.format(
+                frozen, relaxed
+            )
+        rv[".CHRG"] = config["Job"]["charge"]
+        rv[".UHF"] = str(int(config["Job"]["multiplicity"]) - 1)
+        return rv
