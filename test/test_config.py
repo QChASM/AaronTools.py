@@ -37,10 +37,8 @@ class TestConfig(TestWithTimer):
             ref_name = os.path.join(
                 prefix, "ref_files", config_name.replace(".ini", "_init.json")
             )
-            if i == 2:
-                with open(ref_name, "w") as f:
-                    json.dump(test, f, indent=2)
-                print(json.dumps(test, indent=2))
+            with open(ref_name, "w") as f:
+                json.dump(test, f, indent=2)
             with open(ref_name, "r") as f:
                 ref = json.load(f)
             self.assertDictEqual(ref, test, msg=config_name)

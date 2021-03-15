@@ -11,7 +11,19 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
 
-read_types = ["xyz", "log", "com", "gjf", "sd", "sdf", "mol", "out", "dat", "fchk", "crest"]
+read_types = [
+    "xyz",
+    "log",
+    "com",
+    "gjf",
+    "sd",
+    "sdf",
+    "mol",
+    "out",
+    "dat",
+    "fchk",
+    "crest",
+]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
@@ -50,7 +62,7 @@ ERROR_ORCA = {
     # "CHK": "",
     # "EIGEN": "", <- ORCA doesn't seem to have this
     # "QUOTA": "",
-    "Zero distance between atoms": "CLASH", # <- only get an error if atoms are literally on top of each other
+    "Zero distance between atoms": "CLASH",  # <- only get an error if atoms are literally on top of each other
     "Error : multiplicity": "CHARGEMULT",
     # "REDUND": "",
     # "REDUND": "",
@@ -87,7 +99,7 @@ ERROR_PSI4 = {
     "psi4.driver.qcdb.exceptions.BasisSetNotFound: BasisSet::construct: Unable to find a basis set for": "BASIS",
     "qcelemental.exceptions.NotAnElementError": "ATOM",
     "psi4.driver.p4util.exceptions.ValidationError: set_memory()": "MEM",
-# ERROR_PSI4[""] = "UNKNOWN",
+    # ERROR_PSI4[""] = "UNKNOWN",
 }
 
 
@@ -455,7 +467,9 @@ class FileReader:
             if "$$$$" in line:
                 progress = 0
                 if get_all:
-                    self.all_geom.append([deepcopy(self.comment), deepcopy(self.geometry)])
+                    self.all_geom.append(
+                        [deepcopy(self.comment), deepcopy(self.geometry)]
+                    )
 
                 continue
 
@@ -471,7 +485,9 @@ class FileReader:
                 self.atoms = []
                 for line in lines[i : i + natoms]:
                     atom_info = line.split()
-                    self.atoms += [Atom(element=atom_info[3], coords=atom_info[0:3])]
+                    self.atoms += [
+                        Atom(element=atom_info[3], coords=atom_info[0:3])
+                    ]
 
                 for line in lines[i + natoms : i + natoms + nbonds]:
                     a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
@@ -512,7 +528,9 @@ class FileReader:
         while line != "":
             if "* O   R   C   A *" in line:
                 self.file_type = "out"
-                return self.read_orca_out(f, get_all=get_all, just_geom=just_geom)
+                return self.read_orca_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
             if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
@@ -573,7 +591,8 @@ class FileReader:
                     and "rotational_temperature" not in self.other
                 ):
                     self.other["rotational_temperature"] = [
-                        float(x) if is_num(x) else 0 for x in line.split()[-8:-1:3]
+                        float(x) if is_num(x) else 0
+                        for x in line.split()[-8:-1:3]
                     ]
                     self.other["rotational_temperature"] = [
                         x
@@ -709,7 +728,11 @@ class FileReader:
                     item = line.split("=")[0].strip()
                     self.other[item] = float(line.split()[-1])
 
-                elif "total energy" in line and "=" in line or re.search("\(.\) energy", line):
+                elif (
+                    "total energy" in line
+                    and "=" in line
+                    or re.search("\(.\) energy", line)
+                ):
                     item = line.split("=")[0].strip().strip("*").strip()
                     self.other[item] = float(line.split()[-1])
                     # hopefully the highest level energy gets printed last
@@ -770,9 +793,14 @@ class FileReader:
         line = f.readline()
         n = 1
         while line != "":
-            if "Psi4: An Open-Source Ab Initio Electronic Structure Package" in line:
+            if (
+                "Psi4: An Open-Source Ab Initio Electronic Structure Package"
+                in line
+            ):
                 self.file_type = "dat"
-                return self.read_psi4_out(f, get_all=get_all, just_geom=just_geom)
+                return self.read_psi4_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
@@ -1009,7 +1037,9 @@ class FileReader:
                 atom_match = re.search("X\s+(\d+)\s+F", line)
                 bond_match = re.search("B\s+(\d+)\s+(\d+)\s+F", line)
                 angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
-                torsion_match = re.search("D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                torsion_match = re.search(
+                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line
+                )
                 if atom_match:
                     if "atoms" not in rv:
                         rv["atoms"] = ""
@@ -1019,31 +1049,37 @@ class FileReader:
                 elif bond_match:
                     if "bonds" not in rv:
                         rv["bonds"] = []
-                    rv["bonds"].append(",".join([bond_match.group(1), bond_match.group(2)]))
+                    rv["bonds"].append(
+                        ",".join([bond_match.group(1), bond_match.group(2)])
+                    )
                 elif angle_match:
                     if "angles" not in rv:
                         rv["angles"] = []
                     rv["angles"].append(
-                        ",".join([
-                            angle_match.group(1),
-                            angle_match.group(2),
-                            angle_match.group(3)
-                        ])
+                        ",".join(
+                            [
+                                angle_match.group(1),
+                                angle_match.group(2),
+                                angle_match.group(3),
+                            ]
+                        )
                     )
                 elif torsion_match:
                     if "torsions" not in rv:
                         rv["torsions"] = []
                     rv["torsions"].append(
-                        ",".join([
-                            torsion_match.group(1),
-                            torsion_match.group(2),
-                            torsion_match.group(3),
-                            torsion_match.group(4)
-                        ])
+                        ",".join(
+                            [
+                                torsion_match.group(1),
+                                torsion_match.group(2),
+                                torsion_match.group(3),
+                                torsion_match.group(4),
+                            ]
+                        )
                     )
 
                 line = f.readline()
-                n+=1
+                n += 1
 
             return rv, n
 
@@ -1077,23 +1113,24 @@ class FileReader:
                 self.other["archive"] += line.strip()
 
             # geometry
-            if line.startswith("GradGradGrad"):
-                self.other["opt_steps"] += 1
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
                 self.atoms, n = get_atoms(f, n)
+                self.other["opt_steps"] += 1
 
-            if re.search("The following ModRedundant input section has been read:", line):
+            if re.search(
+                "The following ModRedundant input section has been read:", line
+            ):
                 constraints, n = get_modredundant(f, n)
 
             if just_geom:
                 line = f.readline()
                 n += 1
                 continue
-                        # z-matrix parameters
+                # z-matrix parameters
             if re.search("Optimized Parameters", line):
                 self.other["params"], n = get_params(f, n)
             if "Symbolic Z-matrix:" in line:
@@ -1256,8 +1293,11 @@ class FileReader:
                                 if not constraints:
                                     # if we didn't read constraints, try using flagged atoms instead
                                     from AaronTools.finders import FlaggedAtoms
+
                                     constraints = {"atoms": FlaggedAtoms}
-                                job_type.append(OptimizationJob(constraints=constraints))
+                                job_type.append(
+                                    OptimizationJob(constraints=constraints)
+                                )
                                 continue
 
                             other_kwargs[GAUSSIAN_ROUTE]["opt"] = []
@@ -1266,12 +1306,15 @@ class FileReader:
                                 if opt.lower() == "ts":
                                     ts = True
                                 else:
-                                    other_kwargs[GAUSSIAN_ROUTE][
-                                        "opt"
-                                    ].append(opt)
+                                    other_kwargs[GAUSSIAN_ROUTE]["opt"].append(
+                                        opt
+                                    )
 
                             job_type.append(
-                                OptimizationJob(transition_state=ts, constraints=constraints)
+                                OptimizationJob(
+                                    transition_state=ts,
+                                    constraints=constraints,
+                                )
                             )
 
                         elif option_lower.startswith("freq"):
@@ -1630,8 +1673,14 @@ class Frequency:
         :intensity: float
         :vector: (2D array) normal mode vectors
         """
+
         def __init__(
-            self, frequency, intensity=None, vector=None, forcek=None, symmetry=None,
+            self,
+            frequency,
+            intensity=None,
+            vector=None,
+            forcek=None,
+            symmetry=None,
         ):
             if vector is None:
                 vector = []
@@ -1810,7 +1859,9 @@ class Frequency:
             if "Frequencies" in line and (
                 (hpmodes and "---" in line) or ("--" in line and not hpmodes)
             ):
-                for i, symm in zip(float_num.findall(line), lines[k-1].split()):
+                for i, symm in zip(
+                    float_num.findall(line), lines[k - 1].split()
+                ):
                     self.data += [Frequency.Data(float(i), symmetry=symm)]
                     modes += [[]]
                     idx += 1
