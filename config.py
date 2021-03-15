@@ -496,23 +496,42 @@ class Config(configparser.ConfigParser):
                         )
                     ]
             if "freq" in job_type[0]:
-                if self[section].get("temperature", fallback=False):
-                    theory.job_type += [
-                        FrequencyJob(temperature=self[section]["temperature"])
-                    ]
-                else:
-                    theory.job_type += [FrequencyJob()]
+                theory.job_type += [
+                    FrequencyJob(
+                        numerical=self[section].get(
+                            "numerical", fallback=False
+                        ),
+                        temperature=self[section].get(
+                            "temperature", fallback=None
+                        ),
+                    )
+                ]
             if "single-point" in job_type or "SP" in job_type:
                 theory.job_type += [SinglePointJob()]
             if "force" in job_type or "gradient" in job_type:
-                theory.job_type += [ForceJob()]
+                theory.job_type += [
+                    ForceJob(
+                        numerical=self[section].get(
+                            "numerical", fallback=False
+                        ),
+                    )
+                ]
         else:
-            theory.job_type = [SinglePointJob()]
+            # default to opt+freq
+            theory.job_type = [
+                OptimizationJob(geometry=geometry),
+                FrequencyJob(
+                    numerical=self[section].get("numerical", fallback=False),
+                    temperature=self[section].get(
+                        "temperature", fallback=None
+                    ),
+                ),
+            ]
         # return updated theory object
         return theory
 
     def get_template(self):
-        def get_multiple(filenames, path=None):
+        def get_multiple(filenames, path=None, suffix=None):
             rv = []
             for name in filenames:
                 kind = ""
@@ -525,11 +544,15 @@ class Config(configparser.ConfigParser):
                 if not os.path.isfile(name):
                     continue
                 geom = AaronTools.geometry.Geometry(name)
+                if suffix is not None:
+                    geom.name += ".{}".format(suffix)
                 rv += [(geom, kind)]
             return rv
 
-        structure = None
+        structure_dict = {}
+        kind_dict = {}
         structure_list = []
+        # load templates from AARONLIB
         if "Reaction" in self:
             if "template" in self["Reaction"]:
                 path = os.path.join(
@@ -549,56 +572,119 @@ class Config(configparser.ConfigParser):
                 for dirpath, dirnames, filenames in os.walk(path):
                     structure_list += get_multiple(filenames, path=dirpath)
         # get starting structure
-        elif "Geometry" not in self or "structure" not in self["Geometry"]:
-            structure = "{}.xyz".format(self["Job"]["name"])
-            self["Job"]["name"] = os.path.basename(self["Job"]["name"])
-            s = "No structure indicated in config. Trying to use {}".format(
-                structure
-            )
-            print(s, file=sys.stderr)
+        elif "structure" in self["Geometry"]:
+            structure_dict[""] = self["Geometry"]["structure"]
         else:
-            structure = self["Geometry"]["structure"]
+            for key in self["Geometry"]:
+                if key.startswith("structure."):
+                    structure_dict[str(key.split(".")[1])] = self["Geometry"][
+                        key
+                    ]
 
         # create Geometry objects as requeseted by config[Geometry][structure]
-        if structure is not None and os.path.isdir(structure):
-            # if structure is a directory
-            for dirpath, dirnames, filenames in os.walk(structure):
-                structure_list += get_multiple(filenames, path=dirpath)
-        elif structure is not None:
-            try:
-                # if structure is a filename
-                structure = AaronTools.geometry.Geometry(structure)
-            except FileNotFoundError:
-                # if structure is a filename
-                structure = AaronTools.geometry.Geometry(
-                    os.path.join(self["DEFAULT"]["top_dir"], structure)
-                )
-            except IndexError:
-                # if structure is a smiles string
-                structure = AaronTools.geometry.Geometry.from_string(structure)
-                self._changes[""] = ({}, None)
-            # adjust structure attributes
-            if "name" in self["Job"]:
-                structure.name = self["Job"]["name"]
-            if "Geometry" in self and "comment" in self["Geometry"]:
-                structure.comment = self["Geometry"]["comment"]
-                structure.parse_comment()
-            structure_list = [(structure, None)]
+        for name, structure in structure_dict.items():
+            if structure is not None and os.path.isdir(structure):
+                # if structure is a directory
+                for dirpath, dirnames, filenames in os.walk(structure):
+                    structure_list += get_multiple(
+                        filenames, path=dirpath, suffix=name
+                    )
+            elif structure is not None:
+                try:
+                    # if structure is a filename
+                    structure = AaronTools.geometry.Geometry(structure)
+                except FileNotFoundError:
+                    # if structure is a filename
+                    structure = AaronTools.geometry.Geometry(
+                        os.path.join(self["DEFAULT"]["top_dir"], structure)
+                    )
+                except (IndexError, NotImplementedError):
+                    # if structure is a smiles string
+                    structure = AaronTools.geometry.Geometry.from_string(
+                        structure
+                    )
+                    self._changes[""] = ({}, None)
+                # adjust structure attributes
+                if "name" in self["Job"]:
+                    structure.name = self["Job"]["name"]
+                if "Geometry" in self and "comment" in self["Geometry"]:
+                    structure.comment = self["Geometry"]["comment"]
+                    structure.parse_comment()
+                structure.name += ".{}".format(name)
+                structure_dict[str(name)] = structure
+                kind_dict[name] = None
 
-        # apply functions found in [Geometry] section
-        for structure, kind in structure_list:
-            if "Geometry" in self:
-                if "&call" in self["Geometry"]:
-                    lines = self["Geometry"]["&call"]
-                    for line in lines.split("\n"):
-                        if line.strip():
-                            eval(
-                                line.strip(),
-                                {
-                                    "structure": structure,
-                                    "Geometry": AaronTools.geometry.Geometry,
-                                },
+        # for loop for structure modification/creation
+        for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
+        structure_patt = re.compile("(structure\.(\S+?))\.?")
+        structure_patt_parsed = re.compile("(structure\['(\S+?)'\])\.?")
+        if "Geometry" in self:
+            for key in self["Geometry"]:
+                if not key.startswith("&for"):
+                    continue
+                for_match = for_patt.search(key)
+                if for_match is None:
+                    raise SyntaxError(
+                        "Malformed &for loop specification in config"
+                    )
+                lines = self["Geometry"][key].split("\n")
+                for name in eval(for_match.group(2), {}):
+                    eval_dict = {
+                        "Geometry": AaronTools.geometry.Geometry,
+                        "structure": structure_dict,
+                        for_match.group(1): name,
+                    }
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        for structure_match in structure_patt.findall(line):
+                            suffix = structure_match[1]
+                            if suffix == for_match.group(1):
+                                suffix = name
+                            suffix = str(suffix)
+                            line = line.replace(
+                                structure_match[0],
+                                "structure['{}']".format(suffix),
                             )
+                            if suffix not in structure_dict:
+                                structure_dict[
+                                    suffix
+                                ] = AaronTools.geometry.Geometry()
+                                kind_dict[suffix] = None
+                        if "=" in line:
+                            left = line.split("=")[0].strip()
+                            right = line.split("=")[1].strip()
+                            suffix_match = structure_patt_parsed.search(left)
+                            if suffix_match is None:
+                                raise RuntimeError(
+                                    "Can only assign to Geometry objects with names of the form `structure.suffix`"
+                                )
+                            suffix = suffix_match.group(2)
+                            suffix = str(suffix)
+                            structure_dict[suffix] = eval(right, eval_dict)
+                            structure_dict[suffix].name = ".".join(
+                                structure_dict[suffix].name.split(".")[:-1]
+                                + [suffix]
+                            )
+                        else:
+                            eval(line, eval_dict)
+        # add to structure list
+        for name in structure_dict:
+            structure_list += [(structure_dict[name], kind_dict[name])]
+        # apply functions found in [Geometry] section
+        if "Geometry" in self and "&call" in self["Geometry"]:
+            for structure, kind in structure_list:
+                lines = self["Geometry"]["&call"]
+                for line in lines.split("\n"):
+                    if line.strip():
+                        eval(
+                            line.strip(),
+                            {
+                                "structure": structure,
+                                "Geometry": AaronTools.geometry.Geometry,
+                            },
+                        )
         if len(structure_list) == 1:
             return structure_list[0][0]
         return structure_list

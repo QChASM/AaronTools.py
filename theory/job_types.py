@@ -672,9 +672,13 @@ class OptimizationJob(JobType):
 class FrequencyJob(JobType):
     """frequnecy job"""
 
-    def __init__(self, numerical=False, temperature=298.15):
-        """temperature in K for thermochem info that gets printed in output file"""
+    def __init__(self, numerical=False, temperature=None):
+        """
+        temperature in K for thermochem info, defaults to 298.15 K
+        """
         super().__init__()
+        if temperature is None:
+            temperature = 298.15
         self.numerical = numerical
         self.temperature = temperature
 
