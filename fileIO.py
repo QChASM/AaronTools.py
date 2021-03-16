@@ -58,6 +58,8 @@ ERROR_ORCA = {
     "The basis set was either not assigned or not available for this element": "BASIS",
     "Element name/number, dummy atom or point charge expected": "ATOM",
     "Error  (ORCA_SCF): Not enough memory available!": "MEM",
+    "WARNING: Analytical MP2 frequency calculations": "NUMFREQ",
+    "WARNING: Analytical Hessians are not yet implemented for meta-GGA functionals": "NUMFREQ",
     "ORCA finished with error return": "UNKNOWN",
 }
 
