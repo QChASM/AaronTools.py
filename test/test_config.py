@@ -50,6 +50,9 @@ class TestConfig(TestWithTimer):
         rings = Config(os.path.join(prefix, "test_files", "ring_subs.ini"))
         rings._parse_changes()
         print(rings._changes)
+        test_1 = Config(os.path.join(prefix, "test_files", "substyle_1.ini"))
+        test_1._parse_changes()
+        print(test_1._changes)
 
     def test_for_loop(self):
         for_loop = Config(os.path.join(prefix, "test_files", "for_loop.ini"))
@@ -66,8 +69,8 @@ class TestConfig(TestWithTimer):
 def suite():
     suite = unittest.TestSuite()
     # suite.addTest(TestConfig("test_init"))
-    # suite.addTest(TestConfig("test_parse_changes"))
-    suite.addTest(TestConfig("test_for_loop"))
+    suite.addTest(TestConfig("test_parse_changes"))
+    # suite.addTest(TestConfig("test_for_loop"))
     return suite
 
 

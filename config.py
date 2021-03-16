@@ -9,18 +9,37 @@ from warnings import warn
 
 import AaronTools
 from AaronTools.const import AARONLIB, AARONTOOLS
-from AaronTools.theory import (GAUSSIAN_COMMENT, GAUSSIAN_CONSTRAINTS,
-                               GAUSSIAN_COORDINATES, GAUSSIAN_GEN_BASIS,
-                               GAUSSIAN_GEN_ECP, GAUSSIAN_POST,
-                               GAUSSIAN_PRE_ROUTE, GAUSSIAN_ROUTE, ORCA_BLOCKS,
-                               ORCA_COMMENT, ORCA_COORDINATES, ORCA_ROUTE,
-                               PSI4_AFTER_JOB, PSI4_BEFORE_GEOM,
-                               PSI4_BEFORE_JOB, PSI4_COMMENT, PSI4_JOB,
-                               PSI4_MOLECULE, PSI4_OPTKING, PSI4_SETTINGS,
-                               Theory)
+from AaronTools.theory import (
+    GAUSSIAN_COMMENT,
+    GAUSSIAN_CONSTRAINTS,
+    GAUSSIAN_COORDINATES,
+    GAUSSIAN_GEN_BASIS,
+    GAUSSIAN_GEN_ECP,
+    GAUSSIAN_POST,
+    GAUSSIAN_PRE_ROUTE,
+    GAUSSIAN_ROUTE,
+    ORCA_BLOCKS,
+    ORCA_COMMENT,
+    ORCA_COORDINATES,
+    ORCA_ROUTE,
+    PSI4_AFTER_JOB,
+    PSI4_BEFORE_GEOM,
+    PSI4_BEFORE_JOB,
+    PSI4_COMMENT,
+    PSI4_JOB,
+    PSI4_MOLECULE,
+    PSI4_OPTKING,
+    PSI4_SETTINGS,
+    Theory,
+)
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
-from AaronTools.theory.job_types import (CrestJob, ForceJob, FrequencyJob,
-                                         OptimizationJob, SinglePointJob)
+from AaronTools.theory.job_types import (
+    CrestJob,
+    ForceJob,
+    FrequencyJob,
+    OptimizationJob,
+    SinglePointJob,
+)
 
 SECTIONS = ["DEFAULT", "HPC", "Job", "Substitution", "Mapping", "Reaction"]
 THEORY_OPTIONS = [
