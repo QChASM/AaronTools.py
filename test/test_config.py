@@ -5,6 +5,7 @@ import unittest
 
 import AaronTools
 import AaronTools.config
+import numpy as np
 from AaronTools.config import Config
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
@@ -36,10 +37,8 @@ class TestConfig(TestWithTimer):
             ref_name = os.path.join(
                 prefix, "ref_files", config_name.replace(".ini", "_init.json")
             )
-            if i == 2:
-                with open(ref_name, "w") as f:
-                    json.dump(test, f, indent=2)
-                print(json.dumps(test, indent=2))
+            with open(ref_name, "w") as f:
+                json.dump(test, f, indent=2)
             with open(ref_name, "r") as f:
                 ref = json.load(f)
             self.assertDictEqual(ref, test, msg=config_name)
@@ -52,11 +51,23 @@ class TestConfig(TestWithTimer):
         rings._parse_changes()
         print(rings._changes)
 
+    def test_for_loop(self):
+        for_loop = Config(os.path.join(prefix, "test_files", "for_loop.ini"))
+        structure_list = for_loop.get_template()
+        for structure, kind in structure_list:
+            dihedral = round(
+                np.rad2deg(structure.dihedral("3", "1", "2", "6")), 6
+            )
+            if dihedral < 0:
+                dihedral += 360
+            self.assertEqual(float(structure.name.split(".")[-1]), dihedral)
+
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestConfig("test_init"))
-    suite.addTest(TestConfig("test_parse_changes"))
+    # suite.addTest(TestConfig("test_init"))
+    # suite.addTest(TestConfig("test_parse_changes"))
+    suite.addTest(TestConfig("test_for_loop"))
     return suite
 
 

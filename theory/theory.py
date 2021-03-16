@@ -1,37 +1,23 @@
 """for constructing headers and footers for input files"""
-
+import itertools as it
 import re
 
-from AaronTools.theory import (
-    GAUSSIAN_COMMENT,
-    GAUSSIAN_CONSTRAINTS,
-    GAUSSIAN_COORDINATES,
-    GAUSSIAN_GEN_BASIS,
-    GAUSSIAN_GEN_ECP,
-    GAUSSIAN_POST,
-    GAUSSIAN_PRE_ROUTE,
-    GAUSSIAN_ROUTE,
-    ORCA_BLOCKS,
-    ORCA_COMMENT,
-    ORCA_COORDINATES,
-    ORCA_ROUTE,
-    PSI4_AFTER_JOB,
-    PSI4_BEFORE_GEOM,
-    PSI4_BEFORE_JOB,
-    PSI4_COMMENT,
-    PSI4_MOLECULE,
-    PSI4_COORDINATES,
-    PSI4_JOB,
-    PSI4_OPTKING,
-    PSI4_SETTINGS,
-)
+from AaronTools.const import ELEMENTS, UNIT
+from AaronTools.theory import (GAUSSIAN_COMMENT, GAUSSIAN_CONSTRAINTS,
+                               GAUSSIAN_COORDINATES, GAUSSIAN_GEN_BASIS,
+                               GAUSSIAN_GEN_ECP, GAUSSIAN_POST,
+                               GAUSSIAN_PRE_ROUTE, GAUSSIAN_ROUTE, ORCA_BLOCKS,
+                               ORCA_COMMENT, ORCA_COORDINATES, ORCA_ROUTE,
+                               PSI4_AFTER_JOB, PSI4_BEFORE_GEOM,
+                               PSI4_BEFORE_JOB, PSI4_COMMENT, PSI4_COORDINATES,
+                               PSI4_JOB, PSI4_MOLECULE, PSI4_OPTKING,
+                               PSI4_SETTINGS)
 from AaronTools.utils.utils import combine_dicts
-from AaronTools.const import UNIT, ELEMENTS
 
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
-from .job_types import JobType
+from .job_types import CrestJob, JobType
 from .method import KNOWN_SEMI_EMPIRICAL, Method, SAPTMethod
 
 
@@ -81,7 +67,7 @@ class Theory:
         "docc",
         "frac_occ",
     ]
-    
+
     # commonly used settings that do not take array values
     FORCED_PSI4_SINGLE = [
         "reference",
@@ -243,7 +229,7 @@ class Theory:
             for job1, job2 in zip(self.job_type, other.job_type):
                 if job1 != job2:
                     return False
-        
+
         return True
 
     def make_header(
@@ -791,7 +777,6 @@ class Theory:
 
         if return_warnings:
             return out_str, warnings
-
         return out_str
 
     def get_orca_header(
@@ -929,7 +914,6 @@ class Theory:
 
         if return_warnings:
             return out_str, warnings
-
         return out_str
 
     def get_psi4_header(
@@ -1252,7 +1236,6 @@ class Theory:
 
         if return_warnings:
             return s, warnings
-
         return s
 
     def get_psi4_footer(
@@ -1402,5 +1385,9 @@ class Theory:
 
         if return_warnings:
             return out_str, warnings
-
         return out_str
+
+    def write_aux(self, config):
+        for job_type in self.job_type:
+            if isinstance(job_type, CrestJob):
+                return job_type.write_aux(config)

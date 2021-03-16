@@ -76,7 +76,9 @@ class TestCLS(TestWithTimer):
             os.path.join(prefix, "ref_files", "change_chirality_cls", "*.xyz")
         )
     )
-    chiral_ring_mirror = os.path.join(prefix, "test_files", "chiral_ring_mirror.xyz")
+    chiral_ring_mirror = os.path.join(
+        prefix, "test_files", "chiral_ring_mirror.xyz"
+    )
     cone_bidentate_2 = os.path.join(prefix, "test_files", "bpy.xyz")
     cone_bidentate_3 = os.path.join(prefix, "test_files", "dppe.xyz")
 
@@ -237,7 +239,7 @@ class TestCLS(TestWithTimer):
         # except urllib.error.URLError:
         #     # can't resolve name or some other connectivity error
         #     return
-        # 
+        #
         # args = [
         #     sys.executable,
         #     os.path.join(self.aarontools_bin, "substitute.py"),
@@ -285,7 +287,8 @@ class TestCLS(TestWithTimer):
         args = [
             sys.executable,
             os.path.join(self.aarontools_bin, "mirror.py"),
-            TestCLS.change_chir_1, "-xy"
+            TestCLS.change_chir_1,
+            "-xy",
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
@@ -802,8 +805,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         if len(err) != 0:
             raise RuntimeError(err)
 
-       # ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
-       #     test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
+        # ref = """                      Filename        Max Disp       Max Force        RMS Disp       RMS Force
+        #     test_files/opt_running.log     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
 
         ref = """                      Filename    Step        Max Disp       Max Force        RMS Disp       RMS Force
             test_files/opt_running.log       4     1.66e+00/NO     3.61e+00/NO     2.79e-01/NO     2.55e-01/NO  not finished"""
@@ -860,35 +863,41 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
     def test_coneAngle(self):
         """test coneAngle.py"""
-        
+
         args = [
             sys.executable,
             os.path.join(self.aarontools_bin, "coneAngle.py"),
-            "-r", "bondi",
+            "-r",
+            "bondi",
             TestCLS.cone_bidentate_3,
-            "-k", "2,3",
-            "-m", "exact",
+            "-k",
+            "2,3",
+            "-m",
+            "exact",
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        angle = float(out)       
+        angle = float(out)
         self.assertTrue(abs(angle - 218.6) <= 0.1)
 
         args = [
             sys.executable,
             os.path.join(self.aarontools_bin, "coneAngle.py"),
-            "-r", "bondi",
+            "-r",
+            "bondi",
             TestCLS.cone_bidentate_2,
-            "-k", "2,3",
-            "-m", "exact",
+            "-k",
+            "2,3",
+            "-m",
+            "exact",
         ]
 
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        angle = float(out)       
+        angle = float(out)
         self.assertTrue(abs(angle - 194.6) <= 0.1)
 
 
