@@ -192,6 +192,17 @@ class ImplicitSolvent:
         "Z-1,2-DiChloroEthene",
     ]
 
+    KNOWN_GAUSSIAN_MODELS = [
+        "SMD",
+        "CPCM",
+        "PCM",
+        "DIPOLE",
+        "IPCM",
+        "ISODENSITY",
+        "IEFPCM",
+        "SCIPCM",
+    ]
+
     KNOWN_ORCA_CPCM_SOLVENTS = [
         "Water",
         "Acetonitrile",
@@ -402,6 +413,8 @@ class ImplicitSolvent:
         "CYCLOHEXANONE",
     ]
 
+    KNOWN_ORCA_MODELS = ["SMD", "CPCM", "C-PCM", "PCM"]
+
     def __init__(self, solvent_model, solvent):
         self.name = solvent_model
         self.solvent = solvent
@@ -421,17 +434,7 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model
-                for model in [
-                        "SMD",
-                        "CPCM",
-                        "PCM",
-                        "DIPOLE",
-                        "IPCM",
-                        "ISODENSITY",
-                        "IEFPCM",
-                        "SCIPCM",
-                ]
+                self.name.upper() == model for model in KNOWN_GAUSSIAN_MODELS
         ):
             warnings.append(
                 "solvent model is not available in Gaussian: %s\nuse one of: %s"
@@ -483,8 +486,7 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model
-                for model in ["SMD", "CPCM", "C-PCM", "PCM"]
+                self.name.upper() == model for model in KNOWN_ORCA_MODELS
         ):
             warnings.append(
                 "solvent model is not available in ORCA: %s\nuse CPCM or SMD"

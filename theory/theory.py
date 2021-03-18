@@ -252,7 +252,9 @@ class Theory:
             but if it's an OptimizationJob, it will add opt=noeigentest
         kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*
         """
-
+        if geom is None:
+            geom = self.geometry
+            
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
@@ -328,6 +330,9 @@ class Theory:
         conditional_kwargs: dict() of keyword: value pairs
         kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
+        if geom is None:
+            geom = self.geometry
+            
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
@@ -390,11 +395,15 @@ class Theory:
             conditional_kwargs=None,
             **kwargs,
     ):
-        """geom: Geometry
+        """
+        geom: Geometry
         style: str, gaussian or psi4
         conditional_kwargs: dict, see make_header
         kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
+        if geom is None:
+            geom = self.geometry
+            
         if conditional_kwargs is None:
             conditional_kwargs = {}
 

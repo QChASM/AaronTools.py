@@ -257,10 +257,10 @@ class BasisSet:
                 elements.append(info[i])
             elif info[i].lower().startswith("aux"):
                 try:
-                    aux_type = info[i+1]
+                    aux_type = info[i + 1]
                     i += 1
                     if aux_type.lower() == "optri":
-                        aux_type += " %s" % info[i+1]
+                        aux_type += " %s" % info[i + 1]
                         i += 1
                 except:
                     raise RuntimeError(
@@ -271,10 +271,18 @@ class BasisSet:
                 basis_name = info[i]
                 try:
                     # TODO: allow spaces in paths
-                    if os.path.exists(info[i+1]) or "\\" in info[i+1] or "/" in info[i+1]:
+                    if (
+                            (
+                                # os thinks I have a file named "aux" somewhere on my computer
+                                # I don't see it, but basis file names cannot start with 'aux'
+                                os.path.exists(info[i+1]) and
+                                not info[i+1].lower().startswith("aux")
+                            )
+                            or os.sep in info[i+1]
+                    ):
                         user_defined = info[i+1]
                         i += 1
-                except:
+                except Exception as e:
                     pass
 
                 if not elements:

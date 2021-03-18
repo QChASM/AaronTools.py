@@ -730,6 +730,12 @@ class FileReader:
                     item = line.split("=")[0].strip()
                     self.other[item] = float(line.split()[-1])
 
+                elif "Full point group" in line:
+                    self.other["full_point_group"] = line.split()[-1]
+
+                elif "Molecular point group" in line:
+                    self.other["molecular_point_group"] = line.split()[-1]
+
                 elif (
                     "total energy" in line
                     and "=" in line
@@ -932,6 +938,9 @@ class FileReader:
                         / PHYSICAL.KB
                         for x in self.other["rotational_temperature"]
                     ]
+
+                elif "Point Group:" in line:
+                    self.other["full_point_group"] = line.split()[2][:-1]
 
                 elif "Symmetry Number" in line:
                     self.other["rotational_symmetry_number"] = int(
@@ -1228,6 +1237,16 @@ class FileReader:
                     line = f.readline()
                     n += 1
                 self.other["gradient"] = grad
+
+            # symmetry
+            if "Full point group" in line:
+                self.other["full_point_group"] = line.split()[-3]
+
+            if "Largest Abelian subgroup" in line:
+                self.other["abelian_subgroup"] = line.split()[-3]
+
+            if "Largest concise Abelian subgroup" in line:
+                self.other["concise_abelian_subgroup"] = line.split()[-3]
 
             # forces
             if "Forces (Hartrees/Bohr)" in line:
@@ -1774,7 +1793,9 @@ class Frequency:
                     data.forcek = force_consts[i]
 
             elif line.strip().startswith("Irrep"):
-                symm = [x for x in line.split()[1:]]
+                # sometimes psi4 doesn't identify the irrep of a mode, so we can't
+                # use line.split()
+                symm = [x.strip() if x.strip() else None for x in [line[31:40], line[51:60], line[71:80]]]
                 for i, data in enumerate(self.data[-nmodes:]):
                     data.symmetry = symm[i]
 
