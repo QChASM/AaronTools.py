@@ -342,7 +342,7 @@ class ATDecoder(json.JSONDecoder):
         
         if "mem" in obj:
             rv.memory = obj["mem"]
-        
+
         if "jobs" in obj:
             jobs = []
             for job in obj["jobs"]:
@@ -354,6 +354,7 @@ class ATDecoder(json.JSONDecoder):
                     jobs.append(SinglePointJob(**obj["jobs"][job]))
                 elif job == "ForceJob":
                     jobs.append(ForceJob(**obj["jobs"][job]))
+            rv.job_type = jobs
         
         if "basis" in obj or "ecp" in obj:
             rv.basis = BasisSet([], [])
