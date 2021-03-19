@@ -170,56 +170,60 @@ class ATEncoder(json.JSONEncoder):
                     except AttributeError:
                         pass
                 
-        if obj.basis.basis:
+        if obj.basis:
             rv["basis"] = {"name": [], "elements":[], "file":[], "auxiliary":[]}
-            for basis in obj.basis.basis:
-                rv["basis"]["name"].append(basis.name)
-                rv["basis"]["elements"].append([])
-                for ele in basis.ele_selection:
-                    if isinstance(ele, str):
-                        rv["basis"]["elements"][-1].append(ele)
-                    elif isinstance(ele, AnyTransitionMetal):
-                        rv["basis"]["elements"][-1].append("tm")
-                    elif isinstance(ele, AnyNonTransitionMetal):
-                        rv["basis"]["elements"][-1].append("!tm")
-                        
-                if basis.not_anys:
-                    for ele in basis.not_anys:
+            if obj.basis:
+                for basis in obj.basis.basis:
+                    rv["basis"]["name"].append(basis.name)
+                    rv["basis"]["elements"].append([])
+                    for ele in basis.ele_selection:
                         if isinstance(ele, str):
-                            rv["basis"]["elements"][-1].append("!%s" % ele)
+                            rv["basis"]["elements"][-1].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
+                            rv["basis"]["elements"][-1].append("tm")
+                        elif isinstance(ele, AnyNonTransitionMetal):
                             rv["basis"]["elements"][-1].append("!tm")
-                        elif isinstance(ele, AnyNonTransitionMetal):
-                            rv["basis"]["elements"][-1].append("!!tm")
+                            
+                    if basis.not_anys:
+                        for ele in basis.not_anys:
+                            if isinstance(ele, str):
+                                rv["basis"]["elements"][-1].append("!%s" % ele)
+                            elif isinstance(ele, AnyTransitionMetal):
+                                rv["basis"]["elements"][-1].append("!tm")
+                            elif isinstance(ele, AnyNonTransitionMetal):
+                                rv["basis"]["elements"][-1].append("!!tm")
+    
+    
+                    rv["basis"]["file"].append(basis.user_defined)
+                    rv["basis"]["auxiliary"].append(basis.aux_type)
 
-
-                rv["basis"]["file"].append(basis.user_defined)
-                rv["basis"]["auxiliary"].append(basis.aux_type)
-
-        if obj.basis.ecp:
-            rv["ecp"] = {"name": [], "elements":[], "file":[]}
-            for basis in obj.basis.ecp:
-                rv["ecp"]["name"].append(basis.name)
-                for ele in basis.ele_selection:
-                    if isinstance(ele, str):
-                        rv["ecp"]["elements"].append(ele)
-                    elif isinstance(ele, AnyTransitionMetal):
-                        rv["ecp"]["elements"].append("tm")
-                    elif isinstance(ele, AnyNonTransitionMetal):
-                        rv["ecp"]["elements"].append("!tm")
-                    else:
-                        rv["ecp"]["elements"].append([])
-                        
-                if basis.not_anys:
-                    for ele in basis.not_anys:
+            if obj.basis.ecp:
+                rv["ecp"] = {"name": [], "elements":[], "file":[]}
+                for basis in obj.basis.ecp:
+                    rv["ecp"]["name"].append(basis.name)
+                    for ele in basis.ele_selection:
                         if isinstance(ele, str):
-                            rv["ecp"]["elements"][-1].append("!%s" % ele)
+                            rv["ecp"]["elements"].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
-                            rv["ecp"]["elements"][-1].append("!tm")
+                            rv["ecp"]["elements"].append("tm")
                         elif isinstance(ele, AnyNonTransitionMetal):
-                            rv["ecp"]["elements"][-1].append("tm")
+                            rv["ecp"]["elements"].append("!tm")
+                        else:
+                            rv["ecp"]["elements"].append([])
+                            
+                    if basis.not_anys:
+                        for ele in basis.not_anys:
+                            if isinstance(ele, str):
+                                rv["ecp"]["elements"][-1].append("!%s" % ele)
+                            elif isinstance(ele, AnyTransitionMetal):
+                                rv["ecp"]["elements"][-1].append("!tm")
+                            elif isinstance(ele, AnyNonTransitionMetal):
+                                rv["ecp"]["elements"][-1].append("tm")
+    
+                    rv["ecp"]["file"].append(basis.user_defined)
 
-                rv["ecp"]["file"].append(basis.user_defined)
+            if obj.kwargs:
+                rv["other"] = obj.kwargs
 
         return rv
 
@@ -341,7 +345,7 @@ class ATDecoder(json.JSONDecoder):
         
         if "mem" in obj:
             rv.memory = obj["mem"]
-        
+
         if "jobs" in obj:
             jobs = []
             for job in obj["jobs"]:
@@ -353,6 +357,7 @@ class ATDecoder(json.JSONDecoder):
                     jobs.append(SinglePointJob(**obj["jobs"][job]))
                 elif job == "ForceJob":
                     jobs.append(ForceJob(**obj["jobs"][job]))
+            rv.job_type = jobs
         
         if "basis" in obj or "ecp" in obj:
             rv.basis = BasisSet([], [])
@@ -386,5 +391,8 @@ class ATDecoder(json.JSONDecoder):
                         user_defined=file,
                     )
                 )
+        
+        if "other" in obj:
+            rv.kwargs = obj["other"]
         
         return rv

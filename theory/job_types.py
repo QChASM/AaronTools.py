@@ -82,13 +82,13 @@ class OptimizationJob(JobType):
         geometry    - Geoemtry, will be set when using an AaronTools FileWriter"""
         super().__init__()
 
-        self.ts = transition_state
+        self.transition_state = transition_state
         self.constraints = constraints
         self.geometry = geometry
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE, GAUSSIAN_CONSTRAINTS"""
-        if self.ts:
+        if self.transition_state:
             out = {GAUSSIAN_ROUTE: {"Opt": ["ts"]}}
         else:
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
@@ -336,7 +336,7 @@ class OptimizationJob(JobType):
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE, ORCA_BLOCKS"""
-        if self.ts:
+        if self.transition_state:
             out = {ORCA_ROUTE: ["OptTS"]}
         else:
             out = {ORCA_ROUTE: ["Opt"]}
@@ -400,7 +400,7 @@ class OptimizationJob(JobType):
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB, PSI4_OPTKING, PSI4_BEFORE_GEOM"""
-        if self.ts:
+        if self.transition_state:
             out = {
                 PSI4_JOB: {"optimize": []},
                 PSI4_SETTINGS: {"opt_type": ["ts"]},
