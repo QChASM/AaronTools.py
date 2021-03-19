@@ -1,0 +1,26 @@
+{
+  "": [
+    {},
+    null
+  ],
+  "benzene": [
+    {
+      "(1,4)": "benzene"
+    },
+    "Substitution"
+  ],
+  "cyclohexane": [
+    {
+      "(1,4)": "cyclohexane",
+      "(2,5)": "cyclohexane"
+    },
+    "Substitution"
+  ],
+  "cyclopentane": [
+    {
+      "(1,4)": "cyclopentane",
+      "(2,5)": "cyclopentane"
+    },
+    "Substitution"
+  ]
+}

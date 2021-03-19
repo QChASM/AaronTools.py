@@ -13,48 +13,73 @@ AaronTools.config.AARONLIB = os.path.join(prefix, "aaron_libs")
 
 
 class TestConfig(TestWithTimer):
-    config_list = [("config_blank.ini", None), ("config_HOH.ini", None)]
+    config_list = [("blank.ini", None), ("HOH.ini", None)]
 
     def test_init(self):
         for i, (config_name, config) in enumerate(TestConfig.config_list):
             config = Config(
-                os.path.join(prefix, "test_files", config_name), quiet=True
+                os.path.join(prefix, "test_files", config_name),
+                quiet=True,
+                skip_user_default=True,
             )
-            config.set(
-                "DEFAULT",
-                "name",
-                os.path.relpath(
-                    config.get("DEFAULT", "name"),
-                    config.get("DEFAULT", "top_dir"),
-                ),
-            )
-            config.set("DEFAULT", "top_dir", "")
             TestConfig.config_list[i] = config_name, config
 
-            test = {}
-            for section in config:
-                test[section] = dict(config.items(section))
+            test = config.as_dict(skip=config.USER_SPECIFIC)
             ref_name = os.path.join(
                 prefix, "ref_files", config_name.replace(".ini", "_init.json")
             )
-            if i == 2:
-                with open(ref_name, "w") as f:
-                    json.dump(test, f, indent=2)
-                print(json.dumps(test, indent=2))
+            # with open(ref_name, "w") as f:
+            #     json.dump(test, f, indent=2)
+
+            # need this to make sure python->json stuff is consistent,
+            # eg: json doesn't distinguish between tuples and lists
+            test = json.loads(json.dumps(test))
+            # print(json.dumps(test, indent=2))
             with open(ref_name, "r") as f:
                 ref = json.load(f)
             self.assertDictEqual(ref, test, msg=config_name)
 
     def test_parse_changes(self):
-        simple = Config(os.path.join(prefix, "test_files", "simple_subs.ini"))
-        simple._parse_changes()
-        print(simple._changes)
-        rings = Config(os.path.join(prefix, "test_files", "ring_subs.ini"))
-        rings._parse_changes()
-        print(rings._changes)
+        ###
+        # substitutions with single point of connections
+        ###
+        simple = Config(
+            os.path.join(prefix, "test_files", "simple_subs.ini"),
+            quiet=True,
+            skip_user_default=True,
+        )
+        test = json.loads(json.dumps(simple._changes))
+        ref_name = simple.infile.replace(".ini", "_changes.json")
+        ref_name = ref_name.replace("test_files", "ref_files")
+        # with open(ref_name, "w") as f:
+        #     json.dump(simple._changes, f, indent=2)
+        with open(ref_name, "r") as f:
+            ref = json.load(f)
+        self.assertDictEqual(ref, test, msg=simple.infile)
+
+        ###
+        # for ring-fusing substitutions (multiple connection points)
+        ###
+        rings = Config(
+            os.path.join(prefix, "test_files", "ring_subs.ini"),
+            quiet=True,
+            skip_user_default=True,
+        )
+        test = json.loads(json.dumps(rings._changes))
+        ref_name = rings.infile.replace(".ini", "_changes.json")
+        ref_name = ref_name.replace("test_files", "ref_files")
+        # with open(ref_name, "w") as f:
+        #     json.dump(rings._changes, f, indent=2)
+        with open(ref_name, "r") as f:
+            ref = json.load(f)
+        self.assertDictEqual(ref, test, msg=simple.infile)
 
     def test_for_loop(self):
-        for_loop = Config(os.path.join(prefix, "test_files", "for_loop.ini"))
+        for_loop = Config(
+            os.path.join(prefix, "test_files", "for_loop.ini"),
+            quiet=True,
+            skip_user_default=True,
+        )
         structure_list = for_loop.get_template()
         for structure, kind in structure_list:
             dihedral = round(
@@ -67,8 +92,8 @@ class TestConfig(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    # suite.addTest(TestConfig("test_init"))
-    # suite.addTest(TestConfig("test_parse_changes"))
+    suite.addTest(TestConfig("test_init"))
+    suite.addTest(TestConfig("test_parse_changes"))
     suite.addTest(TestConfig("test_for_loop"))
     return suite
 
