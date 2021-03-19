@@ -4,7 +4,6 @@ import os
 import ssl
 import sys
 import unittest
-import urllib
 from glob import glob
 from subprocess import PIPE, Popen
 

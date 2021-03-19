@@ -2,11 +2,8 @@
 import itertools
 import re
 import ssl
-import urllib.parse
 from collections import deque
 from copy import deepcopy
-from urllib.error import HTTPError
-from urllib.request import urlopen
 from warnings import warn
 
 import numpy as np
@@ -24,6 +21,13 @@ from AaronTools.utils.prime_numbers import Primes
 COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
+
+DEFAULT_CONFIG = Config(skip_user_default=True, quiet=True)
+
+if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
+    import urllib.parse
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
 
 
 class Geometry:
@@ -116,6 +120,10 @@ class Geometry:
     # class methods
     @classmethod
     def iupac2smiles(cls, name):
+        if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
+            raise PermissionError(
+                "Converting IUPAC to SMILES failed. External network lookup disallowed."
+            )
         # opsin seems to be better at iupac names with radicals
         url_smi = "{}/opsin/{}.smi".format(
             OPSIN_HOST, urllib.parse.quote(name)
@@ -143,6 +151,12 @@ class Geometry:
         """
 
         def get_cactus_sd(smiles):
+            if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
+                raise PermissionError(
+                    "Cannot retrieve structure from {}. External network lookup disallowed.".format(
+                        CACTUS_HOST
+                    )
+                )
             url_sd = "{}/cgi-bin/translate.tcl?smiles={}&format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
@@ -160,6 +174,8 @@ class Geometry:
             )
             return s_sd
 
+        if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
+            strict_use_rdkit = True
         accepted_forms = ["iupac", "smiles"]
         if form not in accepted_forms:
             raise NotImplementedError(
@@ -194,7 +210,7 @@ class Geometry:
         try:
             f = FileReader((name, "sd", s_sd))
             is_sdf = True
-        except:
+        except Exception:
             # for some reason, CACTUS is giving xyz files instead of sdf...
             is_sdf = False
             f = FileReader((name, "xyz", s_sd))

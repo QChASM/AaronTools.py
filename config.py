@@ -2,8 +2,6 @@ import configparser
 import itertools as it
 import os
 import re
-import sys
-from copy import deepcopy
 from getpass import getuser
 from warnings import warn
 
@@ -34,14 +32,12 @@ from AaronTools.theory import (
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import (
-    CrestJob,
     ForceJob,
     FrequencyJob,
     OptimizationJob,
     SinglePointJob,
 )
 
-SECTIONS = ["DEFAULT", "HPC", "Job", "Substitution", "Mapping", "Reaction"]
 THEORY_OPTIONS = [
     "GAUSSIAN_COMMENT",
     "GAUSSIAN_CONSTRAINTS",
@@ -82,15 +78,20 @@ class Config(configparser.ConfigParser):
         "_changed_list",
         "_args",
         "_kwargs",
-        "conformer",
         "infile",
+        "conformer",
         "metadata",
     ]
 
-    def __init__(self, infile="config.ini", quiet=False, **kwargs):
+    USER_SPECIFIC = ["metadata"]
+
+    def __init__(
+        self, infile=None, quiet=False, skip_user_default=False, **kwargs
+    ):
         """
         infile: the configuration file to read
         quiet: prints helpful status information
+        skip_user_default: change to True to skip importing user's default config files
         **kwargs: passed to initialization of parent class
         """
         configparser.ConfigParser.__init__(
@@ -98,40 +99,48 @@ class Config(configparser.ConfigParser):
         )
         if not quiet:
             print("Reading configuration...")
-        if infile is not None:
-            self.read_config(infile, quiet)
-            # enforce selective case sensitivity
-            for section in self:
-                if section in [
-                    "Substitution",
-                    "Mapping",
-                    "Configs",
-                    "Results",
-                ]:
-                    continue
-                for option, value in self[section].items():
-                    if option.lower() != option:
-                        self[section][option.lower()] = value
-                        del self[section][option]
-            # handle included sections
-            self._parse_includes()
-            # set additional default values
+        self._read_config(infile, quiet, skip_user_default)
+
+        # enforce case-sensitivity in certain sections
+        for section in self:
+            if section in [
+                "Substitution",
+                "Mapping",
+                "Configs",
+                "Results",
+            ]:
+                continue
+            for option, value in self[section].items():
+                if option.lower() != option:
+                    self[section][option.lower()] = value
+                    del self[section][option]
+
+        # handle included sections
+        self._parse_includes()
+
+        # set additional default values
+        if infile:
             if "top_dir" not in self["DEFAULT"]:
                 self["DEFAULT"]["top_dir"] = os.path.dirname(
                     os.path.abspath(infile)
                 )
             if "name" not in self["DEFAULT"]:
                 self["DEFAULT"]["name"] = ".".join(
-                    os.path.relpath(infile).split(".")[:-1]
+                    os.path.relpath(
+                        infile, start=self["DEFAULT"]["top_dir"]
+                    ).split(".")[:-1]
                 )
+
         # handle substitutions/mapping
         self._changes = {}
         self._changed_list = []
         self._parse_changes()
+
         # for passing to Theory(*args, **kwargs)
         self._args = []
         self._kwargs = {}
         self.infile = infile
+
         # metadata is username and project name
         self.metadata = {
             "user": self.get(
@@ -145,71 +154,6 @@ class Config(configparser.ConfigParser):
 
     def optionxform(self, option):
         return str(option)
-
-    def _parse_changes(self):
-        for section in ["Substitution", "Mapping"]:
-            if section not in self:
-                continue
-            if "reopt" in self[section] and self.getboolean(section, "reopt"):
-                self._changes[""] = {}, None
-            for key, val in self[section].items():
-                if key in self["DEFAULT"] or key == "reopt":
-                    continue
-                if "=" not in val:
-                    val = [v.strip() for v in val.split(",")]
-                else:
-                    tmp = [v.strip() for v in val.split(";")]
-                    val = []
-                    for t in tmp:
-                        t = t.strip()
-                        if not t:
-                            continue
-                        elif "\n" in t:
-                            val += t.split("\n")
-                        else:
-                            val += [t]
-                    tmp = {}
-                    for v in val:
-                        v = v.strip().split("=")
-                        tmp[v[0].strip()] = v[1].strip()
-                    val = tmp
-                # handle request for all combinations
-                if key.startswith("&combination"):
-                    atoms = []
-                    subs = []
-                    # val <= { "2, 4": "H, CH3", "7, 9": "OH, NH2", .. }
-                    for k, v in val.items():
-                        atoms.append([i.strip() for i in k.split(",")])
-                        subs.append(
-                            [None] + [i.strip() for i in v.strip().split(",")]
-                        )
-                    # atoms = [ [2, 4],         [7, 9],      .. ]
-                    # subs  = [ [None, H, CH3], [None, OH, NH2], .. ]
-                    for combo in it.product(*[range(len(s)) for s in subs]):
-                        # combos = (0, 0,..), (0,.., 1),..(1,.. 0),..(1,.., 1),..
-                        if not any(combo):
-                            # skip if no substitutions
-                            continue
-                        name = []
-                        combo_key = []
-                        combo_val = []
-                        for i, p in enumerate(combo):
-                            # don't add subsitution if sub == None
-                            if subs[i][p] is None:
-                                continue
-                            name.append(subs[i][p])
-                            combo_key.append(",".join(atoms[i]))
-                            combo_val.append(subs[i][p])
-                        name = "_".join(name)
-                        self._changes[name] = (
-                            dict(zip(combo_key, combo_val)),
-                            section,
-                        )
-                else:
-                    if isinstance(val, list):
-                        val = {key: ",".join(val)}
-                        key = ""
-                    self._changes[key] = (val, section)
 
     def __str__(self):
         rv = ""
@@ -231,6 +175,103 @@ class Config(configparser.ConfigParser):
         for attr in self.SPEC_ATTRS:
             setattr(config, attr, getattr(self, attr))
         return config
+
+    def _parse_changes(self):
+        for section in ["Substitution", "Mapping"]:
+            if section not in self:
+                continue
+            if "reopt" in self[section].getboolean(section, "reopt"):
+                self._changes[""] = ({}, None)
+            for key, val in self[section].items():
+                if key in self["DEFAULT"]:
+                    continue
+                del self[section][key]
+                key = "\n".join(["".join(k.split()) for k in key.split("\n")])
+                val = "\n".join(["".join(v.split()) for v in val.split("\n")])
+                self[section][key] = val
+            for key, val in self[section].items():
+                if key in self["DEFAULT"] or key == "reopt":
+                    continue
+                if "=" not in val:
+                    val = [v.strip() for v in val.split(",")]
+                else:
+                    tmp = [v.strip() for v in val.split(";")]
+                    val = []
+                    for t in tmp:
+                        t = t.strip()
+                        if not t:
+                            continue
+                        elif "\n" in t:
+                            val += t.split("\n")
+                        else:
+                            val += [t]
+                    tmp = {}
+                    for i, v in enumerate(val):
+                        if i == 0 and len(v.split("=")) == 1:
+                            v = "{}={}".format(key, v)
+                            val[i] = v
+                            del self[section][key]
+                            key = ""
+                            self[section]["~PLACEHOLDER~"] = ";".join(val)
+                        v = v.split("=")
+                        if not key.startswith("&combinations"):
+                            v[0] = v[0].split(",")
+                        else:
+                            v[0] = [v[0]]
+                        for k in v[0]:
+                            tmp[k] = v[1]
+                    val = tmp
+                # handle request for combinations
+                if key.startswith("&combination"):
+                    atoms = []
+                    subs = []
+                    # val <= { "2, 4": "H, CH3", "7, 9": "OH, NH2", .. }
+                    for k, v in val.items():
+                        if "(" not in k:
+                            # regular substituents
+                            atoms.append(k.split(","))
+                        else:
+                            # ring substitutions
+                            atoms.append(re.findall("\(.*?\)", k))
+                        subs.append([None] + [i for i in v.strip().split(",")])
+                    # atoms <= [ [2, 4],         [7, 9],      .. ]
+                    # subs  <= [ [None, H, CH3], [None, OH, NH2], .. ]
+                    for combo in it.product(*[range(len(s)) for s in subs]):
+                        # combos <= (0, 0,..), (0,.., 1),..(1,.. 0),..(1,.., 1),..
+                        if not any(combo):
+                            # skip if no substitutions
+                            # (already included if reopt=True)
+                            continue
+                        name = []
+                        tmp = {}
+                        for i, p in enumerate(combo):
+                            # don't add subsitution if sub == None
+                            if subs[i][p] is None:
+                                continue
+                            name.append(subs[i][p])
+                            for a in atoms[i]:
+                                tmp[a] = subs[i][p]
+                        name = "_".join(name)
+                        self._changes[name] = (
+                            tmp,
+                            section,
+                        )
+                else:
+                    if isinstance(val, list):
+                        name = "_".join(val)
+                        val = {key: ",".join(val)}
+                    elif not key:
+                        name = "_".join(
+                            [
+                                "_".join([v] * len(k.split(",")))
+                                for k, v in val.items()
+                            ]
+                        )
+                        self[section][name] = self[section]["~PLACEHOLDER~"]
+                        del self[section]["~PLACEHOLDER~"]
+                    else:
+                        name = key
+                    self._changes[name] = (val, section)
 
     def parse_functions(self):
         """
@@ -274,16 +315,19 @@ class Config(configparser.ConfigParser):
         out = [x.strip() for x in raw.split(delim) if len(x.strip()) > 0]
         return out
 
-    def read_config(self, infile, quiet):
+    def _read_config(self, infile, quiet, skip_user_default):
         """
         Reads configuration information from `infile` after pulling defaults
         """
         filenames = [
             os.path.join(AARONTOOLS, "config.ini"),
-            os.path.join(AARONLIB, "config.ini"),
-            infile,
         ]
-        for filename in filenames:
+        if not skip_user_default:
+            filenames += [os.path.join(AARONLIB, "config.ini")]
+        if infile:
+            filenames += [infile]
+        local_only = False
+        for i, filename in enumerate(filenames):
             if not quiet:
                 if os.path.isfile(filename):
                     print("    ✓", end="  ")
@@ -297,18 +341,29 @@ class Config(configparser.ConfigParser):
                 else:
                     success = self.read(filename)
                     if not quiet and len(success) == 0:
-                        print("failed to read %s" % filename)
+                        try:
+                            with open(filename) as f:
+                                f.readline()
+                        except Exception as e:
+                            raise Exception(
+                                "failed to read %s\n%s" % (filename, e)
+                            ) from e
             except configparser.MissingSectionHeaderError:
                 # add global options to default section
                 with open(filename) as f:
                     contents = "[DEFAULT]\n" + f.read()
                 self.read_string(contents)
+            # local_only can only be overridden at the user level if "False" in the system config file
+            if i == 0:
+                local_only = self["DEFAULT"].getboolean("local_only")
+            elif local_only:
+                self["DEFAULT"]["local_only"] = str(local_only)
 
-    def get_other_kwargs(self, section="Job"):
+    def get_other_kwargs(self, section="Theory"):
         """
         Returns dict() that can be unpacked and passed to Geometry.write along with a theory
         Example:
-        [Job]
+        [Theory]
         route = pop NBORead
                 opt MaxCycle=1000, NoEigenTest
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
@@ -318,7 +373,7 @@ class Config(configparser.ConfigParser):
 
         'two-layer' options can also be specified as a python dictionary
         the following is equivalent to the above example:
-        [Job]
+        [Theory]
         route = {"pop":["NBORead"], "opt":["MaxCycle=1000", NoEigenTest"]}
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
         """
@@ -403,23 +458,17 @@ class Config(configparser.ConfigParser):
 
         return out
 
-    def get_theory(self, geometry, section="Job"):
+    def get_theory(self, geometry, section="Theory"):
         """
         Get the theory object according to configuration information
         """
         if not self.has_section(section):
-            warn('config has no "%s" section, switching to "Job"' % section)
-            section = "Job"
+            warn('config has no "%s" section, switching to "Theory"' % section)
+            section = "Theory"
 
         kwargs = self.get_other_kwargs(section=section)
-        # kwargs = {}
-        # for key, val in self[section].items():
-        #     if key.upper() in THEORY_OPTIONS:
-        #         kwargs[key.upper()] = eval(val)
-        #     else:
-        #         kwargs[key] = val
-
         theory = Theory(*self._args, geometry=geometry, **kwargs)
+
         # build ImplicitSolvent object
         if self[section].get("solvent", fallback="gas") == "gas":
             theory.solvent = None
@@ -428,8 +477,9 @@ class Config(configparser.ConfigParser):
                 self[section]["solvent_model"],
                 self[section]["solvent"],
             )
+
         # build JobType list
-        job_type = self[section].get("type", fallback=False)
+        job_type = self["Job"].get("type", fallback=False)
         if job_type:
             theory.job_type = []
             job_type = job_type.split(".")
@@ -534,11 +584,9 @@ class Config(configparser.ConfigParser):
         def get_multiple(filenames, path=None, suffix=None):
             rv = []
             for name in filenames:
-                kind = ""
+                kind = "Minimum"
                 if name.startswith("TS"):
                     kind = "TS"
-                else:
-                    kind = "Minimum"
                 if path is not None:
                     name = os.path.join(path, name)
                 if not os.path.isfile(name):
@@ -571,23 +619,25 @@ class Config(configparser.ConfigParser):
                 )
                 for dirpath, dirnames, filenames in os.walk(path):
                     structure_list += get_multiple(filenames, path=dirpath)
-        # get starting structure
-        elif "structure" in self["Geometry"]:
+
+        # load templates from config[Geometry]
+        # store in structure_dict, keyed by structure option suffix
+        # `structure.suffix = geom.xyz` store as {suffix: geom.xyz}
+        # `structure = geom.xyz` (no suffix), store as {"": geom.xyz}
+        if "structure" in self["Geometry"]:
             structure_dict[""] = self["Geometry"]["structure"]
         else:
             for key in self["Geometry"]:
                 if key.startswith("structure."):
-                    structure_dict[str(key.split(".")[1])] = self["Geometry"][
-                        key
-                    ]
-
-        # create Geometry objects as requeseted by config[Geometry][structure]
-        for name, structure in structure_dict.items():
+                    suffix = ".".join(key.split(".")[1:])
+                    structure_dict[suffix] = self["Geometry"][key]
+        # create Geometry objects
+        for suffix, structure in structure_dict.items():
             if structure is not None and os.path.isdir(structure):
                 # if structure is a directory
                 for dirpath, dirnames, filenames in os.walk(structure):
                     structure_list += get_multiple(
-                        filenames, path=dirpath, suffix=name
+                        filenames, path=dirpath, suffix=suffix
                     )
             elif structure is not None:
                 try:
@@ -610,14 +660,23 @@ class Config(configparser.ConfigParser):
                 if "Geometry" in self and "comment" in self["Geometry"]:
                     structure.comment = self["Geometry"]["comment"]
                     structure.parse_comment()
-                structure.name += ".{}".format(name)
-                structure_dict[str(name)] = structure
-                kind_dict[name] = None
+                structure.name += ".{}".format(suffix)
+                structure_dict[suffix] = structure
+                kind_dict[suffix] = None
 
         # for loop for structure modification/creation
+        # structure.suffix = geom.xyz
+        # &for name in <iterator>:
+        #    structure.name = structure.suffix.copy()
+        #    structure.name.method_call(*args, **kwargs)
+
+        # captures name placeholder and iterator from for-loop initilaizer
         for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
+        # captures config-style structure/suffix -> (structure.suffix, suffix)
         structure_patt = re.compile("(structure\.(\S+?))\.?")
-        structure_patt_parsed = re.compile("(structure\['(\S+?)'\])\.?")
+        # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
+        parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
+
         if "Geometry" in self:
             for key in self["Geometry"]:
                 if not key.startswith("&for"):
@@ -628,21 +687,23 @@ class Config(configparser.ConfigParser):
                         "Malformed &for loop specification in config"
                     )
                 lines = self["Geometry"][key].split("\n")
-                for name in eval(for_match.group(2), {}):
+                for it_val in eval(for_match.group(2), {}):
                     eval_dict = {
                         "Geometry": AaronTools.geometry.Geometry,
                         "structure": structure_dict,
-                        for_match.group(1): name,
+                        for_match.group(1): it_val,
                     }
                     for line in lines:
                         line = line.strip()
                         if not line:
                             continue
                         for structure_match in structure_patt.findall(line):
-                            suffix = structure_match[1]
-                            if suffix == for_match.group(1):
-                                suffix = name
-                            suffix = str(suffix)
+                            # if our suffix is not the iterator, keep it's value for the dict key
+                            if structure_match[1] != for_match.group(1):
+                                suffix = structure_match[1]
+                            else:
+                                suffix = str(it_val)
+                            # change to dict-style syntax (structure.suffix -> structure["suffix"])
                             line = line.replace(
                                 structure_match[0],
                                 "structure['{}']".format(suffix),
@@ -653,15 +714,18 @@ class Config(configparser.ConfigParser):
                                 ] = AaronTools.geometry.Geometry()
                                 kind_dict[suffix] = None
                         if "=" in line:
+                            # assignments must be done outside of eval()
+                            # left -> structure.suffix -> structure_dict["suffix"]
+                            # right -> eval(right)
+                            # left = right -> structure_dict[suffix] = eval(right)
                             left = line.split("=")[0].strip()
                             right = line.split("=")[1].strip()
-                            suffix_match = structure_patt_parsed.search(left)
+                            suffix_match = parsed_struct_patt.search(left)
                             if suffix_match is None:
                                 raise RuntimeError(
                                     "Can only assign to Geometry objects with names of the form `structure.suffix`"
                                 )
                             suffix = suffix_match.group(2)
-                            suffix = str(suffix)
                             structure_dict[suffix] = eval(right, eval_dict)
                             structure_dict[suffix].name = ".".join(
                                 structure_dict[suffix].name.split(".")[:-1]
@@ -669,9 +733,11 @@ class Config(configparser.ConfigParser):
                             )
                         else:
                             eval(line, eval_dict)
-        # add to structure list
-        for name in structure_dict:
-            structure_list += [(structure_dict[name], kind_dict[name])]
+
+        # add structure_dict to structure list
+        for suffix in structure_dict:
+            structure_list += [(structure_dict[suffix], kind_dict[suffix])]
+
         # apply functions found in [Geometry] section
         if "Geometry" in self and "&call" in self["Geometry"]:
             for structure, kind in structure_list:
@@ -685,20 +751,17 @@ class Config(configparser.ConfigParser):
                                 "Geometry": AaronTools.geometry.Geometry,
                             },
                         )
-        if len(structure_list) == 1:
-            return structure_list[0][0]
         return structure_list
 
     def _parse_includes(self):
         """
         Moves option values from subsections into parent section
         Eg:
-            [Job]
+            [HPC]
             include = Wheeler
             ppn = 12
-            queue = batch
 
-            [Job.Wheeler]
+            [HPC.Wheeler]
             nodes = 1
             queue = wheeler_q
 
@@ -711,9 +774,18 @@ class Config(configparser.ConfigParser):
         for section in self._sections:
             # add requested subsections to parent section
             if self.has_option(section, "include"):
-                include_section = "{}.{}".format(
-                    section, self[section]["include"]
-                )
+                include_section = self[section]["include"].split(".")
+                if include_section[0] in self._sections:
+                    # include specifies full section name, eg:
+                    # include = Job.Minimum --> [Job.Minimum]
+                    include_section = ".".join(include_section)
+                else:
+                    # short-form of include, eg:
+                    # [Job]
+                    # include = Minimum
+                    # --> [Job.Minimum]
+                    include_section = [section] + include_section
+                    include_section = ".".join(include_section)
                 for key, val in self[include_section].items():
                     self[section][key] = val
             # handle non-default capitalization of default section
@@ -721,41 +793,69 @@ class Config(configparser.ConfigParser):
                 for key, val in self[section].items():
                     self["DEFAULT"][key] = val
 
-    def get_spec(self, spec=None, skip_keys=None):
+    def as_dict(self, spec=None, skip=None):
+        """
+        Forms a metadata spec dictionary from configuration info
+        :spec: (dict) if given, append key/vals to that dict
+        :skip: (list) skip storing stuff according to (section, option) or attrs
+               section, option, and attrs are strings that can be regex (full match only)
+               eg: skip=[("Job", ".*"), "conformer"] will skip everything in the Job
+               section and the Config.conformer attribute
+        """
         if spec is None:
             spec = {}
-        if skip_keys is None:
-            skip_keys = []
+        if skip is None:
+            skip = []
+        skip_attrs = []
+        skip_sections = []
+        skip_options = []
+        for s in skip:
+            if isinstance(s, tuple):
+                skip_sections.append(s[0])
+                skip_options.append(s[1])
+            else:
+                skip_attrs.append(s)
+
         for attr in self.SPEC_ATTRS:
-            if attr in skip_keys:
-                continue
-            spec[attr] = getattr(self, attr)
+            for s in skip_attrs:
+                if re.fullmatch(s, attr):
+                    break
+            else:
+                spec[attr] = getattr(self, attr)
+
         for section in self._sections:
-            if section in ["Results", "Plot"]:
-                # this is just used when displaying results and have no bearing on
-                # how computations are actually run. The user may change values here
-                # to make analysis easier, and we don't want those changes to exclude
-                # fireworks when searching
+            if "." in section:
+                # these are include sections that should already be pulled into
+                # the main body of the config file
                 continue
-            for key, val in self.items(section=section):
-                if key in skip_keys:
-                    continue
-                if "." in section:
-                    continue
-                spec["{}/{}".format(section, key)] = val
+            for option in self[section]:
+                for i, s in enumerate(skip_sections):
+                    o = skip_options[i]
+                    if re.fullmatch(s, section) and re.fullmatch(o, option):
+                        break
+                else:
+                    spec["{}/{}".format(section, option)] = self[section][
+                        option
+                    ]
         return spec
 
     def read_spec(self, spec):
+        """
+        Loads configuration metadata from spec dictionaries
+        """
         for attr in spec:
             if attr in self.SPEC_ATTRS:
                 setattr(self, attr, spec[attr])
             if "/" in attr:
-                section, key = attr.replace("#", ".").split("/")
+                section, key = attr.split("/")
                 if section not in self:
                     self.add_section(section)
                 self[section][key] = spec[attr]
 
     def for_step(self, step=None):
+        """
+        Generates a config copy with only options for the given step
+        """
         config = self.copy()
         # find step-specific options
         for section in config._sections:
@@ -784,12 +884,12 @@ class Config(configparser.ConfigParser):
                     "Must specify remote working directory for HPC (remote_dir = /path/to/HPC/work/dir)"
                 ) from e
         else:
-            config["HPC"]["work_dir"] = config["Job"].get("top_dir")
-        config["HPC"]["job_name"] = config["Job"]["name"]
+            config["HPC"]["work_dir"] = config["DEFAULT"].get("top_dir")
+        config["Job"]["name"] = config["DEFAULT"]["name"]
         if config.conformer:
-            config["HPC"]["job_name"] += "_{}".format(config.conformer)
+            config["Job"]["name"] += "_{}".format(config.conformer)
         if step:
-            config["HPC"]["job_name"] += ".{}".format(step)
+            config["Job"]["name"] += ".{}".format(step)
         # parse user-supplied functions in config file
         config.parse_functions()
         return config

@@ -1,0 +1,15 @@
+{
+  "_changes": {},
+  "_changed_list": [],
+  "_args": [],
+  "_kwargs": {},
+  "infile": "/home/deo/pyChASM/AaronTools/test/test_files/blank.ini",
+  "conformer": 0,
+  "Job/include": "Minimum",
+  "Job/1 type": "optimize.changes",
+  "Job/2 type": "optimize",
+  "Job/3 type": "frequencies",
+  "Job/local_only": "False",
+  "Job/top_dir": "/home/deo/pyChASM/AaronTools/test/test_files",
+  "Job/name": "blank"
+}

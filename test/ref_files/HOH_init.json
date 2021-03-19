@@ -1,0 +1,127 @@
+{
+  "_changes": {
+    "": [
+      {},
+      null
+    ],
+    "sub1": [
+      {
+        "1": "iPr",
+        "3": "iPr"
+      },
+      "Substitution"
+    ],
+    "OH_OH_iPr_iPr": [
+      {
+        "1": "OH",
+        "3": "OH",
+        "4": "iPr",
+        "5": "iPr"
+      },
+      "Substitution"
+    ],
+    "Me": [
+      {
+        "1": "Me"
+      },
+      "Substitution"
+    ],
+    "Et": [
+      {
+        "1": "Et"
+      },
+      "Substitution"
+    ],
+    "Ph": [
+      {
+        "1": "Ph"
+      },
+      "Substitution"
+    ],
+    "Me_Me": [
+      {
+        "1": "Me",
+        "3": "Me"
+      },
+      "Substitution"
+    ],
+    "Me_Et": [
+      {
+        "1": "Me",
+        "3": "Et"
+      },
+      "Substitution"
+    ],
+    "Me_Ph": [
+      {
+        "1": "Me",
+        "3": "Ph"
+      },
+      "Substitution"
+    ],
+    "Et_Me": [
+      {
+        "1": "Et",
+        "3": "Me"
+      },
+      "Substitution"
+    ],
+    "Et_Et": [
+      {
+        "1": "Et",
+        "3": "Et"
+      },
+      "Substitution"
+    ],
+    "Et_Ph": [
+      {
+        "1": "Et",
+        "3": "Ph"
+      },
+      "Substitution"
+    ],
+    "Ph_Me": [
+      {
+        "1": "Ph",
+        "3": "Me"
+      },
+      "Substitution"
+    ],
+    "Ph_Et": [
+      {
+        "1": "Ph",
+        "3": "Et"
+      },
+      "Substitution"
+    ],
+    "Ph_Ph": [
+      {
+        "1": "Ph",
+        "3": "Ph"
+      },
+      "Substitution"
+    ]
+  },
+  "_changed_list": [],
+  "_args": [],
+  "_kwargs": {},
+  "infile": "/home/deo/pyChASM/AaronTools/test/test_files/HOH.ini",
+  "conformer": 0,
+  "Job/include": "Minimum",
+  "Job/1 type": "optimize.changes",
+  "Job/2 type": "optimize",
+  "Job/3 type": "frequencies",
+  "Job/local_only": "False",
+  "Job/top_dir": "/home/deo/pyChASM/AaronTools/test/test_files",
+  "Job/name": "HOH",
+  "Geometry/structure": "HOH",
+  "Geometry/local_only": "False",
+  "Geometry/top_dir": "/home/deo/pyChASM/AaronTools/test/test_files",
+  "Geometry/name": "HOH",
+  "Substitution/sub1": "1,3=iPr",
+  "Substitution/&combinations": "\n1=Me,Et,Ph\n3=Me,Et,Ph",
+  "Substitution/OH_OH_iPr_iPr": "1,3=OH;4,5=iPr",
+  "Substitution/local_only": "False",
+  "Substitution/top_dir": "/home/deo/pyChASM/AaronTools/test/test_files",
+  "Substitution/name": "HOH"
+}

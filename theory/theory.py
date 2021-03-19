@@ -3,21 +3,35 @@ import itertools as it
 import re
 
 from AaronTools.const import ELEMENTS, UNIT
-from AaronTools.theory import (GAUSSIAN_COMMENT, GAUSSIAN_CONSTRAINTS,
-                               GAUSSIAN_COORDINATES, GAUSSIAN_GEN_BASIS,
-                               GAUSSIAN_GEN_ECP, GAUSSIAN_POST,
-                               GAUSSIAN_PRE_ROUTE, GAUSSIAN_ROUTE, ORCA_BLOCKS,
-                               ORCA_COMMENT, ORCA_COORDINATES, ORCA_ROUTE,
-                               PSI4_AFTER_JOB, PSI4_BEFORE_GEOM,
-                               PSI4_BEFORE_JOB, PSI4_COMMENT, PSI4_COORDINATES,
-                               PSI4_JOB, PSI4_MOLECULE, PSI4_OPTKING,
-                               PSI4_SETTINGS)
+from AaronTools.theory import (
+    GAUSSIAN_COMMENT,
+    GAUSSIAN_CONSTRAINTS,
+    GAUSSIAN_COORDINATES,
+    GAUSSIAN_GEN_BASIS,
+    GAUSSIAN_GEN_ECP,
+    GAUSSIAN_POST,
+    GAUSSIAN_PRE_ROUTE,
+    GAUSSIAN_ROUTE,
+    ORCA_BLOCKS,
+    ORCA_COMMENT,
+    ORCA_COORDINATES,
+    ORCA_ROUTE,
+    PSI4_AFTER_JOB,
+    PSI4_BEFORE_GEOM,
+    PSI4_BEFORE_JOB,
+    PSI4_COMMENT,
+    PSI4_COORDINATES,
+    PSI4_JOB,
+    PSI4_MOLECULE,
+    PSI4_OPTKING,
+    PSI4_SETTINGS,
+)
 from AaronTools.utils.utils import combine_dicts
 
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
-from .job_types import CrestJob, JobType
+from .job_types import JobType
 from .method import KNOWN_SEMI_EMPIRICAL, Method, SAPTMethod
 
 
@@ -85,15 +99,15 @@ class Theory:
     ]
 
     def __init__(
-            self,
-            charge=0,
-            multiplicity=1,
-            method=None,
-            basis=None,
-            ecp=None,
-            empirical_dispersion=None,
-            grid=None,
-            **kwargs,
+        self,
+        charge=0,
+        multiplicity=1,
+        method=None,
+        basis=None,
+        ecp=None,
+        empirical_dispersion=None,
+        grid=None,
+        **kwargs,
     ):
         if not isinstance(charge, list):
             self.charge = int(charge)
@@ -138,7 +152,9 @@ class Theory:
         # if method, basis, etc aren't the expected classes, make them so
         if method is not None:
             if not isinstance(method, Method):
-                self.method = Method(method, method.upper() in KNOWN_SEMI_EMPIRICAL)
+                self.method = Method(
+                    method, method.upper() in KNOWN_SEMI_EMPIRICAL
+                )
             else:
                 self.method = method
 
@@ -235,11 +251,11 @@ class Theory:
         return True
 
     def make_header(
-            self,
-            geom=None,
-            style="gaussian",
-            conditional_kwargs=None,
-            **kwargs,
+        self,
+        geom=None,
+        style="gaussian",
+        conditional_kwargs=None,
+        **kwargs,
     ):
         """
         geom: Geometry
@@ -256,7 +272,7 @@ class Theory:
         """
         if geom is None:
             geom = self.geometry
-            
+
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
@@ -270,9 +286,9 @@ class Theory:
         other_kw_dict = {}
         for keyword in kwargs:
             if (
-                    keyword.startswith("PSI4_")
-                    or keyword.startswith("ORCA_")
-                    or keyword.startswith("GAUSSIAN_")
+                keyword.startswith("PSI4_")
+                or keyword.startswith("ORCA_")
+                or keyword.startswith("GAUSSIAN_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -320,11 +336,11 @@ class Theory:
         raise NotImplementedError("no get_header method for style: %s" % style)
 
     def make_molecule(
-            self,
-            geom=None,
-            style="gaussian",
-            conditional_kwargs=None,
-            **kwargs,
+        self,
+        geom=None,
+        style="gaussian",
+        conditional_kwargs=None,
+        **kwargs,
     ):
         """
         geom: Geometry()
@@ -334,7 +350,7 @@ class Theory:
         """
         if geom is None:
             geom = self.geometry
-            
+
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
@@ -346,9 +362,9 @@ class Theory:
         other_kw_dict = {}
         for keyword in kwargs:
             if (
-                    keyword.startswith("PSI4_")
-                    or keyword.startswith("ORCA_")
-                    or keyword.startswith("GAUSSIAN_")
+                keyword.startswith("PSI4_")
+                or keyword.startswith("ORCA_")
+                or keyword.startswith("GAUSSIAN_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -391,11 +407,11 @@ class Theory:
         NotImplementedError("no get_molecule method for style: %s" % style)
 
     def make_footer(
-            self,
-            geom=None,
-            style="gaussian",
-            conditional_kwargs=None,
-            **kwargs,
+        self,
+        geom=None,
+        style="gaussian",
+        conditional_kwargs=None,
+        **kwargs,
     ):
         """
         geom: Geometry
@@ -405,7 +421,7 @@ class Theory:
         """
         if geom is None:
             geom = self.geometry
-            
+
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
@@ -417,9 +433,9 @@ class Theory:
         other_kw_dict = {}
         for keyword in kwargs:
             if (
-                    keyword.startswith("PSI4_")
-                    or keyword.startswith("ORCA_")
-                    or keyword.startswith("GAUSSIAN_")
+                keyword.startswith("PSI4_")
+                or keyword.startswith("ORCA_")
+                or keyword.startswith("GAUSSIAN_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -462,10 +478,10 @@ class Theory:
         NotImplementedError("no get_footer method for style: %s" % style)
 
     def get_gaussian_header(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """write Gaussian09/16 input file header (up to charge mult)
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
@@ -485,8 +501,8 @@ class Theory:
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         if (
-                GAUSSIAN_COMMENT not in other_kw_dict
-                or not other_kw_dict[GAUSSIAN_COMMENT]
+            GAUSSIAN_COMMENT not in other_kw_dict
+            or not other_kw_dict[GAUSSIAN_COMMENT]
         ):
             if self.geometry.comment:
                 other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
@@ -571,31 +587,29 @@ class Theory:
                 if option.lower() == "opt":
                     # need to specified CalcFC for gaussian ts optimization
                     if any(
-                            x.lower() == "ts"
-                            for x in other_kw_dict[GAUSSIAN_ROUTE][option]
+                        x.lower() == "ts"
+                        for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ) and not any(
                         x.lower() == y
                         for y in [
-                                "calcfc",
-                                "readfc",
-                                "rcfc",
-                                "readcartesianfc",
-                                "calcall",
-                                "calchffc",
+                            "calcfc",
+                            "readfc",
+                            "rcfc",
+                            "readcartesianfc",
+                            "calcall",
+                            "calchffc",
                         ]
                         for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                     ):
                         other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
 
-                if (
-                        other_kw_dict[GAUSSIAN_ROUTE][option]
-                        or (
-                            other_kw_dict[GAUSSIAN_ROUTE][option] and
-                            len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1 and (
-                                "=" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
-                                or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
-                            )
-                        )
+                if other_kw_dict[GAUSSIAN_ROUTE][option] or (
+                    other_kw_dict[GAUSSIAN_ROUTE][option]
+                    and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
+                    and (
+                        "=" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
+                        or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
+                    )
                 ):
                     out_str += "=("
                     for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
@@ -608,8 +622,8 @@ class Theory:
                     out_str += ")"
 
                 elif (
-                        other_kw_dict[GAUSSIAN_ROUTE][option] and
-                        len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
+                    other_kw_dict[GAUSSIAN_ROUTE][option]
+                    and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
                 ):
                     out_str += "=%s" % other_kw_dict[GAUSSIAN_ROUTE][option][0]
 
@@ -640,10 +654,10 @@ class Theory:
         return out_str
 
     def get_gaussian_molecule(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """
         get molecule specification for gaussian input files
@@ -668,13 +682,14 @@ class Theory:
             other_kw_dict[GAUSSIAN_COORDINATES] = {}
 
         if "coords" not in other_kw_dict[GAUSSIAN_COORDINATES]:
-            other_kw_dict[GAUSSIAN_COORDINATES]["coords"] = self.geometry.coords
+            other_kw_dict[GAUSSIAN_COORDINATES][
+                "coords"
+            ] = self.geometry.coords
 
         s = ""
 
         for atom, coord in zip(
-                self.geometry.atoms,
-                other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
+            self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
             s += "%-2s" % atom.element
             for val in coord:
@@ -690,16 +705,16 @@ class Theory:
             s += "\n"
 
         if (
-                "variables" in other_kw_dict[GAUSSIAN_COORDINATES] and
-                other_kw_dict[GAUSSIAN_COORDINATES]["variables"]
+            "variables" in other_kw_dict[GAUSSIAN_COORDINATES]
+            and other_kw_dict[GAUSSIAN_COORDINATES]["variables"]
         ):
             s += "Variable:\n"
             for var in other_kw_dict[GAUSSIAN_COORDINATES]["variables"]:
                 s += "%4s = %9.5f\n" % tuple(var)
 
         if (
-                "constants" in other_kw_dict[GAUSSIAN_COORDINATES] and
-                other_kw_dict[GAUSSIAN_COORDINATES]["constants"]
+            "constants" in other_kw_dict[GAUSSIAN_COORDINATES]
+            and other_kw_dict[GAUSSIAN_COORDINATES]["constants"]
         ):
             s += "Constant:\n"
             for var in other_kw_dict[GAUSSIAN_COORDINATES]["constants"]:
@@ -711,10 +726,10 @@ class Theory:
         return s
 
     def get_gaussian_footer(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """write footer of gaussian input file"""
 
@@ -739,16 +754,16 @@ class Theory:
         # if method is not semi emperical, basis set might be gen or genecp
         # get basis info (will be written after constraints)
         if (
-                self.method is not None
-                and not self.method.is_semiempirical
-                and self.basis is not None
+            self.method is not None
+            and not self.method.is_semiempirical
+            and self.basis is not None
         ):
             basis_info = self.basis.get_gaussian_basis_info()
 
         elif (
-                self.method is not None
-                and not self.method.is_semiempirical
-                and self.basis is None
+            self.method is not None
+            and not self.method.is_semiempirical
+            and self.basis is None
         ):
             basis_info = {}
             warnings.append("no basis specfied")
@@ -791,10 +806,10 @@ class Theory:
         return out_str
 
     def get_orca_header(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """
         get ORCA input file header
@@ -838,7 +853,7 @@ class Theory:
                 warnings.append(warning)
 
             if any(
-                    "finalgrid" in x.lower() for x in other_kw_dict[ORCA_ROUTE]
+                "finalgrid" in x.lower() for x in other_kw_dict[ORCA_ROUTE]
             ):
                 grid_info[ORCA_ROUTE].pop(1)
 
@@ -908,10 +923,17 @@ class Theory:
                 if any(other_kw_dict[ORCA_BLOCKS][keyword]):
                     if keyword == "base":
                         out_str += "%%%s " % keyword
-                        if isinstance(other_kw_dict[ORCA_BLOCKS][keyword], str):
-                            out_str += "\"%s\"\n" % other_kw_dict[ORCA_BLOCKS][keyword]
+                        if isinstance(
+                            other_kw_dict[ORCA_BLOCKS][keyword], str
+                        ):
+                            out_str += (
+                                '"%s"\n' % other_kw_dict[ORCA_BLOCKS][keyword]
+                            )
                         else:
-                            out_str += "\"%s\"\n" % other_kw_dict[ORCA_BLOCKS][keyword][0]
+                            out_str += (
+                                '"%s"\n'
+                                % other_kw_dict[ORCA_BLOCKS][keyword][0]
+                            )
                     else:
                         out_str += "%%%s\n" % keyword
                         for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
@@ -928,10 +950,10 @@ class Theory:
         return out_str
 
     def get_psi4_header(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """
         write Psi4 input file
@@ -961,7 +983,9 @@ class Theory:
 
         # get basis info if method is not semi empirical
         if not self.method.is_semiempirical and self.basis is not None:
-            basis_info = self.basis.get_psi4_basis_info(isinstance(self.method, SAPTMethod))
+            basis_info = self.basis.get_psi4_basis_info(
+                isinstance(self.method, SAPTMethod)
+            )
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -1046,10 +1070,10 @@ class Theory:
         return out_str
 
     def get_psi4_molecule(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """
         get molecule specification for psi4 input files
@@ -1080,8 +1104,9 @@ class Theory:
 
         s = ""
         if (
-                isinstance(self.method, SAPTMethod) and
-                sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1 > self.multiplicity[0]
+            isinstance(self.method, SAPTMethod)
+            and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
+            > self.multiplicity[0]
         ):
             use_molecule_array = True
             s += "mol = psi4.core.Molecule.from_arrays(\n"
@@ -1090,7 +1115,10 @@ class Theory:
             if PSI4_MOLECULE in other_kw_dict:
                 for keyword in other_kw_dict[PSI4_MOLECULE]:
                     if other_kw_dict[keyword]:
-                        s += "    %s=%s,\n" % (keyword, repr(other_kw_dict[keyword][0]))
+                        s += "    %s=%s,\n" % (
+                            keyword,
+                            repr(other_kw_dict[keyword][0]),
+                        )
 
         else:
             s += "molecule {\n"
@@ -1104,8 +1132,8 @@ class Theory:
                     if other_kw_dict[PSI4_MOLECULE][keyword]:
                         opt = other_kw_dict[PSI4_MOLECULE][keyword][0]
                         if (
-                                "pubchem" in keyword.lower() and
-                                not keyword.strip().endswith(":")
+                            "pubchem" in keyword.lower()
+                            and not keyword.strip().endswith(":")
                         ):
                             keyword = keyword.strip() + ":"
                             pubchem = True
@@ -1125,7 +1153,7 @@ class Theory:
             seps = []
             for i, m1 in enumerate(self.geometry.components[:-1]):
                 seps.append(0)
-                for m2 in monomers[:i + 1]:
+                for m2 in monomers[: i + 1]:
                     seps[-1] += len(m2)
 
             s += "    fragment_separators=%s,\n" % repr(seps)
@@ -1159,7 +1187,9 @@ class Theory:
                             else:
                                 s += "%9.5f," % val
                         else:
-                            warnings.append("unknown coordinate type: %s" % type(val))
+                            warnings.append(
+                                "unknown coordinate type: %s" % type(val)
+                            )
                     s += "\n"
 
             s += "    ],\n"
@@ -1168,9 +1198,18 @@ class Theory:
 
             if len(atoms_in_monomer) != len(self.geometry.atoms):
                 from AaronTools.finders import NotAny
+
                 warnings.append(
-                    "there are atoms not in any monomers: %s" % (
-                        ", ".join([atom.name for atom in self.geometry.find(NotAny(atoms_in_monomer))])
+                    "there are atoms not in any monomers: %s"
+                    % (
+                        ", ".join(
+                            [
+                                atom.name
+                                for atom in self.geometry.find(
+                                    NotAny(atoms_in_monomer)
+                                )
+                            ]
+                        )
                     )
                 )
 
@@ -1200,11 +1239,15 @@ class Theory:
                         elif isinstance(val, str):
                             s += "    %9s" % val
                         else:
-                            warnings.append("unknown coordinate type: %s" % type(val))
+                            warnings.append(
+                                "unknown coordinate type: %s" % type(val)
+                            )
                     s += "\n"
 
             if "variables" in other_kw_dict[PSI4_COORDINATES]:
-                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES]["variables"]:
+                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES][
+                    "variables"
+                ]:
                     if use_bohr and angstrom:
                         val /= UNIT.A0_TO_BOHR
                     s += "     %3s = %9.5f\n" % (name, val)
@@ -1213,16 +1256,24 @@ class Theory:
 
             if len(atoms_in_monomer) != len(self.geometry.atoms):
                 from AaronTools.finders import NotAny
+
                 warnings.append(
-                    "there are atoms not in any monomers: %s" % (
-                        ", ".join([atom.name for atom in self.geometry.find(NotAny(atoms_in_monomer))])
+                    "there are atoms not in any monomers: %s"
+                    % (
+                        ", ".join(
+                            [
+                                atom.name
+                                for atom in self.geometry.find(
+                                    NotAny(atoms_in_monomer)
+                                )
+                            ]
+                        )
                     )
                 )
 
         elif not pubchem:
             for atom, coord in zip(
-                    self.geometry.atoms,
-                    other_kw_dict[PSI4_COORDINATES]["coords"]
+                self.geometry.atoms, other_kw_dict[PSI4_COORDINATES]["coords"]
             ):
                 s += "    %2s" % atom.element
                 for val in coord:
@@ -1232,11 +1283,15 @@ class Theory:
                     elif isinstance(val, str):
                         s += " %9s" % val
                     else:
-                        warnings.append("unknown coordinate type: %s" % type(val))
+                        warnings.append(
+                            "unknown coordinate type: %s" % type(val)
+                        )
                 s += "\n"
 
             if "variables" in other_kw_dict[PSI4_COORDINATES]:
-                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES]["variables"]:
+                for (name, val, angstrom) in other_kw_dict[PSI4_COORDINATES][
+                    "variables"
+                ]:
                     if use_bohr and angstrom:
                         val /= UNIT.A0_TO_BOHR
                     s += "     %3s = %9.5f\n" % (name, val)
@@ -1250,10 +1305,10 @@ class Theory:
         return s
 
     def get_psi4_footer(
-            self,
-            return_warnings=False,
-            conditional_kwargs=None,
-            **other_kw_dict,
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
     ):
         """
         get psi4 footer
@@ -1292,12 +1347,9 @@ class Theory:
         # settings
         # a setting will only get added if its list has at least
         # one item, but only the first item will be used
-        if (
-                PSI4_SETTINGS in other_kw_dict and
-                any(
-                    other_kw_dict[PSI4_SETTINGS][setting]
-                    for setting in other_kw_dict[PSI4_SETTINGS]
-                )
+        if PSI4_SETTINGS in other_kw_dict and any(
+            other_kw_dict[PSI4_SETTINGS][setting]
+            for setting in other_kw_dict[PSI4_SETTINGS]
         ):
             out_str += "set {\n"
             for setting in other_kw_dict[PSI4_SETTINGS]:
@@ -1305,36 +1357,39 @@ class Theory:
                     if isinstance(other_kw_dict[PSI4_SETTINGS][setting], str):
                         val = other_kw_dict[PSI4_SETTINGS][setting]
                     else:
-                        if (
-                                len(other_kw_dict[PSI4_SETTINGS][setting]) == 1 and
-                                (
-                                    not any(
-                                        array_setting == setting.strip().lower()
-                                        for array_setting in self.FORCED_PSI4_ARRAY
-                                    )
-                                    or any(
-                                        single_setting == setting.strip().lower()
-                                        for single_setting in self.FORCED_PSI4_SINGLE
-                                    )
-                                )
+                        if len(
+                            other_kw_dict[PSI4_SETTINGS][setting]
+                        ) == 1 and (
+                            not any(
+                                array_setting == setting.strip().lower()
+                                for array_setting in self.FORCED_PSI4_ARRAY
+                            )
+                            or any(
+                                single_setting == setting.strip().lower()
+                                for single_setting in self.FORCED_PSI4_SINGLE
+                            )
                         ):
                             val = other_kw_dict[PSI4_SETTINGS][setting][0]
                         else:
                             # array of values
                             val = "["
-                            val += ",".join(["%s" % v for v in other_kw_dict[PSI4_SETTINGS][setting]])
+                            val += ",".join(
+                                [
+                                    "%s" % v
+                                    for v in other_kw_dict[PSI4_SETTINGS][
+                                        setting
+                                    ]
+                                ]
+                            )
                             val += "]"
 
                     out_str += "    %-20s    %s\n" % (setting, val)
 
             out_str += "}\n\n"
 
-        if (
-                PSI4_OPTKING in other_kw_dict and
-                any(
-                    other_kw_dict[PSI4_OPTKING][setting]
-                    for setting in other_kw_dict[PSI4_OPTKING]
-                )
+        if PSI4_OPTKING in other_kw_dict and any(
+            other_kw_dict[PSI4_OPTKING][setting]
+            for setting in other_kw_dict[PSI4_OPTKING]
         ):
             out_str += "set optking {\n"
             for setting in other_kw_dict[PSI4_OPTKING]:
@@ -1365,11 +1420,11 @@ class Theory:
         if PSI4_JOB in other_kw_dict:
             for func in other_kw_dict[PSI4_JOB].keys():
                 if any(
-                        [
-                            "return_wfn" in kwarg
-                            and ("True" in kwarg or "on" in kwarg)
-                            for kwarg in other_kw_dict[PSI4_JOB][func]
-                        ]
+                    [
+                        "return_wfn" in kwarg
+                        and ("True" in kwarg or "on" in kwarg)
+                        for kwarg in other_kw_dict[PSI4_JOB][func]
+                    ]
                 ):
                     out_str += "nrg, wfn = %s('%s'" % (func, method)
                 else:
