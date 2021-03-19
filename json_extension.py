@@ -222,6 +222,9 @@ class ATEncoder(json.JSONEncoder):
     
                     rv["ecp"]["file"].append(basis.user_defined)
 
+            if obj.kwargs:
+                rv["other"] = obj.kwargs
+
         return rv
 
 
@@ -388,5 +391,8 @@ class ATDecoder(json.JSONDecoder):
                         user_defined=file,
                     )
                 )
+        
+        if "other" in obj:
+            rv.kwargs = obj["other"]
         
         return rv

@@ -124,14 +124,12 @@ class Basis:
             for finder in obj.ele_selection:
                 if isinstance(finder, str):
                     if finder not in obj2.ele_selection:
-                        print("bad ele", finder)
                         return False
                 else:
                     for finder2 in obj2.ele_selection:
                         if repr(finder) == repr(finder2):
                             break
                     else:
-                        print("finder not in other", finder, obj2.ele_selection)
                         return False
         
         return True

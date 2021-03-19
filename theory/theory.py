@@ -192,6 +192,8 @@ class Theory:
                 super().__setattr__(attr, IntegrationGrid(val))
             else:
                 super().__setattr__(attr, val)
+        elif attr == "job_type" and isinstance(val, JobType):
+            super().__setattr__(attr, [val])
         else:
             super().__setattr__(attr, val)
 

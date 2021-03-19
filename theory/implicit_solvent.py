@@ -434,7 +434,7 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model for model in KNOWN_GAUSSIAN_MODELS
+                self.name.upper() == model for model in self.KNOWN_GAUSSIAN_MODELS
         ):
             warnings.append(
                 "solvent model is not available in Gaussian: %s\nuse one of: %s"
@@ -486,7 +486,7 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model for model in KNOWN_ORCA_MODELS
+                self.name.upper() == model for model in self.KNOWN_ORCA_MODELS
         ):
             warnings.append(
                 "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
