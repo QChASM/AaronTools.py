@@ -3,6 +3,7 @@
 import sys
 from os.path import splitext
 import argparse
+from warnings import warn
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
@@ -742,20 +743,24 @@ for f in args.infile:
     other_kwargs = combine_dicts(kwargs, other_kwargs)
 
     if args.outfile:
-        geom.write(
+        warnings = geom.write(
             append=True,
             outfile=args.outfile.replace("$INFILE", get_filename(f)),
             style=style,
             theory=theory,
+            return_warnings=True,
             **other_kwargs
         )
     else:
-        print(
-            geom.write(
-                append=True,
-                outfile=False,
-                style=style,
-                theory=theory,
-                **other_kwargs
-            )
+        out, warnings = geom.write(
+            append=True,
+            outfile=False,
+            style=style,
+            theory=theory,
+            return_warnings=True,
+            **other_kwargs
         )
+        print(out)
+    
+    for warning in warnings:
+        warn(warning)

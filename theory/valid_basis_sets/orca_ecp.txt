@@ -1,0 +1,8 @@
+def2-ECP
+SK-MCDHF-RSC
+HayWadt
+def2-SD
+def-SD
+SDD
+LANL1
+LANL2

@@ -231,7 +231,7 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, theory, outfile=None, **kwargs):
+    def write_com(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
         fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
@@ -242,9 +242,12 @@ class FileWriter:
                 break
 
         # get file content string
-        s = theory.make_header(geom, **kwargs)
-        s += theory.make_molecule(geom, **kwargs)
-        s += theory.make_footer(geom, **kwargs)
+        header, header_warnings = theory.make_header(geom, return_warnings=True, **kwargs)
+        mol, mol_warnings = theory.make_molecule(geom, return_warnings=True, **kwargs)
+        footer, footer_warnings = theory.make_footer(geom, return_warnings=True, **kwargs)
+
+        s = header + mol + footer
+        warnings = header_warnings + mol_warnings + footer_warnings
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
@@ -255,17 +258,21 @@ class FileWriter:
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
+            if return_warnings:
+                return s, warnings
             return s
         else:
             with open(outfile, "w") as f:
                 f.write(s)
 
+        if return_warnings:
+            return warnings
         return
 
     @classmethod
-    def write_inp(cls, geom, theory, outfile=None, **kwargs):
+    def write_inp(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
-        s = theory.make_header(geom, style="orca", **kwargs)
+        s, warnings = theory.make_header(geom, style="orca", return_warnings=True, **kwargs)
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
@@ -280,13 +287,17 @@ class FileWriter:
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
+            if return_warnings:
+                return s, warnings
             return s
         else:
             with open(outfile, "w") as f:
                 f.write(s)
+        if return_warnings:
+            return warnings
 
     @classmethod
-    def write_in(cls, geom, theory, outfile=None, **kwargs):
+    def write_in(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
         """
         can accept "monomers" as a kwarg
         this should be a list of lists of atoms corresponding to the
@@ -301,9 +312,12 @@ class FileWriter:
         else:
             monomers = None
 
-        s = theory.make_header(geom, style="psi4", **kwargs)
-        s += theory.make_molecule(geom, style="psi4", **kwargs)
-        s += theory.make_footer(geom, style="psi4", **kwargs)
+        header, header_warnings = theory.make_header(geom, style="psi4", return_warnings=True, **kwargs)
+        mol, mol_warnings = theory.make_molecule(geom, style="psi4", return_warnings=True, **kwargs)
+        footer, footer_warnings = theory.make_footer(geom, style="psi4", return_warnings=True, **kwargs)
+
+        s = header + mol + footer
+        warnings = header_warnings + mol_warnings + footer_warnings
 
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
@@ -314,10 +328,14 @@ class FileWriter:
             with open(fname, "w") as f:
                 f.write(s)
         elif outfile is False:
+            if return_warnings:
+                return s, warnings
             return s
         else:
             with open(outfile, "w") as f:
                 f.write(s)
+        if return_warnings:
+            return warnings
 
 
 class FileReader:

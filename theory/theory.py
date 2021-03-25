@@ -255,6 +255,7 @@ class Theory:
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        sanity_check_method=False,
         **kwargs,
     ):
         """
@@ -268,6 +269,9 @@ class Theory:
             conditional_kwargs = {GAUSSIAN_ROUTE:{'opt':['noeigentest']}}
             will not add opt=noeigentest to the route
             but if it's an OptimizationJob, it will add opt=noeigentest
+        sanity_check_method: bool, check if method is available in recent version
+                             of the target software package (Psi4 checks when its
+                             footer is created)
         kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*
         """
         if geom is None:
@@ -411,12 +415,15 @@ class Theory:
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        sanity_check_method=False,
         **kwargs,
     ):
         """
         geom: Geometry
         style: str, gaussian or psi4
         conditional_kwargs: dict, see make_header
+        sanity_check_method: bool, check if method is available in recent version
+                             of the target software package (Psi4 only)
         kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
         if geom is None:
@@ -483,10 +490,12 @@ class Theory:
         conditional_kwargs=None,
         **other_kw_dict,
     ):
-        """write Gaussian09/16 input file header (up to charge mult)
+        """
+        write Gaussian09/16 input file header (up to charge mult)
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
-        returns warnings if a certain feature is not available in Gaussian"""
+        returns warnings if a certain feature is not available in Gaussian
+        """
 
         if conditional_kwargs is None:
             conditional_kwargs = {}
@@ -560,9 +569,13 @@ class Theory:
             func, warning = self.method.get_gaussian()
             if warning is not None:
                 warnings.append(warning)
+            warning = self.method.sanity_check_method(func, "gaussian")
+            if warning:
+                warnings.append(warning)
             out_str += "%s" % func
             if not self.method.is_semiempirical and self.basis is not None:
-                basis_info = self.basis.get_gaussian_basis_info()
+                basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
+                warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
                 # in two basis sets or left out of any
                 if self.geometry is not None:
@@ -758,7 +771,7 @@ class Theory:
             and not self.method.is_semiempirical
             and self.basis is not None
         ):
-            basis_info = self.basis.get_gaussian_basis_info()
+            basis_info, warnings = self.basis.get_gaussian_basis_info()
 
         elif (
             self.method is not None
@@ -835,7 +848,8 @@ class Theory:
 
         # if method isn't semi-empirical, get basis info to write later
         if not self.method.is_semiempirical and self.basis is not None:
-            basis_info = self.basis.get_orca_basis_info()
+            basis_info, basis_warnings = self.basis.get_orca_basis_info()
+            warnings.extend(basis_warnings)
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -895,6 +909,9 @@ class Theory:
         if self.method is not None:
             func, warning = self.method.get_orca()
             if warning is not None:
+                warnings.append(warning)
+            warning = self.method.sanity_check_method(func, "orca")
+            if warning:
                 warnings.append(warning)
             out_str += " %s" % func
 
@@ -983,9 +1000,10 @@ class Theory:
 
         # get basis info if method is not semi empirical
         if not self.method.is_semiempirical and self.basis is not None:
-            basis_info = self.basis.get_psi4_basis_info(
+            basis_info, basis_warnings = self.basis.get_psi4_basis_info(
                 isinstance(self.method, SAPTMethod)
             )
+            warnings.extend(basis_warnings)
             if self.geometry is not None:
                 warning = self.basis.check_for_elements(self.geometry)
                 if warning is not None:
@@ -1405,6 +1423,10 @@ class Theory:
         method = self.method.get_psi4()[0]
         if self.empirical_dispersion is not None:
             method += self.empirical_dispersion.get_psi4()[0]
+
+        warning = self.method.sanity_check_method(method, "psi4")
+        if warning:
+            warnings.append(warning)
 
         # after job stuff - replace METHOD with method
         if PSI4_BEFORE_JOB in other_kw_dict:
