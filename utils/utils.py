@@ -201,6 +201,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
         of the d1 key and d2 key (only for combined items)
     dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
     """
+    from copy import deepcopy
     d1 = args[0]
     d2 = args[1:]
     if len(d2) > 1:
@@ -231,7 +232,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
     for case_key, key in zip(case_keys_1, keys_1):
         # if the key is only in d1, add the item to out
         if key in keys_1 and key not in keys_2:
-            out[case_key] = d1[case_key]
+            out[case_key] = deepcopy(d1[case_key])
         # if the key is in both, combine the items
         elif key in keys_1 and key in keys_2:
             key_2 = case_keys_2[keys_2.index(key)]
@@ -243,7 +244,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
                 )
             else:
                 try:
-                    out[key] = d1[case_key] + d2[key_2]
+                    out[key] = deepcopy(d1[case_key]) + deepcopy(d2[key_2])
                 except TypeError:
                     out[key] = resolve_concatenation(d1[case_key], d2[key_2])
 

@@ -138,7 +138,47 @@ class Basis:
         """sets self's elements for the geometry"""
         atoms = geometry.find(self.ele_selection, NotAny(*self.not_anys))
         elements = set([atom.element for atom in atoms])
-        self.elements = elements
+        self.elements = sorted(elements)
+
+    @staticmethod
+    def sanity_check_basis(name, program):
+        import os.path
+        from re import match, IGNORECASE
+        from difflib import SequenceMatcher as seqmatch
+        from numpy import argsort, loadtxt
+        from AaronTools.const import AARONTOOLS
+        
+        warning = None
+        
+        if program.lower() == "gaussian":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_basis_sets", "gaussian.txt"), dtype=str)
+        elif program.lower() == "orca":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_basis_sets", "orca.txt"), dtype=str)
+        elif program.lower() == "psi4":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_basis_sets", "psi4.txt"), dtype=str)
+        else:
+            raise NotImplementedError("cannot validate basis names for %s" % program)
+        
+        if not any(
+            # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
+            match(
+                "%s$" % (basis.replace("(", "\(").replace(")", "\)")).replace("*", "\*").replace("+", "\+"), name, flags=IGNORECASE
+            ) for basis in valid
+        ):
+            warning = "basis '%s' may not be available in %s\n" % (name, program) + \
+            "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
+            
+            # try to suggest alternatives that have similar names
+            simm = [
+                seqmatch(
+                    lambda x: x in "-_()/", name.upper(), test_basis.upper()
+                ).ratio() for test_basis in valid
+            ]
+            ndx = argsort(simm)[-5:][::-1]
+            warning += "\npossible misspelling of:\n"
+            warning += "\n".join([valid[i] for i in ndx])
+
+        return warning
 
     @staticmethod
     def get_gaussian(name):
@@ -186,6 +226,43 @@ class ECP(Basis):
 
         return super().__eq__(other)
 
+    @staticmethod
+    def sanity_check_basis(name, program):
+        import os.path
+        from re import match, IGNORECASE
+        from difflib import SequenceMatcher as seqmatch
+        from numpy import argsort, loadtxt
+        from AaronTools.const import AARONTOOLS
+        
+        warning = None
+        
+        if program.lower() == "gaussian":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_basis_sets", "gaussian_ecp.txt"), dtype=str)
+        elif program.lower() == "orca":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_basis_sets", "orca_ecp.txt"), dtype=str)
+        else:
+            raise NotImplementedError("cannot validate basis names for %s" % program)
+        
+        if not any(
+            # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
+            match(
+                "%s$" % (basis.replace("(", "\(").replace(")", "\)")).replace("*", "\*").replace("+", "\+"), name, flags=IGNORECASE
+            ) for basis in valid
+        ):
+            warning = "basis '%s' may not be available in %s\n" % (name, program) + \
+            "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
+            
+            # try to suggest alternatives that have similar names
+            simm = [
+                seqmatch(
+                    lambda x: x in "-_()/", name.upper(), test_basis.upper()
+                ).ratio() for test_basis in valid
+            ]
+            ndx = argsort(simm)[-5:][::-1]
+            warning += "\npossible misspelling of:\n"
+            warning += "\n".join([valid[i] for i in ndx])
+
+        return warning
 
 class BasisSet:
     """used to more easily get basis set info for writing input files"""
@@ -357,6 +434,7 @@ class BasisSet:
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""
         info = {}
+        warnings = []
 
         if self.basis is not None:
             #check if we need to use gen or genecp:
@@ -367,7 +445,11 @@ class BasisSet:
                     all([basis == self.basis[0] for basis in self.basis])
                     and not self.basis[0].user_defined and self.ecp is None
             ):
-                info[GAUSSIAN_ROUTE] = "/%s" % Basis.get_gaussian(self.basis[0].name)
+                basis_name = Basis.get_gaussian(self.basis[0].name)
+                warning = self.basis[0].sanity_check_basis(basis_name, "gaussian")
+                if warning:
+                    warnings.append(warning)
+                info[GAUSSIAN_ROUTE] = "/%s" % basis_name
             else:
                 if self.ecp is None or all(not ecp.elements for ecp in self.ecp):
                     info[GAUSSIAN_ROUTE] = "/gen"
@@ -381,7 +463,11 @@ class BasisSet:
                     if basis.elements and not basis.user_defined:
                         out_str += " ".join([ele for ele in basis.elements])
                         out_str += " 0\n"
-                        out_str += Basis.get_gaussian(basis.name)
+                        basis_name = Basis.get_gaussian(basis.name)
+                        warning = basis.sanity_check_basis(basis_name, "gaussian")
+                        if warning:
+                            warnings.append(warning)
+                        out_str += basis_name
                         out_str += "\n****\n"
 
                 for basis in self.basis:
@@ -414,7 +500,7 @@ class BasisSet:
                             else:
                                 out_str += "@%s\n" % basis.user_defined
 
-                    info[GAUSSIAN_GEN_BASIS] = out_str
+                info[GAUSSIAN_GEN_BASIS] = out_str
 
         if self.ecp is not None:
             out_str = ""
@@ -422,7 +508,11 @@ class BasisSet:
                 if basis.elements and not basis.user_defined:
                     out_str += " ".join([ele for ele in basis.elements])
                     out_str += " 0\n"
-                    out_str += Basis.get_gaussian(basis.name)
+                    basis_name = Basis.get_gaussian(basis.name)
+                    warning = basis.sanity_check_basis(basis_name, "gaussian")
+                    if warning:
+                        warnings.append(warning)
+                    out_str += basis_name
                     out_str += "\n"
 
             for basis in self.ecp:
@@ -459,12 +549,13 @@ class BasisSet:
             if self.basis is None:
                 info[GAUSSIAN_ROUTE] = " Pseudo=Read"
 
-        return info
+        return info, warnings
 
     def get_orca_basis_info(self):
         """return dict for get_orca_header"""
         #TODO: warn if basis should be f12
         info = {ORCA_BLOCKS:{'basis':[]}, ORCA_ROUTE:[]}
+        warnings = []
 
         first_basis = []
 
@@ -474,7 +565,11 @@ class BasisSet:
                     if basis.aux_type is None:
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name)
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -488,7 +583,11 @@ class BasisSet:
                                 out_str = "newGTO            %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name)
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -497,7 +596,11 @@ class BasisSet:
                     elif basis.aux_type.upper() == "C":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = "%s/C" % Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name) + "/C"
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = "%s" % basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -511,7 +614,12 @@ class BasisSet:
                                 out_str = "newAuxCGTO        %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s/C\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name) + "/C"
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+    
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -520,7 +628,11 @@ class BasisSet:
                     elif basis.aux_type.upper() == "J":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = "%s/J" % Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name) + "/J"
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = "%s" % basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -534,7 +646,12 @@ class BasisSet:
                                 out_str = "newAuxJGTO        %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s/J\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name) + "/J"
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -543,7 +660,11 @@ class BasisSet:
                     elif basis.aux_type.upper() == "JK":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = "%s/JK" % Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name) + "/JK"
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = "%s" % basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -557,7 +678,12 @@ class BasisSet:
                                 out_str = "newAuxJKGTO       %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s/JK\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name) + "/JK"
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -566,7 +692,11 @@ class BasisSet:
                     elif basis.aux_type.upper() == "CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = "%s-CABS" % Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name) + "-CABS"
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = "%s" % basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -580,7 +710,12 @@ class BasisSet:
                                 out_str = "newCABSGTO        %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s-CABS\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name) + "-CABS"
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -589,7 +724,11 @@ class BasisSet:
                     elif basis.aux_type.upper() == "OPTRI CABS":
                         if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                out_str = "%s-OptRI" % Basis.get_orca(basis.name)
+                                basis_name = Basis.get_orca(basis.name) + "-OptRI"
+                                warning = Basis.sanity_check_basis(basis_name, "orca")
+                                if warning:
+                                    warnings.append(warning)
+                                out_str = "%s" % basis_name
                                 info[ORCA_ROUTE].append(out_str)
                                 first_basis.append(basis.aux_type)
 
@@ -603,7 +742,12 @@ class BasisSet:
                                 out_str = "newCABSGTO        %-2s " % ele
 
                                 if not basis.user_defined:
-                                    out_str += "\"%s-OptRI\" end" % Basis.get_orca(basis.name)
+                                    basis_name = Basis.get_orca(basis.name) + "-OptRI"
+                                    warning = Basis.sanity_check_basis(basis_name, "orca")
+                                    if warning:
+                                        warnings.append(warning)
+
+                                    out_str += "\"%s\" end" % basis_name
                                 else:
                                     out_str += "\"%s\" end" % basis.user_defined
 
@@ -614,7 +758,11 @@ class BasisSet:
                 if basis.elements and not basis.user_defined:
                     for ele in basis.elements:
                         out_str = "newECP            %-2s " % ele
-                        out_str += "\"%s\" end" % Basis.get_orca(basis.name)
+                        basis_name = Basis.get_orca(basis.name)
+                        warning = basis.sanity_check_basis(basis_name, "orca")
+                        if warning:
+                            warnings.append(warning)
+                        out_str += "\"%s\" end" % basis_name
 
                         info[ORCA_BLOCKS]['basis'].append(out_str)
 
@@ -624,7 +772,7 @@ class BasisSet:
 
                     info[ORCA_BLOCKS]['basis'].append(out_str)
 
-        return info
+        return info, warnings
 
     def get_psi4_basis_info(self, sapt=False):
         """
@@ -635,6 +783,7 @@ class BasisSet:
         out_str2 = None
         out_str3 = None
         out_str4 = None
+        warnings = []
 
         first_basis = []
 
@@ -644,7 +793,11 @@ class BasisSet:
                     first_basis.append(basis.aux_type)
                     if basis.aux_type is None or basis.user_defined:
                         out_str += "basis {\n"
-                        out_str += "    assign    %s\n" % Basis.get_psi4(basis.name)
+                        basis_name = Basis.get_psi4(basis.name)
+                        warning = basis.sanity_check_basis(basis_name, "psi4")
+                        if warning and not basis.user_defined:
+                            warnings.append(warning)
+                        out_str += "    assign    %s\n" % basis_name
 
                     elif basis.aux_type.upper() == "JK":
                         if sapt:
@@ -652,38 +805,64 @@ class BasisSet:
                         else:
                             out_str4 = "df_basis_scf {\n"
 
-                        out_str4 += "    assign    %s-jkfit\n" % Basis.get_psi4(basis.name)
+                        basis_name = Basis.get_psi4(basis.name) + "-jkfit"
+                        warning = basis.sanity_check_basis(basis_name, "psi4")
+                        if warning and not basis.user_defined:
+                            warnings.append(warning)
+                        out_str4 += "    assign    %s\n" % basis_name
 
                     elif basis.aux_type.upper() == "RI":
                         out_str2 = "df_basis_%s {\n"
                         if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
-                            out_str2 += "    assign    %s-rifit\n" % Basis.get_psi4(basis.name)
+                            basis_name = Basis.get_psi4(basis.name) + "-rifit"
+                            warning = basis.sanity_check_basis(basis_name, "psi4")
+                            if warning and not basis.user_defined:
+                                warnings.append(warning)
+ 
+                            out_str2 += "    assign    %s\n" % basis_name
                         else:
-                            out_str2 += "    assign    %s-ri\n" % Basis.get_psi4(basis.name)
+                            basis_name = Basis.get_psi4(basis.name) + "-ri"
+                            warning = basis.sanity_check_basis(basis_name, "psi4")
+                            if warning and not basis.user_defined:
+                                warnings.append(warning)
+ 
+                            out_str2 += "    assign    %s\n" % basis_name
 
                 else:
                     if basis.aux_type is None or basis.user_defined:
+                        basis_name = Basis.get_psi4(basis.name)
+                        warning = basis.sanity_check_basis(basis_name, "psi4")
+                        if warning and not basis.user_defined:
+                            warnings.append(warning)
                         for ele in basis.elements:
-                            out_str += "    assign %-2s %s\n" % (ele, Basis.get_psi4(basis.name))
+                            out_str += "    assign %-2s %s\n" % (ele, basis_name)
 
                     elif basis.aux_type.upper() == "JK":
+                        basis_name = Basis.get_psi4(basis.name) + "-jkfit"
+                        warning = basis.sanity_check_basis(basis_name, "psi4")
+                        if warning and not basis.user_defined:
+                            warnings.append(warning)
                         for ele in basis.elements:
-                            out_str4 += "    assign %-2s %s-jkfit\n" % (
+                            out_str4 += "    assign %-2s %s\n" % (
                                 ele,
-                                Basis.get_psi4(basis.name),
+                                basis_name,
                             )
 
                     elif basis.aux_type.upper() == "RI":
+                        basis_name = Basis.get_psi4(basis.name)
+                        if basis_name.lower() == "sto-3g" or basis_name.lower() == "3-21g":
+                            basis_name += "-rifit"
+                        else:
+                            basis_name += "-ri"
+                        warning = basis.sanity_check_basis(basis_name, "psi4")
+                        if warning and not basis.user_defined:
+                            warnings.append(warning)
+
                         for ele in basis.elements:
                             if basis.name.lower() == "sto-3g" or basis.name.lower() == "3-21g":
                                 out_str2 += "    assign %-2s %s-rifit\n" % (
                                     ele,
-                                    Basis.get_psi4(basis.name),
-                                )
-                            else:
-                                out_str2 += "    assign %-2s %s-ri\n" % (
-                                    ele,
-                                    Basis.get_psi4(basis.name),
+                                    basis_name,
                                 )
 
             if any(basis.user_defined for basis in self.basis):
@@ -721,7 +900,7 @@ class BasisSet:
         else:
             info = {}
 
-        return info
+        return info, warnings
 
     def check_for_elements(self, geometry):
         """checks to make sure each element is in a basis set"""

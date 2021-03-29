@@ -23,8 +23,56 @@ class Method:
             self.is_semiempirical == other.is_semiempirical
         )
 
+    @staticmethod
+    def sanity_check_method(name, program):
+        """
+        check to see if method is available in the specified program
+        name - str, name of method
+        program, str, gaussian, orca or psi4
+        """
+        import os.path
+        from re import match, IGNORECASE
+        from difflib import SequenceMatcher as seqmatch
+        from numpy import argsort, loadtxt
+        from AaronTools.const import AARONTOOLS
+        
+        warning = None
+        
+        prefix = ""
+        if program.lower() == "gaussian":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "gaussian.txt"), dtype=str)
+            prefix = "(?:RO|R|U)?"
+        elif program.lower() == "orca":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "orca.txt"), dtype=str)
+        elif program.lower() == "psi4":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "psi4.txt"), dtype=str)
+        else:
+            raise NotImplementedError("cannot validate method names for %s" % program)
+        
+        if not any(
+            # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
+            match(
+                "%s%s$" % (prefix, method.replace("(", "\(").replace(")", "\)")), name, flags=IGNORECASE
+            ) for method in valid
+        ):
+            warning = "method '%s' may not be available in %s\n" % (name, program) + \
+            "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
+            
+            # try to suggest alternatives that have similar names
+            simm = [
+                seqmatch(
+                    lambda x: x in "-_()/", name.upper(), test_method.upper()
+                ).ratio() for test_method in valid
+            ]
+            ndx = argsort(simm)[-5:][::-1]
+            warning += "\npossible misspelling of:\n"
+            warning += "\n".join([valid[i] for i in ndx])
+
+        return warning
+
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""
+        warning = None
         if self.name.lower() == "ωb97x-d" or self.name.lower() == "wb97x-d":
             return ("wB97XD", None)
         elif self.name == "Gaussian's B3LYP":
@@ -42,11 +90,13 @@ class Method:
             return ("wB97XD", "ωB97X-D3 is not available in Gaussian, switching to ωB97X-D2")
         elif self.name.lower() == "b3lyp":
             return ("B3LYP", None)
-
-        return self.name.replace('ω', 'w'), None
+        
+        name = self.name.replace('ω', 'w')
+        return name, warning
 
     def get_orca(self):
         """maps proper functional name to one ORCA accepts"""
+        warning = None
         if (
                 self.name == "ωB97X-D" or
                 any(
@@ -67,7 +117,8 @@ class Method:
         elif self.name.upper() == "PBE1PBE":
             return ("PBE0", None)
 
-        return self.name.replace('ω', 'w'), None
+        name = self.name.replace('ω', 'w')
+        return name, warning
 
     def get_psi4(self):
         """maps proper functional name to one Psi4 accepts"""
@@ -81,6 +132,9 @@ class Method:
             return ("M06-2X", None)
         elif self.name.upper() == "M06L":
             return ("M06-L", None)
+
+        # the functionals havent been combined with dispersion yet, so
+        # we aren't checking if the method is available
 
         return self.name.replace('ω', 'w'), None
 
