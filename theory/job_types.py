@@ -628,9 +628,15 @@ class OptimizationJob(JobType):
         return out
 
     def get_xtb(self, config):
-        rv = ""
+        """
+        Generates dictionaries used to generate xcontrol file and command line options
+
+        Returns: dict(xcontrol), dict(cmdline)
+        """
+        xcontrol = {}
+        cmdline = {}
+        # only put constraints in xcontrol file so this works with Crest also
         if self.constraints:
-            force = config["Job"].get("force_constant", fallback=0.5)
             constraints = it.chain.from_iterable(*self.constraints.values())
             frozen = {
                 str(self.geometry.atoms.index(c) + 1) for c in constraints
@@ -642,23 +648,113 @@ class OptimizationJob(JobType):
                 if a not in constraints
             }
             relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
-            rv += "$constrain\n"
-            rv += "    atoms: {}\n".format(frozen)
-            rv += "    force constant={}\n".format(force)
-            rv += "    referenct=ref.xyz\n"
-            rv += "$metadyn\n"
-            rv += "    atoms: {}\n".format(relaxed)
-        for section in config:
-            for option, value in config[section].items():
-                if "charge" in option:
-                    rv += "$chrg {}\n".format(value)
-                if "multiplicity" in option:
-                    rv += "$spin {}\n".format(int(value) - 1)
-                if "temperature" in option:
-                    rv += "$thermo\n"
-                    rv += "    temp={}".format(value)
-        rv += "$end\n"
-        return rv
+            xcontrol.setdefault("constrain", {})
+            xcontrol["constrain"]["atoms"] = frozen
+            xcontrol["constrain"]["force constant"] = config["Job"].get(
+                "constrain_force", fallback="0.5"
+            )
+            xcontrol["constrain"]["reference"] = config["Job"].get(
+                "constrain_ref", fallback="ref.xyz"
+            )
+            xcontrol.setdefault("metadyn", {})
+            xcontrol["metadyn"]["atoms"] = relaxed
+
+        style = config["Job"]["exec_type"]
+        if "charge" in config["Theory"]:
+            cmdline["chrg"] = config["Theory"]["charge"]
+        if "multiplicity" in config["Theory"]:
+            cmdline["uhf"] = str(int(config["Theory"]["multiplicity"]) - 1)
+        if "gfn" in config["Job"]:
+            cmdline["gfn"] = config["Job"]["gfn"]
+        if "temperature" in config["Theory"]:
+            cmdline["etemp"] = config["Theory"]["temperature"]
+            if style == "crest":
+                cmdline["temp"] = cmdline["etemp"]
+                del cmdline["etemp"]
+        if (
+            "solvent_model" in config["Theory"]
+            and config["Theory"]["solvent_model"] == "alpb"
+        ):
+            solvent = config["Theory"]["solvent"].split()
+            if len(solvent) > 1:
+                solvent, ref = solvent
+            else:
+                ref = "bar1M"
+            if solvent.lower() not in [
+                "acetone",
+                "acetonitrile",
+                "aniline",
+                "benzaldehyde",
+                "benzene",
+                "ch2cl2",
+                "chcl3",
+                "cs2",
+                "dioxane",
+                "dmf",
+                "dmso",
+                "ether",
+                "ethylacetate",
+                "furane",
+                "hexandecane",
+                "hexane",
+                "methanol",
+                "nitromethane",
+                "octanol",
+                "woctanol",
+                "phenol",
+                "toluene",
+                "thf",
+                "water",
+            ]:
+                raise ValueError("%s is not a supported solvent" % solvent)
+            if ref.lower() not in ["reference", "bar1m"]:
+                raise ValueError(
+                    "%s Gsolv reference state not supported" % ref
+                )
+            if style.lower() == "crest":
+                cmdline["alpb"] = "{}".format(solvent)
+            else:
+                cmdline["alpb"] = "{} {}".format(solvent, ref)
+        elif (
+            "solvent_model" in config["Theory"]
+            and config["Theory"]["solvent_model"] == "gbsa"
+        ):
+            solvent = config["Theory"]["solvent"].split()
+            if len(solvent) > 1:
+                solvent, ref = solvent
+            else:
+                ref = "bar1M"
+            if solvent.lower() not in [
+                "acetone",
+                "acetonitrile",
+                "benzene",
+                "ch2cl2",
+                "chcl3",
+                "cs2",
+                "dmf",
+                "dmso",
+                "ether",
+                "h2o",
+                "methanol",
+                "n-hexane",
+                "thf" "toluene",
+            ]:
+                gfn = config["Job"].get("gfn", fallback="2")
+                if gfn != "1" and solvent.lower() in ["benzene"]:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+                elif gfn != "2" and solvent.lower() in ["DMF", "n-hexane"]:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+                else:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+            if ref.lower() not in ["reference", "bar1m"]:
+                raise ValueError(
+                    "%s Gsolv reference state not supported" % ref
+                )
+            if style.lower() == "crest":
+                cmdline["gbsa"] = "{}".format(solvent)
+            else:
+                cmdline["gbsa"] = "{} {}".format(solvent, ref)
+        return xcontrol, cmdline
 
 
 class FrequencyJob(JobType):
