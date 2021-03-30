@@ -312,7 +312,7 @@ nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
 
     def test_read_crest(self):
         fname = os.path.join(prefix, "test_files/good.crest")
-        res = FileReader(fname)
+        res = FileReader(fname, conf_name=False)
         self.assertDictEqual(
             res.other,
             {
