@@ -338,21 +338,24 @@ class BasisSet:
         basis: list(Basis), Basis, str, or None
         ecp: list(ECP) or None
         """
+        self.basis = []
+        self.ecp = []
         if isinstance(basis, str):
-            basis = self.parse_basis_str(basis, cls=Basis)
+            self.basis += self.parse_basis_str(basis, cls=Basis)
         elif isinstance(basis, Basis):
-            basis = [basis]
+            self.basis += [basis]
+        elif isinstance(basis, BasisSet):
+            self.basis += basis.basis
+            if ecp is None:
+                self.ecp += basis.ecp
 
         if isinstance(ecp, str):
             if ecp.split():
-                ecp = self.parse_basis_str(ecp, cls=ECP)
+                ecp += self.parse_basis_str(ecp, cls=ECP)
             else:
-                ecp = [ECP(ecp)]
+                ecp += [ECP(ecp)]
         elif isinstance(ecp, ECP):
-            ecp = [ecp]
-
-        self.basis = basis
-        self.ecp = ecp
+            ecp += [ecp]
 
     @property
     def elements_in_basis(self):
@@ -422,7 +425,7 @@ class BasisSet:
                     elements = None
 
                 basis_sets.append(
-                    Basis(
+                    cls(
                         basis_name,
                         elements=elements,
                         aux_type=aux_type,
@@ -432,9 +435,7 @@ class BasisSet:
                 elements = []
                 aux_type = None
                 user_defined = False
-
             i += 1
-
         return basis_sets
 
     def __eq__(self, other):
@@ -494,7 +495,7 @@ class BasisSet:
         info = {}
         warnings = []
 
-        if self.basis is not None:
+        if self.basis:
             # check if we need to use gen or genecp:
             #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
             #    -multiple basis sets

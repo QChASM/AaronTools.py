@@ -375,6 +375,7 @@ class FileReader:
         get_all=False,
         just_geom=True,
         freq_name=None,
+        conf_name=None,
     ):
         """
         :fname: either a string specifying the file name of the file to read
@@ -409,7 +410,9 @@ class FileReader:
 
         # Fill in attributes with geometry information
         if self.content is None:
-            self.read_file(get_all, just_geom, freq_name=freq_name)
+            self.read_file(
+                get_all, just_geom, freq_name=freq_name, conf_name=conf_name
+            )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
         elif isinstance(self.content, IOBase):
@@ -431,11 +434,13 @@ class FileReader:
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom)
             elif self.file_type == "crest":
-                self.read_crest(f)
+                self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
                 self.read_xtb(f, freq_name=freq_name)
 
-    def read_file(self, get_all=False, just_geom=True, freq_name=None):
+    def read_file(
+        self, get_all=False, just_geom=True, freq_name=None, conf_name=None
+    ):
         """
         Reads geometry information from fname.
         Parameters:
@@ -471,7 +476,7 @@ class FileReader:
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom)
         elif self.file_type == "crest":
-            self.read_crest(f)
+            self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
             self.read_xtb(f, freq_name=freq_name)
 
@@ -1685,7 +1690,14 @@ class FileReader:
             )
             self.atoms.append(atom)
 
-    def read_crest(self, f):
+    def read_crest(self, f, conf_name=None):
+        """
+        conf_name = False to skip conformer loading (doesn't get written until crest job is done)
+        """
+        if conf_name is None:
+            conf_name = os.path.join(
+                os.path.dirname(self.name), "crest_conformers.xyz"
+            )
         line = True
         self.other["finished"] = False
         self.other["error"] = None
@@ -1723,12 +1735,9 @@ class FileReader:
                     int(float_num.findall(line)[0]) + 1
                 )
 
-        if self.other["finished"]:
-            cfname = os.path.join(
-                os.path.dirname(self.name), "crest_conformers.xyz"
-            )
+        if self.other["finished"] and conf_name:
             self.other["conformers"] = FileReader(
-                cfname,
+                conf_name,
                 get_all=True,
             ).all_geom
             self.comment, self.atoms = self.other["conformers"][0]

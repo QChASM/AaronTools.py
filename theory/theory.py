@@ -165,20 +165,13 @@ class Theory:
                 self.grid = grid
 
         if basis is not None:
-            if not isinstance(basis, BasisSet):
-                self.basis = BasisSet(basis)
-            else:
-                self.basis = BasisSet.parse_basis_str(basis)
-            if self.geometry is not None:
-                self.basis.refresh_elements(self.geometry)
+            self.basis = BasisSet(basis=basis)
 
         if ecp is not None:
             if self.basis is None:
                 self.basis = BasisSet(ecp=ecp)
             else:
-                self.basis.ecp = BasisSet.parse_basis_str(ecp, cls=ECP)
-            if self.geometry is not None:
-                self.basis.refresh_elements(self.geometry)
+                self.basis.ecp = BasisSet(ecp=ecp)
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):

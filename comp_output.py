@@ -61,7 +61,7 @@ class CompOutput:
     RRHO = "RRHO"
     LOG = logging.getLogger(__name__)
 
-    def __init__(self, fname="", get_all=True, freq_name=None):
+    def __init__(self, fname="", get_all=True, freq_name=None, conf_name=None):
         self.geometry = None
         self.opts = None
         self.opt_steps = None
@@ -106,7 +106,11 @@ class CompOutput:
 
         if isinstance(fname, (str, tuple)) and len(fname) > 0:
             from_file = FileReader(
-                fname, get_all, just_geom=False, freq_name=freq_name
+                fname,
+                get_all,
+                just_geom=False,
+                freq_name=freq_name,
+                conf_name=conf_name,
             )
         elif isinstance(fname, FileReader):
             from_file = fname
