@@ -22,7 +22,7 @@ COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
 
-DEFAULT_CONFIG = Config(skip_user_default=True, quiet=True)
+DEFAULT_CONFIG = Config(quiet=True)
 
 if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
     import urllib.parse

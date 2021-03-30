@@ -168,13 +168,17 @@ class Theory:
             if not isinstance(basis, BasisSet):
                 self.basis = BasisSet(basis)
             else:
-                self.basis = basis
+                self.basis = BasisSet.parse_basis_str(basis)
+            if self.geometry is not None:
+                self.basis.refresh_elements(self.geometry)
 
         if ecp is not None:
             if self.basis is None:
                 self.basis = BasisSet(ecp=ecp)
             else:
                 self.basis.ecp = BasisSet.parse_basis_str(ecp, cls=ECP)
+            if self.geometry is not None:
+                self.basis.refresh_elements(self.geometry)
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):
@@ -574,7 +578,10 @@ class Theory:
                 warnings.append(warning)
             out_str += "%s" % func
             if not self.method.is_semiempirical and self.basis is not None:
-                basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
+                (
+                    basis_info,
+                    basis_warnings,
+                ) = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
                 # in two basis sets or left out of any
@@ -814,8 +821,6 @@ class Theory:
         # new lines
         out_str += "\n\n\n"
 
-        print(out_str)
-        exit()
         if return_warnings:
             return out_str, warnings
         return out_str

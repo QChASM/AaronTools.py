@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
+import warnings
 from collections.abc import MutableSequence
+from pprint import pprint
 
 import numpy as np
 
@@ -10,7 +12,9 @@ from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import float_vec, uptri2sym
 
 
-def obj_to_dict(obj, skip_attrs=[]):
+def obj_to_dict(obj, skip_attrs=None):
+    if skip_attrs is None:
+        skip_attrs = []
     rv = {}
     if hasattr(obj, "__dict__"):
         for attr in obj.__dict__:
@@ -34,6 +38,9 @@ def obj_to_dict(obj, skip_attrs=[]):
         return obj
 
 
+ATOMSPEC = "{:10s} {:3s} {: .6f} {: .6f} {: .6f}"
+
+
 class CompOutput:
     """
     Attributes:
@@ -52,7 +59,7 @@ class CompOutput:
     QUASI_RRHO = "QRRHO"
     RRHO = "RRHO"
 
-    def __init__(self, fname="", get_all=True):
+    def __init__(self, fname="", get_all=True, freq_name=None):
         self.geometry = None
         self.opts = None
         self.opt_steps = None
@@ -73,6 +80,7 @@ class CompOutput:
 
         self.error, self.error_msg, self.finished = (None, None, None)
 
+        # these will be pulled out of FileReader.other dict
         keys = [
             "opt_steps",
             "energy",
@@ -95,14 +103,18 @@ class CompOutput:
         ]
 
         if isinstance(fname, (str, tuple)) and len(fname) > 0:
-            from_file = FileReader(fname, get_all, just_geom=False)
+            from_file = FileReader(
+                fname, get_all, just_geom=False, freq_name=freq_name
+            )
         elif isinstance(fname, FileReader):
             from_file = fname
         else:
             return
 
         if from_file.atoms:
-            self.geometry = Geometry(from_file)
+            self.geometry = Geometry(
+                from_file.atoms, comment=from_file.comment
+            )
         if from_file.all_geom:
             self.opts = []
             for g in from_file.all_geom:
@@ -129,8 +141,30 @@ class CompOutput:
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
 
-    def to_dict(self, skip_attrs=[]):
+    def to_dict(self, skip_attrs=None):
         return obj_to_dict(self, skip_attrs=skip_attrs)
+
+    def to_store(self):
+        data = self.__dict__.copy()
+        for key in ["opts"]:
+            del data[key]
+        for key, val in data.items():
+            if key == "conformers" and val is not None:
+                for i, v in enumerate(val):
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore")
+                        val[i] = hash(v)
+                data[key] = val
+            elif key == "geometry" and val is not None:
+                data[key] = [
+                    ATOMSPEC.format(a.name, a.element, *a.coords)
+                    for a in val.atoms
+                ]
+            elif isinstance(val, MutableSequence):
+                val = [obj_to_dict(v) for v in val]
+            else:
+                val = obj_to_dict(val)
+        return data
 
     def get_progress(self):
         rv = ""
@@ -186,13 +220,19 @@ class CompOutput:
         vib_unit_convert = (
             PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANCK / PHYSICAL.KB
         )
-        vibtemps = np.array([f_i * vib_unit_convert for f_i in freqs if f_i > 0])
+        vibtemps = np.array(
+            [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
+        )
         if method == "QHARM":
-            harm_vibtemps = np.array([
-                f_i * vib_unit_convert if f_i > v0 else v0 * vib_unit_convert
-                for f_i in freqs
-                if f_i > 0
-            ])
+            harm_vibtemps = np.array(
+                [
+                    f_i * vib_unit_convert
+                    if f_i > v0
+                    else v0 * vib_unit_convert
+                    for f_i in freqs
+                    if f_i > 0
+                ]
+            )
         else:
             harm_vibtemps = vibtemps
 
@@ -236,15 +276,13 @@ class CompOutput:
         # Vibrational
         if method == self.QUASI_HARMONIC:
             Sv = np.sum(
-                harm_vibtemps / (
-                    T * (np.exp(harm_vibtemps / T) - 1)
-                ) - np.log(1 - np.exp(-harm_vibtemps / T))
+                harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
+                - np.log(1 - np.exp(-harm_vibtemps / T))
             )
         elif method == self.RRHO:
             Sv = np.sum(
-                vibtemps / (
-                    T * (np.exp(vibtemps / T) - 1)
-                ) - np.log(1 - np.exp(-vibtemps / T))
+                vibtemps / (T * (np.exp(vibtemps / T) - 1))
+                - np.log(1 - np.exp(-vibtemps / T))
             )
         elif method == self.QUASI_RRHO:
             mu = PHYSICAL.PLANCK
@@ -264,11 +302,12 @@ class CompOutput:
             weights = weight = 1 / (1 + (v0 / freqs) ** 4)
 
             Sv = np.sum(
-                weights * (
-                    harm_vibtemps / (
-                        T * (np.exp(harm_vibtemps / T) - 1)
-                    ) - np.log(1 - np.exp(-harm_vibtemps / T))
-                ) + (1 - weights) * Sr_eff
+                weights
+                * (
+                    harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
+                    - np.log(1 - np.exp(-harm_vibtemps / T))
+                )
+                + (1 - weights) * Sr_eff
             )
 
         Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
