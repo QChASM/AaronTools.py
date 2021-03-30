@@ -636,27 +636,38 @@ class OptimizationJob(JobType):
         xcontrol = ""
         # only put constraints in xcontrol file so this works with Crest also
         if self.constraints:
-            constraints = []
-            for con in it.chain.from_iterable(*self.constraints.values()):
-                constraints += self.geometry.find(con)
-            frozen = {
-                str(self.geometry.atoms.index(c) + 1) for c in constraints
-            }
-            frozen = ",".join(sorted(frozen, key=lambda x: int(x)))
-            relaxed = {
-                str(i + 1)
-                for i, a in enumerate(self.geometry.atoms)
-                if a not in constraints
-            }
-            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
             xcontrol += "$constrain\n"
-            xcontrol += "  atoms: {}\n".format(frozen)
             xcontrol += "  force constant={}\n".format(
                 config["Job"].get("constrain_force", fallback="0.5")
             )
             xcontrol += "  reference={}\n".format(
                 config["Job"].get("constrain_ref", fallback="ref.xyz")
             )
+            constrained = set([])
+            for bond in self.constraints.get("bonds", []):
+                bond = self.geometry.find(bond)
+                constrained.union(bond)
+                xcontrol += "  distance: {},{},auto\n".format(
+                    *(self.geometry.atoms.index(c) + 1 for c in bond)
+                )
+            for angle in self.constraints.get("angles", []):
+                angle = self.geometry.find(angle)
+                constrained.union(angle)
+                xcontrol += "  angle: {},{},{},auto\n".format(
+                    *(self.geometry.atoms.index(c) + 1 for c in angle)
+                )
+            for dihedral in self.constraints.get("torsions", []):
+                dihedral = self.geometry.find(dihedral)
+                constrained.union(dihedral)
+                xcontrol += "  dihedral: {},{},{},{},auto\n".format(
+                    *(self.geometry.atoms.index(c) + 1 for c in dihedral)
+                )
+            relaxed = {
+                str(i + 1)
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constrained
+            }
+            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
             xcontrol += "$metadyn\n"
             xcontrol += "  atoms: {}\n".format(relaxed)
         xcontrol += "$end\n"

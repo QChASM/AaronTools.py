@@ -232,7 +232,9 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_com(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
         fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
@@ -243,9 +245,15 @@ class FileWriter:
                 break
 
         # get file content string
-        header, header_warnings = theory.make_header(geom, return_warnings=True, **kwargs)
-        mol, mol_warnings = theory.make_molecule(geom, return_warnings=True, **kwargs)
-        footer, footer_warnings = theory.make_footer(geom, return_warnings=True, **kwargs)
+        header, header_warnings = theory.make_header(
+            geom, return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, return_warnings=True, **kwargs
+        )
+        footer, footer_warnings = theory.make_footer(
+            geom, return_warnings=True, **kwargs
+        )
 
         s = header + mol + footer
         warnings = header_warnings + mol_warnings + footer_warnings
@@ -271,9 +279,13 @@ class FileWriter:
         return
 
     @classmethod
-    def write_inp(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_inp(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
-        s, warnings = theory.make_header(geom, style="orca", return_warnings=True, **kwargs)
+        s, warnings = theory.make_header(
+            geom, style="orca", return_warnings=True, **kwargs
+        )
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
@@ -298,7 +310,9 @@ class FileWriter:
             return warnings
 
     @classmethod
-    def write_in(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_in(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         """
         can accept "monomers" as a kwarg
         this should be a list of lists of atoms corresponding to the
@@ -313,9 +327,15 @@ class FileWriter:
         else:
             monomers = None
 
-        header, header_warnings = theory.make_header(geom, style="psi4", return_warnings=True, **kwargs)
-        mol, mol_warnings = theory.make_molecule(geom, style="psi4", return_warnings=True, **kwargs)
-        footer, footer_warnings = theory.make_footer(geom, style="psi4", return_warnings=True, **kwargs)
+        header, header_warnings = theory.make_header(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
+        footer, footer_warnings = theory.make_footer(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
 
         s = header + mol + footer
         warnings = header_warnings + mol_warnings + footer_warnings
@@ -1451,9 +1471,6 @@ class FileReader:
             self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
-        if not self.other["finished"] and not self.other["error"]:
-            self.other["error"] = ERROR["Unknown message"]
-            self.other["error_msg"] = "Unknown message"
         return
 
     def read_com(self, f):
@@ -1706,17 +1723,16 @@ class FileReader:
                     int(float_num.findall(line)[0]) + 1
                 )
 
-        # if self.other["error"] is not None:
-        #     return
-        cfname = os.path.join(
-            os.path.dirname(self.name), "crest_conformers.xyz"
-        )
-        self.other["conformers"] = FileReader(
-            cfname,
-            get_all=True,
-        ).all_geom
-        self.comment, self.atoms = self.other["conformers"][0]
-        self.other["conformers"] = self.other["conformers"][1:]
+        if self.other["finished"]:
+            cfname = os.path.join(
+                os.path.dirname(self.name), "crest_conformers.xyz"
+            )
+            self.other["conformers"] = FileReader(
+                cfname,
+                get_all=True,
+            ).all_geom
+            self.comment, self.atoms = self.other["conformers"][0]
+            self.other["conformers"] = self.other["conformers"][1:]
 
     def read_xtb(self, f, freq_name=None):
         line = True

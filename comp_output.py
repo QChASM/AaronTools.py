@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import logging
 import warnings
 from collections.abc import MutableSequence
 from pprint import pprint
@@ -58,6 +59,7 @@ class CompOutput:
     QUASI_HARMONIC = "QHARM"
     QUASI_RRHO = "QRRHO"
     RRHO = "RRHO"
+    LOG = logging.getLogger(__name__)
 
     def __init__(self, fname="", get_all=True, freq_name=None):
         self.geometry = None
@@ -145,16 +147,17 @@ class CompOutput:
         return obj_to_dict(self, skip_attrs=skip_attrs)
 
     def to_store(self):
-        data = self.__dict__.copy()
-        for key in ["opts"]:
-            del data[key]
+        data = {}
         for key, val in data.items():
-            if key == "conformers" and val is not None:
+            if key in ["opts"]:
+                del data[key]
+            elif key == "conformers" and val is not None:
+                tmp = {}
                 for i, v in enumerate(val):
                     with warnings.catch_warnings():
                         warnings.filterwarnings("ignore")
-                        val[i] = hash(v)
-                data[key] = val
+                        tmp[i] = hash(v)
+                data[key] = tmp
             elif key == "geometry" and val is not None:
                 data[key] = [
                     ATOMSPEC.format(a.name, a.element, *a.coords)

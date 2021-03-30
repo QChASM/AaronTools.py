@@ -1493,7 +1493,7 @@ class Theory:
 
         if config._args:
             for arg in config._args:
-                cmdline["arg"] = None
+                cmdline[arg] = None
         if config._kwargs:
             for key, val in config._kwargs.items():
                 cmdline[key] = val
@@ -1506,6 +1506,8 @@ class Theory:
             cmdline["gfn"] = config["Job"]["gfn"]
         if style == "xtb" and hasattr(job_type, "transition_state"):
             cmdline["optts"] = None
+        elif style == "xtb":
+            cmdline["opt"] = None
         if style == "crest":
             cmdline["temp"] = config["Theory"].get(
                 "temperature", fallback="298"
@@ -1597,7 +1599,13 @@ class Theory:
                 cmdline["gbsa"] = "{}".format(solvent)
             else:
                 cmdline["gbsa"] = "{} {}".format(solvent, ref)
-        return cmdline
+        opt_string = config["Theory"].get("cmdline", "")
+        for key, val in cmdline.items():
+            if val is not None:
+                opt_string += " --{} {}".format(key, val)
+            else:
+                opt_string += " --{}".format(key)
+        return opt_string.strip()
 
     def get_xcontrol(self, config):
         if len(self.job_type) > 1:
