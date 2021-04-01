@@ -165,16 +165,13 @@ class Theory:
                 self.grid = grid
 
         if basis is not None:
-            if not isinstance(basis, BasisSet):
-                self.basis = BasisSet(basis)
-            else:
-                self.basis = basis
+            self.basis = BasisSet(basis=basis)
 
         if ecp is not None:
             if self.basis is None:
                 self.basis = BasisSet(ecp=ecp)
             else:
-                self.basis.ecp = BasisSet.parse_basis_str(ecp, cls=ECP)
+                self.basis.ecp = BasisSet(ecp=ecp)
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):
@@ -574,7 +571,10 @@ class Theory:
                 warnings.append(warning)
             out_str += "%s" % func
             if not self.method.is_semiempirical and self.basis is not None:
-                basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
+                (
+                    basis_info,
+                    basis_warnings,
+                ) = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
                 # in two basis sets or left out of any
@@ -1500,7 +1500,135 @@ class Theory:
             return out_str, warnings
         return out_str
 
-    def write_aux(self, config):
-        for job_type in self.job_type:
-            if isinstance(job_type, CrestJob):
-                return job_type.write_aux(config)
+    def get_xtb_cmdline(self, config):
+        if len(self.job_type) > 1:
+            raise NotImplementedError(
+                "Multiple job types not supported for crest/xtb"
+            )
+        job_type = self.job_type[0]
+        cmdline = {}
+        style = config["Job"]["exec_type"]
+
+        if config._args:
+            for arg in config._args:
+                cmdline[arg] = None
+        if config._kwargs:
+            for key, val in config._kwargs.items():
+                cmdline[key] = val
+
+        if self.charge != 0:
+            cmdline["chrg"] = self.charge
+        if self.multiplicity != 1:
+            cmdline["uhf"] = self.multiplicity - 1
+        if "gfn" in config["Job"]:
+            cmdline["gfn"] = config["Job"]["gfn"]
+        if style == "xtb" and hasattr(job_type, "transition_state"):
+            cmdline["optts"] = None
+        elif style == "xtb":
+            cmdline["opt"] = None
+        if style == "crest":
+            cmdline["temp"] = config["Theory"].get(
+                "temperature", fallback="298"
+            )
+        else:
+            cmdline["etemp"] = config["Theory"].get(
+                "temperature", fallback="298"
+            )
+        if (
+            "solvent_model" in config["Theory"]
+            and config["Theory"]["solvent_model"] == "alpb"
+        ):
+            solvent = config["Theory"]["solvent"].split()
+            if len(solvent) > 1:
+                solvent, ref = solvent
+            else:
+                ref = "bar1M"
+            if solvent.lower() not in [
+                "acetone",
+                "acetonitrile",
+                "aniline",
+                "benzaldehyde",
+                "benzene",
+                "ch2cl2",
+                "chcl3",
+                "cs2",
+                "dioxane",
+                "dmf",
+                "dmso",
+                "ether",
+                "ethylacetate",
+                "furane",
+                "hexandecane",
+                "hexane",
+                "methanol",
+                "nitromethane",
+                "octanol",
+                "woctanol",
+                "phenol",
+                "toluene",
+                "thf",
+                "water",
+            ]:
+                raise ValueError("%s is not a supported solvent" % solvent)
+            if ref.lower() not in ["reference", "bar1m"]:
+                raise ValueError(
+                    "%s Gsolv reference state not supported" % ref
+                )
+            if style.lower() == "crest":
+                cmdline["alpb"] = "{}".format(solvent)
+            else:
+                cmdline["alpb"] = "{} {}".format(solvent, ref)
+        elif (
+            "solvent_model" in config["Theory"]
+            and config["Theory"]["solvent_model"] == "gbsa"
+        ):
+            solvent = config["Theory"]["solvent"].split()
+            if len(solvent) > 1:
+                solvent, ref = solvent
+            else:
+                ref = "bar1M"
+            if solvent.lower() not in [
+                "acetone",
+                "acetonitrile",
+                "benzene",
+                "ch2cl2",
+                "chcl3",
+                "cs2",
+                "dmf",
+                "dmso",
+                "ether",
+                "h2o",
+                "methanol",
+                "n-hexane",
+                "thf" "toluene",
+            ]:
+                gfn = config["Job"].get("gfn", fallback="2")
+                if gfn != "1" and solvent.lower() in ["benzene"]:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+                elif gfn != "2" and solvent.lower() in ["DMF", "n-hexane"]:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+                else:
+                    raise ValueError("%s is not a supported solvent" % solvent)
+            if ref.lower() not in ["reference", "bar1m"]:
+                raise ValueError(
+                    "%s Gsolv reference state not supported" % ref
+                )
+            if style.lower() == "crest":
+                cmdline["gbsa"] = "{}".format(solvent)
+            else:
+                cmdline["gbsa"] = "{} {}".format(solvent, ref)
+        opt_string = config["Theory"].get("cmdline", "")
+        for key, val in cmdline.items():
+            if val is not None:
+                opt_string += " --{} {}".format(key, val)
+            else:
+                opt_string += " --{}".format(key)
+        return opt_string.strip()
+
+    def get_xcontrol(self, config):
+        if len(self.job_type) > 1:
+            raise NotImplementedError(
+                "Multiple job types not supported for crest/xtb"
+            )
+        job_type = self.job_type[0]
+        return job_type.get_xcontrol(config)

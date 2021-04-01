@@ -35,6 +35,7 @@ class TestConfig(TestWithTimer):
             # print(json.dumps(test, indent=2))
             with open(ref_name, "r") as f:
                 ref = json.load(f)
+            self.maxDiff = None
             self.assertDictEqual(ref, test, msg=config_name)
 
     def test_parse_changes(self):

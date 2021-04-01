@@ -24,6 +24,7 @@ read_types = [
     "dat",
     "fchk",
     "crest",
+    "xtb",
 ]
 write_types = ["xyz", "com", "inp", "in"]
 file_type_err = "File type not yet implemented: {}"
@@ -232,7 +233,9 @@ class FileWriter:
         return
 
     @classmethod
-    def write_com(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_com(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
         fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
@@ -243,9 +246,15 @@ class FileWriter:
                 break
 
         # get file content string
-        header, header_warnings = theory.make_header(geom, return_warnings=True, **kwargs)
-        mol, mol_warnings = theory.make_molecule(geom, return_warnings=True, **kwargs)
-        footer, footer_warnings = theory.make_footer(geom, return_warnings=True, **kwargs)
+        header, header_warnings = theory.make_header(
+            geom, return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, return_warnings=True, **kwargs
+        )
+        footer, footer_warnings = theory.make_footer(
+            geom, return_warnings=True, **kwargs
+        )
 
         s = header + mol + footer
         warnings = header_warnings + mol_warnings + footer_warnings
@@ -271,9 +280,13 @@ class FileWriter:
         return
 
     @classmethod
-    def write_inp(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_inp(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
-        s, warnings = theory.make_header(geom, style="orca", return_warnings=True, **kwargs)
+        s, warnings = theory.make_header(
+            geom, style="orca", return_warnings=True, **kwargs
+        )
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
@@ -298,7 +311,9 @@ class FileWriter:
             return warnings
 
     @classmethod
-    def write_in(cls, geom, theory, outfile=None, return_warnings=False, **kwargs):
+    def write_in(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
         """
         can accept "monomers" as a kwarg
         this should be a list of lists of atoms corresponding to the
@@ -313,9 +328,15 @@ class FileWriter:
         else:
             monomers = None
 
-        header, header_warnings = theory.make_header(geom, style="psi4", return_warnings=True, **kwargs)
-        mol, mol_warnings = theory.make_molecule(geom, style="psi4", return_warnings=True, **kwargs)
-        footer, footer_warnings = theory.make_footer(geom, style="psi4", return_warnings=True, **kwargs)
+        header, header_warnings = theory.make_header(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
+        footer, footer_warnings = theory.make_footer(
+            geom, style="psi4", return_warnings=True, **kwargs
+        )
 
         s = header + mol + footer
         warnings = header_warnings + mol_warnings + footer_warnings
@@ -349,7 +370,14 @@ class FileReader:
         other {}
     """
 
-    def __init__(self, fname, get_all=False, just_geom=True):
+    def __init__(
+        self,
+        fname,
+        get_all=False,
+        just_geom=True,
+        freq_name=None,
+        conf_name=None,
+    ):
         """
         :fname: either a string specifying the file name of the file to read
             or a tuple of (str(name), str(file_type), str(content))
@@ -357,6 +385,9 @@ class FileReader:
             self.all_geom; otherwise only saves last geometry
         :just_geom: if true, does not store other information, such as
             frequencies, only what is needed to construct a Geometry() obj
+        :freq_name: Name of the file containing the frequency output. Only use
+            if this information is in a different file than `fname` (eg: xtb runs
+            using the --hess runtype option)
         """
         # Initialization
         self.name = ""
@@ -380,7 +411,9 @@ class FileReader:
 
         # Fill in attributes with geometry information
         if self.content is None:
-            self.read_file(get_all, just_geom)
+            self.read_file(
+                get_all, just_geom, freq_name=freq_name, conf_name=conf_name
+            )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
         elif isinstance(self.content, IOBase):
@@ -404,9 +437,13 @@ class FileReader:
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom)
             elif self.file_type == "crest":
-                self.read_crest(f)
+                self.read_crest(f, conf_name=conf_name)
+            elif self.file_type == "xtb":
+                self.read_xtb(f, freq_name=freq_name)
 
-    def read_file(self, get_all=False, just_geom=True):
+    def read_file(
+        self, get_all=False, just_geom=True, freq_name=None, conf_name=None
+    ):
         """
         Reads geometry information from fname.
         Parameters:
@@ -444,9 +481,9 @@ class FileReader:
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom)
         elif self.file_type == "crest":
-            self.read_crest(f)
+            self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
-            self.read_xtb(f)
+            self.read_xtb(f, freq_name=freq_name)
 
         f.close()
         return
@@ -1165,7 +1202,7 @@ class FileReader:
         while line != "":
             # route
             # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
-            ##B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
+            # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
             # pmodes,noraman,temperature=313.15)
             if line.strip().startswith("#") and route is None:
                 route = ""
@@ -1218,7 +1255,7 @@ class FileReader:
             if NORM_FINISH in line:
                 self.other["finished"] = True
             if "SCF Done" in line:
-                tmp = [l.strip() for l in line.split()]
+                tmp = [word.strip() for word in line.split()]
                 idx = tmp.index("=")
                 self.other["energy"] = float(tmp[idx + 1])
             if "Molecular mass:" in line:
@@ -1481,9 +1518,6 @@ class FileReader:
             self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
-        if not self.other["finished"] and not self.other["error"]:
-            self.other["error"] = ERROR["Unknown message"]
-            self.other["error_msg"] = "Unknown message"
         return
 
     def read_com(self, f):
@@ -1698,13 +1732,21 @@ class FileReader:
             )
             self.atoms.append(atom)
 
-    def read_crest(self, f):
+    def read_crest(self, f, conf_name=None):
+        """
+        conf_name = False to skip conformer loading (doesn't get written until crest job is done)
+        """
+        if conf_name is None:
+            conf_name = os.path.join(
+                os.path.dirname(self.name), "crest_conformers.xyz"
+            )
         line = True
+        self.other["finished"] = False
+        self.other["error"] = None
         while line:
             line = f.readline()
             if "terminated normally" in line:
                 self.other["finished"] = True
-                self.other["error"] = None
             elif "population of lowest" in line:
                 self.other["best_pop"] = float(float_num.findall(line)[0])
             elif "ensemble free energy" in line:
@@ -1719,20 +1761,61 @@ class FileReader:
                 self.other["best_energy"] = float(float_num.findall(line)[0])
             elif "T /K" in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
+            elif (
+                line.strip()
+                .lower()
+                .startswith(("forrtl", "warning", "*warning"))
+            ):
+                self.other["error"] = "UNKNOWN"
+                if "error_msg" not in self.other:
+                    self.other["error_msg"] = ""
+                self.other["error_msg"] += line
+            elif "-chrg" in line:
+                self.other["charge"] = int(float_num.findall(line)[0])
+            elif "-uhf" in line:
+                self.other["multiplicity"] = (
+                    int(float_num.findall(line)[0]) + 1
+                )
 
-        cfname = os.path.join(
-            os.path.dirname(self.name), "crest_conformers.xyz"
-        )
-        if os.access(cfname, os.R_OK):
+        if self.other["finished"] and conf_name:
             self.other["conformers"] = FileReader(
-                cfname,
+                conf_name,
                 get_all=True,
             ).all_geom
+            self.comment, self.atoms = self.other["conformers"][0]
+            self.other["conformers"] = self.other["conformers"][1:]
 
-    def read_xtb(self, f):
+    def read_xtb(self, f, freq_name=None):
         line = True
+        self.other["finished"] = False
+        self.other["error"] = None
         while line:
             line = f.readline()
+            if "normal termination" in line:
+                self.other["finished"] = True
+            if "abnormal termination" in line:
+                self.other["error"] = "UNKNOWN"
+            if line.strip().startswith("#ERROR"):
+                if "error_msg" not in self.other:
+                    self.other["error_msg"] = ""
+                self.other["error_msg"] += line
+            if "charge" in line and ":" in line:
+                self.other["charge"] = int(float_num.findall(line)[0])
+            if "spin" in line and ":" in line:
+                self.other["multiplicity"] = (
+                    2 * float(float_num.findall(line)[0]) + 1
+                )
+            if "total energy" in line:
+                self.other["energy"] = float(float_num.findall(line)[0])
+            if "zero point energy" in line:
+                self.other["ZPVE"] = float(float_num.findall(line)[0])
+            if "total free energy" in line:
+                self.other["free_energy"] = float(float_num.findall(line)[0])
+            if "electronic temp." in line:
+                self.other["temperature"] = float(float_num.findall(line)[0])
+        if freq_name is not None:
+            with open(freq_name) as f_freq:
+                self.other["frequency"] = Frequency(f_freq.read())
 
 
 class Frequency:
@@ -1855,7 +1938,10 @@ class Frequency:
             elif line.strip().startswith("Irrep"):
                 # sometimes psi4 doesn't identify the irrep of a mode, so we can't
                 # use line.split()
-                symm = [x.strip() if x.strip() else None for x in [line[31:40], line[51:60], line[71:80]]]
+                symm = [
+                    x.strip() if x.strip() else None
+                    for x in [line[31:40], line[51:60], line[71:80]]
+                ]
                 for i, data in enumerate(self.data[-nmodes:]):
                     data.symmetry = symm[i]
 

@@ -79,7 +79,6 @@ class Config(configparser.ConfigParser):
         "_args",
         "_kwargs",
         "infile",
-        "conformer",
         "metadata",
     ]
 
@@ -150,7 +149,6 @@ class Config(configparser.ConfigParser):
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }
-        self.conformer = 0
 
     def optionxform(self, option):
         return str(option)
@@ -168,13 +166,27 @@ class Config(configparser.ConfigParser):
 
     def copy(self):
         config = Config(infile=None, quiet=True)
-        for attr in self._sections:
-            config.add_section(attr)
-            for key, val in self[attr].items():
-                config[attr][key] = val
-        for attr in self.SPEC_ATTRS:
-            setattr(config, attr, getattr(self, attr))
+        for section in ["DEFAULT"] + self.sections():
+            try:
+                config.add_section(section)
+            except (configparser.DuplicateSectionError, ValueError):
+                pass
+            for key, val in self[section].items():
+                config[section][key] = val
+        for section in self.SPEC_ATTRS:
+            setattr(config, section, getattr(self, section))
         return config
+
+    def for_change(self, change, structure=None):
+        this_config = self.copy()
+        if structure is not None:
+            this_config["Job"]["name"] = structure.name
+        if change:
+            this_config["Job"]["name"] = os.path.join(
+                change, this_config["Job"]["name"]
+            )
+        this_config._changes = {change: self._changes[change]}
+        return this_config
 
     def _parse_changes(self):
         for section in ["Substitution", "Mapping"]:
@@ -214,7 +226,10 @@ class Config(configparser.ConfigParser):
                             key = ""
                             self[section]["~PLACEHOLDER~"] = ";".join(val)
                         v = v.split("=")
-                        if not key.startswith("&combinations"):
+                        if (
+                            not key.startswith("&combinations")
+                            and "(" not in v[0]
+                        ):
                             v[0] = v[0].split(",")
                         else:
                             v[0] = [v[0]]
@@ -284,7 +299,7 @@ class Config(configparser.ConfigParser):
         """
         func_patt = re.compile("%{(.*?)}")
         attr_patt = re.compile("\$([a-zA-Z0-9_:]+)")
-        for section in self._sections:
+        for section in ["DEFAULT"] + self.sections():
             # evaluate functions
             for key, val in self[section].items():
                 for match in func_patt.findall(val):
@@ -505,15 +520,14 @@ class Config(configparser.ConfigParser):
                                     "Constraints for forming/breaking bonds must be specified for TS search"
                                 )
                         for con in con_list:
+                            tmp = []
                             try:
-                                con = tuple(
-                                    geometry.find(str(c))[0]
-                                    for c in eval(con, {})
-                                )
+                                for c in eval(con, {}):
+                                    tmp += geometry.find(str(c))
                             except TypeError:
-                                con = tuple(
-                                    geometry.find(str(c))[0] for c in con
-                                )
+                                for c in con:
+                                    tmp += geometry.find(str(c))
+                            con = [a.name for a in tmp]
                             if len(con) == 1:
                                 constraints.setdefault("atoms", [])
                                 constraints["atoms"] += [con]
@@ -529,17 +543,9 @@ class Config(configparser.ConfigParser):
                     elif "ts" == job_type[1]:
                         ts = True
 
-                if "opt" in job_type[0]:
+                if "opt" in job_type[0] or "conf" in job_type[0]:
                     theory.job_type += [
                         OptimizationJob(
-                            transition_state=ts,
-                            geometry=geometry,
-                            constraints=constraints,
-                        )
-                    ]
-                elif "conf" in job_type[0]:
-                    theory.job_type += [
-                        CrestJob(
                             transition_state=ts,
                             geometry=geometry,
                             constraints=constraints,
@@ -602,6 +608,7 @@ class Config(configparser.ConfigParser):
         structure_list = []
         # load templates from AARONLIB
         if "Reaction" in self:
+            path = None
             if "template" in self["Reaction"]:
                 path = os.path.join(
                     AARONLIB,
@@ -619,6 +626,10 @@ class Config(configparser.ConfigParser):
                 )
                 for dirpath, dirnames, filenames in os.walk(path):
                     structure_list += get_multiple(filenames, path=dirpath)
+            for structure, kind in structure_list:
+                structure.name = os.path.relpath(structure.name, path)
+        if "Geometry" not in self:
+            return structure_list
 
         # load templates from config[Geometry]
         # store in structure_dict, keyed by structure option suffix
@@ -771,11 +782,11 @@ class Config(configparser.ConfigParser):
             ppn = 12
             queue = wheeler_q
         """
-        for section in self._sections:
+        for section in ["DEFAULT"] + self.sections():
             # add requested subsections to parent section
             if self.has_option(section, "include"):
                 include_section = self[section]["include"].split(".")
-                if include_section[0] in self._sections:
+                if include_section[0] in self.sections():
                     # include specifies full section name, eg:
                     # include = Job.Minimum --> [Job.Minimum]
                     include_section = ".".join(include_section)
@@ -823,7 +834,7 @@ class Config(configparser.ConfigParser):
             else:
                 spec[attr] = getattr(self, attr)
 
-        for section in self._sections:
+        for section in ["DEFAULT"] + self.sections():
             if "." in section:
                 # these are include sections that should already be pulled into
                 # the main body of the config file
@@ -834,6 +845,13 @@ class Config(configparser.ConfigParser):
                     if re.fullmatch(s, section) and re.fullmatch(o, option):
                         break
                 else:
+                    # only include default options once, unless they are overridden
+                    if (
+                        section != "DEFAULT"
+                        and option in self["DEFAULT"]
+                        and self["DEFAULT"][option] == self[section][option]
+                    ):
+                        continue
                     spec["{}/{}".format(section, option)] = self[section][
                         option
                     ]
@@ -858,20 +876,16 @@ class Config(configparser.ConfigParser):
         """
         config = self.copy()
         # find step-specific options
-        for section in config._sections:
+        for section in ["DEFAULT"] + config.sections():
             for key, val in config[section].items():
                 remove_key = key
                 key = key.strip().split()
                 if len(key) == 1:
                     continue
-                key_step = key[0]
+                key_step = float(key[0])
                 key = " ".join(key[1:])
-                try:
-                    key_step = float(key_step)
-                except ValueError:
-                    key_step = key_step.strip()
                 # screen based on step
-                if isinstance(key_step, float) and key_step == float(step):
+                if key_step == float(step):
                     config[section][key] = val
                 # clean up metadata
                 del config[section][remove_key]
@@ -885,11 +899,6 @@ class Config(configparser.ConfigParser):
                 ) from e
         else:
             config["HPC"]["work_dir"] = config["DEFAULT"].get("top_dir")
-        config["Job"]["name"] = config["DEFAULT"]["name"]
-        if config.conformer:
-            config["Job"]["name"] += "_{}".format(config.conformer)
-        if step:
-            config["Job"]["name"] += ".{}".format(step)
         # parse user-supplied functions in config file
         config.parse_functions()
         return config
