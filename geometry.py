@@ -239,7 +239,8 @@ class Geometry:
                        otherwise, the nth item indicate the symmetry of the nth bidentate ligand
         minimize - bool, use minimize=True when mapping ligands (see Geometry.map_ligand)
 
-        returns a list of cls containing all unique coordination complexes
+        returns a list of cls containing all unique coordination complexes and the
+        general formula of the complexes
         """
         import os.path
         from AaronTools.atoms import BondOrder
@@ -323,11 +324,16 @@ class Geometry:
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
 
+        monodentate_names = sorted(
+            monodentate_names,
+            key=lambda x: 10000 * monodentate_names.count(x) + Component.list().index(x),
+            reverse=True,
+        )
         for i, mono_lig in enumerate(
             sorted(
                 set(monodentate_names),
-                key=lambda x: monodentate_names.count(x),
-                reverse=True
+                key=lambda x: 10000 * monodentate_names.count(x) + Component.list().index(x),
+                reverse=True,
             )
         ):
             cc_type += alphabet[i]
@@ -335,11 +341,15 @@ class Geometry:
             if monodentate_names.count(mono_lig) > 1:
                 cc_type += "%i" % monodentate_names.count(mono_lig)
                 this_name += "%i" % monodentate_names.count(mono_lig)
-        
-        for i, symbi_lig in enumerate(
-            sorted(
+
+        symm_bidentate_names = sorted(
+            symm_bidentate_names,
+            key=lambda x: 10000 * symm_bidentate_names.count(x) + Component.list().index(x),
+            reverse=True
+        )
+        for i, symbi_lig in enumerate(sorted(
                 set(symm_bidentate_names),
-                key=lambda x: symm_bidentate_names.count(x),
+                key=lambda x: 10000 * symm_bidentate_names.count(x) + Component.list().index(x),
                 reverse=True
             )
         ):
@@ -348,11 +358,15 @@ class Geometry:
             if symm_bidentate_names.count(symbi_lig) > 1:
                 cc_type += "%i" % symm_bidentate_names.count(symbi_lig)
                 this_name += "%i" % symm_bidentate_names.count(symbi_lig)
-        
+        asymm_bidentate_names = sorted(
+            asymm_bidentate_names,
+            key=lambda x: 10000 * asymm_bidentate_names.count(x) + Component.list().index(x),
+            reverse=True
+        )
         for i, asymbi_lig in enumerate(
             sorted(
                 set(asymm_bidentate_names),
-                key=lambda x: asymm_bidentate_names.count(x),
+                key=lambda x: 10000 * asymm_bidentate_names.count(x) + Component.list().index(x),
                 reverse=True
             )
         ):
@@ -442,7 +456,7 @@ class Geometry:
             geom_copy.name = "%s-%i" % (this_name, i + 1)
             geoms.append(geom_copy)
         
-        return geoms
+        return geoms, cc_type
     
     # attribute access
     def _stack_coords(self, atoms=None):

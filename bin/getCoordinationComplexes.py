@@ -27,7 +27,7 @@ coord_comp_parser.add_argument(
 coord_comp_parser.add_argument(
     "-c2",
     "--c2-symmetric",
-    type=bool,
+    type=lambda x: x.lower() in ["yes", "true", "t", "arr", "y", "aye", "yeah"],
     nargs="*",
     default=None,
     required=False,
@@ -73,13 +73,15 @@ coord_comp_parser.add_argument(
 
 args = coord_comp_parser.parse_args()
 
-geoms = Geometry.get_coordination_complexes(
+geoms, formula = Geometry.get_coordination_complexes(
     args.center,
     args.ligands,
     args.shape,
     c2_symmetric=args.c2_symmetric,
     minimize=args.minimize,
 )
+
+print("formula is %s" % formula)
 
 if not os.path.exists(args.outdir):
     os.makedirs(args.outdir)
