@@ -6,6 +6,24 @@ import os
 from AaronTools.geometry import Geometry
 from AaronTools.component import Component
 
+vsepr_choices = [
+        "tetrahedral",
+        "seesaw",
+        "square_planar",
+        "trigonal_pyramidal",
+        "trigonal_bipyramidal",
+        "square_pyramidal",
+        "pentagonal",
+        "hexagonal",
+        "trigonal_prismatic",
+        "pentagonal_pyramidal",
+        "octahedral",
+        "capped_octahedral",
+        "hexagonal_pyramidal",
+        "pentagonal_bipyramidal",
+        "capped_trigonal_prismatic",
+        "heptagonal",
+]
 
 coord_comp_parser = argparse.ArgumentParser(
     description="build coordination complexes using templates from Inorg. Chem. 2018, 57, 17, 10557–10567",
@@ -32,13 +50,14 @@ coord_comp_parser.add_argument(
     default=None,
     required=False,
     dest="c2_symmetric",
-    help="list corresping to --ligands to denote which bidentate\n" +
+    help="list of true/false corresping to --ligands to denote which bidentate\n" +
     "ligands are C2-symmetric\nDefault: no ligands are treated as symmetric",
 )
 
 coord_comp_parser.add_argument(
     "-g",
     "--coordination-geometry",
+    choices=vsepr_choices,
     required=True,
     dest="shape",
     help="coordination geometry of central atom"
@@ -80,7 +99,7 @@ args = coord_comp_parser.parse_args()
 geoms, formula = Geometry.get_coordination_complexes(
     args.center,
     args.ligands,
-    args.shape,
+    args.shape.replace("_", " "),
     c2_symmetric=args.c2_symmetric,
     minimize=args.minimize,
 )
