@@ -399,7 +399,7 @@ class Geometry:
                     fix=1
                 )
                 # attach ligand
-                geom_copy.map_ligand(comp, key)
+                geom_copy.map_ligand(comp, key, minimize=minimize)
             
             for lig in symm_bidentate_names:
                 keys = mapping[start:start + 2]
@@ -418,7 +418,7 @@ class Geometry:
                         fix=1,
                         as_group=False
                     )
-                geom_copy.map_ligand(comp, keys)
+                geom_copy.map_ligand(comp, keys, minimize=minimize)
                 
             for lig in asymm_bidentate_names:
                 keys = mapping[start:start + 2]
@@ -437,7 +437,7 @@ class Geometry:
                         fix=1,
                         as_group=False
                     )
-                geom_copy.map_ligand(comp, keys)
+                geom_copy.map_ligand(comp, keys, minimize=minimize)
         
             geom_copy.name = "%s-%i" % (this_name, i + 1)
             geoms.append(geom_copy)
