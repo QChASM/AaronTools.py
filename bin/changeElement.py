@@ -9,19 +9,49 @@ from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename
 
 vsepr_choices = [
-    "linear_1",
-    "linear_2",
-    "bent_2_planar",
-    "bent_2_tetrahedral",
-    "trigonal_planar",
-    "bent_3_tetrahedral",
-    "t_shaped",
-    "tetrahedral",
-    "sawhorse",
-    "square_planar",
-    "trigonal_bipyriamidal",
-    "square_pyramidal",
-    "octahedral",
+        "point",
+        "linear_1",
+        "linear_2",
+        "bent_2_tetrahedral",
+        "bent_2_planar",
+        "trigonal_planar",
+        "bent_3_tetrahedral",
+        "t_shaped",
+        "tetrahedral",
+        "sawhorse",
+        "seesaw",
+        "square_planar",
+        "trigonal_pyramidal",
+        "trigonal_bipyramidal",
+        "square_pyramidal",
+        "pentagonal",
+        "hexagonal",
+        "trigonal_prismatic",
+        "pentagonal_pyramidal",
+        "octahedral",
+        "capped_octahedral",
+        "hexagonal_pyramidal",
+        "pentagonal_bipyramidal",
+        "capped_trigonal_prismatic",
+        "heptagonal",
+        "hexagonal_bipyramidal",
+        "heptagonal_pyramidal",
+        "octagonal",
+        "square_antiprismatic",
+        "trigonal_dodecahedral",
+        "capped_cube",
+        "biaugmented_trigonal_prismatic",
+        "cubic",
+        "elongated_trigonal_bipyramidal",
+        "capped_square_antiprismatic",
+        "enneagonal",
+        "heptagonal_bipyramidal",
+        "hula-hoop",
+        "triangular_cupola",
+        "tridiminished_icosahedral",
+        "muffin",
+        "octagonal_pyramidal",
+        "tricapped_trigonal_prismatic",
 ]
 
 element_parser = argparse.ArgumentParser(
@@ -95,14 +125,11 @@ element_parser.add_argument(
     type=str,
     default=None,
     dest="geometry",
+    choices=vsepr_choices,
     required=False,
     help="specify the geometry to use with the new element\n" +
     "if the argument is not supplied, the geometry will remain the same as\n" +
-    "the previous element's, unless necessitated by an increase in hydrogens\n" +
-    "Geometry can be:\n%s" % "".join(
-        s + ", " if (sum(len(x) for x in vsepr_choices[:i])) % 40 < 21 else s + ",\n"
-        for i, s in enumerate(vsepr_choices)
-    ).strip().strip(","),
+    "the previous element's, unless necessitated by an increase in hydrogens",
 )
 
 args = element_parser.parse_args()

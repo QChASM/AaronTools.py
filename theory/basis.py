@@ -90,7 +90,7 @@ class Basis:
                 else:
                     warn("element not known: %s" % repr(ele))
 
-            if not ele_selection and not not_anys:
+            if not ele_selection and not_anys:
                 #if only not_anys were given, fall back to the default elements
                 ele_selection = self.default_elements
 

@@ -52,7 +52,7 @@ class Method:
         if not any(
             # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
             match(
-                "%s%s$" % (prefix, method.replace("(", "\(").replace(")", "\)")), name, flags=IGNORECASE
+                "%s%s$" % (prefix, method.replace("(", "\(").replace(")", "\)").replace("+", "\+")), name, flags=IGNORECASE
             ) for method in valid
         ):
             warning = "method '%s' may not be available in %s\n" % (name, program) + \
@@ -107,7 +107,7 @@ class Method:
         elif self.name == "ωB97X-D3":
             return ("wB97X-D3", None)
         elif any(self.name.upper() == name for name in ["B97-D", "B97D"]):
-            return ("B97-D2", "B97-D may refer to B97-D2 or B97-D3 - using the former")
+            return ("B97-D", None)
         elif self.name == "Gaussian's B3LYP":
             return ("B3LYP/G", None)
         elif self.name.upper() == "M06-L":

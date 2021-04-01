@@ -116,7 +116,7 @@ class CompOutput:
         for k in keys:
             if k in from_file.other:
                 self.__setattr__(k, from_file.other[k])
-                del from_file.other[k]
+                # del from_file.other[k]
         self.other = from_file.other
 
         if self.rotational_temperature is None and self.geometry:

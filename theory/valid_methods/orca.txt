@@ -383,4 +383,6 @@ MNDO
 AM1
 PM3
 PM3
+HF-3c
+PBEh-3c
 HF
