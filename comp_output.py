@@ -197,15 +197,22 @@ class CompOutput:
         return zpve
 
     def therm_corr(self, temperature=None, v0=100, method="RRHO"):
-        """returns thermal correction to energy, enthalpy correction to energy, and entropy
+        """
+        returns thermal correction to energy, enthalpy correction to energy, and entropy
         for the specified cutoff frequency and temperature
         in that order (Hartrees for corrections, Eh/K for entropy)
 
-        temperature     -   float/None               temperature in K, None will use self.temperature
-        v0              -   float/100                cutoff for quasi G corrections
-        method          -   str/RRHO, QRRHO, QHARM   type of quasi treatment (RRHO  - no quasi treatment
-                                                                              QRRHO - Grimme's quasi-RRHO
-                                                                              QHARM - Truhlar's quasi-harmonic)
+        temperature: float, temperature in K- None will use self.temperature
+        v0: float, cutoff/damping parameter for quasi G corrections
+        method: str - type of quasi treatment:
+                RRHO  - no quasi treatment
+                QRRHO - Grimme's quasi-RRHO
+                see Grimme, S. (2012), Supramolecular Binding Thermodynamics by 
+                Dispersion‐Corrected Density Functional Theory. Chem. Eur. J., 
+                18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
+                QHARM - Truhlar's quasi-harmonic
+                see J. Phys. Chem. B 2011, 115, 49, 14556–14562
+                (DOI: 10.1021/jp205508z) for details
         """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
@@ -331,10 +338,13 @@ class CompOutput:
         return Ecorr, Hcorr, Stot
 
     def calc_G_corr(self, temperature=None, v0=0, method="RRHO"):
-        """returns quasi rrho free energy correction (Eh)
-        temperature     -   float/None              temperature; default is self.temperature
-        v0              -   cutoff                  for quasi-rrho or quasi-harmonic entropy
-        method          -   str/RRHO, QRRHO, QHARM  method for treating entropy"""
+        """
+        returns quasi rrho free energy correction (Eh)
+        temperature: float, temperature; default is self.temperature
+        v0: float, parameter for quasi-rrho or quasi-harmonic entropy
+        method: str (RRHO, QRRHO, QHARM) method for treating entropy
+                see CompOutput.therm_corr for references
+        """
         Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method)
         T = temperature if temperature is not None else self.temperature
         Gcorr_qRRHO = Hcorr - T * Stot
@@ -342,7 +352,12 @@ class CompOutput:
         return Gcorr_qRRHO
 
     def calc_Grimme_G(self, temperature=None, v0=100):
-        """returns quasi rrho free energy (Eh)"""
+        """
+        returns quasi rrho free energy (Eh)
+        see Grimme, S. (2012), Supramolecular Binding Thermodynamics by 
+        Dispersion‐Corrected Density Functional Theory. Chem. Eur. J., 
+        18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
+        """
         Gcorr_qRRHO = self.calc_G_corr(
             temperature=temperature, v0=v0, method=self.QUASI_RRHO
         )

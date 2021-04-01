@@ -377,84 +377,87 @@ class Geometry:
                 this_name += "%i" % asymm_bidentate_names.count(asymbi_lig)
 
         # load the key atoms for ligand mapping from the template file
-        libfile = os.path.join(
+        libdir = os.path.join(
             AARONTOOLS,
             "coordination_complex",
             shape,
-            "%s.csv" % cc_type
+            cc_type
         )
-        if not os.path.exists(libfile):
+        if not os.path.exists(libdir):
             raise RuntimeError("no templates for %s %s" % (cc_type, shape))
-        mappings = np.loadtxt(libfile, dtype=str, delimiter=",", ndmin=2)
-        
+
         geoms = []
-        # for each possible structure, create a copy of the original template shape
-        # attach ligands in the order they would appear in the formula
-        for i, mapping in enumerate(mappings):
-            geom_copy = geom.copy()
-            geom_copy.center = [geom_copy.atoms[0]]
-            geom_copy.components = [Component([atom]) for atom in geom_copy.atoms[1:]]
-        
-            start = 0
-            for lig in monodentate_names:
-                key = mapping[start]
-                start += 1
-                comp = Component(lig)
-                d = 2.5
-                # adjust distance to key atoms to what they should be for the new ligand
-                try:
-                    d = bo.bonds[bo.key(center, comp.key_atoms[0])]["1.0"]
-                except KeyError:
-                    pass
-                geom_copy.change_distance(
-                    geom_copy.atoms[0],
-                    key,
-                    dist=d,
-                    fix=1
-                )
-                # attach ligand
-                geom_copy.map_ligand(comp, key, minimize=minimize)
+        for f in os.listdir(libdir):
+            mappings = np.loadtxt(os.path.join(libdir, f), dtype=str, delimiter=",", ndmin=2)
             
-            for lig in symm_bidentate_names:
-                keys = mapping[start:start + 2]
-                start += 2
-                comp = Component(lig)
-                for old_key, new_key in zip(keys, comp.key_atoms):
+            point_group, subset = f.rstrip(".csv").split("_")            
+            # for each possible structure, create a copy of the original template shape
+            # attach ligands in the order they would appear in the formula
+            for i, mapping in enumerate(mappings):
+                geom_copy = geom.copy()
+                geom_copy.center = [geom_copy.atoms[0]]
+                geom_copy.components = [Component([atom]) for atom in geom_copy.atoms[1:]]
+            
+                start = 0
+                for lig in monodentate_names:
+                    key = mapping[start]
+                    start += 1
+                    comp = Component(lig)
                     d = 2.5
+                    # adjust distance to key atoms to what they should be for the new ligand
                     try:
-                        d = bo.bonds[bo.key(center, new_key)]["1.0"]
+                        d = bo.bonds[bo.key(center, comp.key_atoms[0])]["1.0"]
                     except KeyError:
                         pass
                     geom_copy.change_distance(
                         geom_copy.atoms[0],
-                        old_key,
+                        key,
                         dist=d,
-                        fix=1,
-                        as_group=False
+                        fix=1
                     )
-                geom_copy.map_ligand(comp, keys, minimize=minimize)
+                    # attach ligand
+                    geom_copy.map_ligand(comp, key, minimize=minimize)
                 
-            for lig in asymm_bidentate_names:
-                keys = mapping[start:start + 2]
-                start += 2
-                comp = Component(lig)
-                for old_key, new_key in zip(keys, comp.key_atoms):
-                    d = 2.5
-                    try:
-                        d = bo.bonds[bo.key(center, new_key)]["1.0"]
-                    except KeyError:
-                        pass
-                    geom_copy.change_distance(
-                        geom_copy.atoms[0],
-                        old_key,
-                        dist=d,
-                        fix=1,
-                        as_group=False
-                    )
-                geom_copy.map_ligand(comp, keys, minimize=minimize)
-        
-            geom_copy.name = "%s-%i" % (this_name, i + 1)
-            geoms.append(geom_copy)
+                for lig in symm_bidentate_names:
+                    keys = mapping[start:start + 2]
+                    start += 2
+                    comp = Component(lig)
+                    for old_key, new_key in zip(keys, comp.key_atoms):
+                        d = 2.5
+                        try:
+                            d = bo.bonds[bo.key(center, new_key)]["1.0"]
+                        except KeyError:
+                            pass
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0],
+                            old_key,
+                            dist=d,
+                            fix=1,
+                            as_group=False
+                        )
+                    geom_copy.map_ligand(comp, keys, minimize=minimize)
+                    
+                for lig in asymm_bidentate_names:
+                    keys = mapping[start:start + 2]
+                    start += 2
+                    comp = Component(lig)
+                    for old_key, new_key in zip(keys, comp.key_atoms):
+                        d = 2.5
+                        try:
+                            d = bo.bonds[bo.key(center, new_key)]["1.0"]
+                        except KeyError:
+                            pass
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0],
+                            old_key,
+                            dist=d,
+                            fix=1,
+                            as_group=False
+                        )
+                    geom_copy.map_ligand(comp, keys, minimize=minimize)
+            
+                geom_copy.name = "%s-%i_%s_%s" % (this_name, i + 1, point_group, subset)
+                geoms.append(geom_copy)
         
         return geoms, cc_type
     
@@ -1161,10 +1164,12 @@ class Geometry:
     ):
         """
         determine canonical ranking for atoms
-        invariant: bool - if True, use invariant described in 10.1021/ci00062a008
+        invariant: bool - if True, use invariant described in J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
+                          (DOI: 10.1021/ci00062a008)
                           if False, use neighbor IDs
 
-        algorithm described in 10.1021/acs.jcim.5b00543
+        algorithm described in J. Chem. Inf. Model. 2015, 55, 10, 2111–2120 
+        (DOI: 10.1021/acs.jcim.5b00543)
         """
         primes = Primes.list(len(self.atoms))
         atoms = []
@@ -2078,8 +2083,9 @@ class Geometry:
         basis=None,
     ):
         """
-        calculates % buried volume (%V_bur)
-        Monte-Carlo or Gauss-Legendre/Lebedev integration
+        calculates % buried volume (%V_bur) using Monte-Carlo or Gauss-Legendre/Lebedev integration
+        see Organometallics 2008, 27, 12, 2679–2681 (DOI: 10.1021/om8001119) for details
+
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
                   the centroid between the atoms

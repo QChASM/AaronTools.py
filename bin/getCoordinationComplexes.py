@@ -68,7 +68,11 @@ coord_comp_parser.add_argument(
     required=True,
     metavar="output destination",
     dest="outdir",
-    help="output directory",
+    help="output directory\n" +\
+    "Filenames will match the detected generic formula and\n" +
+    "include the point group and subset from the reference\n"
+    "noted above\n"
+    "Subsets with primes (e.g. A' and A'') are not distinguished",
 )
 
 args = coord_comp_parser.parse_args()

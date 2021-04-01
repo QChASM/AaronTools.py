@@ -10,7 +10,7 @@ from AaronTools.finders import NotAny
 
 
 vbur_parser = argparse.ArgumentParser(
-    description="calculated % volume buried in a sphere around a center atom",
+    description="calculated % volume buried in a sphere around a center atom - see Organometallics 2008, 27, 12, 2679–2681",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -71,7 +71,14 @@ vbur_parser.add_argument(
     default="umn",
     choices=["umn", "bondi"],
     dest="radii",
-    help="VDW radii to use in calculation\nDefault: umn",
+    help="VDW radii to use in calculation\n" + 
+    "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n" +
+    "    (DOI: 10.1021/jp8111556)\n" + 
+    "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n" +
+    "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
+    "    (DOI: 10.1023/A:1011625728803)\n" + 
+    "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
+    "Default: umn",
 )
 
 vbur_parser.add_argument(
@@ -96,7 +103,7 @@ vbur_parser.add_argument(
     type=lambda x: x.capitalize() if x.lower() == "lebedev" else x.upper(),
     choices=["MC", "Lebedev"],
     dest="method",
-    help="integration method\nDefault: Lebedev"
+    help="integration method - Monte-Carlo (MC) or Lebedev quadrature (Lebedev)\nDefault: Lebedev"
 )
 
 grid_options = vbur_parser.add_argument_group("Lebedev integration options")
@@ -106,7 +113,8 @@ grid_options.add_argument(
     default=20,
     choices=[20, 32, 64, 75, 99, 127],
     dest="rpoints",
-    help="number of radial shells for Lebedev integration\n" +
+    help="number of radial shells for Gauss-Legendre integration\n" +
+    "of the radial component\n" +
     "lower values are faster, but at the cost of accuracy\nDefault: 20"
 )
 

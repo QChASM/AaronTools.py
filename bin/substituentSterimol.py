@@ -9,7 +9,7 @@ from AaronTools.substituent import Substituent
 from AaronTools.utils.utils import get_filename
 
 sterimol_parser = argparse.ArgumentParser(
-    description="calculate B1, B5, and L sterimol parameters for substituents",
+    description="calculate B1, B5, and L sterimol parameters for substituents - see Verloop, A. and Tipker, J. (1976), Use of linear free energy related and other parameters in the study of fungicidal selectivity. Pestic. Sci., 7: 379-390.",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -57,7 +57,14 @@ sterimol_parser.add_argument(
     default="bondi",
     choices=["bondi", "umn"],
     dest="radii",
-    help="van der Waals radii - Bondi or Truhlar et. al.\nDefault: bondi"
+    help="VDW radii to use in calculation\n" + 
+    "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n" +
+    "    (DOI: 10.1021/jp8111556)\n" + 
+    "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n" +
+    "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
+    "    (DOI: 10.1023/A:1011625728803)\n" + 
+    "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
+    "Default: bondi"
 )
 
 sterimol_parser.add_argument(
@@ -65,7 +72,7 @@ sterimol_parser.add_argument(
     action="store_true",
     required=False,
     dest="vector",
-    help="print Chimera bild file for vectors instead of\nparameter values"
+    help="print Chimera/ChimeraX bild file for vectors instead of parameter values"
 )
 
 sterimol_parser.add_argument(

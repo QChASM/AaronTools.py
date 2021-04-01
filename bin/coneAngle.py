@@ -71,9 +71,12 @@ cone_parser.add_argument(
     dest="method",
     help="cone angle type\n" +
     "Tolman: Tolman's method for asymmetric mono- and bidentate ligands\n" +
-    "        see doi 10.1021/ja00808a009\n" +
+    "        see J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI:\n" +
+    "        10.1021/ja00808a009)\n" +
     "Exact: (Default) Allen's method for an all-encompassing cone\n" +
-    "       see doi 10.1002/jcc.23217",
+    "       see Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.\n" +
+    "       (2013), Exact ligand cone angles. J. Comput. Chem., 34:\n" +
+    "       1189-1197. (DOI: 10.1002/jcc.23217)",
 )
 
 cone_parser.add_argument(
@@ -81,7 +84,14 @@ cone_parser.add_argument(
     default="umn",
     choices=["umn", "bondi"],
     dest="radii",
-    help="VDW radii to use in calculation\nDefault: umn",
+    help="VDW radii to use in calculation\n" + 
+    "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n" +
+    "    (DOI: 10.1021/jp8111556)\n" + 
+    "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n" +
+    "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
+    "    (DOI: 10.1023/A:1011625728803)\n" + 
+    "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
+    "Default: umn",
 )
 
 cone_parser.add_argument(
@@ -89,7 +99,7 @@ cone_parser.add_argument(
     action="store_true",
     default=False,
     dest="print_cones",
-    help="print Chimera bild file containing cones",
+    help="print Chimera/ChimeraX bild file containing cones",
 )
 
 args = cone_parser.parse_args()
