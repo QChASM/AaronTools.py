@@ -322,36 +322,40 @@ class Geometry:
         # sorted by name count is insufficient when there's multiple monodentate ligands
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
-        monodentate_names = sorted(
-            monodentate_names,
-            key=lambda x: 1000 * monodentate_names.count(x) + Component.list().index(x),
-            reverse=True
-        )
-        for i, mono_lig in enumerate(set(monodentate_names)):
+
+        for i, mono_lig in enumerate(
+            sorted(
+                set(monodentate_names),
+                key=lambda x: monodentate_names.count(x),
+                reverse=True
+            )
+        ):
             cc_type += alphabet[i]
             this_name += "(%s)" % mono_lig
             if monodentate_names.count(mono_lig) > 1:
                 cc_type += "%i" % monodentate_names.count(mono_lig)
                 this_name += "%i" % monodentate_names.count(mono_lig)
         
-        symm_bidentate_names = sorted(
-            symm_bidentate_names,
-            key=lambda x: 1000 * symm_bidentate_names.count(x) + Component.list().index(x),
-            reverse=True
-        )
-        for i, symbi_lig in enumerate(set(symm_bidentate_names)):
+        for i, symbi_lig in enumerate(
+            sorted(
+                set(symm_bidentate_names),
+                key=lambda x: symm_bidentate_names.count(x),
+                reverse=True
+            )
+        ):
             cc_type += "(%s)" % symmbet[i]
             this_name += "(%s)" % symbi_lig
             if symm_bidentate_names.count(symbi_lig) > 1:
                 cc_type += "%i" % symm_bidentate_names.count(symbi_lig)
                 this_name += "%i" % symm_bidentate_names.count(symbi_lig)
         
-        asymm_bidentate_names = sorted(
-            asymm_bidentate_names,
-            key=lambda x: 1000 * asymm_bidentate_names.count(x) + Component.list().index(x),
-            reverse=True
-        )
-        for i, asymbi_lig in enumerate(set(asymm_bidentate_names)):
+        for i, asymbi_lig in enumerate(
+            sorted(
+                set(asymm_bidentate_names),
+                key=lambda x: asymm_bidentate_names.count(x),
+                reverse=True
+            )
+        ):
             cc_type += "(%s)" % asymmbet[i]
             this_name += "(%s)" % asymbi_lig
             if asymm_bidentate_names.count(asymbi_lig) > 1:
