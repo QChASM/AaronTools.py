@@ -452,23 +452,21 @@ class Substituent(Geometry):
 
         return found
 
-    def sterimol(self, parameter="L", return_vector=False, radii="bondi"):
+    def sterimol(self, return_vector=False, radii="bondi"):
         """
-        returns sterimol parameter value for the specified parameter
+        returns sterimol parameter values in a dictionary
+        keys are B1, B2, B3, B4, B5, and L
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
         selectivity. Pestic. Sci., 7: 379-390. 
         (DOI: 10.1002/ps.2780070410)
         
-        return_vector: bool/returns tuple(vector start, vector end) instead
-        parameter (str) can be:
-            "L"
-            "B1"
-            "B5"
+        return_vector: bool/returns dict of tuple(vector start, vector end) instead
         radii: "bondi" - Bondi vdW radii
                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
         """
         from AaronTools.finders import BondedTo
+        from scipy.spatial import ConvexHull
 
         if self.end is None:
             raise RuntimeError(
@@ -491,120 +489,191 @@ class Substituent(Geometry):
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
 
-        param_value = None
-        vector = None
-        if parameter == "B1":
-            from scipy.spatial import ConvexHull
-            # for B1, we're going to use ConvexHull to find the minimum width
-            # to do this, we're going to project the substituent in a plane
-            # perpendicular to the L-axis and get a set of points along the 
-            # vdw radii of the atoms
-            # ConvexHull will take these points and figure out which ones
-            # are on the outside (vertices)
-            # we then just need to find the minimum bounding box of the hull
-            points = []
-            ndx = []
-            test_v = atom2.bond(self.atoms[-1])
-            # just grab a random vector perpendicular to the L-axis
-            # it doesn't matter really
-            ip_vector = perp_vector(L_axis)
-            x_vec = np.cross(ip_vector, L_axis)
-            x_vec /= np.linalg.norm(x_vec)
-            basis = np.array([x_vec, ip_vector, L_axis]).T
+        B1 = None
+        B2 = None
+        B3 = None
+        B4 = None
+        B5 = None
+        L = None
+        vector = {"B1": None, "B2": None, "B3": None, "B4": None, "B5": None, "L": None}
+        # for B1, we're going to use ConvexHull to find the minimum width
+        # to do this, we're going to project the substituent in a plane
+        # perpendicular to the L-axis and get a set of points along the 
+        # vdw radii of the atoms
+        # ConvexHull will take these points and figure out which ones
+        # are on the outside (vertices)
+        # we then just need to find the minimum bounding box of the hull
+        points = []
+        ndx = []
+        test_v = atom2.bond(self.atoms[-1])
+        # just grab a random vector perpendicular to the L-axis
+        # it doesn't matter really
+        ip_vector = perp_vector(L_axis)
+        x_vec = np.cross(ip_vector, L_axis)
+        x_vec /= np.linalg.norm(x_vec)
+        basis = np.array([x_vec, ip_vector, L_axis]).T
 
         for i, atom in enumerate(self.atoms):
             test_v = atom2.bond(atom)
 
-            if parameter == "L":
-                test_L = (
-                    np.dot(test_v, L_axis)
-                    - atom1.dist(atom2)
-                    + VDW_RADII[atom1.element]
-                    + VDW_RADII[atom.element]
+            # L
+            test_L = (
+                np.dot(test_v, L_axis)
+                - atom1.dist(atom2)
+                + radii_dict[atom1.element]
+                + radii_dict[atom.element]
+            )
+            if L is None or test_L > L:
+                L = test_L
+                start = atom1.coords - radii_dict[atom1.element] * L_axis
+                vector["L"] = (start, start + L * L_axis)
+
+            # B1-4 stuff - we come back to this later
+            r1 = radii_dict[atom.element]
+
+            new_coords = np.dot(test_v, basis)
+            # in plane coordinates - z-axis is L-axis, which
+            # we don't care about for B1
+            ip_coords = new_coords[0:2]
+            for x in np.linspace(0, 2 * np.pi, num=250):
+                ndx.append(i)
+                v = ip_coords + r1 * np.array([np.cos(x), np.sin(x)])
+                points.append(v)
+
+            # B5
+            b = np.dot(test_v, L_axis)
+            test_B5_v = test_v - (b * L_axis)
+            test_B5 = np.linalg.norm(test_B5_v) + radii_dict[atom.element]
+            if B5 is None or test_B5 > B5:
+                B5 = test_B5
+                start = atom.coords - test_B5_v
+                if np.linalg.norm(test_B5_v) > 3 * np.finfo(float).eps:
+                    perp_vec = test_B5_v
+                else:
+                    v_n = test_v / np.linalg.norm(test_v)
+                    perp_vec = v_n[::-1]
+                    perp_vec -= np.dot(v_n, perp_vec) * v_n
+
+                end = start + test_B5 * (
+                    perp_vec / np.linalg.norm(perp_vec)
                 )
-                if param_value is None or test_L > param_value:
-                    param_value = test_L
-                    start = atom1.coords - VDW_RADII[atom1.element] * L_axis
-                    vector = (start, start + param_value * L_axis)
 
-            elif parameter == "B1":
-                r1 = radii_dict[atom.element]
+                vector["B5"] = (start, end)
 
-                new_coords = np.dot(test_v, basis)
-                # in plane coordinates - z-axis is L-axis, which
-                # we don't care about for B1
-                ip_coords = new_coords[0:2]
-                for x in np.linspace(0, 2 * np.pi, num=250):
-                    ndx.append(i)
-                    v = ip_coords + r1 * np.array([np.cos(x), np.sin(x)])
-                    points.append(v)
+        points = np.array(points)
 
-            elif parameter == "B5":
-                b = np.dot(test_v, L_axis)
-                test_B5_v = test_v - (b * L_axis)
-                test_B5 = np.linalg.norm(test_B5_v) + radii_dict[atom.element]
-                if param_value is None or test_B5 > param_value:
-                    param_value = test_B5
-                    start = atom.coords - test_B5_v
-                    if np.linalg.norm(test_B5_v) > 3 * np.finfo(float).eps:
-                        perp_vec = test_B5_v
-                    else:
-                        v_n = test_v / np.linalg.norm(test_v)
-                        perp_vec = v_n[::-1]
-                        perp_vec -= np.dot(v_n, perp_vec) * v_n
+        hull = ConvexHull(points)
 
-                    end = start + test_B5 * (
-                        perp_vec / np.linalg.norm(perp_vec)
-                    )
+        # import matplotlib.pyplot as plt
+        # plt.plot(points[:, 0], points[:, 1], 'o')
+        # plt.plot(0, 0, 'kx')
+        # plt.plot(points[hull.vertices,0], points[hull.vertices,1], 'ro')
 
-                    vector = (start, end)
-
-        if parameter == "B1":
-            points = np.array(points)
-
-            # import matplotlib.pyplot as plt
-            hull = ConvexHull(points)
-
-            # plt.plot(points[:, 0], points[:, 1], 'o')
-            # plt.plot(points[hull.vertices,0], points[hull.vertices,1], 'ro')
-
-            # ax = plt.gca()
-            # ax.set_aspect('equal')
+        # ax = plt.gca()
+        # ax.set_aspect('equal')
+        
+        # go through each edge, find a vector perpendicular to the one
+        # defined by the edge that passes through the origin
+        # the length of the shortest of these vectors is B1
+        for i in range(0, len(hull.vertices) - 1):
+            v_ndx_0, v_ndx_1 = hull.vertices[i:i + 2]
+            v = points[v_ndx_1] - points[v_ndx_0]
+            v /= np.linalg.norm(v)
+            b = points[v_ndx_0]
+            t = np.dot(b, v)
+            perp = b - t * v
+            # plt.plot(perp[0], perp[1], 'g*')
+            test_b1 = np.linalg.norm(perp)
+            if B1 is None or test_b1 < B1:
+                # min_ndx = hull.vertices[i:i + 2]
+                B1 = test_b1
+                b1_atom = self.atoms[ndx[v_ndx_0]]
+                test_v = atom2.bond(b1_atom)
+                test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
+                start = b1_atom.coords - test_B1_v
+                end = x_vec * perp[0] + ip_vector * perp[1]
+                end += start
+                vector["B1"] = (start, end)
+        
+        # figure out B2-4
+        # these are sorted in increasing order
+        # for now, they will just be Bpar for the one opposite B1
+        # and Bperp1 and Bperp2 for the ones perpendicular to B1
+        b1_norm = end - start
+        b1_norm /= np.linalg.norm(b1_norm)
+        b1_perp = np.cross(L_axis, b1_norm)
+        b1_perp /= np.linalg.norm(b1_perp)
+        Bpar = None
+        Bperp1 = None
+        Bperp2 = None
+        for atom in self.atoms:
+            test_v = atom2.bond(atom)
+            b = np.dot(test_v, L_axis)
+            test_B_v = test_v - (b * L_axis)
+            test_par_vec = np.dot(test_B_v, b1_norm) * b1_norm
+            test_par_vec -= radii_dict[atom.element] * b1_norm
+            start = atom.coords - test_B_v
+            end = start + test_par_vec
             
-            min_b1 = None
-            # go through each edge, find a vector perpendicular to the one
-            # defined by the edge that passes through the origin
-            # the length of the shortest of these vectors is B1
-            for i in range(0, len(hull.vertices) - 1):
-                v_ndx_0, v_ndx_1 = hull.vertices[i:i + 2]
-                v = points[v_ndx_1] - points[v_ndx_0]
-                v /= np.linalg.norm(v)
-                b = points[v_ndx_0]
-                t = np.dot(b, v)
-                perp = b - t * v
-                # plt.plot(perp[0], perp[1], '*')
-                test_b1 = np.linalg.norm(perp)
-                if min_b1 is None or test_b1 < min_b1:
-                    # min_ndx = hull.vertices[i:i + 2]
-                    min_b1 = test_b1
-                    b1_atom = self.atoms[ndx[v_ndx_0]]
-                    test_v = atom2.bond(b1_atom)
-                    test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
-                    start = b1_atom.coords - test_B1_v
-                    end = x_vec * perp[0] + ip_vector * perp[1]
-                    end += start
-                    
-            vector = (start, end)
-            # print(np.linalg.norm(start - end), min_b1)
-            param_value = min_b1
+            test_Bpar = np.linalg.norm(end - start)
+            if Bpar is None or test_Bpar > Bpar:
+                Bpar = test_Bpar
+                par_vec = (start, end)
             
-            # plt.plot(points[min_ndx,0], points[min_ndx,1], 'gx')
+            perp_vec = np.dot(test_B_v, b1_perp) * b1_perp
+            if np.dot(test_B_v, b1_perp) > 0 or np.isclose(np.dot(b1_perp, test_B_v), 0):
+                test_perp_vec1 = perp_vec + radii_dict[atom.element] * b1_perp
+                end = start + test_perp_vec1
+                test_Bperp1 = np.linalg.norm(end - start)
+                if Bperp1 is None or test_Bperp1 > Bperp1:
+                    Bperp1 = test_Bperp1
+                    perp_vec1 = (start, end)
+            if np.dot(test_B_v, b1_perp) < 0 or np.isclose(np.dot(b1_perp, test_B_v), 0):
+                test_perp_vec2 = perp_vec - radii_dict[atom.element] * b1_perp
+                end = start + test_perp_vec2
+                test_Bperp2 = np.linalg.norm(end - start)
+                if Bperp2 is None or test_Bperp2 > Bperp2:
+                    Bperp2 = test_Bperp2
+                    perp_vec2 = (start, end)
+
+        i = 0
+        Bs = [Bpar, Bperp1, Bperp2]
+        Bvecs = [par_vec, perp_vec1, perp_vec2]
+        while Bs:
+            max_b = max(Bs)
+            n = Bs.index(max_b)
+            max_v = Bvecs.pop(n)
+            Bs.pop(n)
             
-            # plt.show()
+            if i == 0:
+                B4 = max_b
+                vector["B4"] = max_v
+            elif i == 1:
+                B3 = max_b
+                vector["B3"] = max_v
+            elif i == 2:
+                B2 = max_b
+                vector["B2"] = max_v
+            i += 1
+        
+        params = {
+            "B1": B1,
+            "B2": B2,
+            "B3": B3,
+            "B4": B4,
+            "B5": B5,
+            "L": L,
+        }
+
+        # print(np.linalg.norm(start - end), B1)
+        
+        # plt.plot(points[min_ndx,0], points[min_ndx,1], 'g*')
+        
+        # plt.show()
 
         if return_vector:
             return vector
-        return param_value
+        return params
 
     def align_to_bond(self, bond):
         """

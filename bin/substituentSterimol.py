@@ -91,7 +91,7 @@ args = sterimol_parser.parse_args()
 
 s = ""
 if not args.vector:
-    s += "B1\tB5\tL\tfile\n"
+    s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -111,24 +111,26 @@ for infile in args.infile:
     end = geom.find(avoid)[0]
     frag = geom.get_fragment(target, stop=end)
     sub = Substituent(frag, end=end, detect=False)
-    b1 = sub.sterimol("B1", return_vector=args.vector, radii=args.radii)
-    b5 = sub.sterimol("B5", return_vector=args.vector, radii=args.radii)
-    l = sub.sterimol("L", return_vector=args.vector, radii=args.radii)
+    data = sub.sterimol(return_vector=args.vector, radii=args.radii)
     if args.vector:
-        start, end = b1
-        s += ".color black\n"
-        s += ".note Sterimol B1\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
-        start, end = b5
-        s += ".color red\n"
-        s += ".note Sterimol B5\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
-        start, end = l
-        s += ".color blue\n"
-        s += ".note Sterimol L\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
+        for key, color in zip(
+                ["B1", "B2", "B3", "B4", "B5", "L"],
+                ["black", "green", "purple", "orange", "red", "blue"]
+        ):
+            start, end = data[key]
+            s += ".color %s\n" % color
+            s += ".note Sterimol %s\n" % key
+            s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
     else:
-        s += "%.2f\t%.2f\t%.2f\t%s\n" % (b1, b5, l, infile)
+        s += "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n" % (
+            data["B1"],
+            data["B2"],
+            data["B3"],
+            data["B4"],
+            data["B5"],
+            data["L"],
+            infile,
+        )
 
 if not args.outfile:
     print(s)
