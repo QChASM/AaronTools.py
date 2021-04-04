@@ -461,6 +461,19 @@ class Substituent(Geometry):
         selectivity. Pestic. Sci., 7: 379-390. 
         (DOI: 10.1002/ps.2780070410)
         
+        Note: AaronTools' definition of the L parameter is different than the original 
+        STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is 
+        projected onto a plane parallel to the bond between the molecule and the substituent.
+        The L parameter is 0.40 Å plus the distance from the first substituent atom to the
+        outer van der Waals surface of the projection along the bond vector. This 0.40 Å is
+        a correction for STERIMOL using a hydrogen to represent the molecule, when a carbon
+        would be more likely. In AaronTools the substituent is projected the same, but L is
+        calculated starting from the van der Waals radius of the first substituent atom
+        instead. This means AaronTools will give the same L value even if the substituent
+        is capped with something besides a hydrogen. When comparing AaronTools' L values
+        with STERIMOL (using the same set of radii for the atoms), the values usually
+        differ by < 0.1 Å.
+        
         return_vector: bool/returns dict of tuple(vector start, vector end) instead
         radii: "bondi" - Bondi vdW radii
                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
@@ -496,16 +509,17 @@ class Substituent(Geometry):
         B5 = None
         L = None
         vector = {"B1": None, "B2": None, "B3": None, "B4": None, "B5": None, "L": None}
-        # for B1, we're going to use ConvexHull to find the minimum width
+        # for B1, we're going to use ConvexHull to find the minimum distance
+        # from one face of a bounding box
         # to do this, we're going to project the substituent in a plane
         # perpendicular to the L-axis and get a set of points along the 
         # vdw radii of the atoms
         # ConvexHull will take these points and figure out which ones
         # are on the outside (vertices)
-        # we then just need to find the minimum bounding box of the hull
+        # we then just need to find the bounding box with the minimum distance
+        # from L-axis to one side of the box
         points = []
         ndx = []
-        test_v = atom2.bond(self.atoms[-1])
         # just grab a random vector perpendicular to the L-axis
         # it doesn't matter really
         ip_vector = perp_vector(L_axis)
@@ -516,7 +530,14 @@ class Substituent(Geometry):
         for i, atom in enumerate(self.atoms):
             test_v = atom2.bond(atom)
 
-            # L
+            # L - overlap with L-axis and vector from 1st substituent
+            # atom to this atom plus the difference between the sum of
+            # the vdw radii and bond length of the 1st substituent atom
+            # and the molecule's atom
+            # the distance from atom2 is subtracted off b/c our L
+            # goes from one end of the VDW radii to the other
+            # distance from atom2 is included in test_v, so we need
+            # to subtract it off
             test_L = (
                 np.dot(test_v, L_axis)
                 - atom1.dist(atom2)
@@ -541,6 +562,9 @@ class Substituent(Geometry):
                 points.append(v)
 
             # B5
+            # find distance along L-axis, then subtract this from vector from
+            # vector from molecule to this atom to get the B5 vector
+            # add the atom's radius to get the full B5
             b = np.dot(test_v, L_axis)
             test_B5_v = test_v - (b * L_axis)
             test_B5 = np.linalg.norm(test_B5_v) + radii_dict[atom.element]
@@ -550,8 +574,10 @@ class Substituent(Geometry):
                 if np.linalg.norm(test_B5_v) > 3 * np.finfo(float).eps:
                     perp_vec = test_B5_v
                 else:
+                    # this atom might be along the L-axis, in which case use
+                    # any vector orthogonal to L-axis
                     v_n = test_v / np.linalg.norm(test_v)
-                    perp_vec = v_n[::-1]
+                    perp_vec = perp_vector(L_axis)
                     perp_vec -= np.dot(v_n, perp_vec) * v_n
 
                 end = start + test_B5 * (
@@ -576,17 +602,22 @@ class Substituent(Geometry):
         # defined by the edge that passes through the origin
         # the length of the shortest of these vectors is B1
         for i in range(0, len(hull.vertices) - 1):
+            # the vertices of the hull are organized in a counterclockwise
+            # direction, so neighboring indices define an edge
             v_ndx_0, v_ndx_1 = hull.vertices[i:i + 2]
+            # find 'tangent' of the edge
             v = points[v_ndx_1] - points[v_ndx_0]
             v /= np.linalg.norm(v)
+            # find normal to this edge by projecting a vector from the
+            # L axis to one of the points on the edge
             b = points[v_ndx_0]
             t = np.dot(b, v)
             perp = b - t * v
             # plt.plot(perp[0], perp[1], 'g*')
             test_b1 = np.linalg.norm(perp)
             if B1 is None or test_b1 < B1:
-                # min_ndx = hull.vertices[i:i + 2]
                 B1 = test_b1
+                # figure out vector from L axis to represent B1
                 b1_atom = self.atoms[ndx[v_ndx_0]]
                 test_v = atom2.bond(b1_atom)
                 test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
@@ -596,7 +627,7 @@ class Substituent(Geometry):
                 vector["B1"] = (start, end)
         
         # figure out B2-4
-        # these are sorted in increasing order
+        # these need to be sorted in increasing order
         # for now, they will just be Bpar for the one opposite B1
         # and Bperp1 and Bperp2 for the ones perpendicular to B1
         b1_norm = end - start
@@ -636,6 +667,7 @@ class Substituent(Geometry):
                     Bperp2 = test_Bperp2
                     perp_vec2 = (start, end)
 
+        # put B2-4 in order
         i = 0
         Bs = [Bpar, Bperp1, Bperp2]
         Bvecs = [par_vec, perp_vec1, perp_vec2]
@@ -664,8 +696,6 @@ class Substituent(Geometry):
             "B5": B5,
             "L": L,
         }
-
-        # print(np.linalg.norm(start - end), B1)
         
         # plt.plot(points[min_ndx,0], points[min_ndx,1], 'g*')
         

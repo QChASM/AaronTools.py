@@ -3083,7 +3083,7 @@ class Geometry:
 
         # rotate to min angle
         self.rotate(
-            axis, np.deg2rad(angle_min - angle), targets=targets, center=center
+            axis, np.deg2rad(angle_min - angle), targets=targets, center=center_coords
         )
 
         return

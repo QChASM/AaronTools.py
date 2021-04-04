@@ -172,7 +172,7 @@ class ATEncoder(json.JSONEncoder):
                 
         if obj.basis:
             rv["basis"] = {"name": [], "elements":[], "file":[], "auxiliary":[]}
-            if obj.basis:
+            if obj.basis.basis:
                 for basis in obj.basis.basis:
                     rv["basis"]["name"].append(basis.name)
                     rv["basis"]["elements"].append([])
