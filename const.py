@@ -1358,7 +1358,6 @@ ATOM_TYPES = [
 
 # main group vdw radii from doi 10.1021/jp8111556
 # transition metals from doi 10.1023/A:1011625728803 (crystal radii)
-# transition metals are indented a bit more than the rest
 VDW_RADII = {
     "H": 1.10,
     "He": 1.40,

@@ -1,11 +1,10 @@
 """For parsing and storing atom information"""
 import json
 import os
-from copy import deepcopy
-from warnings import warn
 
 import numpy as np
 
+from AaronTools import addlogger
 from AaronTools.const import (
     CONNECTIVITY,
     EIJ,
@@ -71,6 +70,7 @@ class BondOrder:
         return float(closest[0])
 
 
+@addlogger
 class Atom:
     """
     Attributes:
@@ -86,6 +86,8 @@ class Atom:
         _connectivity   int             max connections without hypervalence
         _saturation     int             max connections without hypervalence or charges
     """
+
+    LOG = None
 
     BondOrder()
 
@@ -172,6 +174,14 @@ class Atom:
                 pass
         return True
 
+    def __str__(self):
+        s = ""
+        s += "{:<3s} ".format(self.element)
+        s += " {:<4s}".format(self.name)
+        for c in self.coords:
+            s += " {: 10.6f}".format(c)
+        return s
+
     def __repr__(self):
         s = ""
         s += "{:>3s} ".format(self.element)
@@ -187,20 +197,21 @@ class Atom:
         try:
             self._radii = float(RADII[self.element])
         except KeyError:
-            warn("Radii not found for element: %s" % self.element)
+            self.LOG.warning("Radii not found for element: %s" % self.element)
         return
 
     def __setattr__(self, attr, val):
         if (
-                (attr == "_hashed" and val) or
-                (attr != "element" and attr != "coords") or
-                not self._hashed
+            (attr == "_hashed" and val)
+            or (attr != "element" and attr != "coords")
+            or not self._hashed
         ):
             super().__setattr__(attr, val)
         else:
             raise RuntimeError(
-                "Atom %s's Geometry has been hashed and can no longer be changed\n" % self.name +
-                "setattr was called to set %s to %s" % (attr, val)
+                "Atom %s's Geometry has been hashed and can no longer be changed\n"
+                % self.name
+                + "setattr was called to set %s to %s" % (attr, val)
             )
 
     def _set_vdw(self):
@@ -208,7 +219,9 @@ class Atom:
         try:
             self._vdw = float(VDW_RADII[self.element])
         except KeyError:
-            warn("VDW Radii not found for element: %s" % self.element)
+            self.LOG.warning(
+                "VDW Radii not found for element: %s" % self.element
+            )
             self._vdw = 0
         return
 
@@ -219,7 +232,9 @@ class Atom:
         try:
             self._connectivity = int(CONNECTIVITY[self.element])
         except KeyError:
-            warn("Connectivity not found for element: " + self.element)
+            self.LOG.warning(
+                "Connectivity not found for element: " + self.element
+            )
         return
 
     def _set_saturation(self):
@@ -230,7 +245,9 @@ class Atom:
             self._saturation = int(SATURATION[self.element])
         except KeyError:
             if self.element not in TMETAL:
-                warn("Saturation not found for element: " + self.element)
+                self.LOG.warning(
+                    "Saturation not found for element: " + self.element
+                )
         return
 
     def add_tag(self, *args):
@@ -307,7 +324,7 @@ class Atom:
             except AttributeError:
                 rv.__dict__[key] = val
                 if val.__class__.__module__ != "builtins":
-                    warn(
+                    self.LOG.warning(
                         "No copy method for {}: in-place changes may occur".format(
                             type(val)
                         )
@@ -361,7 +378,7 @@ class Atom:
         if self.element in MASS:
             return MASS[self.element]
         else:
-            warn("no mass for %s" % self.element)
+            self.LOG.warning("no mass for %s" % self.element)
             return 0
 
     def rij(self, other):

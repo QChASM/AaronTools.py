@@ -2,14 +2,16 @@
 import os
 import re
 from glob import glob
+
 import numpy as np
 
-from AaronTools.const import AARONLIB, AARONTOOLS, VDW_RADII, BONDI_RADII
+from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
+from AaronTools.fileIO import read_types
+from AaronTools.finders import BondedTo, CloserTo
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.finders import BondedTo, CloserTo
-from AaronTools.fileIO import read_types
 from AaronTools.utils.utils import get_filename
+
 
 class Component(Geometry):
     """
@@ -49,7 +51,7 @@ class Component(Geometry):
         if isinstance(structure, str) and not os.access(structure, os.R_OK):
             for ext in read_types:
                 if structure.endswith(".%s" % ext):
-                    structure = structure[:-(1 + len(ext))]
+                    structure = structure[: -(1 + len(ext))]
 
             for lib in [Component.AARON_LIBS, Component.BUILTIN]:
                 if not os.path.exists(lib):
@@ -59,12 +61,12 @@ class Component(Geometry):
                     name, ext = os.path.splitext(f)
                     if not any(".%s" % x == ext for x in read_types):
                         continue
-                    
+
                     match = structure == name
                     if match:
                         flig = os.path.join(lib, f)
                         break
-                    
+
                 if flig:
                     break
             else:
@@ -102,11 +104,12 @@ class Component(Geometry):
         return False
 
     @classmethod
-    def list(cls,
-            name_regex=None,
-            coordinating_elements=None,
-            denticity=None,
-            include_ext=False,
+    def list(
+        cls,
+        name_regex=None,
+        coordinating_elements=None,
+        denticity=None,
+        include_ext=False,
     ):
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
@@ -116,20 +119,20 @@ class Component(Geometry):
                 name, ext = os.path.splitext(f)
                 if not any(".%s" % x == ext for x in read_types):
                     continue
-                
+
                 if name in names:
                     continue
-                
+
                 name_ok = True
                 elements_ok = True
                 denticity_ok = True
-    
+
                 if (
                     name_regex is not None
                     and re.search(name_regex, name, re.IGNORECASE) is None
                 ):
                     name_ok = False
-    
+
                 if coordinating_elements is not None:
                     geom = Geometry(
                         os.path.join(lib, name + ext),
@@ -137,7 +140,9 @@ class Component(Geometry):
                         refresh_ranks=False,
                     )
                     # geom = cls(name)
-                    elements = [geom.atoms[i].element for i in geom.other["key_atoms"]]
+                    elements = [
+                        geom.atoms[i].element for i in geom.other["key_atoms"]
+                    ]
                     if not all(
                         elements.count(x) == coordinating_elements.count(x)
                         for x in coordinating_elements
@@ -146,12 +151,12 @@ class Component(Geometry):
                         for x in elements
                     ):
                         elements_ok = False
-    
+
                 if denticity is not None:
                     geom = cls(name)
                     if len(geom.find("key")) != denticity:
                         denticity_ok = False
-    
+
                 if name_ok and elements_ok and denticity_ok:
                     if include_ext:
                         names.append(name + ext)
@@ -354,7 +359,9 @@ class Component(Geometry):
             start, end, angle, fix=4, adjust=True, as_group=True
         )
 
-    def cone_angle(self, center, method="exact", return_cones=False, radii="umn"):
+    def cone_angle(
+        self, center, method="exact", return_cones=False, radii="umn"
+    ):
         """
         returns cone angle in degrees
         center - Atom() that this component is coordinating
@@ -372,6 +379,11 @@ class Component(Geometry):
                'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
                dict() with elements as keys and radii as values
         """
+        if method.lower() == "tolman":
+            CITATION = "doi:10.1021/ja00808a009"
+        elif method.lower() == "exact":
+            CITATION = "doi:10.1002/jcc.23217"
+        self.LOG.citation(CITATION)
 
         key = self.find("key")
 
@@ -405,7 +417,7 @@ class Component(Geometry):
                     bridge_path = False
 
             for key_atom in key:
-                L_axis =  key_atom.coords - center.coords
+                L_axis = key_atom.coords - center.coords
                 L_axis /= np.linalg.norm(L_axis)
                 bonded_atoms = self.find(BondedTo(key_atom))
                 for bonded_atom in bonded_atoms:
@@ -440,7 +452,9 @@ class Component(Geometry):
                                     other_key = key1
                                 frag = self.find(
                                     frag,
-                                    CloserTo(key_atom, other_key, include_ties=True)
+                                    CloserTo(
+                                        key_atom, other_key, include_ties=True
+                                    ),
                                 )
 
                         # some ligands like DuPhos have rings on the phosphorous atom
@@ -450,12 +464,17 @@ class Component(Geometry):
                         # Geometry(frag).write(outfile="frag%s.xyz" % bonded_atom.name)
 
                         for atom in frag:
-                            beta = np.arcsin(radii_dict[atom.element] / atom.dist(center))
+                            beta = np.arcsin(
+                                radii_dict[atom.element] / atom.dist(center)
+                            )
                             v = center.bond(atom) / center.dist(atom)
                             c = np.linalg.norm(v - L_axis)
                             test_angle = beta + np.arccos((c ** 2 - 2) / -2)
 
-                            if tolman_angle is None or test_angle > tolman_angle:
+                            if (
+                                tolman_angle is None
+                                or test_angle > tolman_angle
+                            ):
                                 tolman_angle = test_angle
 
                     scale = 5 * np.cos(tolman_angle)
@@ -463,11 +482,12 @@ class Component(Geometry):
                     cones.append(
                         (
                             (
-                                center.coords + scale * L_axis if 2 * tolman_angle < np.pi
+                                center.coords + scale * L_axis
+                                if 2 * tolman_angle < np.pi
                                 else center.coords - scale * L_axis
                             ),
                             center.coords,
-                            scale * abs(np.tan(tolman_angle))
+                            scale * abs(np.tan(tolman_angle)),
                         )
                     )
 
@@ -484,7 +504,9 @@ class Component(Geometry):
             test_one_atom_axis = None
             max_beta = None
             for i, atom in enumerate(self.atoms):
-                beta[i] = np.arcsin(radii_dict[atom.element] / atom.dist(center))
+                beta[i] = np.arcsin(
+                    radii_dict[atom.element] / atom.dist(center)
+                )
                 if max_beta is None or beta[i] > max_beta:
                     max_beta = beta[i]
                     test_one_atom_axis = center.bond(atom)
@@ -495,16 +517,16 @@ class Component(Geometry):
             for i, atom in enumerate(self.atoms):
                 rhs = beta[i]
 
-                if np.dot(
-                        center.bond(atom), test_one_atom_axis
-                ) / (
-                        center.dist(atom) * np.linalg.norm(test_one_atom_axis)
-                ) <= 1:
+                if (
+                    np.dot(center.bond(atom), test_one_atom_axis)
+                    / (center.dist(atom) * np.linalg.norm(test_one_atom_axis))
+                    <= 1
+                ):
                     rhs += np.arccos(
-                        np.dot(
-                            center.bond(atom), test_one_atom_axis
-                        ) / (
-                            center.dist(atom) * np.linalg.norm(test_one_atom_axis)
+                        np.dot(center.bond(atom), test_one_atom_axis)
+                        / (
+                            center.dist(atom)
+                            * np.linalg.norm(test_one_atom_axis)
                         )
                     )
                 lhs = max_beta
@@ -521,7 +543,11 @@ class Component(Geometry):
                     (
                         center.coords + scale * test_one_atom_axis,
                         center.coords,
-                        scale * abs(np.linalg.norm(test_one_atom_axis) * np.tan(max_beta))
+                        scale
+                        * abs(
+                            np.linalg.norm(test_one_atom_axis)
+                            * np.tan(max_beta)
+                        ),
                     )
                 )
 
@@ -535,24 +561,23 @@ class Component(Geometry):
                 for j, atom2 in enumerate(self.atoms[:i]):
                     rhs = beta[i]
 
-                    if np.dot(
-                            center.bond(atom1), center.bond(atom2)
-                        ) / (
-                            center.dist(atom1) * center.dist(atom2)
-                    ) <= 1:
+                    if (
+                        np.dot(center.bond(atom1), center.bond(atom2))
+                        / (center.dist(atom1) * center.dist(atom2))
+                        <= 1
+                    ):
                         rhs += np.arccos(
-                            np.dot(
-                                center.bond(atom1), center.bond(atom2)
-                            ) / (
-                                center.dist(atom1) * center.dist(atom2)
-                            )
+                            np.dot(center.bond(atom1), center.bond(atom2))
+                            / (center.dist(atom1) * center.dist(atom2))
                         )
                     lhs = beta[j]
                     if lhs >= rhs:
                         overshadowed_list.append(atom1)
                         break
             # winow list to ones that aren't in the shadow of another
-            atom_list = [atom for atom in self.atoms if atom not in overshadowed_list]
+            atom_list = [
+                atom for atom in self.atoms if atom not in overshadowed_list
+            ]
 
             # check pairs of atoms
             max_a = None
@@ -564,11 +589,8 @@ class Component(Geometry):
                 for j, atom2 in enumerate(atom_list[:i]):
                     ndx_j = self.atoms.index(atom2)
                     beta_ij = np.arccos(
-                        np.dot(
-                            center.bond(atom1), center.bond(atom2)
-                        ) / (
-                            atom1.dist(center) * atom2.dist(center)
-                        )
+                        np.dot(center.bond(atom1), center.bond(atom2))
+                        / (atom1.dist(center) * atom2.dist(center))
                     )
 
                     test_alpha = (beta[ndx_i] + beta[ndx_j] + beta_ij) / 2
@@ -586,7 +608,11 @@ class Component(Geometry):
                             0.5 * (beta_ij - beta[ndx_i] + beta[ndx_j])
                         ) / np.sin(beta_ij)
                         cij = 0
-                        norm = aij * mi + bij * mj + cij * np.cross(mi, mj) / np.sin(bij)
+                        norm = (
+                            aij * mi
+                            + bij * mj
+                            + cij * np.cross(mi, mj) / np.sin(bij)
+                        )
 
             # r = 0.2 * np.tan(max_a)
             # print(
@@ -599,7 +625,9 @@ class Component(Geometry):
             rhs = max_a
             for atom in atom_list:
                 ndx_i = self.atoms.index(atom)
-                lhs = beta[ndx_i] + np.arccos(np.dot(center.bond(atom), norm) / center.dist(atom))
+                lhs = beta[ndx_i] + np.arccos(
+                    np.dot(center.bond(atom), norm) / center.dist(atom)
+                )
                 # this should be >=, but there can be numerical issues
                 if rhs > lhs or np.isclose(rhs, lhs):
                     overshadowed_list.append(atom)
@@ -612,7 +640,7 @@ class Component(Geometry):
                     (
                         center.coords + (scale * norm),
                         center.coords,
-                        scale * abs(np.tan(max_a))
+                        scale * abs(np.tan(max_a)),
                     )
                 )
 
@@ -629,7 +657,7 @@ class Component(Geometry):
             c = 0
             for i, atom1 in enumerate(atom_list):
                 for j, atom2 in enumerate(atom_list[:i]):
-                    for k, atom3 in enumerate(atom_list[i+1:]):
+                    for k, atom3 in enumerate(atom_list[i + 1 :]):
                         c += 1
                         ndx_i = self.atoms.index(atom1)
                         ndx_j = self.atoms.index(atom2)
@@ -653,7 +681,7 @@ class Component(Geometry):
                             (
                                 np.cross(mj, mk),
                                 np.cross(mk, mi),
-                                np.cross(mi, mj)
+                                np.cross(mi, mj),
                             )
                         )
 
@@ -661,7 +689,7 @@ class Component(Geometry):
                             [
                                 np.cos(beta[ndx_i]),
                                 np.cos(beta[ndx_j]),
-                                np.cos(beta[ndx_k])
+                                np.cos(beta[ndx_k]),
                             ]
                         )
 
@@ -669,7 +697,7 @@ class Component(Geometry):
                             [
                                 np.sin(beta[ndx_i]),
                                 np.sin(beta[ndx_j]),
-                                np.sin(beta[ndx_k])
+                                np.sin(beta[ndx_k]),
                             ]
                         )
 
@@ -699,8 +727,12 @@ class Component(Geometry):
                         t2 = 2 * (A - B) * (A + B - 2 * D)
                         t3 = (A + B - 2 * D) ** 2 - 4 * C ** 2
 
-                        w_lt = (-t2 - np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (2 * t1)
-                        w_gt = (-t2 + np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (2 * t1)
+                        w_lt = (-t2 - np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (
+                            2 * t1
+                        )
+                        w_gt = (-t2 + np.sqrt(t2 ** 2 - 4 * t1 * t3)) / (
+                            2 * t1
+                        )
 
                         alpha1 = np.arccos(w_lt) / 2
                         alpha2 = (2 * np.pi - np.arccos(w_lt)) / 2
@@ -714,20 +746,26 @@ class Component(Geometry):
                             if min_alpha is not None and alpha >= min_alpha:
                                 continue
 
-                            lhs = A * np.cos(alpha) ** 2 + B * np.sin(alpha) ** 2
+                            lhs = (
+                                A * np.cos(alpha) ** 2 + B * np.sin(alpha) ** 2
+                            )
                             lhs += 2 * C * np.sin(alpha) * np.cos(alpha)
                             if not np.isclose(lhs, D):
                                 continue
 
                             # print(lhs, D)
 
-                            p = np.dot(N, u * np.cos(alpha) + v * np.sin(alpha))
+                            p = np.dot(
+                                N, u * np.cos(alpha) + v * np.sin(alpha)
+                            )
                             norm = p / gamma_ijk
 
                             for atom in atom_list:
                                 ndx = self.atoms.index(atom)
                                 rhs = beta[ndx]
-                                d = np.dot(center.bond(atom), norm) / center.dist(atom)
+                                d = np.dot(
+                                    center.bond(atom), norm
+                                ) / center.dist(atom)
                                 if abs(d) < 1:
                                     rhs += np.arccos(d)
                                 if not alpha >= rhs:
@@ -750,7 +788,7 @@ class Component(Geometry):
                 (
                     center.coords + scale * min_norm,
                     center.coords,
-                    scale * abs(np.tan(min_alpha))
+                    scale * abs(np.tan(min_alpha)),
                 )
             )
 
@@ -760,4 +798,6 @@ class Component(Geometry):
             return np.rad2deg(2 * min_alpha)
 
         else:
-            raise NotImplementedError("cone angle type is not implemented: %s" % method)
+            raise NotImplementedError(
+                "cone angle type is not implemented: %s" % method
+            )

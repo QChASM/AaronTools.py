@@ -4,13 +4,13 @@ import re
 import ssl
 from collections import deque
 from copy import deepcopy
-from warnings import warn
 
 import numpy as np
 from scipy.spatial import distance_matrix
 
 import AaronTools
 import AaronTools.utils.utils as utils
+from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.config import Config
 from AaronTools.const import BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
@@ -30,6 +30,7 @@ if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
     from urllib.request import urlopen
 
 
+@addlogger
 class Geometry:
     """
     Attributes:
@@ -39,6 +40,14 @@ class Geometry:
         other
         _iter_idx
     """
+
+    # AaronTools.addlogger decorator will add logger to this class attribute
+    LOG = None
+    # decorator uses this to set log level (defaults to WARNING if None)
+    # LOGLEVEL = "INFO"
+    # add to this dict to override log level for specific functions
+    # keys are log level, values are lists of function names
+    # LOGLEVEL_OVERRIDE = {"DEBUG": "find"}
 
     Primes()
 
@@ -70,8 +79,7 @@ class Geometry:
         self._iter_idx = None
         self._sigmat = None
         self._epsmat = None
-
-        self.debug = False
+        self.LOG.debug("hello")
 
         if isinstance(structure, Geometry):
             # new from geometry
@@ -84,10 +92,10 @@ class Geometry:
         elif isinstance(structure, FileReader):
             # get info from FileReader object
             from_file = structure
-        elif isinstance(structure, str) and structure != "":
+        elif isinstance(structure, str) and structure:
             # parse file
             from_file = FileReader(structure)
-        elif hasattr(structure, "__iter__") and structure != "":
+        elif hasattr(structure, "__iter__") and structure:
             for a in structure:
                 if not isinstance(a, Atom):
                     raise TypeError
@@ -160,12 +168,30 @@ class Geometry:
             url_sd = "{}/cgi-bin/translate.tcl?smiles={}&format=sdf&astyle=kekule&dim=3D&file=".format(
                 CACTUS_HOST, urllib.parse.quote(smiles)
             )
-            s_sd_get = (
-                urlopen(url_sd, context=ssl.SSLContext()).read().decode("utf8")
-            )
-            tmp_url = re.search(
-                'User-defined exchange format file: <a href="(.*)"', s_sd_get
-            ).group(1)
+            s_sd_get = urlopen(url_sd, context=ssl.SSLContext())
+            msg, status = s_sd_get.msg, s_sd_get.status
+            if msg != "OK":
+                cls.LOG.error(
+                    "Issue contacting %s for SMILES lookup (status: %s)",
+                    CACTUS_HOST,
+                    status,
+                )
+                raise IOError
+            s_sd_get = s_sd_get.read().decode("utf8")
+            try:
+                tmp_url = re.search(
+                    'User-defined exchange format file: <a href="(.*)"',
+                    s_sd_get,
+                ).group(1)
+            except AttributeError as err:
+                if re.search("You entered an invalid SMILES", s_sd_get):
+                    cls.LOG.error(
+                        "Invalid SMILES encountered: %s (consult %s for syntax help)",
+                        smiles,
+                        "https://cactus.nci.nih.gov/translate/smiles.html",
+                    )
+                    exit(1)
+                raise IOError(err)
             new_url = "{}{}".format(CACTUS_HOST, tmp_url)
             s_sd = (
                 urlopen(new_url, context=ssl.SSLContext())
@@ -191,7 +217,6 @@ class Geometry:
         try:
             import rdkit.Chem.AllChem as rdk
 
-            scale_coords = False
             m = rdk.MolFromSmiles(smiles)
             if m is None and not strict_use_rdkit:
                 s_sd = get_cactus_sd(smiles)
@@ -204,16 +229,19 @@ class Geometry:
                     "Could not load {} with RDKit".format(smiles)
                 )
         except ImportError:
-            scale_coords = True
             s_sd = get_cactus_sd(smiles)
 
         try:
             f = FileReader((name, "sd", s_sd))
             is_sdf = True
-        except Exception:
+        except ValueError:
             # for some reason, CACTUS is giving xyz files instead of sdf...
             is_sdf = False
-            f = FileReader((name, "xyz", s_sd))
+            try:
+                f = FileReader((name, "xyz", s_sd))
+            except ValueError:
+                cls.LOG.error("Error loading geometry:\n %s", s_sd)
+                raise
 
         return cls(f, refresh_connected=not is_sdf)
 
@@ -256,6 +284,12 @@ class Geometry:
         return self._stack_coords(atoms)
 
     # utilities
+    def __str__(self):
+        s = ""
+        for a in self:
+            s += a.__str__() + "\n"
+        return s
+
     def __repr__(self):
         """ string representation """
         s = ""
@@ -346,14 +380,14 @@ class Geometry:
                 atom.coords.setflags(write=False)
                 atom._hashed = True
             # make sure atoms don't move
-            # if atoms move, the hash value could change making it impossible to access
+            # if atoms move, te hash value could change making it impossible to access
             # items in a dictionary with this instance as the key
 
         if not self._hashed:
-            warn(
-                "%s %s has been hashed and will no longer be editable\n"
-                % (self.__class__.__name__, self.name)
-                + "use Geometry.copy to get an editable duplicate of this instance"
+            self.LOG.warning(
+                "Geometry `%s` has been hashed and will no longer be editable.\n"
+                "Use Geometry.copy to get an editable duplicate of this instance",
+                self.name,
             )
             self.atoms = tuple(self.atoms)
             self._hashed = True
@@ -716,17 +750,17 @@ class Geometry:
             """ find a single atom """
             # print(arg)
             if isinstance(arg, Atom):
-                # print('atom')
+                # print("atom")
                 return [arg]
 
             rv = []
             if isinstance(arg, Finder):
-                # print('finder')
+                # print("finder")
                 rv += arg.get_matching_atoms(self.atoms, self)
 
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
-                # print('name')
+                # print("name")
                 test_name = arg.replace(".", "\.")
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
                 test_name = re.compile("^" + test_name + "$")
@@ -736,7 +770,7 @@ class Geometry:
                         rv += [a]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
-                # print('comma list')
+                # print("comma list")
                 list_style = arg.split(",")
                 if len(list_style) > 1:
                     for i in list_style:
@@ -750,17 +784,17 @@ class Geometry:
                 and len(arg.split("-")) > 1
                 and not re.search("[A-Za-z]", arg)
             ):
-                # print('range list')
+                # print("range list")
                 rv += _find_between(arg)
 
             elif isinstance(arg, str) and arg in ELEMENTS:
-                # print('element')
+                # print("element")
                 # this is an element
                 for a in self.atoms:
                     if a.element == arg:
                         rv += [a]
             else:
-                # print('tag')
+                # print("tag")
                 # this is a tag
                 for a in self.atoms:
                     if arg in a.tags:
@@ -921,6 +955,11 @@ class Geometry:
 
         algorithm described in 10.1021/acs.jcim.5b00543
         """
+        CITATION = "doi:10.1021/ci00062a008"
+        self.LOG.citation(CITATION)
+        CITATION = "doi:10.1021/acs.jcim.5b00543"
+        self.LOG.citation(CITATION)
+
         primes = Primes.list(len(self.atoms))
         atoms = []
         ranks = []
@@ -1107,7 +1146,9 @@ class Geometry:
                 break
             ranks = new_ranks
         else:
-            warn("Max cycles reached in canonical sorting (neighbor-ranks)")
+            self.LOG.warning(
+                "Max cycles reached in canonical sorting (neighbor-ranks)"
+            )
 
         # break ties using spatial positions
         # AND update neighbors until no change
@@ -1119,7 +1160,9 @@ class Geometry:
                     break
                 ranks = new_ranks
             else:
-                warn("Max cycles reached in canonical sorting (tie-breaking)")
+                self.LOG.warning(
+                    "Max cycles reached in canonical sorting (tie-breaking)"
+                )
 
         return ranks
 
@@ -1318,9 +1361,6 @@ class Geometry:
                 )
             )
         return [self.atoms[i] for i in path]
-
-    # nothing in AaronTools refers to short_walk anymore
-    short_walk = shortest_path
 
     # geometry measurement
     def bond(self, a1, a2):
@@ -2447,8 +2487,11 @@ class Geometry:
         if dist is None:
             if hasattr(a1, "_radii") and hasattr(a2, "_radii"):
                 new_dist = a1._radii + a2._radii
-            else:
-                warn("no radii for one of:\n%s\n%s" % (a1, a2))
+            elif not hasattr(a1, "_radii"):
+                self.LOG.warning("no radii for %s", a1)
+                return
+            elif not hasattr(a2, "_radii"):
+                self.LOG.warning("no radii for %s", a2)
                 return
         elif adjust:
             new_dist = a1.dist(a2) + dist
@@ -2696,9 +2739,8 @@ class Geometry:
             a2_frag = self.get_fragment(a2, a3)[1:]
             a3_frag = self.get_fragment(a3, a2)[1:]
             if any(atom in a2_frag for atom in a3_frag):
-                warn(
-                    "changing dihedral that is in a ring:\n%s, %s"
-                    % (str(a2), str(a3))
+                self.LOG.warning(
+                    "changing dihedral that is part of a ring: %s %s", a2, a3
                 )
         else:
             a2_frag = [a1]
@@ -4138,7 +4180,7 @@ class Geometry:
             # validate conf_spec
             if conf_num > sub.conf_num:
                 self = original
-                warn(
+                self.LOG.warning(
                     "Bad conformer number given: {} {} > {}".format(
                         sub.name, conf_num, sub.conf_num
                     )

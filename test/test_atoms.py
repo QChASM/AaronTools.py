@@ -141,7 +141,7 @@ class TestAtoms(TestWithTimer):
 
     def test_repr(self):
         atom = Atom("H", [0, 0, 0], True, "1", ["test"])
-        s = str(atom)
+        s = repr(atom)
         self.assertEqual(
             s, "  H     0.00000000    0.00000000    0.00000000  -1    1"
         )
@@ -155,7 +155,7 @@ class TestAtoms(TestWithTimer):
             atom = Atom("NotAnElement", [0, 0, 0])
         atom = Atom()
         atom.element = "NotAnElement"
-        with self.assertWarns(UserWarning):
+        with self.assertLogs(logger=Atom.LOG, level="WARNING"):
             atom._set_radii()
 
     def test_set_connectivity(self):

@@ -3,10 +3,10 @@ import os
 import re
 from copy import deepcopy
 from io import IOBase, StringIO
-from warnings import warn
 
 import numpy as np
 
+from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
@@ -1776,6 +1776,7 @@ class FileReader:
                 self.other["frequency"] = Frequency(f_freq.read())
 
 
+@addlogger
 class Frequency:
     """
     ATTRIBUTES
@@ -1787,6 +1788,8 @@ class Frequency:
         {freq: {intensity: float, vector: np.array}}
     :is_TS: bool - true if len(imaginary_frequencies) == 1, else False
     """
+
+    LOG = None
 
     class Data:
         """
@@ -1846,7 +1849,7 @@ class Frequency:
             if "Harmonic frequencies" in line:
                 num_head += 1
         if hpmodes and num_head != 2:
-            warn("Log file damaged, cannot get frequencies")
+            self.LOG.warning("Log file damaged, cannot get frequencies")
             return
         if style == "log":
             self.parse_lines(lines, hpmodes)

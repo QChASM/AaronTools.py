@@ -1,22 +1,22 @@
+#!/usr/bin/env python3
 """for fragments attached to a structure by one bond"""
 
-#!/usr/bin/env python3
 import json
 import os
 import re
 import sys
 from copy import deepcopy
-from glob import glob
-from warnings import warn
 
 import numpy as np
 
+from AaronTools import addlogger
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import rotation_matrix
 
 
+@addlogger
 class Substituent(Geometry):
     """
     Attributes:
@@ -27,6 +27,7 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
+    LOG = None
     AARON_LIBS = os.path.join(AARONLIB, "Subs")
     BUILTIN = os.path.join(AARONTOOLS, "Substituents")
     CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
@@ -39,14 +40,14 @@ class Substituent(Geometry):
         cache["lengths"] = {}  # for storing number of atoms in each sub
 
     def __init__(
-            self,
-            sub=None,
-            name=None,
-            targets=None,
-            end=None,
-            conf_num=None,
-            conf_angle=None,
-            detect=True,
+        self,
+        sub=None,
+        name=None,
+        targets=None,
+        end=None,
+        conf_num=None,
+        conf_angle=None,
+        detect=True,
     ):
         """
         sub is either a file sub, a geometry, or an atom list
@@ -108,7 +109,7 @@ class Substituent(Geometry):
                     if match:
                         fsub = os.path.join(lib, f)
                         break
-                
+
                 if fsub:
                     break
 
@@ -133,7 +134,7 @@ class Substituent(Geometry):
                     self.atoms = fsub.atoms[1:]
                     self.refresh_connected()
                     self.name = match.group(1)
-                    warn("Conformer info not loaded for" + sub)
+                    self.LOG.warning("Conformer info not loaded for" + sub)
                     return
                 else:
                     raise RuntimeError(
@@ -155,7 +156,7 @@ class Substituent(Geometry):
                 self.conf_num = int(conf_info.group(1))
                 self.conf_angle = np.deg2rad(float(conf_info.group(2)))
             else:
-                warn("Conformer info not loaded for" + f)
+                self.LOG.warning("Conformer info not loaded for" + f)
 
         if not self.name:
             self.name = "sub"
@@ -168,8 +169,8 @@ class Substituent(Geometry):
         if len(self.atoms) != len(other.atoms):
             return len(self.atoms) < len(other.atoms)
         for a, b in zip(
-                self.reorder(start=self.atoms[0])[0],
-                other.reorder(start=other.atoms[0])[0],
+            self.reorder(start=self.atoms[0])[0],
+            other.reorder(start=other.atoms[0])[0],
         ):
             if a < b and not b < a:
                 return True
@@ -177,13 +178,13 @@ class Substituent(Geometry):
 
     @classmethod
     def from_string(
-            cls,
-            name,
-            conf_num=None,
-            conf_angle=None,
-            form="smiles",
-            debug=False,
-            strict_use_rdkit=False,
+        cls,
+        name,
+        conf_num=None,
+        conf_angle=None,
+        form="smiles",
+        debug=False,
+        strict_use_rdkit=False,
     ):
         """
         creates a substituent from a string
@@ -227,7 +228,7 @@ class Substituent(Geometry):
                     break
         if my_rad is None:
             if radicals:
-                warn(
+                cls.LOG.warning(
                     "radical atom may be ambiguous, be sure to check output: %s"
                     % smiles
                 )
@@ -343,10 +344,10 @@ class Substituent(Geometry):
                 name, ext = os.path.splitext(os.path.basename(f))
                 if not any(".%s" % x == ext for x in read_types):
                     continue
-                
+
                 if name in names:
                     continue
-                
+
                 if include_ext:
                     names.append(name + ext)
                 else:
@@ -378,11 +379,11 @@ class Substituent(Geometry):
 
                 # test number of atoms against cache
                 if (
-                        name in sub_lengths
-                        and len(test_sub.atoms) != sub_lengths[name]
+                    name in sub_lengths
+                    and len(test_sub.atoms) != sub_lengths[name]
                 ):
                     continue
-                
+
                 # use Geometry until we've done all the checks we can do without
                 # determining connectivity
                 # (for performance reasons)
@@ -394,7 +395,7 @@ class Substituent(Geometry):
                 # add to cache
                 sub_lengths[name] = len(init_ref.atoms)
                 cache_changed = True
-    
+
                 # want same number of atoms
                 if len(test_sub.atoms) != len(init_ref.atoms):
                     continue
@@ -402,8 +403,12 @@ class Substituent(Geometry):
                 # same number of each element
                 ref_eles = [atom.element for atom in init_ref.atoms]
                 test_eles = [atom.element for atom in test_sub.atoms]
-                ref_counts = {ele:ref_eles.count(ele) for ele in set(ref_eles)}
-                test_counts = {ele:test_eles.count(ele) for ele in set(test_eles)}
+                ref_counts = {
+                    ele: ref_eles.count(ele) for ele in set(ref_eles)
+                }
+                test_counts = {
+                    ele: test_eles.count(ele) for ele in set(test_eles)
+                }
                 if ref_counts != test_counts:
                     continue
 
@@ -411,7 +416,7 @@ class Substituent(Geometry):
                 ref_sub.name = name
                 ref_sub.refresh_connected()
                 ref_sub.refresh_ranks()
-    
+
                 for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
                     # want correct elements
                     if a.element != b.element:
@@ -422,8 +427,8 @@ class Substituent(Geometry):
                     # and correct connected elements
                     failed = False
                     for i, j in zip(
-                            sorted([aa.element for aa in a.connected]),
-                            sorted([bb.element for bb in b.connected]),
+                        sorted([aa.element for aa in a.connected]),
+                        sorted([bb.element for bb in b.connected]),
                     ):
                         if i != j:
                             failed = True
@@ -554,7 +559,9 @@ class Substituent(Geometry):
                                 #   if it is between the tangent vectors, then this atom
                                 #   is obstructed and does not define the minimum width
                                 p_v = (
-                                    test_B1 * perp_vec / np.linalg.norm(test_B1)
+                                    test_B1
+                                    * perp_vec
+                                    / np.linalg.norm(test_B1)
                                 )
                                 u_n = u_v / np.linalg.norm(u_v)
                                 r_v = r2 * np.cross(u_n, L_axis)
@@ -574,13 +581,16 @@ class Substituent(Geometry):
                                 c12 = np.linalg.norm(tan2 - tan1)
 
                                 t1p = np.arccos(
-                                    (c1p ** 2 - a1p ** 2 - b1p ** 2) / (-2 * a1p * b1p)
+                                    (c1p ** 2 - a1p ** 2 - b1p ** 2)
+                                    / (-2 * a1p * b1p)
                                 )
                                 t2p = np.arccos(
-                                    (c2p ** 2 - a2p ** 2 - b2p ** 2) / (-2 * a2p * b2p)
+                                    (c2p ** 2 - a2p ** 2 - b2p ** 2)
+                                    / (-2 * a2p * b2p)
                                 )
                                 t12 = np.arccos(
-                                    (c12 ** 2 - a12 ** 2 - b12 ** 2) / (-2 * a12 * b12)
+                                    (c12 ** 2 - a12 ** 2 - b12 ** 2)
+                                    / (-2 * a12 * b12)
                                 )
 
                                 if abs(t1p + t2p - t12) < 1e-3:
@@ -630,7 +640,7 @@ class Substituent(Geometry):
                                     #     a2.name,
                                     #     "at angle",
                                     #     angle
-                                    #)
+                                    # )
                                     continue
 
                                 u_n = u_v / np.linalg.norm(u_v)
@@ -651,13 +661,16 @@ class Substituent(Geometry):
                                 c12 = np.linalg.norm(tan2 - tan1)
 
                                 t1p = np.arccos(
-                                    (c1p ** 2 - a1p ** 2 - b1p ** 2) / (-2 * a1p * b1p)
+                                    (c1p ** 2 - a1p ** 2 - b1p ** 2)
+                                    / (-2 * a1p * b1p)
                                 )
                                 t2p = np.arccos(
-                                    (c2p ** 2 - a2p ** 2 - b2p ** 2) / (-2 * a2p * b2p)
+                                    (c2p ** 2 - a2p ** 2 - b2p ** 2)
+                                    / (-2 * a2p * b2p)
                                 )
                                 t12 = np.arccos(
-                                    (c12 ** 2 - a12 ** 2 - b12 ** 2) / (-2 * a12 * b12)
+                                    (c12 ** 2 - a12 ** 2 - b12 ** 2)
+                                    / (-2 * a12 * b12)
                                 )
 
                                 # print(t1p, t2p, t12, t1p + t2p)
@@ -675,8 +688,8 @@ class Substituent(Geometry):
                                     # it"s not really a usable opening
                                     # must have an arc length > 1 A
                                     if (
-                                            start_angle is not None
-                                            and end_angle is None
+                                        start_angle is not None
+                                        and end_angle is None
                                     ):
                                         if (angle - start_angle) * r1 < 0.9:
                                             # print(
@@ -692,8 +705,8 @@ class Substituent(Geometry):
 
                             else:
                                 if (
-                                        not partially_obstructed
-                                        and start_angle is None
+                                    not partially_obstructed
+                                    and start_angle is None
                                 ):
                                     # print(atom.name, "not obstructed at angle", angle)
                                     start_angle = angle
@@ -705,7 +718,7 @@ class Substituent(Geometry):
 
                         # print(atom.name, "finished scanning", start_angle, end_angle, angle)
                         if start_angle is None or (
-                                start_angle != 0 and end_angle is None
+                            start_angle != 0 and end_angle is None
                         ):
                             obstructed = True
                         else:
