@@ -367,10 +367,14 @@ class Component(Geometry):
         center - Atom() that this component is coordinating
                  used as the apex of the cone
         method (str) can be:
-            'Tolman' - Tolman cone angle for asymmetric ligands (doi 10.1021/ja00808a009)
+            'Tolman' - Tolman cone angle for asymmetric ligands 
+                       See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
                        NOTE: this does not make assumptions about the geometry
                        NOTE: only works with monodentate and bidentate ligands
-            'exact' - cone angle from Allen et. al. (doi 10.1002/jcc.23217)
+            'exact' - cone angle from Allen et. al. 
+                      See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D. 
+                      (2013), Exact ligand cone angles. J. Comput. Chem., 34: 
+                      1189-1197. (DOI: 10.1002/jcc.23217)
         return_cones - return cone apex, center of base, and base radius list
                        the sides of the cones will be 5 angstroms long
                        for Tolman cone angles, multiple cones will be returned, one for

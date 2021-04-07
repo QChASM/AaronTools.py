@@ -841,8 +841,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         if len(err) != 0:
             raise RuntimeError(err)
 
-        ref = """B1      B5      L       file
-        1.70    3.36    6.68    test_files/benzene.xyz
+        ref = """B1      B2      B3      B4      B5      L       file
+        1.70    1.70    3.36    3.36    3.36    6.78    test_files/benzene.xyz
 
         """
 

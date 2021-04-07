@@ -9,7 +9,7 @@ from AaronTools.substituent import Substituent
 from AaronTools.utils.utils import get_filename
 
 sterimol_parser = argparse.ArgumentParser(
-    description="calculate B1, B5, and L sterimol parameters for substituents",
+    description="calculate B1, B5, and L sterimol parameters for substituents - see Verloop, A. and Tipker, J. (1976), Use of linear free energy related and other parameters in the study of fungicidal selectivity. Pestic. Sci., 7: 379-390.",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -57,7 +57,14 @@ sterimol_parser.add_argument(
     default="bondi",
     choices=["bondi", "umn"],
     dest="radii",
-    help="van der Waals radii - Bondi or Truhlar et. al.\nDefault: bondi"
+    help="VDW radii to use in calculation\n" + 
+    "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n" +
+    "    (DOI: 10.1021/jp8111556)\n" + 
+    "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n" +
+    "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
+    "    (DOI: 10.1023/A:1011625728803)\n" + 
+    "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
+    "Default: bondi"
 )
 
 sterimol_parser.add_argument(
@@ -65,7 +72,7 @@ sterimol_parser.add_argument(
     action="store_true",
     required=False,
     dest="vector",
-    help="print Chimera bild file for vectors instead of\nparameter values"
+    help="print Chimera/ChimeraX bild file for vectors instead of parameter values"
 )
 
 sterimol_parser.add_argument(
@@ -84,7 +91,7 @@ args = sterimol_parser.parse_args()
 
 s = ""
 if not args.vector:
-    s += "B1\tB5\tL\tfile\n"
+    s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
 
 for infile in args.infile:
     if isinstance(infile, str):
@@ -104,24 +111,26 @@ for infile in args.infile:
     end = geom.find(avoid)[0]
     frag = geom.get_fragment(target, stop=end)
     sub = Substituent(frag, end=end, detect=False)
-    b1 = sub.sterimol("B1", return_vector=args.vector, radii=args.radii)
-    b5 = sub.sterimol("B5", return_vector=args.vector, radii=args.radii)
-    l = sub.sterimol("L", return_vector=args.vector, radii=args.radii)
+    data = sub.sterimol(return_vector=args.vector, radii=args.radii)
     if args.vector:
-        start, end = b1
-        s += ".color black\n"
-        s += ".note Sterimol B1\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
-        start, end = b5
-        s += ".color red\n"
-        s += ".note Sterimol B5\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
-        start, end = l
-        s += ".color blue\n"
-        s += ".note Sterimol L\n"
-        s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
+        for key, color in zip(
+                ["B1", "B2", "B3", "B4", "B5", "L"],
+                ["black", "green", "purple", "orange", "red", "blue"]
+        ):
+            start, end = data[key]
+            s += ".color %s\n" % color
+            s += ".note Sterimol %s\n" % key
+            s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
     else:
-        s += "%.2f\t%.2f\t%.2f\t%s\n" % (b1, b5, l, infile)
+        s += "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n" % (
+            data["B1"],
+            data["B2"],
+            data["B3"],
+            data["B4"],
+            data["B5"],
+            data["L"],
+            infile,
+        )
 
 if not args.outfile:
     print(s)

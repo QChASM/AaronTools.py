@@ -1356,8 +1356,12 @@ ATOM_TYPES = [
     "OT",
 ]
 
-# main group vdw radii from doi 10.1021/jp8111556
-# transition metals from doi 10.1023/A:1011625728803 (crystal radii)
+# main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812
+# (DOI: 10.1021/jp8111556)
+# transition metals are crystal radii from Batsanov, S.S. Van der Waals
+# Radii of Elements. Inorganic Materials 37, 871–885 (2001).
+# (DOI: 10.1023/A:1011625728803)
+# transition metals are indented a bit more than the rest
 VDW_RADII = {
     "H": 1.10,
     "He": 1.40,
@@ -1436,7 +1440,7 @@ VDW_RADII = {
     "X": 0,
 }
 
-# doi 10.1021/j100785a001
+# J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)
 BONDI_RADII = {
     "H": 1.20,
     "He": 1.40,

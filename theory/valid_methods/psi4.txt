@@ -385,6 +385,7 @@ sapt2+3-ct
 sapt2+(ccd)-ct
 sapt2+(3)(ccd)-ct
 sapt2+3(ccd)-ct
+sf-sapt
 adc
 eom-cc2
 eom-ccsd

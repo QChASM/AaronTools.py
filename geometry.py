@@ -245,6 +245,250 @@ class Geometry:
 
         return cls(f, refresh_connected=not is_sdf)
 
+    @classmethod
+    def get_coordination_complexes(
+        cls,
+        center,
+        ligands,
+        shape,
+        c2_symmetric=None,
+        minimize=False
+    ):
+        """
+        get all unique coordination complexes
+        uses templates from Inorg. Chem. 2018, 57, 17, 10557–10567
+
+        center - str, element of center atom
+        ligands - list of ligand names in the ligand library
+        shape - str, e.g. octahedral - see Atom.get_shape
+        c2_symmetric - list of bools, specifies which of the bidentate ligands are C2-symmetric
+                       if this list is as long as the ligands list, the nth item corresponds
+                       to the nth ligand
+                       otherwise, the nth item indicate the symmetry of the nth bidentate ligand
+        minimize - bool, use minimize=True when mapping ligands (see Geometry.map_ligand)
+
+        returns a list of cls containing all unique coordination complexes and the
+        general formula of the complexes
+        """
+        import os.path
+        from AaronTools.atoms import BondOrder
+        from AaronTools.const import AARONTOOLS
+        from AaronTools.component import Component
+        
+        if c2_symmetric is None:
+            c2_symmetric = [False for lig in ligands]
+        
+        bo = BondOrder()
+        
+        # create a geometry with the specified shape
+        # change the elements from dummy atoms to something else
+        start_atoms = Atom.get_shape(shape)
+        n_coord = len(start_atoms) - 1
+        start_atoms[0].element = center
+        for atom in start_atoms[1:]:
+            start_atoms[0].connected.add(atom)
+            atom.connected.add(start_atoms[0])
+            atom.element = "B"
+            atom._set_connectivity()
+            atom._set_radii()
+            atom._set_vdw()
+        geom = cls(start_atoms, refresh_connected=False)
+
+        # we'll need to determine the formula of the requested complex
+        # monodentate ligands are a, b, etc
+        # symmetric bidentate are AA, BB, etc
+        # asymmetric bidentate are AB, CD, etc
+        # ligands are sorted monodentate, followed by symmetric bidentate, followed by
+        # asymmetric bidentate, then by decreasing count
+        # e.g., Ca(CO)2(ACN)4 is Ma4b2
+        alphabet = "abcdefghi"
+        symmbet = ["AA", "BB", "CC", "DD"]
+        asymmbet = ["AB", "CD", "EF", "GH"]
+        monodentate_names = []
+        symm_bidentate_names = []
+        asymm_bidentate_names = []
+        
+        n_bidentate = 0
+        # determine types of ligands
+        for i, lig in enumerate(ligands):
+            comp = Component(lig)
+            if len(comp.key_atoms) == 1:
+                monodentate_names.append(lig)
+            elif len(comp.key_atoms) == 2:
+                if len(ligands) == len(c2_symmetric):
+                    c2 = c2_symmetric[i]
+                else:
+                    c2 = c2_symmetric[n_bidentate]
+                n_bidentate += 1
+                if c2:
+                    symm_bidentate_names.append(lig)
+                else:
+                    asymm_bidentate_names.append(lig)
+            else:
+                # tridentate or something
+                raise NotImplementedError(
+                    "can only attach mono- and bidentate ligands: %s (%i)" % (
+                        lig, len(comp.key_atoms)
+                    )
+                )
+        
+        coord_num = (
+            len(monodentate_names) + 
+            2 * (
+                len(symm_bidentate_names) + len(asymm_bidentate_names)
+            )
+        )
+        if coord_num != n_coord:
+            raise RuntimeError(
+                "coordination number (%i) does not match sum of ligand denticity (%i)" % (
+                    n_coord, coord_num
+                )
+            )
+        
+        # start putting formula together
+        cc_type = "M"
+        this_name = center
+        # sorted by name count is insufficient when there's multiple monodentate ligands
+        # with the same count (e.g. Ma3b3)
+        # add the index in the library to offset this
+
+        monodentate_names = sorted(
+            monodentate_names,
+            key=lambda x: 10000 * monodentate_names.count(x) + Component.list().index(x),
+            reverse=True,
+        )
+        for i, mono_lig in enumerate(
+            sorted(
+                set(monodentate_names),
+                key=lambda x: 10000 * monodentate_names.count(x) + Component.list().index(x),
+                reverse=True,
+            )
+        ):
+            cc_type += alphabet[i]
+            this_name += "(%s)" % mono_lig
+            if monodentate_names.count(mono_lig) > 1:
+                cc_type += "%i" % monodentate_names.count(mono_lig)
+                this_name += "%i" % monodentate_names.count(mono_lig)
+
+        symm_bidentate_names = sorted(
+            symm_bidentate_names,
+            key=lambda x: 10000 * symm_bidentate_names.count(x) + Component.list().index(x),
+            reverse=True
+        )
+        for i, symbi_lig in enumerate(sorted(
+                set(symm_bidentate_names),
+                key=lambda x: 10000 * symm_bidentate_names.count(x) + Component.list().index(x),
+                reverse=True
+            )
+        ):
+            cc_type += "(%s)" % symmbet[i]
+            this_name += "(%s)" % symbi_lig
+            if symm_bidentate_names.count(symbi_lig) > 1:
+                cc_type += "%i" % symm_bidentate_names.count(symbi_lig)
+                this_name += "%i" % symm_bidentate_names.count(symbi_lig)
+        asymm_bidentate_names = sorted(
+            asymm_bidentate_names,
+            key=lambda x: 10000 * asymm_bidentate_names.count(x) + Component.list().index(x),
+            reverse=True
+        )
+        for i, asymbi_lig in enumerate(
+            sorted(
+                set(asymm_bidentate_names),
+                key=lambda x: 10000 * asymm_bidentate_names.count(x) + Component.list().index(x),
+                reverse=True
+            )
+        ):
+            cc_type += "(%s)" % asymmbet[i]
+            this_name += "(%s)" % asymbi_lig
+            if asymm_bidentate_names.count(asymbi_lig) > 1:
+                cc_type += "%i" % asymm_bidentate_names.count(asymbi_lig)
+                this_name += "%i" % asymm_bidentate_names.count(asymbi_lig)
+
+        # load the key atoms for ligand mapping from the template file
+        libdir = os.path.join(
+            AARONTOOLS,
+            "coordination_complex",
+            shape,
+            cc_type
+        )
+        if not os.path.exists(libdir):
+            raise RuntimeError("no templates for %s %s" % (cc_type, shape))
+
+        geoms = []
+        for f in os.listdir(libdir):
+            mappings = np.loadtxt(os.path.join(libdir, f), dtype=str, delimiter=",", ndmin=2)
+            
+            point_group, subset = f.rstrip(".csv").split("_")            
+            # for each possible structure, create a copy of the original template shape
+            # attach ligands in the order they would appear in the formula
+            for i, mapping in enumerate(mappings):
+                geom_copy = geom.copy()
+                geom_copy.center = [geom_copy.atoms[0]]
+                geom_copy.components = [Component([atom]) for atom in geom_copy.atoms[1:]]
+            
+                start = 0
+                for lig in monodentate_names:
+                    key = mapping[start]
+                    start += 1
+                    comp = Component(lig)
+                    d = 2.5
+                    # adjust distance to key atoms to what they should be for the new ligand
+                    try:
+                        d = bo.bonds[bo.key(center, comp.key_atoms[0])]["1.0"]
+                    except KeyError:
+                        pass
+                    geom_copy.change_distance(
+                        geom_copy.atoms[0],
+                        key,
+                        dist=d,
+                        fix=1
+                    )
+                    # attach ligand
+                    geom_copy.map_ligand(comp, key, minimize=minimize)
+                
+                for lig in symm_bidentate_names:
+                    keys = mapping[start:start + 2]
+                    start += 2
+                    comp = Component(lig)
+                    for old_key, new_key in zip(keys, comp.key_atoms):
+                        d = 2.5
+                        try:
+                            d = bo.bonds[bo.key(center, new_key)]["1.0"]
+                        except KeyError:
+                            pass
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0],
+                            old_key,
+                            dist=d,
+                            fix=1,
+                            as_group=False
+                        )
+                    geom_copy.map_ligand(comp, keys, minimize=minimize)
+                    
+                for lig in asymm_bidentate_names:
+                    keys = mapping[start:start + 2]
+                    start += 2
+                    comp = Component(lig)
+                    for old_key, new_key in zip(keys, comp.key_atoms):
+                        d = 2.5
+                        try:
+                            d = bo.bonds[bo.key(center, new_key)]["1.0"]
+                        except KeyError:
+                            pass
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0],
+                            old_key,
+                            dist=d,
+                            fix=1,
+                            as_group=False
+                        )
+                    geom_copy.map_ligand(comp, keys, minimize=minimize)
+            
+                geom_copy.name = "%s-%i_%s_%s" % (this_name, i + 1, point_group, subset)
+                geoms.append(geom_copy)
+        
+        return geoms, cc_type
+    
     # attribute access
     def _stack_coords(self, atoms=None):
         """
@@ -918,23 +1162,27 @@ class Geometry:
 
         return atoms
 
-    def refresh_connected(self, threshold=None):
+    def refresh_connected(self, targets=None, threshold=None):
         """
         reset connected atoms
         atoms are connected if their distance from each other is less than
             the sum of their covalent radii plus a threshold
         """
         # clear current connectivity
+        if targets is None:
+            targets = self.atoms
+        else:
+            targets = self.find(targets)
         old_connectivity = []
-        for a in self.atoms:
+        for a in targets:
             old_connectivity += [a.connected]
             a.connected = set([])
 
-        D = distance_matrix(self.coords, self.coords)
+        D = distance_matrix(self.coordinates(targets), self.coordinates(targets))
 
         # determine connectivity
-        for i, a in enumerate(self.atoms):
-            for j, b in enumerate(self.atoms[:i]):
+        for i, a in enumerate(targets):
+            for j, b in enumerate(targets[:i]):
                 if a.dist_is_connected(b, D[i, j], threshold):
                     a.connected.add(b)
                     b.connected.add(a)
@@ -950,10 +1198,12 @@ class Geometry:
     ):
         """
         determine canonical ranking for atoms
-        invariant: bool - if True, use invariant described in 10.1021/ci00062a008
+        invariant: bool - if True, use invariant described in J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
+                          (DOI: 10.1021/ci00062a008)
                           if False, use neighbor IDs
 
-        algorithm described in 10.1021/acs.jcim.5b00543
+        algorithm described in J. Chem. Inf. Model. 2015, 55, 10, 2111–2120 
+        (DOI: 10.1021/acs.jcim.5b00543)
         """
         CITATION = "doi:10.1021/ci00062a008"
         self.LOG.citation(CITATION)
@@ -1873,8 +2123,9 @@ class Geometry:
         basis=None,
     ):
         """
-        calculates % buried volume (%V_bur)
-        Monte-Carlo or Gauss-Legendre/Lebedev integration
+        calculates % buried volume (%V_bur) using Monte-Carlo or Gauss-Legendre/Lebedev integration
+        see Organometallics 2008, 27, 12, 2679–2681 (DOI: 10.1021/om8001119) for details
+
         center  - center atom(s) or np.array of coordinates
                   if more than one atom is specified, the sphere will be centered on
                   the centroid between the atoms
@@ -2874,7 +3125,7 @@ class Geometry:
 
         # rotate to min angle
         self.rotate(
-            axis, np.deg2rad(angle_min - angle), targets=targets, center=center
+            axis, np.deg2rad(angle_min - angle), targets=targets, center=center_coords
         )
 
         return
@@ -3695,7 +3946,10 @@ class Geometry:
                     ligand.COM(targets=new_key.connected) - new_key.coords
                 )
 
-            old_axis = self.COM(targets=targets) - old_key.coords
+            if not targets:
+                old_axis = old_key.coords - self.COM(self.center)
+            else:
+                old_axis = self.COM(targets=targets) - old_key.coords
             w, angle = get_rotation(old_axis, new_axis)
             ligand.rotate(w, angle, center=new_key)
             return ligand
@@ -3720,36 +3974,43 @@ class Geometry:
                 # also, sometimes the ligand atoms don't have the center in their connected
                 # attribute, even though the center has the ligand atoms in its
                 # connected attribute, so refresh_connected
-                self.refresh_connected()
+                self.refresh_connected(targets=self.center)
                 # print("old keys:", old_keys)
                 # print("old ligand:\n", old_ligand)
-                frag = old_ligand.get_fragment(
-                    old_keys[0],
-                    stop=[
-                        atom
-                        for atom in old_keys[0].connected
-                        if atom not in old_ligand.atoms
-                    ],
-                )
-                if all(atom in frag for atom in old_keys):
-                    # for atom in frag:
-                    #     print("frag:", atom)
-                    old_walk = self.shortest_path(
-                        *old_keys,
-                        avoid=[
-                            a
-                            for a in self.center
-                            if any(k.is_connected(a) for k in old_keys)
-                        ]
+                stop=[
+                    atom
+                    for atom in old_keys[0].connected
+                    if atom not in old_ligand.atoms
+                ]
+                if stop:
+                    frag = old_ligand.get_fragment(
+                        old_keys[0],
+                        stop=stop,
                     )
-                    remove_centers = [c for c in self.center if c in old_walk]
+                    if all(atom in frag for atom in old_keys):
+                        old_walk = self.shortest_path(
+                            *old_keys,
+                            avoid=[
+                                a
+                                for a in self.center
+                                if any(k.is_connected(a) for k in old_keys)
+                            ]
+                        )
+                        remove_centers = [c for c in self.center if c in old_walk]
+                
+                else:
+                    old_walk = [a for a in old_keys]
 
             if old_walk and len(old_walk) == 2:
                 old_con = set([])
                 for k in old_keys:
                     for c in k.connected:
                         old_con.add(c)
-                old_vec = old_ligand.COM(targets=old_con) - center
+                if old_con:
+                    old_vec = old_ligand.COM(targets=old_con) - center
+                else:
+                    old_vec = center
+
             elif old_walk:
                 old_vec = old_ligand.COM(targets=old_walk[1:-1]) - center
             else:

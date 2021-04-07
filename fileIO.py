@@ -19,6 +19,7 @@ read_types = [
     "sd",
     "sdf",
     "mol",
+    "mol2",
     "out",
     "dat",
     "fchk",
@@ -425,6 +426,8 @@ class FileReader:
                 self.read_sd(f)
             elif self.file_type == "xyz":
                 self.read_xyz(f, get_all)
+            elif self.file_type == "mol2":
+                self.read_mol2(f, get_all)
             elif any(self.file_type == ext for ext in ["com", "gjf"]):
                 self.read_com(f)
             elif self.file_type == "out":
@@ -469,6 +472,8 @@ class FileReader:
             self.read_com(f)
         elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
             self.read_sd(f)
+        elif self.file_type == "mol2":
+            self.read_mol2(f)
         elif self.file_type == "out":
             self.read_orca_out(f, get_all, just_geom)
         elif self.file_type == "dat":
@@ -553,6 +558,43 @@ class FileReader:
 
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
+
+    def read_mol2(self, f):
+        """
+        read TRIPOS mol2
+        """
+        atoms = []
+        
+        lines = f.readlines()
+        i = 0
+        while i < len(lines):
+            if lines[i].startswith("@<TRIPOS>MOLECULE"):
+                self.comment = lines[i + 1]
+                info = lines[i + 2].split()
+                n_atoms = int(info[0])
+                n_bonds = int(info[1])
+                i += 3
+                
+            elif lines[i].startswith("@<TRIPOS>ATOM"):
+                for j in range(0, n_atoms):
+                    i += 1
+                    info = lines[i].split()
+                    # name = info[1]
+                    coords = np.array([float(x) for x in info[2:5]])
+                    element = re.match("([A-Za-z]+)", info[5]).group(1)
+                    atoms.append(Atom(element=element, coords=coords, name=str(j + 1)))
+            
+                self.atoms = atoms
+            
+            elif lines[i].startswith("@<TRIPOS>BOND"):
+                for j in range(0, n_bonds):
+                    i += 1
+                    info = lines[i].split()
+                    a1, a2 = [int(ndx) - 1 for ndx in info[1:3]]
+                    self.atoms[a1].connected.add(self.atoms[a2])
+                    self.atoms[a2].connected.add(self.atoms[a1])
+            
+            i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):

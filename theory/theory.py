@@ -1121,6 +1121,16 @@ class Theory:
             other_kw_dict[PSI4_COORDINATES]["coords"] = self.geometry.coords
 
         s = ""
+        
+        if isinstance(self.method, SAPTMethod) and not hasattr(self.charge, "__iter__"):
+            warnings.append(
+                "for a SAPTMethod, charge and multiplicity should both be lists\n"
+                "with the first item being the overall charge/multiplicity and\n"
+                "subsequent items being the charge/multiplicity of the\n"
+                "corresponding monomer"
+            )
+            return s, warnings
+        
         if (
             isinstance(self.method, SAPTMethod)
             and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
@@ -1141,7 +1151,16 @@ class Theory:
         else:
             s += "molecule {\n"
             if isinstance(self.method, SAPTMethod):
+                if not hasattr(self.charge, "__iter__"):
+                    warnings.append(
+                        "for a SAPTMethod, charge and multiplicity should both be lists\n"
+                        "with the first item being the overall charge/multiplicity and\n"
+                        "subsequent items being the charge/multiplicity of the\n"
+                        "corresponding monomer"
+                    )
                 s += "    %2i %i\n" % (self.charge[0], self.multiplicity[0])
+                if len(self.charge) > 1 and self.charge[0] != sum(self.charge[1:]):
+                    warnings.append("total charge is not equal to sum of monomer charges")
             else:
                 s += "    %2i %i\n" % (self.charge, self.multiplicity)
 
@@ -1422,7 +1441,13 @@ class Theory:
         # method is method name + dispersion if there is dispersion
         method = self.method.get_psi4()[0]
         if self.empirical_dispersion is not None:
-            method += self.empirical_dispersion.get_psi4()[0]
+            disp = self.empirical_dispersion.get_psi4()[0]
+            if "%s" in method:
+                method = method % disp
+            else:
+                method += disp
+        elif "%s" in method:
+            method = method.replace("%s", "")
 
         warning = self.method.sanity_check_method(method, "psi4")
         if warning:
