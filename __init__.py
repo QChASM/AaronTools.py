@@ -102,6 +102,17 @@ class CustomFilter(logging.Filter):
 class CitationHandler(logging.FileHandler):
     def __init__(self, filename, **kwargs):
         filename = os.path.expandvars(filename)
+        if not os.path.exists(os.path.dirname(filename)):
+            # might be trying to put citations in $AARONLIB, but user
+            # didn't bother to set the environment variable and just
+            # uses the default
+            from AaronTools.const import AARONLIB
+            if "$AARONLIB" in filename:
+                filename = filename.replace("$AARONLIB", AARONLIB)
+            elif "${AARONLIB}" in filename:
+                filename = filename.replace("${AARONLIB}", AARONLIB)
+            elif "%AARONLIB%" in filename:
+                filename = filename.replace("%AARONLIB%", AARONLIB)
         super().__init__(filename, **kwargs)
 
     def emit(self, record):
