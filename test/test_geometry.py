@@ -7,9 +7,9 @@ from copy import copy
 import AaronTools
 import numpy as np
 from AaronTools.atoms import Atom
+from AaronTools.component import Component
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.component import Component
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate

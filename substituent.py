@@ -1,22 +1,22 @@
+#!/usr/bin/env python3
 """for fragments attached to a structure by one bond"""
 
-#!/usr/bin/env python3
 import json
 import os
 import re
 import sys
 from copy import deepcopy
-from glob import glob
-from warnings import warn
 
 import numpy as np
 
+from AaronTools import addlogger
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import perp_vector
 
 
+@addlogger
 class Substituent(Geometry):
     """
     Attributes:
@@ -27,6 +27,7 @@ class Substituent(Geometry):
         conf_angle  angle to rotate by to make next conformer
     """
 
+    LOG = None
     AARON_LIBS = os.path.join(AARONLIB, "Subs")
     BUILTIN = os.path.join(AARONTOOLS, "Substituents")
     CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
@@ -39,14 +40,14 @@ class Substituent(Geometry):
         cache["lengths"] = {}  # for storing number of atoms in each sub
 
     def __init__(
-            self,
-            sub=None,
-            name=None,
-            targets=None,
-            end=None,
-            conf_num=None,
-            conf_angle=None,
-            detect=True,
+        self,
+        sub=None,
+        name=None,
+        targets=None,
+        end=None,
+        conf_num=None,
+        conf_angle=None,
+        detect=True,
     ):
         """
         sub is either a file sub, a geometry, or an atom list
@@ -108,7 +109,7 @@ class Substituent(Geometry):
                     if match:
                         fsub = os.path.join(lib, f)
                         break
-                
+
                 if fsub:
                     break
 
@@ -133,7 +134,7 @@ class Substituent(Geometry):
                     self.atoms = fsub.atoms[1:]
                     self.refresh_connected()
                     self.name = match.group(1)
-                    warn("Conformer info not loaded for" + sub)
+                    self.LOG.warning("Conformer info not loaded for" + sub)
                     return
                 else:
                     raise RuntimeError(
@@ -155,7 +156,7 @@ class Substituent(Geometry):
                 self.conf_num = int(conf_info.group(1))
                 self.conf_angle = np.deg2rad(float(conf_info.group(2)))
             else:
-                warn("Conformer info not loaded for" + f)
+                self.LOG.warning("Conformer info not loaded for" + f)
 
         if not self.name:
             self.name = "sub"
@@ -168,8 +169,8 @@ class Substituent(Geometry):
         if len(self.atoms) != len(other.atoms):
             return len(self.atoms) < len(other.atoms)
         for a, b in zip(
-                self.reorder(start=self.atoms[0])[0],
-                other.reorder(start=other.atoms[0])[0],
+            self.reorder(start=self.atoms[0])[0],
+            other.reorder(start=other.atoms[0])[0],
         ):
             if a < b and not b < a:
                 return True
@@ -177,13 +178,13 @@ class Substituent(Geometry):
 
     @classmethod
     def from_string(
-            cls,
-            name,
-            conf_num=None,
-            conf_angle=None,
-            form="smiles",
-            debug=False,
-            strict_use_rdkit=False,
+        cls,
+        name,
+        conf_num=None,
+        conf_angle=None,
+        form="smiles",
+        debug=False,
+        strict_use_rdkit=False,
     ):
         """
         creates a substituent from a string
@@ -227,7 +228,7 @@ class Substituent(Geometry):
                     break
         if my_rad is None:
             if radicals:
-                warn(
+                cls.LOG.warning(
                     "radical atom may be ambiguous, be sure to check output: %s"
                     % smiles
                 )
@@ -343,10 +344,10 @@ class Substituent(Geometry):
                 name, ext = os.path.splitext(os.path.basename(f))
                 if not any(".%s" % x == ext for x in read_types):
                     continue
-                
+
                 if name in names:
                     continue
-                
+
                 if include_ext:
                     names.append(name + ext)
                 else:
@@ -378,11 +379,11 @@ class Substituent(Geometry):
 
                 # test number of atoms against cache
                 if (
-                        name in sub_lengths
-                        and len(test_sub.atoms) != sub_lengths[name]
+                    name in sub_lengths
+                    and len(test_sub.atoms) != sub_lengths[name]
                 ):
                     continue
-                
+
                 # use Geometry until we've done all the checks we can do without
                 # determining connectivity
                 # (for performance reasons)
@@ -394,7 +395,7 @@ class Substituent(Geometry):
                 # add to cache
                 sub_lengths[name] = len(init_ref.atoms)
                 cache_changed = True
-    
+
                 # want same number of atoms
                 if len(test_sub.atoms) != len(init_ref.atoms):
                     continue
@@ -402,8 +403,12 @@ class Substituent(Geometry):
                 # same number of each element
                 ref_eles = [atom.element for atom in init_ref.atoms]
                 test_eles = [atom.element for atom in test_sub.atoms]
-                ref_counts = {ele:ref_eles.count(ele) for ele in set(ref_eles)}
-                test_counts = {ele:test_eles.count(ele) for ele in set(test_eles)}
+                ref_counts = {
+                    ele: ref_eles.count(ele) for ele in set(ref_eles)
+                }
+                test_counts = {
+                    ele: test_eles.count(ele) for ele in set(test_eles)
+                }
                 if ref_counts != test_counts:
                     continue
 
@@ -411,7 +416,7 @@ class Substituent(Geometry):
                 ref_sub.name = name
                 ref_sub.refresh_connected()
                 ref_sub.refresh_ranks()
-    
+
                 for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
                     # want correct elements
                     if a.element != b.element:
@@ -422,8 +427,8 @@ class Substituent(Geometry):
                     # and correct connected elements
                     failed = False
                     for i, j in zip(
-                            sorted([aa.element for aa in a.connected]),
-                            sorted([bb.element for bb in b.connected]),
+                        sorted([aa.element for aa in a.connected]),
+                        sorted([bb.element for bb in b.connected]),
                     ):
                         if i != j:
                             failed = True
@@ -458,11 +463,11 @@ class Substituent(Geometry):
         keys are B1, B2, B3, B4, B5, and L
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
-        selectivity. Pestic. Sci., 7: 379-390. 
+        selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
-        
-        Note: AaronTools' definition of the L parameter is different than the original 
-        STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is 
+
+        Note: AaronTools' definition of the L parameter is different than the original
+        STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is
         projected onto a plane parallel to the bond between the molecule and the substituent.
         The L parameter is 0.40 Å plus the distance from the first substituent atom to the
         outer van der Waals surface of the projection along the bond vector. This 0.40 Å is
@@ -473,7 +478,7 @@ class Substituent(Geometry):
         is capped with something besides a hydrogen. When comparing AaronTools' L values
         with STERIMOL (using the same set of radii for the atoms), the values usually
         differ by < 0.1 Å.
-        
+
         return_vector: bool/returns dict of tuple(vector start, vector end) instead
         radii: "bondi" - Bondi vdW radii
                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
@@ -512,7 +517,7 @@ class Substituent(Geometry):
         # for B1, we're going to use ConvexHull to find the minimum distance
         # from one face of a bounding box
         # to do this, we're going to project the substituent in a plane
-        # perpendicular to the L-axis and get a set of points along the 
+        # perpendicular to the L-axis and get a set of points along the
         # vdw radii of the atoms
         # ConvexHull will take these points and figure out which ones
         # are on the outside (vertices)
@@ -597,7 +602,7 @@ class Substituent(Geometry):
 
         # ax = plt.gca()
         # ax.set_aspect('equal')
-        
+
         # go through each edge, find a vector perpendicular to the one
         # defined by the edge that passes through the origin
         # the length of the shortest of these vectors is B1
@@ -625,7 +630,7 @@ class Substituent(Geometry):
                 end = x_vec * perp[0] + ip_vector * perp[1]
                 end += start
                 vector["B1"] = (start, end)
-        
+
         # figure out B2-4
         # these need to be sorted in increasing order
         # for now, they will just be Bpar for the one opposite B1
@@ -645,12 +650,12 @@ class Substituent(Geometry):
             test_par_vec -= radii_dict[atom.element] * b1_norm
             start = atom.coords - test_B_v
             end = start + test_par_vec
-            
+
             test_Bpar = np.linalg.norm(end - start)
             if Bpar is None or test_Bpar > Bpar:
                 Bpar = test_Bpar
                 par_vec = (start, end)
-            
+
             perp_vec = np.dot(test_B_v, b1_perp) * b1_perp
             if np.dot(test_B_v, b1_perp) > 0 or np.isclose(np.dot(b1_perp, test_B_v), 0):
                 test_perp_vec1 = perp_vec + radii_dict[atom.element] * b1_perp
@@ -676,7 +681,7 @@ class Substituent(Geometry):
             n = Bs.index(max_b)
             max_v = Bvecs.pop(n)
             Bs.pop(n)
-            
+
             if i == 0:
                 B4 = max_b
                 vector["B4"] = max_v
@@ -687,7 +692,7 @@ class Substituent(Geometry):
                 B2 = max_b
                 vector["B2"] = max_v
             i += 1
-        
+
         params = {
             "B1": B1,
             "B2": B2,
@@ -696,9 +701,9 @@ class Substituent(Geometry):
             "B5": B5,
             "L": L,
         }
-        
+
         # plt.plot(points[min_ndx,0], points[min_ndx,1], 'g*')
-        
+
         # plt.show()
 
         if return_vector:

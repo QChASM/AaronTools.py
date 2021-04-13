@@ -2,10 +2,10 @@ import os
 import re
 import subprocess
 from time import sleep
-from warnings import warn
 
 from jinja2 import Environment, FileSystemLoader
 
+from AaronTools import addlogger
 from AaronTools.const import AARONLIB
 
 USER = os.getenv("USER")
@@ -16,6 +16,7 @@ class JobControl:
     pass
 
 
+@addlogger
 class SubmitProcess:
     """class for submitting jobs to the queue
     attributes:
@@ -27,6 +28,8 @@ class SubmitProcess:
     processors: allocated processors
     memory:     allocated memory in GB
     template:   template job file"""
+
+    LOG = None
 
     def __init__(self, fname, walltime, processors, memory, template=None):
         """fname:   str     - path to input file (e.g. /home/CoolUser/CoolStuff/neat.com
@@ -56,7 +59,7 @@ class SubmitProcess:
             )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn(
+                SubmitProcess.LOG.warning(
                     "error checking queue: %s\nsleeping 300s before trying again"
                     % err.decode("utf-8")
                 )
@@ -86,7 +89,7 @@ class SubmitProcess:
             )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn(
+                SubmitProcess.LOG.warning(
                     "error checking queue: %s\nsleeping 300s before trying again"
                     % err.decode("utf-8")
                 )
@@ -122,7 +125,7 @@ class SubmitProcess:
             )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn(
+                SubmitProcess.LOG.warning(
                     "error checking queue: %s\nsleeping 300s before trying again"
                     % err.decode("utf-8")
                 )
@@ -151,7 +154,7 @@ class SubmitProcess:
             )
             out, err = proc.communicate()
             if len(err) != 0 and retry:
-                warn(
+                SubmitProcess.LOG.warning(
                     "error checking queue: %s\nsleeping 300s before trying again"
                     % err.decode("utf-8")
                 )
@@ -172,7 +175,7 @@ class SubmitProcess:
                 )
                 out, err = proc.communicate()
                 if len(err) != 0 and retry:
-                    warn(
+                    SubmitProcess.LOG.warning(
                         "error checking queue: %s\nsleeping 300s before trying again"
                         % err.decode("utf-8")
                     )

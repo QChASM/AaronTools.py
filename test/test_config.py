@@ -3,14 +3,16 @@ import json
 import os
 import unittest
 
-import AaronTools
-import AaronTools.config
 import numpy as np
+from AaronTools import addlogger
 from AaronTools.config import Config
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
+from AaronTools.test import TestWithTimer, prefix
 
 
+@addlogger
 class TestConfig(TestWithTimer):
+    LOG = None
+    USER_SPECIFIC = ["metadata", "infile", (".*", ".*_dir")]
     config_list = [("blank.ini", None), ("HOH.ini", None)]
 
     def test_init(self):
@@ -22,7 +24,7 @@ class TestConfig(TestWithTimer):
             )
             TestConfig.config_list[i] = config_name, config
 
-            test = config.as_dict(skip=config.USER_SPECIFIC)
+            test = config.as_dict(skip=self.USER_SPECIFIC)
             ref_name = os.path.join(
                 prefix, "ref_files", config_name.replace(".ini", "_init.json")
             )
@@ -32,7 +34,7 @@ class TestConfig(TestWithTimer):
             # need this to make sure python->json stuff is consistent,
             # eg: json doesn't distinguish between tuples and lists
             test = json.loads(json.dumps(test))
-            # print(json.dumps(test, indent=2))
+            self.LOG.debug(json.dumps(test, indent=2))
             with open(ref_name, "r") as f:
                 ref = json.load(f)
             self.maxDiff = None

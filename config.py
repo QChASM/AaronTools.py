@@ -3,9 +3,9 @@ import itertools as it
 import os
 import re
 from getpass import getuser
-from warnings import warn
 
 import AaronTools
+from AaronTools import addlogger
 from AaronTools.const import AARONLIB, AARONTOOLS
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
@@ -62,6 +62,7 @@ THEORY_OPTIONS = [
 ]
 
 
+@addlogger
 class Config(configparser.ConfigParser):
     """
     Reads configuration information from INI files found at:
@@ -73,6 +74,7 @@ class Config(configparser.ConfigParser):
     See help(configparser.ConfigParser) for more information
     """
 
+    LOG = None
     SPEC_ATTRS = [
         "_changes",
         "_changed_list",
@@ -81,8 +83,6 @@ class Config(configparser.ConfigParser):
         "infile",
         "metadata",
     ]
-
-    USER_SPECIFIC = ["metadata"]
 
     def __init__(
         self, infile=None, quiet=False, skip_user_default=False, **kwargs
@@ -478,7 +478,9 @@ class Config(configparser.ConfigParser):
         Get the theory object according to configuration information
         """
         if not self.has_section(section):
-            warn('config has no "%s" section, switching to "Theory"' % section)
+            self.LOG.warning(
+                'config has no "%s" section, switching to "Theory"' % section
+            )
             section = "Theory"
 
         kwargs = self.get_other_kwargs(section=section)

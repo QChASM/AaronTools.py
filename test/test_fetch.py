@@ -34,7 +34,14 @@ class TestFromString(TestWithTimer):
         ref.atoms = ref.reorder(start=ref.atoms[0])[0]
         sub.atoms = sub.reorder(start=sub.atoms[0])[0]
         self.assertTrue(
-            validate(sub, ref, thresh=thresh, heavy_only=True, sort=False, debug=False)
+            validate(
+                sub,
+                ref,
+                thresh=thresh,
+                heavy_only=True,
+                sort=False,
+                debug=False,
+            )
         )
 
     def is_NO2(self, sub):
@@ -50,27 +57,30 @@ class TestFromString(TestWithTimer):
             )
             self.is_COCH3(sub)
 
-            sub = Substituent.from_string(
-                "nitro", form="iupac", strict_use_rdkit=True
-            )
-            self.is_NO2(sub)
+            with self.assertLogs(Substituent.LOG, level="WARNING"):
+                sub = Substituent.from_string(
+                    "nitro", form="iupac", strict_use_rdkit=True
+                )
+                self.is_NO2(sub)
 
             sub = Substituent.from_string(
                 "O=[N.]=O", form="smiles", strict_use_rdkit=True
             )
             self.is_NO2(sub)
 
-            sub = Substituent.from_string(
-                "O=[N]=O", form="smiles", strict_use_rdkit=True
-            )
-            self.is_NO2(sub)
+            with self.assertLogs(Substituent.LOG, level="WARNING"):
+                sub = Substituent.from_string(
+                    "O=[N]=O", form="smiles", strict_use_rdkit=True
+                )
+                self.is_NO2(sub)
 
         except (ImportError, ModuleNotFoundError):
             # I still want to test CACTVS things because sometimes they change stuff
             # that breaks our stuff
-            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
-                "ajs99778", "normn"
-            ]):
+            if any(
+                user == os.getenv("USER", os.getenv("USERNAME", False))
+                for user in ["ajs99778", "normn"]
+            ):
                 sub = Substituent.from_string("acetyl", form="iupac")
                 print(sub.write(outfile=False))
                 self.is_COCH3(sub, thresh=0.3)
@@ -99,24 +109,20 @@ class TestFromString(TestWithTimer):
             )
             ref = TestFromString.chiral_geom
             # really loose threshhold b/c rdkit can give a boat cyclohexane...
-            self.assertTrue(
-                validate(geom, ref, thresh=0.35, heavy_only=True, debug=False)
-            )
+            self.assertTrue(validate(geom, ref, thresh=0.35, heavy_only=True))
 
-        except:
-            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
-                "ajs99778", "normn"
-            ]):
+        except (ImportError, ModuleNotFoundError):
+            if any(
+                user == os.getenv("USER", os.getenv("USERNAME", False))
+                for user in ["ajs99778", "normn"]
+            ):
                 geom = Geometry.from_string(
                     "(1R,2R)-1-Chloro-2-methylcyclohexane", form="iupac"
                 )
-                print(geom.write(outfile=False))
                 ref = TestFromString.chiral_geom
                 # really loose threshhold b/c rdkit can give a boat cyclohexane...
                 self.assertTrue(
-                    validate(
-                        geom, ref, thresh=0.35, heavy_only=True, debug=False
-                    )
+                    validate(geom, ref, thresh=0.35, heavy_only=True)
                 )
             else:
                 self.skipTest("RDKit not installed, CACTVS is not tested")
@@ -129,18 +135,21 @@ class TestFromString(TestWithTimer):
                 "benzene", end_length=1, end_atom="C", form="iupac"
             )
             ref = self.benzene
-            self.assertTrue(validate(ring, ref, thresh="loose", debug=True))
+            self.assertTrue(validate(ring, ref, thresh="loose"))
 
         except ImportError:
-            if any(user == os.getenv("USER", os.getenv("USERNAME", False)) for user in [
-                "ajs99778", "normn"
-            ]):
+            if any(
+                user == os.getenv("USER", os.getenv("USERNAME", False))
+                for user in ["ajs99778", "normn"]
+            ):
                 ring = Ring.from_string(
                     "benzene", end_length=1, end_atom="C", form="iupac"
                 )
                 print(ring.comment)
                 ref = self.benzene
-                self.assertTrue(validate(ring, ref, thresh="loose", debug=True))
+                self.assertTrue(
+                    validate(ring, ref, thresh="loose", debug=True)
+                )
 
             else:
                 self.skipTest("RDKit not installed, CACTVS is not tested")

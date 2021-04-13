@@ -98,65 +98,78 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
 
 
 class TestWithTimer(unittest.TestCase):
-    count = 0
+    test_count = 0
     total_time = 0
+    this_class = None
     last_class = None
     last_result = None
-    _errors = 0
-    _fails = 0
+    errors = 0
+    fails = 0
+    last_errors = 0
+    last_fails = 0
+
+    @classmethod
+    def setUpClass(cls):
+        TestWithTimer.total_time = time.time()
 
     @classmethod
     def tearDownClass(cls):
-        errors = len(cls.last_result.errors)
-        fails = len(cls.last_result.failures)
-        if TestWithTimer._errors != errors:
-            TestWithTimer._errors = errors
-            print("\b ERROR")
-        elif TestWithTimer._fails != fails:
-            TestWithTimer._fails = fails
-            print("\b FAIL")
+        TestWithTimer.total_time = time.time() - TestWithTimer.total_time
+        print(TestWithTimer.get_status())
+
+        if TestWithTimer.errors - TestWithTimer.last_errors:
+            status = "ERROR"
+        elif TestWithTimer.fails - TestWithTimer.last_fails:
+            status = "FAIL"
         else:
-            print("\b ok")
+            status = "ok"
+        TestWithTimer.last_errors = TestWithTimer.errors
+        TestWithTimer.last_fails = TestWithTimer.fails
 
         print(
-            "Ran {} tests in {:.3f}s".format(
-                TestWithTimer.count, TestWithTimer.total_time
+            "Ran %d test in %.4fs  %s"
+            % (
+                TestWithTimer.last_result.testsRun - TestWithTimer.test_count,
+                TestWithTimer.total_time,
+                status,
             )
         )
-        print("-" * 70)
+        TestWithTimer.test_count = TestWithTimer.last_result.testsRun
+        print(unittest.TextTestResult.separator2)
+
+    @classmethod
+    def get_status(cls):
+        if TestWithTimer.errors != len(TestWithTimer.last_result.errors):
+            status = "ERROR"
+        elif TestWithTimer.fails != len(TestWithTimer.last_result.failures):
+            status = "FAIL"
+        else:
+            status = "ok"
+        TestWithTimer.errors = len(TestWithTimer.last_result.errors)
+        TestWithTimer.fails = len(TestWithTimer.last_result.failures)
+        return status
 
     def setUp(self):
-        errors = len(self._outcome.result.errors)
-        fails = len(self._outcome.result.failures)
-        if TestWithTimer._errors != errors:
-            TestWithTimer._errors = errors
-            print("\b ERROR")
-        elif TestWithTimer._fails != fails:
-            TestWithTimer._fails = fails
-            print("\b FAIL")
-        elif self.id().split(".")[1] == TestWithTimer.last_class:
-            print("\b ok")
-        elif TestWithTimer.last_class is not None:
-            TestWithTimer.total_time = 0
         self.start_time = time.time()
 
     def tearDown(self):
         t = time.time() - self.start_time
-        TestWithTimer.total_time += t
+        TestWithTimer.last_result = self._outcome.result
+        TestWithTimer.this_class, self.test_name = self.id().split(".")[-2:]
 
-        name = self.id().split(".")[-2:]
-        if not TestWithTimer.last_class or TestWithTimer.last_class != name[0]:
-            TestWithTimer.last_class = name[0]
-            TestWithTimer.count = 0
-            print("\r{}:".format(name[0]))
+        status = TestWithTimer.get_status()
+        if TestWithTimer.this_class != TestWithTimer.last_class:
+            TestWithTimer.last_class = TestWithTimer.this_class
+            print(TestWithTimer.this_class)
+        else:
+            print(status)
 
-        name = name[1]
-        TestWithTimer.count += 1
         print(
-            "\r    {:3.0f}: {:<30s} {: 3.3f}s  ".format(
-                TestWithTimer.count, name, t
+            "\b   %2d. %-30s %.4fs  "
+            % (
+                TestWithTimer.last_result.testsRun - TestWithTimer.test_count,
+                self.test_name,
+                t,
             ),
             end="",
         )
-
-        TestWithTimer.last_result = self._outcome.result
