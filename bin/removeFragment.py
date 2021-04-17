@@ -95,8 +95,10 @@ for infile in args.infile:
             if not args.add_H:
                 geom -= atom
     
-    if isinstance(args.outfile, str):
-        outfile = args.outfile.replace("$INFILE", get_filename(infile))
+    if args.outfile:
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(infile))
         geom.write(append=False, outfile=outfile)
     else:
         s = geom.write(outfile=False)

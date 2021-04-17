@@ -143,7 +143,6 @@ for f in args.infile:
     if args.print_cones:
         s += ".transparency 0.5\n"
         for cone in cones:
-            print(cone)
             apex, base, radius = cone
             s += ".cone   %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f   %.3f open\n" % (
                 *apex, *base, radius

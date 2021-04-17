@@ -488,7 +488,29 @@ class Geometry:
                 geoms.append(geom_copy)
         
         return geoms, cc_type
-    
+
+    @staticmethod
+    def weighted_percent_buried_volume(geometries, energies, temperature, *args, **kwargs):
+        """
+        Boltzmann-averaged percent buried volume
+        geometries - list of Geometry instances
+        energies - numpy array, energy in kcal/mol; ith energy corresponds to ith substituent
+        temperature - temperature in K
+        *args, **kwargs - passed to Geometry.percent_buried_volume()
+        """
+        values = []
+        
+        for geom in geometries:
+            values.append(geom.percent_buried_volume(*args, **kwargs))
+        
+        rv = utils.boltzmann_average(
+            energies,
+            np.array(values),
+            temperature,
+        )
+        
+        return rv
+        
     # attribute access
     def _stack_coords(self, atoms=None):
         """

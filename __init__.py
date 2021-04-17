@@ -36,6 +36,9 @@ except ValueError:
 if SAVE_CITATIONS is False:
     SAVE_CITATIONS = None
 
+logging.logThreads = 0
+logging.logProcesses = 0
+
 logging.captureWarnings(True)
 
 
@@ -144,7 +147,7 @@ class ATLogger(logging.Logger):
             fmt="%(levelname)s %(name)s.%(funcName)s %(message)s"
         )
         handlers = [(logging.StreamHandler(), PRINT_CITATIONS)]
-        if SAVE_CITATIONS is not None:
+        if SAVE_CITATIONS is not None and os.access(SAVE_CITATIONS, os.W_OK):
             handlers += [(CitationHandler(SAVE_CITATIONS), True)]
         for hdlr, cite in handlers:
             hdlr.setFormatter(formatter)

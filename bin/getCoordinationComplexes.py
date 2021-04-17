@@ -66,6 +66,7 @@ coord_comp_parser.add_argument(
     "-c",
     "--center-atom",
     required=True,
+    metavar="element",
     dest="center",
     help="central atom for coordination complexes"
 )

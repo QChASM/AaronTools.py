@@ -743,9 +743,12 @@ for f in args.infile:
     other_kwargs = combine_dicts(kwargs, other_kwargs)
 
     if args.outfile:
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(f))
         warnings = geom.write(
             append=True,
-            outfile=args.outfile.replace("$INFILE", get_filename(f)),
+            outfile=outfile,
             style=style,
             theory=theory,
             return_warnings=True,

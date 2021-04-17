@@ -192,8 +192,9 @@ for infile in args.infile:
 
             cat_copy.map_ligand(ligands, key)
 
-            if isinstance(args.outfile, str):
-                outfile = args.outfile.replace("$INFILE", get_filename(infile))
+            if args.outfile:
+                if "$INFILE" in args.outfile:
+                    outfile = args.outfile.replace("$INFILE", get_filename(infile))
                 outfile = outfile.replace("$LIGAND", lig_name)
                 cat_copy.write(append=False, outfile=outfile)
             else:

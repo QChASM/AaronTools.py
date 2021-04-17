@@ -9,7 +9,7 @@ from AaronTools.job_control import SubmitProcess
 config = Config(quiet=True)
 
 default_proc = config.getint(
-    "Job", "processors", config.getint("Job", "procs", fallback=4)
+    "Job", "processors", fallback=config.getint("Job", "procs", fallback=4)
 )
 default_mem = config.getint("Job", "memory", fallback=8)
 default_walltime = config.getint("Job", "walltime", fallback=12)

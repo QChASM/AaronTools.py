@@ -188,9 +188,9 @@ for f in args.infile:
             )
 
     if args.outfile:
-        geom.write(
-            append=True, 
-            outfile=args.outfile.replace("$INFILE", get_filename(f))
-        )
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(f))
+        geom.write(append=True, outfile=outfile)
     else:
         print(geom.write(outfile=False))

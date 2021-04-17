@@ -13,7 +13,7 @@ from AaronTools import addlogger
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import perp_vector
+from AaronTools.utils.utils import perp_vector, boltzmann_average
 
 
 @addlogger
@@ -175,6 +175,39 @@ class Substituent(Geometry):
             if a < b and not b < a:
                 return True
         return False
+
+    @staticmethod
+    def weighted_sterimol(substituents, energies, temperature, *args, **kwargs):
+        """
+        returns Boltzmann-averaged sterimol parameters for the substituents
+        substituents - list of Substituent instances
+        energies - numpy array, energy in kcal/mol; ith energy corresponds to ith substituent
+        temperature - temperature in K
+        *args, **kwargs - passed to Substituent.sterimol()
+        """
+        CITATION = "doi:10.1021/acscatal.8b04043"
+        Substituent.LOG.citation(CITATION)
+        values = {
+            "B1": [],
+            "B2": [],
+            "B3": [],
+            "B4": [],
+            "B5": [],
+            "L": [],
+        }
+        
+        rv = dict()
+        
+        for sub in substituents:
+            data = sub.sterimol(*args, **kwargs)
+            for key in data.keys():
+                values[key].append(data[key])
+        
+        for key in values.keys():
+            values[key] = np.array(values[key])
+            rv[key] = boltzmann_average(energies, values[key], temperature)
+        
+        return rv
 
     @classmethod
     def from_string(
@@ -457,7 +490,7 @@ class Substituent(Geometry):
 
         return found
 
-    def sterimol(self, return_vector=False, radii="bondi"):
+    def sterimol(self, return_vector=False, radii="bondi", old_L=False):
         """
         returns sterimol parameter values in a dictionary
         keys are B1, B2, B3, B4, B5, and L
@@ -466,7 +499,14 @@ class Substituent(Geometry):
         selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
 
-        Note: AaronTools' definition of the L parameter is different than the original
+        return_vector: bool/returns dict of tuple(vector start, vector end) instead
+        radii: "bondi" - Bondi vdW radii
+               "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+        old_L: bool - True: use original L (ideal bond length between first substituent
+                            atom and hydrogen + 0.40 angstrom
+                      False: use AaronTools definition
+
+        AaronTools' definition of the L parameter is different than the original
         STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is
         projected onto a plane parallel to the bond between the molecule and the substituent.
         The L parameter is 0.40 Å plus the distance from the first substituent atom to the
@@ -478,22 +518,26 @@ class Substituent(Geometry):
         is capped with something besides a hydrogen. When comparing AaronTools' L values
         with STERIMOL (using the same set of radii for the atoms), the values usually
         differ by < 0.1 Å.
-
-        return_vector: bool/returns dict of tuple(vector start, vector end) instead
-        radii: "bondi" - Bondi vdW radii
-               "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
         """
         from AaronTools.finders import BondedTo
         from scipy.spatial import ConvexHull
+
+        CITATION = "doi:10.1002/ps.2780070410"
+        self.LOG.citation(CITATION)
 
         if self.end is None:
             raise RuntimeError(
                 "cannot calculate sterimol values for substituents without end"
             )
 
-
         atom1 = self.find(BondedTo(self.end))[0]
         atom2 = self.end
+
+        if old_L:
+            from AaronTools.atoms import Atom, BondOrder
+            bo = BondOrder
+            key = bo.key(atom1, Atom(element="H"))
+            dx = bo.bonds[key]["1.0"] + 0.4
 
         # print(atom1.name, atom2.name)
 
@@ -535,24 +579,37 @@ class Substituent(Geometry):
         for i, atom in enumerate(self.atoms):
             test_v = atom2.bond(atom)
 
-            # L - overlap with L-axis and vector from 1st substituent
-            # atom to this atom plus the difference between the sum of
-            # the vdw radii and bond length of the 1st substituent atom
-            # and the molecule's atom
-            # the distance from atom2 is subtracted off b/c our L
-            # goes from one end of the VDW radii to the other
-            # distance from atom2 is included in test_v, so we need
-            # to subtract it off
-            test_L = (
-                np.dot(test_v, L_axis)
-                - atom1.dist(atom2)
-                + radii_dict[atom1.element]
-                + radii_dict[atom.element]
-            )
+            # L
+            if old_L:
+                test_L = (
+                    np.dot(test_v, L_axis)
+                    - atom1.dist(atom2)
+                    + dx
+                    + radii_dict[atom.element]
+                )
+            else:
+                # overlap with L-axis and vector from 1st substituent
+                # atom to this atom plus the difference between the sum of
+                # the vdw radii and bond length of the 1st substituent atom
+                # and the molecule's atom
+                # the distance from atom2 is subtracted off b/c our L
+                # goes from one end of the VDW radii to the other
+                # distance from atom2 is included in test_v, so we need
+                # to subtract it off
+                test_L = (
+                    np.dot(test_v, L_axis)
+                    - atom1.dist(atom2)
+                    + radii_dict[atom1.element]
+                    + radii_dict[atom.element]
+                )
             if L is None or test_L > L:
                 L = test_L
-                start = atom1.coords - radii_dict[atom1.element] * L_axis
-                vector["L"] = (start, start + L * L_axis)
+                if old_L:
+                    start = atom1.coords - dx * L_axis
+                    vector["L"] = (start, start + L * L_axis)
+                else:
+                    start = atom1.coords - radii_dict[atom1.element] * L_axis
+                    vector["L"] = (start, start + L * L_axis)
 
             # B1-4 stuff - we come back to this later
             r1 = radii_dict[atom.element]
@@ -717,7 +774,10 @@ class Substituent(Geometry):
         bond /= np.linalg.norm(bond)
         x_axis = np.array([1.0, 0.0, 0.0])
         rot_axis = np.cross(x_axis, bond)
-        rot_axis /= np.linalg.norm(rot_axis)
+        if np.linalg.norm(rot_axis) > 1e-4:
+            rot_axis /= np.linalg.norm(rot_axis)
+        else:
+            rot_axis = np.array([0.0, 1.0, 0.0])
         angle = np.arccos(np.dot(bond, x_axis))
         self.rotate(rot_axis, angle)
 

@@ -5,7 +5,7 @@ import re
 import numpy as np
 
 import AaronTools.atoms as Atoms
-from AaronTools.const import AARONTOOLS
+from AaronTools.const import AARONTOOLS, PHYSICAL
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -625,3 +625,27 @@ def get_filename(path, include_parent_dir=True):
         fname = path
     fname, _ = os.path.splitext(fname)
     return fname
+
+
+def boltzmann_coefficients(energies, temperature):
+    """
+    returns boltzmann weights for the energies and T
+    energies - numpy array of energies in kcal/mol
+    temperature - T in K
+    """
+    min_nrg = min(energies)
+    energies -= min_nrg
+    weights = np.exp(-energies / (PHYSICAL.R * temperature))
+    return weights
+
+
+def boltzmann_average(energies, values, temperature):
+    """
+    returns the AVT result for the values corresponding to the energies
+    energies - np.array, energy for each state in kcal/mol
+    values - np.array, values that are weighted; the ith value corresponds to the ith energy
+    temperature - float, temperature in K
+    """
+    weights = boltzmann_coefficients(energies, temperature)
+    avg = np.dot(weights, values) / sum(weights)
+    return avg
