@@ -90,9 +90,10 @@ class CustomFilter(logging.Filter):
         """
         Formats message to print prettily to console
         """
-        record.msg = re.sub(
-            "\n(\S)", lambda x: "\n  %s" % x.group(1), record.msg
-        )
+        if isinstance(record.msg, str):
+            record.msg = re.sub(
+                "\n(\S)", lambda x: "\n  %s" % x.group(1), record.msg
+            )
         msg = ["\n  "]
         for word in re.findall("\S+\s*", record.getMessage()):
             if len("".join(msg).split("\n")[-1]) + len(word) < 80:
@@ -138,22 +139,40 @@ class CitationHandler(logging.FileHandler):
 
 
 class ATLogger(logging.Logger):
-    def __init__(self, name, level=None, override=None):
+    def __init__(
+        self, name, level=None, override=None, fmt=None, add_hdlrs=None
+    ):
+        """
+        :level: the log level to use
+        :override: dict(level=funcName) to override loglevel for certain funcitons
+        :fmt: formatting string (optional)
+        :add_hdlrs: list(str(handlerName)) or list(Handler())
+        """
         super().__init__(name, level=1)
         if level is None:
             level = LOGLEVEL
+        if isinstance(level, str):
+            level = getattr(logging, level.upper())
+        self.level = level
+        if fmt is None:
+            fmt = "%(levelname)s %(name)s.%(funcName)s %(message)s"
 
-        formatter = logging.Formatter(
-            fmt="%(levelname)s %(name)s.%(funcName)s %(message)s"
-        )
+        formatter = logging.Formatter(fmt=fmt)
         handlers = [(logging.StreamHandler(), PRINT_CITATIONS)]
         if SAVE_CITATIONS is not None and os.access(SAVE_CITATIONS, os.W_OK):
             handlers += [(CitationHandler(SAVE_CITATIONS), True)]
+        if add_hdlrs is not None:
+            for hdlr in add_hdlrs:
+                if isinstance(hdlr, str):
+                    hdlr = getattr(logging, hdlr)
+                    handlers.append((hdlr(), PRINT_CITATIONS))
+                else:
+                    handlers.append(hdlr, PRINT_CITATIONS)
         for hdlr, cite in handlers:
             hdlr.setFormatter(formatter)
             hdlr.addFilter(
                 CustomFilter(
-                    name=name, level=level, override=override, cite=cite
+                    name=name, level=self.level, override=override, cite=cite
                 )
             )
             self.addHandler(hdlr)
@@ -162,7 +181,7 @@ class ATLogger(logging.Logger):
         self.info(msg, *args, **kwargs)
 
 
-def getlogger(name=None, level=None, override=None):
+def getlogger(name=None, level=None, override=None, fmt=None):
     """
     Get the logger without using the class decorator
     :level: the log level to apply, defaults to WARNING
@@ -188,7 +207,7 @@ def getlogger(name=None, level=None, override=None):
             "." if package is not None else "",
             package if package is not None else "",
         )
-    log = ATLogger(name, level=level, override=override)
+    log = ATLogger(name, level=level, override=override, fmt=fmt)
     return log
 
 

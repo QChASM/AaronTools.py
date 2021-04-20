@@ -1,9 +1,5 @@
 {
   "_changes": {
-    "": [
-      {},
-      null
-    ],
     "sub1": [
       {
         "1": "iPr",
@@ -110,7 +106,7 @@
   "DEFAULT/print_citations": "False",
   "DEFAULT/save_citations": "$AARONLIB/citations.txt",
   "DEFAULT/name": "HOH",
-  "Job/include": "Minimum",
+  "Job/include": "Job.Minimum",
   "Job/1 type": "optimize.changes",
   "Job/2 type": "optimize",
   "Job/3 type": "frequencies",
