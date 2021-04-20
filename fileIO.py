@@ -2141,7 +2141,10 @@ class Frequency:
         if point_spacing:
             x_values = []
             x = -point_spacing
-            while x < max(frequencies):
+            stop = max(frequencies)
+            if peak_type.lower() != "delta":
+                stop += 5 * fwhm
+            while x < stop:
                 x += point_spacing
                 x_values.append(x)
             
