@@ -16,7 +16,10 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.utils.prime_numbers import Primes
+from AaronTools.oniomatoms import OniomAtom
 
+LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
+LA_on = re.compile("(LA) on ([0-9])")
 COORD_THRESHOLD = 0.2
 
 
@@ -607,6 +610,23 @@ class Geometry:
                     a.add_tag("ligand")
                     rv["ligand"] += [a]
 
+        #link atoms
+        match = re.search("LA:([0-9;-]+)", self.comment)
+        if match is not None:
+            rv["link_atoms"] = []
+            match = match.group(1).split(";")
+            for m in match:
+                if m == "":
+                    continue
+                m = m.split("-")
+                m = [int(i) - 1 for i in m]
+                rv["link_atoms"] += [m]
+                for i, j in zip(m[:-1], m[1:]):
+                    a = self.atoms[i]
+                    b = self.atoms[j]
+                    a.add_tag("LAH bonded to " + b.name)
+                    b.add_tag("bonded to LA on " + a.name)
+
         # key atoms
         match = re.search("K:([0-9,;]+)", self.comment)
         if match is not None:
@@ -1008,7 +1028,7 @@ class Geometry:
             a1_arg - the first atom
             a2_arg - the second atom
             dist - the distance to change by/to. Default is to set the bond
-                   lenght to that determined by RADII
+                   length to that determined by RADII
             adjust - default is to set the bond length to `dist`, adjust=True
                      indicates the current bond length should be adjusted by
                      `dist`
@@ -1539,4 +1559,92 @@ class Geometry:
         s_sd = urlopen(url_sd).read().decode('utf8')
         f = FileReader((name, "sd", s_sd))
         return Geometry(f)
+
+    def oniom_frag(self, layer="", as_object=False):
+        frag=[]
+        self.sub_links()
+        if layer not in ['H', 'L', 'M']:
+            raise ValueError("Error in layer request")
+        else:
+            self.parse_comment()
+            for a in self.atoms:
+                if isinstance(a, OniomAtom) and a.layer==layer:
+                    frag.append(a)
+                elif not isinstance (a, OniomAtom):
+                    raise TypeError("Atom does not have property 'layer'")
+ 
+        if as_object:
+            #need to write function to write a comment based on tags
+            frag = Geometry(structure=frag).add_links().sub_hosts()
+        return frag
+
+    def add_links(self):
+        tmp=[]
+        for a in self.atoms:
+            if "LAH" in str(a.tags):
+                c = OniomAtom(element="H", coords = a.coords, layer="H")
+                c.add_tag("LA " + a.name)
+                tmp.append(c)
+        self = self + tmp
+        return self
+
+    def sub_links(self):
+        tmp = []
+        for a in self.atoms:
+            match = re.search("LA [0-9]+", str(a.tags))
+            if match is not None:
+                tmp.append(a)
+            else:
+                pass
+        self = self - tmp
+        return self
+
+    def sub_hosts(self):
+        tmp = []
+        for a in self.atoms:
+            match = re.search("LAH", str(a.tags))
+            if match is not None:
+                tmp.append(a)
+            else:
+                pass
+        self = self - tmp
+        return self
+
+    def check_links(self):
+        for i in range(len(self.atoms)):
+            if not isinstance(self.atoms[i], OniomAtom):
+                raise TypeError("geometry must be composed of OniomAtoms")
+            else:
+                numtrue = 0
+                numlinks = 0
+                for j in range(i+1, len(self.atoms)):
+                    if (self.atoms[i].is_connected(self.atoms[j])) \
+                            and (self.atoms[i].layer != self.atoms[j].layer):
+                        a = self.atoms[i]
+                        b = self.atoms[b]
+                        numlinks += 1
+                        if a > b:
+                            match = LAH_bonded_to.search(str(b.tags))
+                            match2 = LA_on.search(str(a.tags))
+                            if match.group(2) == a.name and match2.group(2) == b.name:
+                                numtrue += 1
+                        elif b > a:
+                            match = LAH_bonded_to.search(str(a.tags))
+                            match2 = LA_on.search(str(b.tags))
+                            if match.group(2) == b.name and match2.group(2) == a.name:
+                                numtrue += 1
+        return numtrue == numlinks
+
+    #def write_comment(self):
+    #    for atom in self.atoms:
+    #        if "constraint" in str(atom.tags):
+    #            do something coming soon
+
+    def update_names(self):
+        for i, a in enumerate(self.atoms):
+            if a.name:
+                pass
+            else:
+                a.name = str(i + 1)
+        return self
 
