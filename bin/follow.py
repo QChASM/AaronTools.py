@@ -248,9 +248,8 @@ for i, mode in enumerate(modes):
 
         outfile = outfiles[i]
         if args.outfile:
-            followed_geom.write(
-                append=True,
-                outfile=outfile.replace("$INFILE", get_filename(args.input_file))
-            )
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(args.input_file))
+            followed_geom.write(append=True, outfile=outfile)
         else:
             print(followed_geom.write(outfile=False))

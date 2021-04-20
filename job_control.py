@@ -9,7 +9,7 @@ from AaronTools import addlogger
 from AaronTools.const import AARONLIB
 
 USER = os.getenv("USER")
-QUEUE_TYPE = os.getenv("QUEUE_TYPE").upper()
+QUEUE_TYPE = os.getenv("QUEUE_TYPE", "None").upper()
 
 
 class JobControl:

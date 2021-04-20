@@ -169,10 +169,10 @@ for f in args.infile:
 
     if len(args.set_ang) + len(args.change) > 0:
         if args.outfile:
-            geom.write(
-                append=True, 
-                outfile=args.outfile.replace("$INFILE", get_filename(f))
-            )
+            outfile = args.outfile
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
+            geom.write(append=True, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
@@ -180,8 +180,8 @@ for f in args.infile:
         if not args.outfile:
             print(out)
         else:
-            with open(
-                    args.outfile.replace("$INFILE", get_filename(f)),
-                    "a"
-            ) as f:
+            outfile = args.outfile
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
+            with open(outfile, "a") as f:
                 f.write(out)

@@ -36,6 +36,9 @@ except ValueError:
 if SAVE_CITATIONS is False:
     SAVE_CITATIONS = None
 
+logging.logThreads = 0
+logging.logProcesses = 0
+
 logging.captureWarnings(True)
 
 
@@ -103,6 +106,17 @@ class CustomFilter(logging.Filter):
 class CitationHandler(logging.FileHandler):
     def __init__(self, filename, **kwargs):
         filename = os.path.expandvars(filename)
+        if not os.path.exists(os.path.dirname(filename)):
+            # might be trying to put citations in $AARONLIB, but user
+            # didn't bother to set the environment variable and just
+            # uses the default
+            from AaronTools.const import AARONLIB
+            if "$AARONLIB" in filename:
+                filename = filename.replace("$AARONLIB", AARONLIB)
+            elif "${AARONLIB}" in filename:
+                filename = filename.replace("${AARONLIB}", AARONLIB)
+            elif "%AARONLIB%" in filename:
+                filename = filename.replace("%AARONLIB%", AARONLIB)
         super().__init__(filename, **kwargs)
 
     def emit(self, record):
@@ -145,7 +159,7 @@ class ATLogger(logging.Logger):
 
         formatter = logging.Formatter(fmt=fmt)
         handlers = [(logging.StreamHandler(), PRINT_CITATIONS)]
-        if SAVE_CITATIONS is not None:
+        if SAVE_CITATIONS is not None and os.access(SAVE_CITATIONS, os.W_OK):
             handlers += [(CitationHandler(SAVE_CITATIONS), True)]
         if add_hdlrs is not None:
             for hdlr in add_hdlrs:

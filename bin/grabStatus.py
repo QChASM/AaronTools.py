@@ -63,10 +63,12 @@ for f in args.infile:
             )
 
     co = CompOutput(infile)
-    if not all(
+    if co.gradient.keys() and (
+        not all(
             x in header_vals for x in co.gradient.keys()
-    ) or not all(
-        x in co.gradient for x in header_vals
+        ) or not all(
+            x in co.gradient for x in header_vals
+        )
     ):
         header_vals = [x for x in sorted(co.gradient.keys())]
         header = "                      Filename    Step  " + "  ".join(
@@ -78,11 +80,12 @@ for f in args.infile:
     s += "%30s" % f
     s += "%8s" % co.opt_steps
 
-    for crit in header_vals:
-        col = "%.2e/%s" % (
-            float(co.gradient[crit]["value"]), "YES" if co.gradient[crit]["converged"] else "NO"
-        )
-        s += "  %14s" % col
+    if co.gradient.keys():
+        for crit in header_vals:
+            col = "%.2e/%s" % (
+                float(co.gradient[crit]["value"]), "YES" if co.gradient[crit]["converged"] else "NO"
+            )
+            s += "  %14s" % col
 
     if (
             "error" in infile.other and
@@ -90,7 +93,7 @@ for f in args.infile:
             infile.other["error"] != "UNKNOWN"
     ):
         s += "  %s" % infile.other["error_msg"]
-    elif not header_vals:
+    elif not co.gradient.keys():
         s += "  no progress found"
     elif co.finished:
         s += "  finished"

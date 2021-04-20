@@ -321,7 +321,7 @@ for f in args.infile:
     if not args.outfile:
         plt.show()
     else:
-        plt.savefig(
-            args.outfile.replace("$INFILE", get_filename(f)),
-            dpi=500
-        )
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(f))
+        plt.savefig(outfile, dpi=500)

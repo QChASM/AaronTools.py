@@ -360,7 +360,7 @@ class Component(Geometry):
         )
 
     def cone_angle(
-        self, center, method="exact", return_cones=False, radii="umn"
+        self, center=None, method="exact", return_cones=False, radii="umn"
     ):
         """
         returns cone angle in degrees
@@ -485,11 +485,7 @@ class Component(Geometry):
 
                     cones.append(
                         (
-                            (
-                                center.coords + scale * L_axis
-                                if 2 * tolman_angle < np.pi
-                                else center.coords - scale * L_axis
-                            ),
+                            center.coords + scale * L_axis,
                             center.coords,
                             scale * abs(np.tan(tolman_angle)),
                         )

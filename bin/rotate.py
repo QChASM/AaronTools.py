@@ -8,6 +8,7 @@ from warnings import warn
 import numpy as np
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
+from AaronTools.utils.utils import get_filename
 
 rotate_parser = argparse.ArgumentParser(
     description="rotate a fragment or molecule's coordinates",
@@ -264,7 +265,8 @@ for f in args.infile:
 
         if args.outfile is not False:
             outfile = args.outfile
-            outfile = outfile.replace("$INFILE", os.path.basename(f))
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
             outfile = outfile.replace(
                 "$AXIS", ".".join(["%.3f" % x for x in vector])
             )

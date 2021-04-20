@@ -195,19 +195,19 @@ for f in args.infile:
 
     if not args.value_only and not args.csv:
         if args.outfile:
-            geom.write(
-                append=True,
-                outfile=args.outfile.replace("$INFILE", get_filename(f))
-            )
+            outfile = args.outfile
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
+            geom.write(append=True, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     elif args.value_only:
         if args.outfile:
-            with open(
-                    args.outfile.replace("$INFILE", get_filename(f)),
-                    "a"
-            ) as f:
+            outfile = args.outfile
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
+            with open(outfile, "a") as f:
                 f.write("%f\n" % rmsd)
 
         else:
@@ -216,10 +216,10 @@ for f in args.infile:
     elif args.csv:
         s = delim.join([ref_geom.name, geom.name, "%f" % rmsd])
         if args.outfile:
-            with open(
-                    args.outfile.replace("$INFILE", get_filename(f)),
-                    "a"
-            ) as f:
+            outfile = args.outfile
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(f))
+            with open(outfile, "a") as f:
                 f.write(s + "\n")
         else:
             print(s)
