@@ -51,6 +51,7 @@ ERROR = {
     "Atomic number out of range for .* basis set.": "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
+    "A syntax error was detected in the input line": "SYNTAX",
     "Unknown message": "UNKNOWN",
 }
 
@@ -236,15 +237,6 @@ class FileWriter:
     def write_com(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
-        # atom specs need flag column before coords if any atoms frozen
-        has_frozen = False
-        fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
-        for atom in geom:
-            if atom.flag:
-                fmt = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
-                has_frozen = True
-                break
-
         # get file content string
         header, header_warnings = theory.make_header(
             geom, return_warnings=True, **kwargs
@@ -360,6 +352,7 @@ class FileWriter:
             return warnings
 
 
+@addlogger
 class FileReader:
     """
     Attributes:
@@ -369,6 +362,9 @@ class FileReader:
         atoms [Atom]
         other {}
     """
+
+    LOG = None
+    LOGLEVEL = "DEBUG"
 
     def __init__(
         self,
@@ -564,7 +560,7 @@ class FileReader:
         read TRIPOS mol2
         """
         atoms = []
-        
+
         lines = f.readlines()
         i = 0
         while i < len(lines):
@@ -574,7 +570,7 @@ class FileReader:
                 n_atoms = int(info[0])
                 n_bonds = int(info[1])
                 i += 3
-                
+
             elif lines[i].startswith("@<TRIPOS>ATOM"):
                 for j in range(0, n_atoms):
                     i += 1
@@ -582,10 +578,12 @@ class FileReader:
                     # name = info[1]
                     coords = np.array([float(x) for x in info[2:5]])
                     element = re.match("([A-Za-z]+)", info[5]).group(1)
-                    atoms.append(Atom(element=element, coords=coords, name=str(j + 1)))
-            
+                    atoms.append(
+                        Atom(element=element, coords=coords, name=str(j + 1))
+                    )
+
                 self.atoms = atoms
-            
+
             elif lines[i].startswith("@<TRIPOS>BOND"):
                 for j in range(0, n_bonds):
                     i += 1
@@ -593,7 +591,7 @@ class FileReader:
                     a1, a2 = [int(ndx) - 1 for ndx in info[1:3]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
-            
+
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
@@ -1498,18 +1496,22 @@ class FileReader:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
 
-                    theory = Theory(
-                        charge=self.other["charge"],
-                        multiplicity=self.other["multiplicity"],
-                        job_type=job_type,
-                        basis=basis,
-                        method=method,
-                        grid=grid,
-                        solvent=solvent,
-                    )
-
-                    self.other["theory"] = theory
                     self.other["other_kwargs"] = other_kwargs
+                    try:
+                        theory = Theory(
+                            charge=self.other["charge"],
+                            multiplicity=self.other["multiplicity"],
+                            job_type=job_type,
+                            basis=basis,
+                            method=method,
+                            grid=grid,
+                            solvent=solvent,
+                        )
+                        self.other["theory"] = theory
+                    except KeyError:
+                        # if there is a serious error, too little info may be available
+                        # to properly create the theory object
+                        pass
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -1789,8 +1791,19 @@ class FileReader:
         line = True
         self.other["finished"] = False
         self.other["error"] = None
+        self.atoms = []
+        self.comment = ""
         while line:
             line = f.readline()
+            if "Optimized Geometry" in line:
+                line = f.readline()
+                n_atoms = int(line.strip())
+                line = f.readline()
+                self.comment = " ".join(line.strip().split()[2:])
+                for i in range(n_atoms):
+                    line = f.readline()
+                    elem, x, y, z = line.split()
+                    self.atoms.append(Atom(element=elem, coords=[x, y, z]))
             if "normal termination" in line:
                 self.other["finished"] = True
             if "abnormal termination" in line:

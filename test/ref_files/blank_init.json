@@ -8,7 +8,7 @@
   "DEFAULT/print_citations": "False",
   "DEFAULT/save_citations": "$AARONLIB/citations.txt",
   "DEFAULT/name": "blank",
-  "Job/include": "Minimum",
+  "Job/include": "Job.Minimum",
   "Job/1 type": "optimize.changes",
   "Job/2 type": "optimize",
   "Job/3 type": "frequencies"

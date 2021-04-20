@@ -2,7 +2,7 @@
 import itertools as it
 import re
 
-from AaronTools.const import ELEMENTS, UNIT
+from AaronTools.const import ELEMENTS, RMSD_CUTOFF, UNIT
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
     GAUSSIAN_CONSTRAINTS,
@@ -171,7 +171,7 @@ class Theory:
             if self.basis is None:
                 self.basis = BasisSet(ecp=ecp)
             else:
-                self.basis.ecp = BasisSet(ecp=ecp)
+                self.basis.ecp = BasisSet(ecp=ecp).ecp
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):
@@ -663,7 +663,6 @@ class Theory:
 
         if return_warnings:
             return out_str, warnings
-
         return out_str
 
     def get_gaussian_molecule(
@@ -701,10 +700,18 @@ class Theory:
 
         s = ""
 
+        # atom specs need flag column before coords if any atoms frozen
+        has_frozen = False
+        for atom in self.geometry.atoms:
+            if atom.flag:
+                has_frozen = True
+                break
         for atom, coord in zip(
             self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
             s += "%-2s" % atom.element
+            if has_frozen:
+                s += " % 2d" % (-1 if atom.flag else 0)
             for val in coord:
                 s += "  "
                 if isinstance(val, float):
@@ -1121,8 +1128,10 @@ class Theory:
             other_kw_dict[PSI4_COORDINATES]["coords"] = self.geometry.coords
 
         s = ""
-        
-        if isinstance(self.method, SAPTMethod) and not hasattr(self.charge, "__iter__"):
+
+        if isinstance(self.method, SAPTMethod) and not hasattr(
+            self.charge, "__iter__"
+        ):
             warnings.append(
                 "for a SAPTMethod, charge and multiplicity should both be lists\n"
                 "with the first item being the overall charge/multiplicity and\n"
@@ -1130,7 +1139,7 @@ class Theory:
                 "corresponding monomer"
             )
             return s, warnings
-        
+
         if (
             isinstance(self.method, SAPTMethod)
             and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
@@ -1159,8 +1168,12 @@ class Theory:
                         "corresponding monomer"
                     )
                 s += "    %2i %i\n" % (self.charge[0], self.multiplicity[0])
-                if len(self.charge) > 1 and self.charge[0] != sum(self.charge[1:]):
-                    warnings.append("total charge is not equal to sum of monomer charges")
+                if len(self.charge) > 1 and self.charge[0] != sum(
+                    self.charge[1:]
+                ):
+                    warnings.append(
+                        "total charge is not equal to sum of monomer charges"
+                    )
             else:
                 s += "    %2i %i\n" % (self.charge, self.multiplicity)
 
@@ -1501,39 +1514,74 @@ class Theory:
         return out_str
 
     def get_xtb_cmdline(self, config):
+        """
+        Uses the config and job type to set command line options for xtb and crest jobs
+
+        Returns a dictionary of option=val pairs; val is None when option doesn't take
+        an argument. This dict should be parsed by the caller into the command line
+        string.
+        """
         if len(self.job_type) > 1:
             raise NotImplementedError(
                 "Multiple job types not supported for crest/xtb"
             )
-        job_type = self.job_type[0]
         cmdline = {}
+        job_type = self.job_type[0]
         style = config["Job"]["exec_type"]
+        if style not in ["xtb", "crest"]:
+            raise NotImplementedError(
+                "Wrong executable type: %s (can only get command line options "
+                "for `xtb` or `crest`)" % style
+            )
 
+        # pull in stuff set by resolve_error
         if config._args:
             for arg in config._args:
                 cmdline[arg] = None
         if config._kwargs:
             for key, val in config._kwargs.items():
                 cmdline[key] = val
-
-        if self.charge != 0:
-            cmdline["chrg"] = self.charge
-        if self.multiplicity != 1:
-            cmdline["uhf"] = self.multiplicity - 1
+        # run types
         if "gfn" in config["Job"]:
-            cmdline["gfn"] = config["Job"]["gfn"]
-        if style == "xtb" and hasattr(job_type, "transition_state"):
-            cmdline["optts"] = None
+            cmdline["--gfn"] = config["Job"]["gfn"]
+        if (
+            style == "xtb"
+            and hasattr(job_type, "transition_state")
+            and job_type.transition_state
+        ):
+            cmdline["--optts"] = None
         elif style == "xtb":
-            cmdline["opt"] = None
+            cmdline["--opt"] = None
+
+        # charge/mult/temp
+        if self.charge != 0:
+            cmdline["--chrg"] = self.charge
+        if self.multiplicity != 1:
+            cmdline["--uhf"] = self.multiplicity - 1
         if style == "crest":
-            cmdline["temp"] = config["Theory"].get(
+            cmdline["--temp"] = config["Theory"].get(
                 "temperature", fallback="298"
             )
         else:
-            cmdline["etemp"] = config["Theory"].get(
+            cmdline["--etemp"] = config["Theory"].get(
                 "temperature", fallback="298"
             )
+
+        # screening parameters
+        if (
+            style == "crest"
+            and "energy_cutoff" in config["Job"]
+            and config["Job"].getfloat("energy_cutoff") > 6
+        ):
+            cmdline["--ewin"] = config["Job"]["energy_cutoff"]
+        if (
+            style == "crest"
+            and "rmsd_cutoff" in config["Job"]
+            and config["Job"].getfloat("rmsd_cutoff") < 0.125
+        ):
+            cmdline["--rthr"] = config["Job"]["rmsd_cutoff"]
+
+        # solvent stuff
         if (
             "solvent_model" in config["Theory"]
             and config["Theory"]["solvent_model"] == "alpb"
@@ -1541,8 +1589,10 @@ class Theory:
             solvent = config["Theory"]["solvent"].split()
             if len(solvent) > 1:
                 solvent, ref = solvent
+            elif len(solvent) == 1:
+                solvent, ref = solvent[0], None
             else:
-                ref = "bar1M"
+                raise ValueError
             if solvent.lower() not in [
                 "acetone",
                 "acetonitrile",
@@ -1570,14 +1620,14 @@ class Theory:
                 "water",
             ]:
                 raise ValueError("%s is not a supported solvent" % solvent)
-            if ref.lower() not in ["reference", "bar1m"]:
+            if ref is not None and ref.lower() not in ["reference", "bar1m"]:
                 raise ValueError(
                     "%s Gsolv reference state not supported" % ref
                 )
-            if style.lower() == "crest":
-                cmdline["alpb"] = "{}".format(solvent)
+            if style.lower() == "crest" or ref is None:
+                cmdline["--alpb"] = "{}".format(solvent)
             else:
-                cmdline["alpb"] = "{} {}".format(solvent, ref)
+                cmdline["--alpb"] = "{} {}".format(solvent, ref)
         elif (
             "solvent_model" in config["Theory"]
             and config["Theory"]["solvent_model"] == "gbsa"
@@ -1586,7 +1636,7 @@ class Theory:
             if len(solvent) > 1:
                 solvent, ref = solvent
             else:
-                ref = "bar1M"
+                solvent, ref = solvent[0], None
             if solvent.lower() not in [
                 "acetone",
                 "acetonitrile",
@@ -1600,7 +1650,8 @@ class Theory:
                 "h2o",
                 "methanol",
                 "n-hexane",
-                "thf" "toluene",
+                "thf",
+                "toluene",
             ]:
                 gfn = config["Job"].get("gfn", fallback="2")
                 if gfn != "1" and solvent.lower() in ["benzene"]:
@@ -1609,26 +1660,30 @@ class Theory:
                     raise ValueError("%s is not a supported solvent" % solvent)
                 else:
                     raise ValueError("%s is not a supported solvent" % solvent)
-            if ref.lower() not in ["reference", "bar1m"]:
+            if ref is not None and ref.lower() not in ["reference", "bar1m"]:
                 raise ValueError(
                     "%s Gsolv reference state not supported" % ref
                 )
-            if style.lower() == "crest":
-                cmdline["gbsa"] = "{}".format(solvent)
+            if style.lower() == "crest" or ref is None:
+                cmdline["--gbsa"] = "{}".format(solvent)
             else:
-                cmdline["gbsa"] = "{} {}".format(solvent, ref)
-        opt_string = config["Theory"].get("cmdline", "")
-        for key, val in cmdline.items():
-            if val is not None:
-                opt_string += " --{} {}".format(key, val)
-            else:
-                opt_string += " --{}".format(key)
-        return opt_string.strip()
+                cmdline["--gbsa"] = "{} {}".format(solvent, ref)
 
-    def get_xcontrol(self, config):
+        other = config["Job"].get("cmdline", fallback="").split()
+        i = 0
+        while i < len(other):
+            if other[i].startswith("-"):
+                key = other[i]
+                cmdline[key] = None
+            else:
+                cmdline[key] = other[i]
+            i += 1
+        return cmdline
+
+    def get_xcontrol(self, config, ref=None):
         if len(self.job_type) > 1:
             raise NotImplementedError(
                 "Multiple job types not supported for crest/xtb"
             )
         job_type = self.job_type[0]
-        return job_type.get_xcontrol(config)
+        return job_type.get_xcontrol(config, ref=ref)

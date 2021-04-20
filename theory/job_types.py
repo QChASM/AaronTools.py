@@ -13,6 +13,7 @@ from AaronTools.theory import (
     PSI4_OPTKING,
     PSI4_SETTINGS,
 )
+from AaronTools.utils.utils import range_list
 
 
 class JobType:
@@ -627,47 +628,55 @@ class OptimizationJob(JobType):
 
         return out
 
-    def get_xcontrol(self, config):
+    def get_xcontrol(self, config, ref=None):
         """
         Generates xcontrol file constraints
 
         Returns: dict(xcontrol)
         """
+        if ref is None:
+            ref = "ref.xyz"
         xcontrol = ""
         # only put constraints in xcontrol file so this works with Crest also
-        if self.constraints:
+        frozen = [i + 1 for i, a in enumerate(self.geometry) if bool(a.flag)]
+        if frozen:
+            frozen = range_list(frozen)
+            xcontrol += "$fix\n"
+            xcontrol += "  atoms: {}\n".format(frozen)
+            xcontrol += "  freeze: {}\n".format(frozen)
+        elif self.constraints:
             xcontrol += "$constrain\n"
             xcontrol += "  force constant={}\n".format(
                 config["Job"].get("constrain_force", fallback="0.5")
             )
             xcontrol += "  reference={}\n".format(
-                config["Job"].get("constrain_ref", fallback="ref.xyz")
+                config["Job"].get("constrain_ref", fallback=ref)
             )
             constrained = set([])
             for bond in self.constraints.get("bonds", []):
                 bond = self.geometry.find(bond)
-                constrained.union(bond)
+                constrained.update(bond)
                 xcontrol += "  distance: {},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in bond)
                 )
             for angle in self.constraints.get("angles", []):
                 angle = self.geometry.find(angle)
-                constrained.union(angle)
+                constrained.update(angle)
                 xcontrol += "  angle: {},{},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in angle)
                 )
             for dihedral in self.constraints.get("torsions", []):
                 dihedral = self.geometry.find(dihedral)
-                constrained.union(dihedral)
+                constrained.update(dihedral)
                 xcontrol += "  dihedral: {},{},{},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in dihedral)
                 )
             relaxed = {
-                str(i + 1)
+                i + 1
                 for i, a in enumerate(self.geometry.atoms)
                 if a not in constrained
             }
-            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            relaxed = range_list(relaxed)
             xcontrol += "$metadyn\n"
             xcontrol += "  atoms: {}\n".format(relaxed)
         xcontrol += "$end\n"
