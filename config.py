@@ -635,7 +635,7 @@ class Config(configparser.ConfigParser):
             if "template" in self["Reaction"]:
                 path = os.path.join(
                     AARONLIB,
-                    "TS_geoms",
+                    "template_geoms",
                     self["Reaction"]["reaction"],
                     self["Reaction"]["template"],
                 )
@@ -644,7 +644,7 @@ class Config(configparser.ConfigParser):
             else:
                 path = os.path.join(
                     AARONLIB,
-                    "TS_geoms",
+                    "template_geoms",
                     self["Reaction"]["reaction"],
                 )
                 for dirpath, dirnames, filenames in os.walk(path):
