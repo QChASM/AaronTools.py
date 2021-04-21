@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-import random
+import json
+import os
 import unittest
 from copy import copy
 
+import AaronTools
 import numpy as np
-
 from AaronTools.atoms import Atom
-from AaronTools.substituent import Substituent
-from AaronTools.ringfragment import RingFragment
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.component import Component
+from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.ring import Ring
+from AaronTools.substituent import Substituent
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 def is_close(a, b, tol=10 ** -8, debug=False):
     n = None
-    if isinstance(a, np.ndarray) and isinstance(a, np.ndarray):
+    if isinstance(a, list):
+        a = np.array(a)
+    if isinstance(b, list):
+        b = np.array(b)
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
         n = np.linalg.norm(a - b)
     elif isinstance(a, np.ndarray):
         n = np.linalg.norm(a) - b
@@ -28,15 +34,8 @@ def is_close(a, b, tol=10 ** -8, debug=False):
     return abs(n) < tol
 
 
-def check_atom_list(ref, comp):
-    rv = True
-    for i, j in zip(ref, comp):
-        rv &= i.__repr__() == j.__repr__()
-    return rv
-
-
 class TestGeometry(TestWithTimer):
-    benz_NO2_Cl = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
+    benz_NO2_Cl = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
     benz_NO2_Cl_conn = [
         "2,6,12",
         "1,3,7",
@@ -54,15 +53,39 @@ class TestGeometry(TestWithTimer):
         "12",
     ]
     benz_NO2_Cl_conn = [i.split(",") for i in benz_NO2_Cl_conn]
-    benzene = prefix + "test_files/benzene.xyz"
-    naphthalene = prefix + "ref_files/naphthalene.xyz"
-    tetrahydronaphthalene = prefix + "ref_files/tetrahydronaphthalene.xyz"
-    pyrene = prefix + "ref_files/pyrene.xyz"
-    benz_Cl = prefix + "test_files/benzene_4-Cl.xyz"
-    benz_OH_Cl = prefix + "test_files/benzene_1-OH_4-Cl.xyz"
-    benz_Ph_Cl = prefix + "test_files/benzene_1-Ph_4-Cl.xyz"
-    Et_NO2 = prefix + "test_files/Et_1-NO2.xyz"
-    pent = prefix + "test_files/pentane.xyz"
+    benzene = os.path.join(prefix, "test_files", "benzene.xyz")
+    pyridine = os.path.join(prefix, "test_files", "pyridine.xyz")
+    pentane = os.path.join(prefix, "test_files", "pentane.xyz")
+    naphthalene = os.path.join(prefix, "ref_files", "naphthalene.xyz")
+    tetrahydronaphthalene = os.path.join(
+        prefix, "ref_files", "tetrahydronaphthalene.xyz"
+    )
+    pyrene = os.path.join(prefix, "ref_files", "pyrene.xyz")
+    benz_Cl = os.path.join(prefix, "test_files", "benzene_4-Cl.xyz")
+    benz_OH_Cl = os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
+    benz_Ph_Cl = os.path.join(prefix, "test_files", "benzene_1-Ph_4-Cl.xyz")
+    Et_NO2 = os.path.join(prefix, "test_files", "Et_1-NO2.xyz")
+    cat = os.path.join(prefix, "test_files", "catalysts", "tm_single-lig.xyz")
+
+    tm_simple = os.path.join(
+        prefix, "test_files", "catalysts/tm_single-lig.xyz"
+    )
+    tm_multi = os.path.join(
+        prefix, "test_files", "catalysts", "tm_multi-lig.xyz"
+    )
+    org_1 = os.path.join(prefix, "test_files", "catalysts", "org_1.xyz")
+    org_tri = os.path.join(prefix, "test_files", "catalysts", "org_tri.xyz")
+    ptco4 = os.path.join(prefix, "test_files", "ptco4.xyz")
+    catalysts = [tm_simple, tm_multi, org_1, org_tri, ptco4]
+
+    monodentate = os.path.join(prefix, "test_files", "ligands", "ACN.xyz")
+    bidentate = os.path.join(prefix, "test_files", "ligands", "S-tBu-BOX.xyz")
+    tridentate = os.path.join(
+        prefix, "test_files", "ligands", "squaramide.xyz"
+    )
+
+    lig_1 = os.path.join(prefix, "test_files", "lig_1.xyz")
+    lig_2 = os.path.join(prefix, "test_files", "lig_2.xyz")
 
     def test_init(self):
         ref = FileReader(TestGeometry.benz_NO2_Cl)
@@ -107,6 +130,19 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(blank.comment, "")
         self.assertEqual(blank.atoms, [])
 
+    def test_attribute_access(self):
+        mol = Geometry(TestGeometry.benzene)
+        # stack coords
+        coords = mol._stack_coords()
+        self.assertEqual(coords.shape, (12, 3))
+        # elements
+        elements = mol.elements
+        self.assertEqual(len(elements), 12)
+        self.assertEqual(elements[0], "C")
+        # coords
+        coords = mol.coords
+        self.assertEqual(coords.shape, (12, 3))
+
     # utilities
     def test_equality(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
@@ -117,6 +153,19 @@ class TestGeometry(TestWithTimer):
         self.assertEqual(mol, mol.copy())
         # different molecules should be unequal
         self.assertNotEqual(mol, benz)
+
+    def test_add_sub_iter_len(self):
+        ref = Geometry(TestGeometry.benz_OH_Cl)
+        mol = Geometry(TestGeometry.benzene)
+        mol.debug = True
+        OH = ref.find(["12", "13"])
+        Cl = ref.find(["11"])
+        mol -= mol.find(["11", "12"])
+        mol += Cl
+        mol += OH
+        mol.refresh_connected()
+        mol.refresh_ranks()
+        self.assertTrue(validate(mol, ref, thresh="loose"))
 
     def test_find_atom(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
@@ -180,11 +229,15 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(len(old) - len(mol.atoms[0].connected) == 1)
 
     def test_canonical_rank(self):
-        pentane = Geometry(TestGeometry.pent)
-        pentane_rank = [0, 1, 2, 1, 0]
-
+        pentane = Geometry(os.path.join(prefix, "test_files", "pentane.xyz"))
+        pentane_rank = [1, 3, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
+
+        mol = Geometry(os.path.join(prefix, "test_files", "6a2e5am1hex.xyz"))
+        mol_rank = [11, 9, 8, 10, 6, 5, 4, 7, 3, 0, 2, 1]
+        test_rank = mol.canonical_rank(heavy_only=True)
+        self.assertSequenceEqual(test_rank, mol_rank)
 
     def test_flag(self):
         geom = Geometry(TestGeometry.benz_NO2_Cl)
@@ -230,15 +283,138 @@ class TestGeometry(TestWithTimer):
         for t in tmp:
             tmp = tmp - np.array([-10, 0, 0])
         test.update_geometry(tmp)
-        self.assertEqual(ref, test)
+        self.assertTrue(validate(test, ref))
 
         # using file
         ref.coord_shift([10, 0, 0])
         test.update_geometry(TestGeometry.benz_NO2_Cl)
-        self.assertEqual(ref, test)
+        self.assertTrue(validate(test, ref))
+
+    def test_near(self):
+        def compare(test, ref):
+            self.assertTrue(len(test) == len(set(test)))
+            test = set(test)
+            for a in ref:
+                self.assertTrue(a in test)
+                test.discard(a)
+            self.assertTrue(len(test) == 0)
+
+        geom = Geometry(self.benz_NO2_Cl)
+
+        # atoms within 3A of origin
+        test = geom.get_near([0, 0, 0], 3)
+        ref = geom.find(["2", "3", "4", "5", "6", "8", "9", "11"])
+        compare(test, ref)
+        # atoms within 1A of x-axis
+        test = geom.get_near(["*", 0, 0], 1)
+        ref = geom.find(["3", "4"])
+        compare(test, ref)
+        # atoms within 0.5A of xy-plane
+        test = geom.get_near(["*", "*", 0], 0.5)
+        ref = geom.find(["1", "4", "11", "12", "13", "14"])
+        compare(test, ref)
+
+        # atoms within 2A of atom 1
+        test = geom.get_near(geom.atoms[0], 2)
+        ref = geom.find(["2", "6", "12"])
+        compare(test, ref)
+        # ...including atom 1
+        test = geom.get_near(geom.atoms[0], 2, include_ref=True)
+        ref = geom.find(["1", "2", "6", "12"])
+        compare(test, ref)
+        # atoms within 2 bonds of atom 1
+        test = geom.get_near(geom.atoms[0], 2, by_bond=True)
+        ref = geom.find(["2", "6", "12", "3", "7", "5", "10", "13", "14"])
+        compare(test, ref)
+        # atoms within 1 bond of atoms 1 and 2
+        test = geom.get_near(geom.atoms[:2], 1, by_bond=True)
+        ref = geom.find(["6", "12", "3", "7"])
+        compare(test, ref)
+        # ...including starting atoms
+        test = geom.get_near(geom.atoms[:2], 1, by_bond=True, include_ref=True)
+        ref = geom.find(["6", "12", "3", "7", "2", "1"])
+        compare(test, ref)
+
+    def test_compare_connectivity(self):
+        geom = Geometry(TestGeometry.cat)
+        ref = Geometry(TestGeometry.cat)
+
+        # no formed/broken
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 0)
+        self.assertTrue(len(formed) == 0)
+        # broken
+        geom.change_distance("10", "15", dist=1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 1)
+        self.assertTrue(len(formed) == 0)
+        self.assertSetEqual(broken, set([("10", "15")]))
+        # formed
+        ref.change_distance("10", "15", dist=1, adjust=True)
+        ref.refresh_connected()
+        geom.change_distance("10", "15", dist=-1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 0)
+        self.assertTrue(len(formed) == 1)
+        self.assertSetEqual(formed, set([("10", "15")]))
+        # broken and formed
+        geom.change_distance("20", "29", dist=1, adjust=True)
+        geom.refresh_connected()
+        broken, formed = geom.compare_connectivity(ref)
+        self.assertTrue(len(broken) == 1)
+        self.assertTrue(len(formed) == 1)
+        self.assertSetEqual(broken, set([("20", "29")]))
+        self.assertSetEqual(formed, set([("10", "15")]))
+
+    def test_examine_constraints(self):
+        cat = Geometry(TestGeometry.cat)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [])
+
+        cat.change_distance(cat.atoms[0], cat.atoms[1], dist=0.5, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, -1)])
+
+        cat.change_distance(cat.atoms[0], cat.atoms[1], dist=-1.0, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, 1)])
+
+        cat.change_distance(cat.atoms[1], cat.atoms[2], dist=0.5, adjust=True)
+        rv = cat.examine_constraints()
+        self.assertSequenceEqual(rv, [(0, 1, 1), (1, 2, -1)])
+
+    def test_detect_components(self):
+        test = {}
+        for cat in TestGeometry.catalysts:
+            cat = Geometry(cat)
+            cat.detect_components()
+            for comp in cat.components:
+                test[os.path.basename(comp.name)] = sorted(
+                    [int(float(c)) for c in comp]
+                )
+
+        with open(
+            os.path.join(prefix, "ref_files", "detect_components.json")
+        ) as f:
+            ref = json.load(f)
+        self.assertDictEqual(test, ref)
+
+    def test_fix_comment(self):
+        cat = Geometry(TestGeometry.tm_simple)
+        cat.fix_comment()
+        self.assertEqual(
+            cat.comment,
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
+        )
+        cat.substitute("Me", "4")
+        self.assertEqual(
+            cat.comment,
+            "C:1 K:2,3;14;39,40 F:1-2;1-3;1-14;2-3;2-14 L:2-13;14-34;35-93",
+        )
 
     # geometry measurement
-
     def test_angle(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
         angle = mol.angle("13", "12", "14")
@@ -279,41 +455,145 @@ class TestGeometry(TestWithTimer):
         ref = Geometry(TestGeometry.benz_NO2_Cl)
 
         # RMSD of copied object should be 0
-        other = ref.copy()
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
-        # if they are out of order, sorting should help
-        res = ref.RMSD(other, longsort=True)
-        self.assertTrue(res < rmsd_tol(other, superTight=True))
+        test = ref.copy()
+        self.assertTrue(validate(test, ref))
 
         # RMSD of shifted copy should be 0
-        other = ref.copy()
-        other.coord_shift([1, 2, 3])
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref, superTight=True))
+        test = ref.copy()
+        test.coord_shift([1, 2, 3])
+        self.assertTrue(validate(test, ref))
 
         # RMSD of rotated copy should be 0
-        other = ref.copy()
-        other.rotate([1, 2, 3], 2.8)
-        other.write("tmp")
-        self.assertTrue(ref.RMSD(other) < rmsd_tol(ref))
+        test = ref.copy()
+        test.rotate([1, 2, 3], 2.8)
+        self.assertTrue(validate(test, ref))
 
         # RMSD of two different structures should not be 0
-        other = Geometry(TestGeometry.pent)
-        self.assertTrue(ref.RMSD(other) > 10 ** -2)
+        test = Geometry(TestGeometry.pentane)
+        self.assertFalse(validate(test, ref))
 
         # RMSD of similar molecule
-        other = Geometry(TestGeometry.benzene)
-        res = ref.RMSD(other, targets="C", ref_targets="C")
+        test = Geometry(TestGeometry.benzene)
+        res = ref.RMSD(test, targets="C", ref_targets="C")
         self.assertTrue(res < rmsd_tol(ref))
-        res = ref.RMSD(other, sort=True)
+
+    def test_vbur_MC(self):
+        """
+        tests % volume buried (MC integration)
+        uses Monte Carlo integration, so it this fails, run it again
+        still figuring out how reliable it is
+        """
+        geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        vbur = geom.percent_buried_volume(method="MC")
+        if not np.isclose(vbur, 86.0, atol=0.35):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.35))
+
+        # a few synthetic tests
+        geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
+        vbur = geom2.percent_buried_volume(
+            method="MC", scale=1 / 1.1, radius=3
+        )
+        if not np.isclose(vbur, 100.0 / 27, atol=0.2):
+            print("V_bur =", vbur, "expected:", 100.0 / 27)
+        self.assertTrue(np.isclose(vbur, 100.0 / 27, atol=0.2))
+
+        geom3 = Geometry(os.path.join(prefix, "ref_files", "vbur2.xyz"))
+        vbur = geom2.percent_buried_volume(
+            method="MC", scale=1 / 1.1, radius=4
+        )
+        if not np.isclose(vbur, 100.0 / 64, atol=0.2):
+            print("V_bur =", vbur, "expected:", 100.0 / 64)
+        self.assertTrue(np.isclose(vbur, 100.0 / 64, atol=0.2))
+
+    def test_vbur_lebedev(self):
+        """
+        tests % volume buried (Lebedev integration)
+        """
+        # 20, 1454
+        geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=20, apoints=1454
+        )
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+
+        # 32, 974
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=32, apoints=974
+        )
+        if not np.isclose(vbur, 86.0, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.15))
+
+        # 64, 590
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=64, apoints=590
+        )
+        if not np.isclose(vbur, 86.0, atol=0.05):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+
+        # 75, 302
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=75, apoints=302
+        )
+        if not np.isclose(vbur, 86.0, atol=0.1):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+
+        # 99, 194
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=99, apoints=194
+        )
+        if not np.isclose(vbur, 86.0, atol=0.5):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.5))
+
+        # 127, 110
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=127, apoints=110
+        )
+        if not np.isclose(vbur, 86.0, atol=0.75):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.75))
+
+        # 20, 2030
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=20, apoints=2030
+        )
+        if not np.isclose(vbur, 86.0, atol=0.1):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+
+        # 20, 2702
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=20, apoints=2702
+        )
+        if not np.isclose(vbur, 86.0, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.15))
+
+        # 20, 5810
+        vbur = geom.percent_buried_volume(
+            method="lebedev", rpoints=20, apoints=5810
+        )
+        if not np.isclose(vbur, 86.0, atol=0.1):
+            print("V_bur =", vbur, "expected:", 86.0)
+        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+
+        geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
+        vbur = geom2.percent_buried_volume(
+            method="lebedev", rpoints=32, apoints=974, scale=1 / 1.1, radius=2
+        )
+        if not np.isclose(vbur, 100.0 / 8, atol=0.1):
+            print("V_bur =", vbur, "expected:", 100.0 / 8)
+        self.assertTrue(np.isclose(vbur, 100.0 / 8, atol=0.1))
 
     # geometry manipulation
     def test_get_fragment(self):
         mol = Geometry(TestGeometry.benz_NO2_Cl)
-
-        # get NO2 fragment using tag
-        frag = mol.get_fragment(mol.atoms[11], mol.atoms[0], copy=False)
-        v_frag = mol.atoms[11:]
-        self.assertSequenceEqual(frag, v_frag)
 
         # get Cl using name
         frag = mol.get_fragment("11", "4", copy=False)
@@ -356,14 +636,14 @@ class TestGeometry(TestWithTimer):
         for a in benzene.atoms:
             a.coords += vector
         mol.coord_shift([0, 3.2, -1.0])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
         # shift some atoms
         vector = np.array([0, -3.2, 1.0])
         for a in benzene.atoms[0:5]:
             a.coords += vector
         mol.coord_shift([0, -3.2, 1.0], [str(i) for i in range(1, 6)])
-        self.assertTrue(np.linalg.norm(benzene.coords() - mol.coords()) == 0)
+        self.assertTrue(np.linalg.norm(benzene.coords - mol.coords) == 0)
 
     def test_change_distance(self):
         def validate_distance(before, after, moved):
@@ -452,9 +732,6 @@ class TestGeometry(TestWithTimer):
                 mol.dihedral(*atom_args), original_dihedral + np.deg2rad(30)
             )
         )
-        self.assertEqual(
-            mol, Geometry(prefix + "test_files/change_dihedral_0.xyz")
-        )
 
         # set dihedral to 60 deg
         mol.change_dihedral(*atom_args, 60, radians=False)
@@ -464,7 +741,6 @@ class TestGeometry(TestWithTimer):
         mol.change_dihedral("12", "1", -30, radians=False, adjust=True)
         self.assertTrue(is_close(mol.dihedral(*atom_args), np.deg2rad(30)))
 
-
     def test_substitute(self):
         ref = Geometry(TestGeometry.benz_NO2_Cl)
         mol = Geometry(TestGeometry.benzene)
@@ -472,32 +748,142 @@ class TestGeometry(TestWithTimer):
         mol.substitute(Substituent("NO2"), "12")
         mol.substitute(Substituent("Cl"), "11")
 
-        rmsd = mol.RMSD(ref, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
-    
+        self.assertTrue(validate(mol, ref))
+
     def test_close_ring(self):
         mol = Geometry(TestGeometry.benzene)
-        
+
         ref1 = Geometry(TestGeometry.naphthalene)
         mol1 = mol.copy()
-        mol1.ring_substitute(['7', '8'], RingFragment('benzene'))
-        rmsd = mol1.RMSD(ref1, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref1))
+        mol1.ring_substitute(["7", "8"], Ring("benzene"))
+        self.assertTrue(validate(mol1, ref1, thresh="loose"))
 
         ref2 = Geometry(TestGeometry.tetrahydronaphthalene)
         mol2 = mol.copy()
-        mol2.ring_substitute(['7', '8'], RingFragment('cyclohexane-chair.1'))
-        rmsd = mol2.RMSD(ref2, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref2))
+        mol2.ring_substitute(["7", "8"], Ring("cyclohexane"))
+        rmsd = mol2.RMSD(ref2, align=True, sort=True)
+        self.assertTrue(rmsd < rmsd_tol(ref2, superLoose=True))
 
         mol3 = Geometry(TestGeometry.naphthalene)
         ref3 = Geometry(TestGeometry.pyrene)
-        targets1 = mol3.find(['9', '15'])
-        targets2 = mol3.find(['10', '16'])
-        mol3.ring_substitute(targets1, RingFragment('benzene'))
-        mol3.ring_substitute(targets2, RingFragment('benzene'))
-        rmsd = mol3.RMSD(ref3, align=True)
+        targets1 = mol3.find(["9", "15"])
+        targets2 = mol3.find(["10", "16"])
+        mol3.ring_substitute(targets1, Ring("benzene"))
+        mol3.ring_substitute(targets2, Ring("benzene"))
+        rmsd = mol3.RMSD(ref3, align=True, sort=True)
         self.assertTrue(rmsd < rmsd_tol(ref3, superLoose=True))
 
-if __name__ == "__main__":
+    def test_change_element(self):
+        mol = Geometry(TestGeometry.benzene)
+
+        ref = Geometry(TestGeometry.pyridine)
+        mol.change_element("1", "N", adjust_hydrogens=True)
+        self.assertTrue(validate(mol, ref, thresh="loose"))
+
+    def test_map_ligand(self):
+        monodentate = Component(TestGeometry.monodentate)
+        tridentate = Component(TestGeometry.tridentate)
+        debug = False
+
+        # import cProfile
+        #
+        # profile = cProfile.Profile()
+        # profile.enable()
+
+        """
+        #TODO: get a reference file for this
+        # two monodentate -> bidentate
+        ptco4 = TestGeometry.ptco4.copy()
+        ptco4.map_ligand('EDA', ["3", "5"])
+        """
+
+        # bidentate -> monodentate, none
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_1.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
+        tm_simple.map_ligand(monodentate.copy(), ["35"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, heavy_only=True, thresh="loose", debug=debug
+            )
+        )
+
+        # bidentate -> two monodentate
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_2.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
+        tm_simple.map_ligand([monodentate.copy(), "ACN"], ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        # bidentate -> bidentate
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
+        tm_simple.map_ligand("S-tBu-BOX", ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        # tridentate -> tridentate
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_4.xyz"))
+        org_tri = Geometry(TestGeometry.org_tri)
+        org_tri.map_ligand(tridentate, ["30", "28", "58"])
+        self.assertTrue(
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        # tridentate -> monodentate + bidentate -> tridentate
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_6.xyz"))
+        org_tri = Geometry(TestGeometry.org_tri)
+        org_tri.map_ligand(["EDA", "ACN"], ["30", "28", "58"])
+        self.assertTrue(
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_7.xyz"))
+        org_tri = Geometry(os.path.join(prefix, "ref_files", "lig_map_6.xyz"))
+        org_tri.map_ligand(tridentate, ["10", "11", "2"])
+        self.assertTrue(
+            validate(
+                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        # bidentate -> two bulky monodentate
+        ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_5.xyz"))
+        tm_simple = Geometry(TestGeometry.tm_simple)
+        tm_simple.map_ligand(["iPr-NC3C"] * 2, ["35", "36"])
+        self.assertTrue(
+            validate(
+                tm_simple, ref, thresh="loose", heavy_only=True, debug=debug
+            )
+        )
+
+        # profile.disable()
+        # profile.print_stats()
+
+
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(TestGeometry("test_map_ligand"))
+    # suite.addTest(TestGeometry("test_examine_constraints"))
+    # suite.addTest(TestGeometry("test_detect_components"))
+    # suite.addTest(TestGeometry("test_fix_comment"))
+    # suite.addTest(TestGeometry("test_RMSD"))
+    return suite
+
+
+ONLYSOME = False
+
+if __name__ == "__main__" and ONLYSOME:
+    runner = unittest.TextTestRunner()
+    runner.run(suite())
+elif __name__ == "__main__":
     unittest.main()

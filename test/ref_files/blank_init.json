@@ -1,0 +1,15 @@
+{
+  "_changes": {},
+  "_changed_list": [],
+  "_args": [],
+  "_kwargs": {},
+  "DEFAULT/local_only": "False",
+  "DEFAULT/log_level": "WARNING",
+  "DEFAULT/print_citations": "False",
+  "DEFAULT/save_citations": "$AARONLIB/citations.txt",
+  "DEFAULT/name": "blank",
+  "Job/include": "Minimum",
+  "Job/1 type": "optimize.changes",
+  "Job/2 type": "optimize",
+  "Job/3 type": "frequencies"
+}

@@ -1,26 +1,37 @@
 #!/usr/bin/env python3
+import os
 import unittest
+import numpy as np
 
 from AaronTools.component import Component
+from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix, validate
 
 
 class TestComponent(TestWithTimer):
     # simple geometries
-    benz = Component(prefix + "test_files/benzene.xyz")
-    benz_Cl = Component(prefix + "test_files/benzene_4-Cl.xyz")
-    benz_NO2_Cl = Component(prefix + "test_files/benzene_1-NO2_4-Cl.xyz")
-    benz_OH_Cl = Component(prefix + "test_files/benzene_1-OH_4-Cl.xyz")
-    benz_Ph_Cl = Component(prefix + "test_files/benzene_1-Ph_4-Cl.xyz")
-    Et_NO2 = Component(prefix + "test_files/Et_1-NO2.xyz")
-    pent = Component(prefix + "test_files/pentane.xyz")
+    benz = Component(os.path.join(prefix, "test_files", "benzene.xyz"))
+    benz_Cl = Component(os.path.join(prefix, "test_files", "benzene_4-Cl.xyz"))
+    benz_NO2_Cl = Component(
+        os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    )
+    benz_OH_Cl = Component(
+        os.path.join(prefix, "test_files", "benzene_1-OH_4-Cl.xyz")
+    )
+    benz_Ph_Cl = Component(
+        os.path.join(prefix, "test_files", "benzene_1-Ph_4-Cl.xyz")
+    )
+    Et_NO2 = Component(os.path.join(prefix, "test_files", "Et_1-NO2.xyz"))
+    pent = Component(os.path.join(prefix, "test_files", "pentane.xyz"))
 
     # ligands
-    RQ_tBu = Component(prefix + "test_files/R-Quinox-tBu3.xyz")
+    RQ_tBu = Component(os.path.join(prefix, "test_files", "R-Quinox-tBu3.xyz"))
     for a in RQ_tBu.find("P"):
         a.add_tag("key")
-    tri = Component(prefix + "test_files/ligands/squaramide.xyz")
+    tri = Component(
+        os.path.join(prefix, "test_files", "ligands", "squaramide.xyz")
+    )
 
     def is_member(self, valid, test):
         for a in valid:
@@ -33,22 +44,6 @@ class TestComponent(TestWithTimer):
         else:
             return False
 
-    def is_same(self, valid, test):
-        # same number of atoms
-        if len(valid.atoms) != len(test.atoms):
-            return False
-        # of same elements
-        tmp = [a.element for a in test.atoms]
-        for e in [a.element for a in valid.atoms]:
-            try:
-                tmp.remove(e)
-            except ValueError:
-                return False
-        # with reasonable rmsd
-        if valid.RMSD(test, sort=True) > 10 ** -4:
-            return False
-        return True
-
     def test_substitute(self):
         mol = TestComponent.benz.copy()
         benz_Cl = TestComponent.benz_Cl.copy()
@@ -57,31 +52,30 @@ class TestComponent(TestWithTimer):
         benz_Ph_Cl = TestComponent.benz_Ph_Cl.copy()
 
         mol.substitute(Substituent("Cl"), "11")
-        rmsd = mol.RMSD(benz_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_Cl))
+        res = validate(mol, benz_Cl)
+        self.assertTrue(res)
 
         mol.substitute(Substituent("NO2"), "12", "1")
-        rmsd = mol.RMSD(benz_NO2_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_NO2_Cl))
+        res = validate(mol, benz_NO2_Cl, sort=True)
+        self.assertTrue(res)
 
         mol.substitute(Substituent("OH"), "NO2")
-        rmsd = mol.RMSD(benz_OH_Cl, sort=True)
-        self.assertTrue(rmsd < rmsd_tol(benz_OH_Cl))
+        res = validate(mol, benz_OH_Cl, sort=True)
+        self.assertTrue(res)
 
-        mol.substitute(Substituent("Ph"), "12.*")
-        rmsd = mol.RMSD(benz_Ph_Cl)
-        self.assertTrue(rmsd < rmsd_tol(benz_Ph_Cl))
-        
+        mol.substitute(Substituent("Ph"), ["12", "12.*"])
+        res = validate(mol, benz_Ph_Cl, sort=True, thresh="loose")
+        self.assertTrue(res)
+
     def test_detect_backbone(self):
         geom = TestComponent.RQ_tBu.copy()
-        geom.detect_backbone()
 
         backbone = geom.find("1,2,7-20")
         Me = geom.find("3,21-23")
         tBu = geom.find("4-6,24-59")
 
         try:
-            test_Me = set(geom.find("Me"))
+            test_Me = set(geom.find(["Me", "CH3"]))
             test_tBu = set(geom.find("tBu"))
             test_backbone = set(geom.find("backbone"))
         except LookupError:
@@ -92,26 +86,41 @@ class TestComponent(TestWithTimer):
         self.assertTrue(self.is_member(backbone, test_backbone))
 
     def test_minimize_torsion(self):
+        ref = Component(
+            os.path.join(prefix, "ref_files", "minimize_torsion.xyz")
+        )
+
         geom = TestComponent.benz.copy()
-        ref = Component("ref_files/minimize_torsion.xyz")
-        
         geom.substitute(Substituent("tBu"), "12")
         geom.substitute(Substituent("Ph"), "10")
         geom.substitute(Substituent("OH"), "7")
-
         geom.minimize_sub_torsion()
-        rmsd = geom.RMSD(ref, align=True)
-        self.assertTrue(rmsd < 1)
+        self.assertTrue(validate(geom, ref, heavy_only=True))
+
+    def test_sub_rotate(self):
+        geom = TestComponent.RQ_tBu.copy()
+        geom.sub_rotate("4", angle=60)
+        geom.sub_rotate("6", angle=60)
+        geom.sub_rotate("5", angle=60)
+        ref = Component(os.path.join(prefix, "ref_files", "sub_rotate.xyz"))
+        self.assertTrue(validate(geom, ref, heavy_only=True))
+
+
+ONLYSOME = False
 
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestComponent("test_detect_backbone"))
-    suite.addTest(TestComponent("test_substitute"))
-    suite.addTest(TestComponent("test_minimize_torsion"))
+    # suite.addTest(TestComponent("test_detect_backbone"))
+    # suite.addTest(TestComponent("test_sub_rotate"))
+    # suite.addTest(TestComponent("test_substitute"))
+    # suite.addTest(TestComponent("test_minimize_torsion"))
+    suite.addTest(TestComponent("test_cone_angle"))
     return suite
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and ONLYSOME:
     runner = unittest.TextTestRunner()
     runner.run(suite())
+elif __name__ == "__main__":
+    unittest.main()

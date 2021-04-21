@@ -1,32 +1,30 @@
 #!/usr/bin/env python
-
 import json
+import os
 import unittest
 
 import numpy as np
-
-from AaronTools.catalyst import Catalyst
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.fileIO import Frequency
 from AaronTools.geometry import Geometry
-from AaronTools.json_extension import JSONDecoder, JSONEncoder
+from AaronTools.json_extension import ATDecoder, ATEncoder
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix
 
 
 class TestJSON(TestWithTimer):
-    small_mol = prefix + "test_files/benzene_1-NO2_4-Cl.xyz"
-    COCH3 = prefix + "test_files/COCH3.xyz"
-    lig = prefix + "test_files/ligands/R-Quinox-tBu3.xyz"
-    cat = prefix + "test_files/catalysts/tm_multi-lig.xyz"
-    log = prefix + "test_files/normal.log"
+    small_mol = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    COCH3 = os.path.join(prefix, "test_files", "COCH3.xyz")
+    lig = os.path.join(prefix, "test_files", "ligands", "R-Quinox-tBu3.xyz")
+    cat = os.path.join(prefix, "test_files", "catalysts", "tm_multi-lig.xyz")
+    log = os.path.join(prefix, "test_files", "normal.log")
 
     def json_tester(self, ref, equality_function, as_iter=False, **kwargs):
         # test to json
-        test = json.dumps(ref, cls=JSONEncoder)
+        test = json.dumps(ref, cls=ATEncoder, indent=4)
         # test from json
-        test = json.loads(test, cls=JSONDecoder)
+        test = json.loads(test, cls=ATDecoder)
         if as_iter:
             for r, t in zip(ref, test):
                 equality_function(r, t, **kwargs)
@@ -51,6 +49,10 @@ class TestJSON(TestWithTimer):
                     for a, b in zip(
                         sorted(ref.__dict__[key]), sorted(test.__dict__[key])
                     ):
+                        if key == "constraint":
+                            self.assertEqual(a[1], b[1])
+                            a = a[0]
+                            b = b[0]
                         self.atom_equal(a, b, skip=["connected", "constraint"])
                 else:
                     self.assertEqual(ref.__dict__[key], test.__dict__[key])
@@ -66,7 +68,10 @@ class TestJSON(TestWithTimer):
             skip.remove("name")
         if "comment" not in skip:
             self.assertEqual(ref.comment, test.comment)
-        for a, b in zip(ref.atoms, test.atoms):
+        for a, b in zip(
+            sorted(ref.atoms, key=lambda x: float(x.name)),
+            sorted(test.atoms, key=lambda x: float(x.name)),
+        ):
             self.atom_equal(a, b, skip)
 
     def sub_equal(self, ref, test):
@@ -79,31 +84,35 @@ class TestJSON(TestWithTimer):
 
     def component_equal(self, ref, test):
         self.geom_equal(ref, test, skip=["name"])
+        # need to sort substituents to make sure the order is the same
+        # use the name of the first atom in the substituent
         self.assertEqual(len(ref.substituents), len(test.substituents))
-        for r, t in zip(sorted(ref.substituents), sorted(test.substituents)):
+        for r, t in zip(
+            sorted(ref.substituents, key=lambda x: int(x.atoms[0].name)),
+            sorted(test.substituents, key=lambda x: int(x.atoms[0].name)),
+        ):
             self.geom_equal(r, t, skip=["comment"])
         self.assertEqual(len(ref.backbone), len(test.backbone))
-        for r, t in zip(ref.backbone, test.backbone):
+        for r, t in zip(sorted(ref.backbone), sorted(test.backbone)):
             self.atom_equal(r, t)
         self.assertEqual(len(ref.key_atoms), len(test.key_atoms))
-        for r, t in zip(ref.key_atoms, test.key_atoms):
+        for r, t in zip(sorted(ref.key_atoms), sorted(test.key_atoms)):
             self.atom_equal(r, t)
 
     def catalyst_equal(self, ref, test):
+        # only one of them needs the comment re-parsed, but
+        # it shouldn't matter if we do both
+        ref.parse_comment()
+        test.parse_comment()
         self.geom_equal(ref, test)
+        if ref.center is None:
+            ref.detect_components()
+        if test.center is None:
+            test.detect_components()
         for r, t in zip(ref.center, test.center):
             self.atom_equal(r, t)
-        for key in ref.components:
-            for r, t in zip(ref.components[key], test.components[key]):
-                self.component_equal(r, t)
-        self.assertEqual(len(ref.conf_spec), len(test.conf_spec))
-        try:
-            for key, val in ref.conf_spec.items():
-                test_key = test.find_exact(key.name)[0]
-                self.assertTrue(test_key in test.conf_spec)
-                self.assertListEqual(val, test.conf_spec[test_key])
-        except AssertionError as err:
-            raise AssertionError("(key={}) {}", key, err)
+        for r, t in zip(sorted(ref.components), sorted(test.components)):
+            self.component_equal(r, t)
 
     def comp_out_equal(self, ref, test):
         keys = [
@@ -130,7 +139,7 @@ class TestJSON(TestWithTimer):
         ]
         for key in keys:
             rval = ref.__dict__[key]
-            tval = ref.__dict__[key]
+            tval = test.__dict__[key]
             if key == "geometry":
                 self.geom_equal(rval, tval)
             elif key == "opts":
@@ -193,7 +202,7 @@ class TestJSON(TestWithTimer):
         self.json_tester(lig, self.component_equal)
 
     def test_catalyst(self):
-        cat = Catalyst(TestJSON.cat)
+        cat = Geometry(TestJSON.cat)
         cat.fix_comment()
         cat.conf_num = 4
         self.json_tester(cat, self.catalyst_equal)

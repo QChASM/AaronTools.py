@@ -1,3 +1,12 @@
 /__pycache__
 /cache
+/utils/cache
 /**/__pycache__
+/**/Session.vim
+/bond_length
+test/ligand.xyz
+/AaronTools.egg-info
+/build
+/dist
+/doc
+/test/*.xyz

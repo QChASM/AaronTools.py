@@ -1,16 +1,17 @@
 """Holds constants"""
 import os
 
-HOME = os.path.expanduser('~')
+HOME = os.path.expanduser("~")
 if "AARONLIB" in os.environ:
     AARONLIB = os.path.abspath(os.environ["AARONLIB"])
 else:
     AARONLIB = os.path.join(HOME, "Aaron_libs")
 
-QCHASM = os.path.dirname(os.path.abspath(__file__))
-QCHASM = os.path.dirname(QCHASM)
+AARONTOOLS = os.path.dirname(os.path.abspath(__file__))
 
 CONNECTIVITY_THRESHOLD = 0.5
+D_CUTOFF = 0.35
+RMSD_CUTOFF = 0.15
 
 ELEMENTS = [
     "Bq",
@@ -100,6 +101,38 @@ ELEMENTS = [
     "Po",
     "At",
     "Rn",
+    "Fr",
+    "Ra",
+    "Ac",
+    "Th",
+    "Pa",
+    "U",
+    "Np",
+    "Pu",
+    "Am",
+    "Cm",
+    "Bk",
+    "Cf",
+    "Es",
+    "Fm",
+    "Md",
+    "No",
+    "Lr",
+    "Rf",
+    "Db",
+    "Sg",
+    "Bh",
+    "Hs",
+    "Mt",
+    "Ds",
+    "Rg",
+    "Cn",
+    "Nh",
+    "Fl",
+    "Mc",
+    "Lv",
+    "Ts",
+    "Og",
     "X",
 ]
 
@@ -135,8 +168,6 @@ TMETAL = {
     "Pt": 1.30,
     "Au": 1.34,
     "Hg": 1.49,
-    "Tl": 1.48,
-    "Pb": 1.47,
 }
 
 RADII = {
@@ -218,8 +249,8 @@ CONNECTIVITY = {
     "B": 4,
     "C": 4,
     "N": 4,
-    "O": 2,
-    "F": 1,
+    "O": 4,
+    "F": 4,
     "Si": 6,
     "Rh": 6,
     "Fe": 6,
@@ -227,14 +258,31 @@ CONNECTIVITY = {
     "Cu": 6,
     "Ru": 6,
     "Pd": 6,
+    "Ir": 6,
+    "P": 4,
+    "S": 4,
+    "Cl": 4,
+    "I": 6,
+    "Br": 6,
+    "X": 1000,
+    "Pt": 6,
+    "Au": 6,
+}
+
+SATURATION = {
+    "H": 1,
+    "B": 3,
+    "C": 4,
+    "N": 3,
+    "O": 2,
+    "F": 1,
+    "Si": 6,
     "P": 4,
     "S": 4,
     "Cl": 1,
     "I": 1,
     "Br": 1,
     "X": 1000,
-    "Pt": 6,
-    "Au": 6,
 }
 
 ELECTRONEGATIVITY = {
@@ -1308,12 +1356,121 @@ ATOM_TYPES = [
     "OT",
 ]
 
+# main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812
+# (DOI: 10.1021/jp8111556)
+# transition metals are crystal radii from Batsanov, S.S. Van der Waals
+# Radii of Elements. Inorganic Materials 37, 871–885 (2001).
+# (DOI: 10.1023/A:1011625728803)
+# transition metals are indented a bit more than the rest
+VDW_RADII = {
+    "H": 1.10,
+    "He": 1.40,
+    "Li": 1.81,
+    "Be": 1.53,
+    "B": 1.92,
+    "C": 1.70,
+    "N": 1.55,
+    "O": 1.52,
+    "F": 1.47,
+    "Ne": 1.54,
+    "Na": 2.27,
+    "Mg": 1.73,
+    "Al": 1.84,
+    "Si": 2.10,
+    "P": 1.80,
+    "S": 1.80,
+    "Cl": 1.75,
+    "Ar": 1.88,
+    "K": 2.75,
+    "Ca": 2.31,
+    "Sc": 2.3,
+    "Ti": 2.15,
+    "V": 2.05,
+    "Cr": 2.05,
+    "Mn": 2.05,
+    "Fe": 2.05,
+    "Co": 2.0,
+    "Ni": 2.0,
+    "Cu": 2.0,
+    "Zn": 2.1,
+    "Ga": 1.87,
+    "Ge": 2.11,
+    "As": 1.85,
+    "Se": 1.90,
+    "Br": 1.83,
+    "Kr": 2.02,
+    "Rb": 3.03,
+    "Sr": 2.49,
+    "Y": 2.4,
+    "Zr": 2.3,
+    "Nb": 2.15,
+    "Mo": 2.1,
+    "Tc": 2.05,
+    "Ru": 2.05,
+    "Rh": 2.0,
+    "Pd": 2.05,
+    "Ag": 2.1,
+    "Cd": 2.2,
+    "In": 1.93,
+    "Sn": 2.17,
+    "Sb": 2.06,
+    "Te": 2.06,
+    "I": 1.98,
+    "Xe": 2.16,
+    "Cs": 3.43,
+    "Ba": 2.68,
+    "La": 2.5,
+    "Hf": 2.25,
+    "Ta": 2.2,
+    "W": 2.1,
+    "Re": 2.05,
+    "Os": 2.0,
+    "Ir": 2.0,
+    "Pt": 2.05,
+    "Au": 2.1,
+    "Hg": 2.05,
+    "Tl": 1.96,
+    "Pb": 2.02,
+    "Bi": 2.07,
+    "Po": 1.97,
+    "At": 2.02,
+    "Rn": 2.20,
+    "Fr": 3.48,
+    "Ra": 2.83,
+    "X": 0,
+}
+
+# J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)
+BONDI_RADII = {
+    "H": 1.20,
+    "He": 1.40,
+    "C": 1.70,
+    "N": 1.55,
+    "O": 1.52,
+    "F": 1.47,
+    "Ne": 1.54,
+    "Si": 2.10,
+    "P": 1.80,
+    "S": 1.80,
+    "Cl": 1.75,
+    "Ar": 1.88,
+    "As": 1.85,
+    "Se": 1.90,
+    "Br": 1.85,
+    "Kr": 2.02,
+    "Te": 2.06,
+    "I": 1.98,
+    "Xe": 2.16,
+}
+
+
 class PHYSICAL:
     # Physical constants
     BOLTZMANN = 0.001987204  # kcal/mol
+    R = 0.001987204  # kcal/mol
     KB = 1.380662e-23  # J/K
     ROOM_TEMPERATURE = 298.15  # K
-    PLANK = 6.62606957e-34
+    PLANCK = 6.62606957e-34
     SPEED_OF_LIGHT = 29979245800  # cm/s
     GAS_CONSTANT = 1.987204  # cal/mol
     STANDARD_PRESSURE = 101317  # Pa
@@ -1325,3 +1482,4 @@ class UNIT:
     HART_TO_KCAL = 627.5095
     HART_TO_JOULE = 4.3597441775e-18
     A0_TO_METER = 5.291772109217e-11
+    A0_TO_BOHR = 0.52917720859

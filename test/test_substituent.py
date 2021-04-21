@@ -1,25 +1,20 @@
 #! /usr/bin/env python3
 """Testing for Substituent class"""
+import os
 import unittest
 
 import numpy as np
-
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
-
-
-def check_atom_list(ref, comp):
-    rv = True
-    for i, j in zip(ref, comp):
-        rv &= i.__repr__() == j.__repr__()
-    return rv
+from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
 
 
 class TestSubstituent(TestWithTimer):
-    COCH3 = Geometry(prefix + "test_files/COCH3.xyz")
-    NO2 = Geometry(prefix + "test_files/NO2.xyz")
-    benz_NO2_Cl = Geometry(prefix + "test_files/benzene_1-NO2_4-Cl.xyz")
+    COCH3 = Geometry(os.path.join(prefix, "test_files", "COCH3.xyz"))
+    NO2 = Geometry(os.path.join(prefix, "test_files", "NO2.xyz"))
+    benz_NO2_Cl = Geometry(
+        os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    )
 
     def is_COCH3(self, sub):
         ref = TestSubstituent.COCH3
@@ -27,8 +22,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, "CF:2,180")
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(180))
-        rmsd = ref.RMSD(sub, longsort=True)
-        self.assertTrue(rmsd < rmsd_tol(ref))
+        self.assertTrue(validate(sub, ref))
         return
 
     def is_NO2(self, sub):
@@ -37,8 +31,7 @@ class TestSubstituent(TestWithTimer):
         self.assertEqual(sub.comment, "CF:2,120")
         self.assertEqual(sub.conf_num, 2)
         self.assertEqual(sub.conf_angle, np.deg2rad(120))
-        rmsd = ref.RMSD(sub, sort=True, align=True)
-        self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
+        self.assertTrue(validate(sub, ref, thresh=1e-5))
         return
 
     def test_init(self):
@@ -51,7 +44,7 @@ class TestSubstituent(TestWithTimer):
 
     def test_copy(self):
         sub = Substituent("COCH3")
-        sub = sub.copy(name="COCH3")
+        sub = sub.copy()
         self.is_COCH3(sub)
         return
 
@@ -77,6 +70,7 @@ class TestSubstituent(TestWithTimer):
         test_bond = sub.find("N")[0].coords - np.array([0.0, 0.0, 0.0])
         test_bond /= np.linalg.norm(test_bond)
         self.assertTrue(np.linalg.norm(bond - test_bond) < 10 ** -8)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,26 +1,26 @@
 import re
+
 import cclib
 
-from AaronTools.const import ELEMENTS, UNIT, PHYSICAL
-from AaronTools.utils.utils import is_alpha, is_int
 from AaronTools.atoms import Atom
-
+from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
+from AaronTools.utils.utils import is_alpha, is_int
 
 float_num = re.compile("[-+]?\d+\.?\d*")
-READTYPES = ['XYZ', 'Gaussian']
-WRITETYPES = ['XYZ', 'Gaussian']
+READTYPES = ["XYZ", "Gaussian"]
+WRITETYPES = ["XYZ", "Gaussian"]
 NORM_FINISH = "Normal termination"
 ERRORS = {
-    "NtrErr Called from FileIO": 'CHK',  # delete
-    "Wrong number of Negative eigenvalues": 'EIGEN',  # opt=noeigen
-    "Convergence failure -- run terminated.": 'CONV',  # scf=xqc
+    "NtrErr Called from FileIO": "CHK",  # delete
+    "Wrong number of Negative eigenvalues": "EIGEN",  # opt=noeigen
+    "Convergence failure -- run terminated.": "CONV",  # scf=xqc
     # check quota and alert user; REMOVE error from end of file!
-    "Erroneous write": 'QUOTA',
-    "Atoms too close": 'CLASH',  # flag as CLASH
+    "Erroneous write": "QUOTA",
+    "Atoms too close": "CLASH",  # flag as CLASH
     # die and alert user to check catalyst structure or fix input file
-    "The combination of multiplicity": 'CHARGEMULT',
-    "Bend failed for angle": 'REDUND',  # Using opt=cartesian
-    "Unknown message": 'UNKNOWN',
+    "The combination of multiplicity": "CHARGEMULT",
+    "Bend failed for angle": "REDUND",  # Using opt=cartesian
+    "Unknown message": "UNKNOWN",
 }
 
 
@@ -44,12 +44,12 @@ class FileReader:
             frequencies, only what is needed to construct a Geometry() obj
         """
         if isinstance(filename, str):
-            self.name, self.file_ext = filename.rsplit('.', 1)
+            self.name, self.file_ext = filename.rsplit(".", 1)
         else:
             self.name, self.file_ext = filename[:2]
             filename = filename[2]
-        self.file_type = ''
-        self.comment = ''
+        self.file_type = ""
+        self.comment = ""
         self.atoms = []
         self.all_geom = None
         self.other = {}
@@ -57,11 +57,11 @@ class FileReader:
         try:
             parser = cclib.io.ccopen(filename)
             data = parser.parse()
-            self.file_type = str(parser).split()[0].split('.')[-1]
+            self.file_type = str(parser).split()[0].split(".")[-1]
             self.other = data.__dict__
         except AttributeError:
-            if self.file_ext == 'com':
-                self.file_type = 'Gaussian'
+            if self.file_ext == "com":
+                self.file_type = "Gaussian"
                 self.read_com(filename)
                 return
 
@@ -69,46 +69,49 @@ class FileReader:
             print(key)
             print(self.other[key])
         for i, (n, c) in enumerate(zip(data.atomnos, data.atomcoords[-1])):
-            self.atoms += [Atom(element=ELEMENTS[n], coords=c, name=i+1)]
+            self.atoms += [Atom(element=ELEMENTS[n], coords=c, name=i + 1)]
         if len(data.atomcoords) == 1:
             # if > 1, there are more geometries to handle
-            del self.other['atomnos']
-            del self.other['atomcoords']
+            del self.other["atomnos"]
+            del self.other["atomcoords"]
         elif get_all:
             # only handle them if get_all is true
             self.all_geom = []
             for i, coords in enumerate(data.atomcoords[:-1]):
                 atoms = []
                 for j, (n, c) in enumerate(zip(data.atomnos, coords)):
-                    self.atoms += [Atom(element=ELEMENTS[n],
-                                        coords=c, name=j+1)]
-                self.all_geoms += [atoms]
+                    self.atoms += [
+                        Atom(element=ELEMENTS[n], coords=c, name=j + 1)
+                    ]
+                self.all_geom += [atoms]
         # cclib doesn't store XYZ file comments
-        if self.file_type == 'XYZ':
+        if self.file_type == "XYZ":
             self.read_xyz(filename)
         # Grab things cclib doesn't from log files
-        if self.file_type == 'Gaussian' and self.file_ext == 'log':
+        if self.file_type == "Gaussian" and self.file_ext == "log":
             self.read_log(filename)
         # fix naming conventions
-        self.other = self.fix_names(self.other)
+        self.fix_names()
         return
 
     def read_log(self, filename):
         # Grab things cclib doesn't from log files
-        if not self.other['metadata']['success']:
+        if not self.other["metadata"]["success"]:
             if isinstance(filename, str):
                 f = open(filename)
             else:
                 f = filename
             for line in f:
                 if "Molecular mass" in line:
-                    self.other['mass'] = float(float_num.search(line).group(0))
-                    self.other['mass'] *= UNIT.AMU_TO_KG
+                    self.other["mass"] = float(float_num.search(line).group(0))
+                    self.other["mass"] *= UNIT.AMU_TO_KG
                 if "Rotational constants (GHZ):" in line:
                     rot = float_num.findall(line)
-                    rot = [float(r) * PHYSICAL.PLANK * (10**9) / PHYSICAL.KB
-                           for r in rot]
-                    self.other['rotational_temperature'] = rot
+                    rot = [
+                        float(r) * PHYSICAL.PLANCK * (10 ** 9) / PHYSICAL.KB
+                        for r in rot
+                    ]
+                    self.other["rotational_temperature"] = rot
 
     def read_xyz(self, filename):
         if isinstance(filename, str):
@@ -131,55 +134,53 @@ class FileReader:
         found_constraint = False
         for line in f:
             # header
-            if line.startswith('%'):
+            if line.startswith("%"):
                 # checkfile spec
-                other['checkfile'] = line.strip().split('=')[1]
+                other["checkfile"] = line.strip().split("=")[1]
                 continue
-            if line.startswith('#'):
-                match = re.search('^#(\S+)', line).group(1)
-                other['method'] = match.split('/')[0]
-                other['basis'] = match.split('/')[1]
-                if 'temperature=' in line:
-                    other['temperature'] = re.search(
-                        'temperature=(\d+\.?\d*)', line
+            if line.startswith("#"):
+                match = re.search("^#(\S+)", line).group(1)
+                other["method"] = match.split("/")[0]
+                other["basis"] = match.split("/")[1]
+                if "temperature=" in line:
+                    other["temperature"] = re.search(
+                        "temperature=(\d+\.?\d*)", line
                     ).group(1)
-                if 'solvent=' in line:
-                    other['solvent'] = re.search(
-                        'solvent=(\S+)\)', line
+                if "solvent=" in line:
+                    other["solvent"] = re.search(
+                        "solvent=(\S+)\)", line
                     ).group(1)
-                if 'scrf=' in line:
-                    other['solvent_model'] = re.search(
-                        'scrf=\((\S+),', line
+                if "scrf=" in line:
+                    other["solvent_model"] = re.search(
+                        "scrf=\((\S+),", line
                     ).group(1)
-                if 'EmpiricalDispersion=' in line:
-                    other['emp_dispersion'] = re.search(
-                        'EmpiricalDispersion=(\s+)', line
+                if "EmpiricalDispersion=" in line:
+                    other["emp_dispersion"] = re.search(
+                        "EmpiricalDispersion=(\s+)", line
                     ).group(1)
-                if 'int=(grid(' in line:
-                    other['grid'] = re.search(
-                        'int=\(grid(\S+)', line
-                    ).group(1)
+                if "int=(grid(" in line:
+                    other["grid"] = re.search("int=\(grid(\S+)", line).group(1)
                 for _ in range(4):
                     line = f.readline()
                 line = line.split()
-                other['charge'] = line[0]
-                other['mult'] = line[1]
+                other["charge"] = line[0]
+                other["mult"] = line[1]
                 found_atoms = True
                 continue
 
             # constraints
-            if found_atoms and line.startswith('B') and line.endswith('F'):
+            if found_atoms and line.startswith("B") and line.endswith("F"):
                 found_constraint = True
-                if 'constraint' not in other:
-                    other['constraint'] = []
-                other['constraint'] += [float_num.findall(line)]
+                if "constraint" not in other:
+                    other["constraint"] = []
+                other["constraint"] += [float_num.findall(line)]
                 continue
 
             # footer
             if found_constraint:
-                if 'footer' not in other:
-                    other['footer'] = ''
-                other['footer'] += line
+                if "footer" not in other:
+                    other["footer"] = ""
+                other["footer"] += line
                 continue
 
             # atom coords
@@ -201,6 +202,6 @@ class FileReader:
         return
 
     def fix_names(self):
-        if 'metadata' in self.other:
-            if 'success' in self.other['metadata']:
-                self.other['finished'] = self.other['metadata']['success']
+        if "metadata" in self.other:
+            if "success" in self.other["metadata"]:
+                self.other["finished"] = self.other["metadata"]["success"]

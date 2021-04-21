@@ -1,0 +1,16 @@
+SDDAll
+SDD
+LANL2MB
+LANL2DZ
+def2SV
+def2SVP
+def2TZV
+def2TZVP
+def2TZVPP
+# not sure if these are ECP's or not - Gaussian manual doesn't list ECP's like basis sets
+CEP
+CHF
+LANL1
+LANL2
+LP-31
+SHC
