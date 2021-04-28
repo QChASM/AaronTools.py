@@ -63,11 +63,13 @@ for f in args.infile:
             )
 
     co = CompOutput(infile)
-    if co.gradient.keys() and (all(
+    if co.gradient.keys() and (
+        not all(
             x in header_vals for x in co.gradient.keys()
-    ) or not all(
-        x in co.gradient for x in header_vals
-    )):
+        ) or not all(
+            x in co.gradient for x in header_vals
+        )
+    ):
         header_vals = [x for x in sorted(co.gradient.keys())]
         header = "                      Filename    Step  " + "  ".join(
             ["%14s" % crit for crit in header_vals]

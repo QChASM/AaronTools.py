@@ -25,8 +25,9 @@ read_types = [
     "fchk",
     "crest",
     "xtb",
+    "sqmout",
 ]
-write_types = ["xyz", "com", "inp", "in"]
+write_types = ["xyz", "com", "inp", "in", "sqmin"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
@@ -51,6 +52,7 @@ ERROR = {
     "Atomic number out of range for .* basis set.": "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
+    "A syntax error was detected in the input line": "SYNTAX",
     "Unknown message": "UNKNOWN",
 }
 
@@ -169,6 +171,8 @@ class FileWriter:
                 style = "inp"
             elif style.lower() == "psi4":
                 style = "in"
+            elif style.lower() == "sqm":
+                style = "sqmin"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -207,6 +211,15 @@ class FileWriter:
                 raise TypeError(
                     "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
+        elif style.lower() == "sqmin":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_sqm(geom, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
 
         return out
 
@@ -237,15 +250,6 @@ class FileWriter:
     def write_com(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
-        # atom specs need flag column before coords if any atoms frozen
-        has_frozen = False
-        fmt = "{:<3s}" + " {:> 12.6f}" * 3 + "\n"
-        for atom in geom:
-            if atom.flag:
-                fmt = "{:<3s}  {:> 2d}" + " {:> 12.6f}" * 3 + "\n"
-                has_frozen = True
-                break
-
         # get file content string
         header, header_warnings = theory.make_header(
             geom, return_warnings=True, **kwargs
@@ -360,7 +364,44 @@ class FileWriter:
         if return_warnings:
             return warnings
 
+    @classmethod
+    def write_sqm(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
+        header, header_warnings = theory.make_header(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
 
+        s = header + mol
+        warnings = header_warnings + mol_warnings
+
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            if "step" in kwargs:
+                fname = "{}.{}.sqmin".format(geom.name, step2str(kwargs["step"]))
+            else:
+                fname = "{}.sqmin".format(geom.name)
+            with open(fname, "w") as f:
+                f.write(s)
+
+        elif outfile is False:
+            if return_warnings:
+                return s, warnings
+            return s
+
+        else:
+            with open(outfile, "w") as f:
+                f.write(s)
+
+        if return_warnings:
+            return warnings
+
+
+
+@addlogger
 class FileReader:
     """
     Attributes:
@@ -370,6 +411,9 @@ class FileReader:
         atoms [Atom]
         other {}
     """
+
+    LOG = None
+    LOGLEVEL = "DEBUG"
 
     def __init__(
         self,
@@ -441,6 +485,8 @@ class FileReader:
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
                 self.read_xtb(f, freq_name=freq_name)
+            elif self.file_type == "sqmout":
+                self.read_sqm(f)
 
     def read_file(
         self, get_all=False, just_geom=True, freq_name=None, conf_name=None
@@ -485,6 +531,8 @@ class FileReader:
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
             self.read_xtb(f, freq_name=freq_name)
+        elif self.file_type == "sqmout":
+            self.read_sqm(f)
 
         f.close()
         return
@@ -531,7 +579,7 @@ class FileReader:
                 progress = 0
                 if get_all:
                     self.all_geom.append(
-                        [deepcopy(self.comment), deepcopy(self.geometry)]
+                        [deepcopy(self.comment), deepcopy(self.atoms)]
                     )
 
                 continue
@@ -560,12 +608,12 @@ class FileReader:
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
 
-    def read_mol2(self, f):
+    def read_mol2(self, f, get_all=False):
         """
         read TRIPOS mol2
         """
         atoms = []
-        
+
         lines = f.readlines()
         i = 0
         while i < len(lines):
@@ -575,7 +623,7 @@ class FileReader:
                 n_atoms = int(info[0])
                 n_bonds = int(info[1])
                 i += 3
-                
+
             elif lines[i].startswith("@<TRIPOS>ATOM"):
                 for j in range(0, n_atoms):
                     i += 1
@@ -583,10 +631,12 @@ class FileReader:
                     # name = info[1]
                     coords = np.array([float(x) for x in info[2:5]])
                     element = re.match("([A-Za-z]+)", info[5]).group(1)
-                    atoms.append(Atom(element=element, coords=coords, name=str(j + 1)))
-            
+                    atoms.append(
+                        Atom(element=element, coords=coords, name=str(j + 1))
+                    )
+
                 self.atoms = atoms
-            
+
             elif lines[i].startswith("@<TRIPOS>BOND"):
                 for j in range(0, n_bonds):
                     i += 1
@@ -594,7 +644,7 @@ class FileReader:
                     a1, a2 = [int(ndx) - 1 for ndx in info[1:3]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
-            
+
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
@@ -1007,10 +1057,15 @@ class FileReader:
                 elif line.startswith(" Multiplicity"):
                     self.other["multiplicity"] = int(line.split()[-1])
 
-                elif "rotational symmetry number" in line.strip():
+                elif "rotational symmetry number" in line:
                     # TODO: make this cleaner
                     self.other["rotational_symmetry_number"] = int(
                         line.split()[-2]
+                    )
+
+                elif "Symmetry Number:" in line:
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-1]
                     )
 
                 elif line.startswith("Zero point energy"):
@@ -1499,18 +1554,22 @@ class FileReader:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
 
-                    theory = Theory(
-                        charge=self.other["charge"],
-                        multiplicity=self.other["multiplicity"],
-                        job_type=job_type,
-                        basis=basis,
-                        method=method,
-                        grid=grid,
-                        solvent=solvent,
-                    )
-
-                    self.other["theory"] = theory
                     self.other["other_kwargs"] = other_kwargs
+                    try:
+                        theory = Theory(
+                            charge=self.other["charge"],
+                            multiplicity=self.other["multiplicity"],
+                            job_type=job_type,
+                            basis=basis,
+                            method=method,
+                            grid=grid,
+                            solvent=solvent,
+                        )
+                        self.other["theory"] = theory
+                    except KeyError:
+                        # if there is a serious error, too little info may be available
+                        # to properly create the theory object
+                        pass
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -1653,10 +1712,6 @@ class FileReader:
         )
 
         theory = Theory()
-        reading_orbital_data = False
-        n_alpha = 0
-        n_beta = 0
-        orbital_data = {}
 
         lines = f.readlines()
 
@@ -1790,8 +1845,19 @@ class FileReader:
         line = True
         self.other["finished"] = False
         self.other["error"] = None
+        self.atoms = []
+        self.comment = ""
         while line:
             line = f.readline()
+            if "Optimized Geometry" in line:
+                line = f.readline()
+                n_atoms = int(line.strip())
+                line = f.readline()
+                self.comment = " ".join(line.strip().split()[2:])
+                for i in range(n_atoms):
+                    line = f.readline()
+                    elem, x, y, z = line.split()
+                    self.atoms.append(Atom(element=elem, coords=[x, y, z]))
             if "normal termination" in line:
                 self.other["finished"] = True
             if "abnormal termination" in line:
@@ -1817,6 +1883,55 @@ class FileReader:
         if freq_name is not None:
             with open(freq_name) as f_freq:
                 self.other["frequency"] = Frequency(f_freq.read())
+
+    def read_sqm(self, f):
+        lines = f.readlines()
+        
+        self.other["finished"] = False
+        
+        self.atoms = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if "Atomic Charges for Step" in line:
+                elements = []
+                for info in lines[i + 2:]:
+                    if not info.strip() or not info.split()[0].isdigit():
+                        break
+                    ele = info.split()[1]
+                    elements.append(ele)
+                i += len(elements) + 2
+                
+            if "Final Structure" in line:
+                k = 0
+                for info in lines[i + 4:]:
+                    data = info.split()
+                    coords = np.array([x for x in data[4:7]])
+                    self.atoms.append(
+                        Atom(
+                            name=str(k + 1),
+                            coords=coords,
+                            element=elements[k],
+                        )
+                    )
+                    k += 1
+                    if k == len(elements):
+                        break
+                i += k + 4
+            
+            if "Calculation Completed" in line:
+                self.other["finished"] = True
+    
+            if "Total SCF energy" in line:
+                self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
+
+            i += 1
+        
+        if not self.atoms:
+            # there's no atoms if there's an error
+            # error is probably on the last line
+            self.other["error"] = "UNKNOWN"
+            self.other["error_msg"] = line
 
 
 @addlogger
@@ -1852,13 +1967,12 @@ class Frequency:
         ):
             if vector is None:
                 vector = []
-            if forcek is None:
-                forcek = []
+
             self.frequency = frequency
             self.intensity = intensity
             self.symmetry = symmetry
             self.vector = np.array(vector)
-            self.forcek = np.array(forcek)
+            self.forcek = forcek
 
     def __init__(self, data, hpmodes=None, style="log"):
         """
@@ -2111,3 +2225,315 @@ class Frequency:
         else:
             self.lowest_frequency = None
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
+
+    def get_ir_data(
+            self,
+            point_spacing=None,
+            fwhm=15.0,
+            plot_type="transmittance",
+            peak_type="pseudo-voigt",
+            voigt_mixing=0.5,
+            linear_scale=0.0,
+            quadratic_scale=0.0,
+    ):
+        """
+        returns arrays of x_values, y_values for an IR plot
+        point_spacing - spacing between points, default is higher resolution around
+                        each peak (i.e. not uniform)
+                        this is pointless if peak_type == delta
+        fwhm - full width at half max in 1/cm
+        plot_type - transmittance or absorbance
+        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
+        voigt_mixing - fraction of pseudo-voigt that is gaussian
+        linear_scale - subtract linear_scale * frequency off each mode
+        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
+        """
+        # scale frequencies
+        frequencies = np.array([freq.frequency for freq in self.data if freq.frequency > 0])
+        frequencies -= linear_scale * frequencies + quadratic_scale * frequencies ** 2
+        intensities = [freq.intensity for freq in self.data if freq.frequency > 0]
+        
+        if point_spacing:
+            x_values = []
+            x = -point_spacing
+            stop = max(frequencies)
+            if peak_type.lower() != "delta":
+                stop += 5 * fwhm
+            while x < stop:
+                x += point_spacing
+                x_values.append(x)
+            
+            x_values = np.array(x_values)
+        
+        e_factor = -4 * np.log(2) / fwhm ** 2
+        
+        if peak_type.lower() != "delta":
+            # get a list of functions
+            # we'll evaluate these at each x point later
+            functions = []
+            if not point_spacing:
+                x_values = np.linspace(0, max(frequencies) - 10 * fwhm, num=100).tolist()
+            
+            for freq, intensity in zip(frequencies, intensities):
+                if intensity is not None:
+                    if not point_spacing:
+                        x_values.extend(
+                            np.linspace(
+                                max(freq - (3.5 * fwhm), 0), 
+                                freq + (3.5 * fwhm), 
+                                num=65,
+                            ).tolist()
+                        )
+                        x_values.append(freq)
+                    
+                    if peak_type.lower() == "gaussian":
+                        functions.append(
+                            lambda x, x0=freq, inten=intensity: inten * np.exp(e_factor * (x - x0) ** 2)
+                        )
+        
+                    elif peak_type.lower() == "lorentzian":
+                        functions.append(
+                            lambda x, x0=freq, inten=intensity: inten * 0.5 * (0.5 * fwhm / ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                        )
+                    
+                    elif peak_type.lower() == "pseudo-voigt":
+                        functions.append(
+                            lambda x, x0=freq, inten=intensity:
+                                inten * (
+                                    (1 - voigt_mixing) * 0.5 * (0.5 * fwhm / ((x - x0)**2 + (0.5 * fwhm)**2)) + 
+                                    voigt_mixing * np.exp(e_factor * (x - x0)**2)
+                                )
+                        )
+            
+            if not point_spacing:
+                x_values = np.array(list(set(x_values)))
+                x_values.sort()
+        
+            y_values = np.sum([f(x_values) for f in functions], axis=0)
+        
+        else:
+            x_values = []
+            y_values = []
+
+            for freq, intensity in zip(frequencies, intensities):
+                if intensity is not None:
+                    y_values.append(intensity)
+                    x_values.append(freq)
+
+            y_values = np.array(y_values)
+
+        if len(y_values) == 0:
+            self.LOG.warning("nothing to plot")
+            return None
+
+        y_values /= np.amax(y_values)
+
+
+        if plot_type.lower() == "transmittance":
+            y_values = np.array([10 ** (2 - y) for y in y_values])
+
+        return x_values, y_values
+  
+    def plot_ir(
+            self,
+            figure,
+            centers=None,
+            widths=None,
+            exp_data=None,
+            plot_type="transmittance",
+            peak_type="pseudo-voigt",
+            reverse_x=True,
+            **kwargs,
+    ):
+        """
+        plot IR data on figure
+        figure - matplotlib figure
+        centers - array-like of float, plot is split into sections centered
+                  on the frequency specified by centers
+                  default is to not split into sections
+        widths - array-like of float, defines the width of each section
+        exp_data - other data to plot
+                   should be a list of (x_data, y_data, color)
+        reverse_x - if True, 0 cm^-1 will be on the right
+        plot_type - see Frequency.get_ir_data
+        peak_type - any value allowed by Frequency.get_ir_data
+        kwargs - keywords for Frequency.get_ir_data
+        """
+
+        data = self.get_ir_data(
+            plot_type=plot_type,
+            peak_type=peak_type,
+            **kwargs
+        )
+        if data is None:
+            return
+        
+        x_values, y_values = data
+
+        if not centers:
+            # if no centers were specified, pretend they were so we
+            # can do everything the same way
+            axes = [figure.subplots(nrows=1, ncols=1)]
+            widths = [max(x_values)]
+            centers = [max(x_values) / 2]
+        else:
+            n_sections = len(centers)
+            figure.subplots_adjust(wspace=0.05)
+            # sort the sections so we don't jump around
+            widths = [x for _, x in sorted(
+                zip(centers, widths),
+                key=lambda p: p[0],
+                reverse=reverse_x,
+            )]
+            centers = sorted(centers, reverse=reverse_x)
+            
+            axes = figure.subplots(
+                nrows=1,
+                ncols=n_sections,
+                sharey=True,
+                gridspec_kw={'width_ratios': widths},
+            )
+            if not hasattr(axes, "__iter__"):
+                # only one section was specified (e.g. zooming in on a peak)
+                # make sure axes is iterable
+                axes = [axes]
+        
+        for i, ax in enumerate(axes):
+            if i == 0:
+                if plot_type.lower() == "transmittance":
+                    ax.set_ylabel("Transmittance (%)")
+                else:
+                    ax.set_ylabel("Absorbance (arb.)")
+                
+                # need to split plot into sections
+                # put a / on the border at the top and bottom borders
+                # of the plot
+                if len(axes) > 1:
+                    ax.spines["right"].set_visible(False)
+                    ax.tick_params(labelright=False, right=False)
+                    ax.plot(
+                        [1, 1],
+                        [0, 1],
+                        marker=((-1, -1), (1, 1)),
+                        markersize=5,
+                        linestyle='none',
+                        color='k',
+                        mec='k',
+                        mew=1,
+                        clip_on=False,
+                        transform=ax.transAxes,
+                    )
+
+            elif i == len(axes) - 1 and len(axes) > 1:
+                # last section needs a set of / too, but on the left side
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(labelleft=False, left=False)
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle='none',
+                    color='k',
+                    mec='k',
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            elif len(axes) > 1:
+                # middle sections need two sets of /
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(labelleft=False, labelright=False, left=False, right=False)
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle='none',
+                    label="Silence Between Two Subplots",
+                    color='k',
+                    mec='k',
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+                ax.plot(
+                    [1, 1],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    label="Silence Between Two Subplots",
+                    linestyle='none',
+                    color='k',
+                    mec='k',
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            if peak_type.lower() != "delta":
+                ax.plot(
+                    x_values,
+                    y_values,
+                    color='k',
+                    linewidth=0.5,
+                    label="computed",
+                )
+
+            else:
+                if plot_type.lower() == "transmittance":
+                    ax.vlines(
+                        x_values,
+                        y_values,
+                        [100 for y in y_values],
+                        linewidth=0.5,
+                        colors=['k' for x in x_values],
+                        label="computed"
+                    )
+                    ax.hlines(
+                        100,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=['k' for y in y_values],
+                        label="computed",
+                    )
+                
+                else:
+                    ax.vlines(
+                        x_values,
+                        [0 for y in y_values],
+                        y_values,
+                        linewidth=0.5,
+                        colors=['k' for x in x_values],
+                        label="computed"
+                    )
+                    ax.hlines(
+                        0,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=['k' for y in y_values],
+                        label="computed"
+                    )
+
+            if exp_data:
+                for x, y, color in exp_data:
+                    ax.plot(x, y, color=color, zorder=-1, linewidth=0.5, label="observed")
+
+            center = centers[i]
+            width = widths[i]
+            high = center + width / 2
+            low = center - width / 2
+            if reverse_x:
+                ax.set_xlim(high, low)
+            else:
+                ax.set_xlim(low, high)
+        
+        # b/c we're doing things in sections, we can't add an x-axis label
+        # well we could, but which section would be put it one?
+        # it wouldn't be centered
+        # so instead the x-axis label is this
+        figure.text(0.5, 0.0, r"wavenumber (cm$^{-1}$)" , ha="center", va="bottom")

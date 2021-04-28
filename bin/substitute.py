@@ -134,9 +134,12 @@ for infile in args.infile:
             geom.refresh_connected()
 
     if args.outfile:
+        outfile = args.outfile
+        if "INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(infile))
         geom.write(
             append=True,
-            outfile=args.outfile.replace("$INFILE", get_filename(infile))
+            outfile=outfile,
         )
     else:
         print(geom.write(outfile=False))

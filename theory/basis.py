@@ -354,6 +354,8 @@ class BasisSet:
                 ecp = [ECP(ecp)]
         elif isinstance(ecp, ECP):
             ecp = [ecp]
+        elif isinstance(ecp, BasisSet):
+            ecp = ecp.ecp
 
         self.basis = basis
         self.ecp = ecp

@@ -3,7 +3,7 @@
 """Generates prime numbers"""
 import sys
 from math import sqrt
-from os import makedirs, path
+from os import makedirs, path, access, W_OK
 
 from AaronTools.const import AARONLIB
 
@@ -20,7 +20,7 @@ class Primes:
         Primes.clean = clean
         if cache is not None:
             Primes.cache = cache
-        if Primes.clean or not path.exists(Primes.cache):
+        if Primes.clean or (not path.exists(Primes.cache) and access(Primes.cache, W_OK)):
             prime_dir, _ = path.split(Primes.cache)
             if not path.exists(prime_dir):
                 makedirs(prime_dir)
@@ -33,12 +33,13 @@ class Primes:
     def next_prime(cls):
         """determine the next prime number"""
         # first return the ones we already found
-        with open(Primes.cache) as f:
-            for line in f:
-                prime = int(line.strip())
-                cls.primes += [prime]
-                yield prime
-        f.close()
+        if path.exists(Primes.cache):
+            with open(Primes.cache) as f:
+                for line in f:
+                    prime = int(line.strip())
+                    cls.primes += [prime]
+                    yield prime
+            f.close()
 
         # then start generating new ones
         test_prime = cls.primes[-1] + 2
@@ -62,6 +63,8 @@ class Primes:
     @classmethod
     def store_prime(cls, prime):
         """add the prime number to the cache"""
+        if not path.exists(cls.cache):
+            return
         with open(cls.cache, "a") as f:
             if hasattr(prime, "__iter__"):
                 f.writelines([str(i) + "\n" for i in prime])

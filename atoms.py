@@ -176,8 +176,8 @@ class Atom:
 
     def __str__(self):
         s = ""
+        s += "{:>4s} ".format(self.name)
         s += "{:<3s} ".format(self.element)
-        s += " {:<4s}".format(self.name)
         for c in self.coords:
             s += " {: 10.6f}".format(c)
         return s
@@ -249,6 +249,12 @@ class Atom:
                     "Saturation not found for element: " + self.element
                 )
         return
+
+    def reset(self):
+        self._set_radii()
+        self._set_vdw()
+        self._set_connectivity()
+        self._set_saturation()
 
     def add_tag(self, *args):
         for a in args:
@@ -473,7 +479,10 @@ class Atom:
         elif shape_name == "tetrahedral":
             return cls.tetrahedral_shape()
         elif shape_name == "sawhorse":
-            return cls.trigonal_bipyramidal_shape()[0:3] + cls.trigonal_bipyramidal_shape()[-2:]
+            return (
+                cls.trigonal_bipyramidal_shape()[0:3]
+                + cls.trigonal_bipyramidal_shape()[-2:]
+            )
         elif shape_name == "seesaw":
             return cls.octahedral_shape()[0:3] + cls.octahedral_shape()[-2:]
         elif shape_name == "square planar":
@@ -1022,46 +1031,84 @@ class Atom:
             try_shapes["sawhorse"] = Atom.get_shape("sawhorse")
             try_shapes["seesaw"] = Atom.get_shape("seesaw")
             try_shapes["square planar"] = Atom.get_shape("square planar")
-            try_shapes["trigonal pyramidal"] = Atom.get_shape("trigonal pyramidal")
+            try_shapes["trigonal pyramidal"] = Atom.get_shape(
+                "trigonal pyramidal"
+            )
 
         elif len(self.connected) == 5:
             try_shapes["trigonal bipyramidal"] = Atom.get_shape(
                 "trigonal bipyramidal"
             )
             try_shapes["square pyramidal"] = Atom.get_shape("square pyramidal")
-            try_shapes["pentagonal"] = Atom.get_shape("pentagonal") # PP-5
+            try_shapes["pentagonal"] = Atom.get_shape("pentagonal")  # PP-5
 
         elif len(self.connected) == 6:
             try_shapes["octahedral"] = Atom.get_shape("octahedral")
-            try_shapes["hexagonal"] = Atom.get_shape("hexagonal") # HP-6
-            try_shapes["trigonal prismatic"] = Atom.get_shape("trigonal prismatic") # TPR-6
-            try_shapes["pentagonal pyramidal"] = Atom.get_shape("pentagonal pyramidal") # PPY-6
+            try_shapes["hexagonal"] = Atom.get_shape("hexagonal")  # HP-6
+            try_shapes["trigonal prismatic"] = Atom.get_shape(
+                "trigonal prismatic"
+            )  # TPR-6
+            try_shapes["pentagonal pyramidal"] = Atom.get_shape(
+                "pentagonal pyramidal"
+            )  # PPY-6
         elif len(self.connected) == 7:
-            try_shapes["capped octahedral"] = Atom.get_shape("capped octahedral") # COC-7
-            try_shapes["capped trigonal prismatic"] = Atom.get_shape("capped trigonal prismatic") # CTPR-7
-            try_shapes["heptagonal"] = Atom.get_shape("heptagonal") # HP-7
-            try_shapes["hexagonal pyramidal"] = Atom.get_shape("hexagonal pyramidal") # HPY-7
-            try_shapes["pentagonal bipyramidal"] = Atom.get_shape("pentagonal bipyramidal") # PBPY-7
+            try_shapes["capped octahedral"] = Atom.get_shape(
+                "capped octahedral"
+            )  # COC-7
+            try_shapes["capped trigonal prismatic"] = Atom.get_shape(
+                "capped trigonal prismatic"
+            )  # CTPR-7
+            try_shapes["heptagonal"] = Atom.get_shape("heptagonal")  # HP-7
+            try_shapes["hexagonal pyramidal"] = Atom.get_shape(
+                "hexagonal pyramidal"
+            )  # HPY-7
+            try_shapes["pentagonal bipyramidal"] = Atom.get_shape(
+                "pentagonal bipyramidal"
+            )  # PBPY-7
         elif len(self.connected) == 8:
-            try_shapes["biaugmented trigonal prismatic"] = Atom.get_shape("biaugmented trigonal prismatic") # BTPR-8
-            try_shapes["cubic"] = Atom.get_shape("cubic") # CU-8
-            try_shapes["elongated trigonal bipyramidal"] = Atom.get_shape("elongated trigonal bipyramidal") # ETBPY-8
-            try_shapes["hexagonal bipyramidal"] = Atom.get_shape("hexagonal bipyramidal") # HBPY-8
-            try_shapes["heptagonal pyramidal"] = Atom.get_shape("heptagonal pyramidal") # HPY-8
-            try_shapes["octagonal"] = Atom.get_shape("octagonal") # OP-8
-            try_shapes["square antiprismatic"] = Atom.get_shape("square antiprismatic") # SAPR-8
-            try_shapes["trigonal dodecahedral"] = Atom.get_shape("trigonal dodecahedral") # TDD-8
+            try_shapes["biaugmented trigonal prismatic"] = Atom.get_shape(
+                "biaugmented trigonal prismatic"
+            )  # BTPR-8
+            try_shapes["cubic"] = Atom.get_shape("cubic")  # CU-8
+            try_shapes["elongated trigonal bipyramidal"] = Atom.get_shape(
+                "elongated trigonal bipyramidal"
+            )  # ETBPY-8
+            try_shapes["hexagonal bipyramidal"] = Atom.get_shape(
+                "hexagonal bipyramidal"
+            )  # HBPY-8
+            try_shapes["heptagonal pyramidal"] = Atom.get_shape(
+                "heptagonal pyramidal"
+            )  # HPY-8
+            try_shapes["octagonal"] = Atom.get_shape("octagonal")  # OP-8
+            try_shapes["square antiprismatic"] = Atom.get_shape(
+                "square antiprismatic"
+            )  # SAPR-8
+            try_shapes["trigonal dodecahedral"] = Atom.get_shape(
+                "trigonal dodecahedral"
+            )  # TDD-8
         elif len(self.connected) == 9:
-            try_shapes["capped cube"] = Atom.get_shape("capped cube") # CCU-9
-            try_shapes["capped square antiprismatic"] = Atom.get_shape("capped square antiprismatic") # CSAPR-9
-            try_shapes["enneagonal"] = Atom.get_shape("enneagonal") # EP-9
-            try_shapes["heptagonal bipyramidal"] = Atom.get_shape("heptagonal bipyramidal") # HBPY-9
-            try_shapes["hula-hoop"] = Atom.get_shape("hula-hoop") # HH-9
-            try_shapes["triangular cupola"] = Atom.get_shape("triangular cupola") # JTC-9
-            try_shapes["tridiminished icosahedral"] = Atom.get_shape("tridiminished icosahedral") # JTDIC-9
-            try_shapes["muffin"] = Atom.get_shape("muffin") # MFF-9
-            try_shapes["octagonal pyramidal"] = Atom.get_shape("octagonal pyramidal") # OPY-9
-            try_shapes["tricapped trigonal prismatic"] = Atom.get_shape("tricapped trigonal prismatic") # TCTPR-9
+            try_shapes["capped cube"] = Atom.get_shape("capped cube")  # CCU-9
+            try_shapes["capped square antiprismatic"] = Atom.get_shape(
+                "capped square antiprismatic"
+            )  # CSAPR-9
+            try_shapes["enneagonal"] = Atom.get_shape("enneagonal")  # EP-9
+            try_shapes["heptagonal bipyramidal"] = Atom.get_shape(
+                "heptagonal bipyramidal"
+            )  # HBPY-9
+            try_shapes["hula-hoop"] = Atom.get_shape("hula-hoop")  # HH-9
+            try_shapes["triangular cupola"] = Atom.get_shape(
+                "triangular cupola"
+            )  # JTC-9
+            try_shapes["tridiminished icosahedral"] = Atom.get_shape(
+                "tridiminished icosahedral"
+            )  # JTDIC-9
+            try_shapes["muffin"] = Atom.get_shape("muffin")  # MFF-9
+            try_shapes["octagonal pyramidal"] = Atom.get_shape(
+                "octagonal pyramidal"
+            )  # OPY-9
+            try_shapes["tricapped trigonal prismatic"] = Atom.get_shape(
+                "tricapped trigonal prismatic"
+            )  # TCTPR-9
 
         else:
             return None, None

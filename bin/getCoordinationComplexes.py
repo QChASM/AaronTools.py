@@ -51,7 +51,7 @@ coord_comp_parser.add_argument(
     required=False,
     dest="c2_symmetric",
     help="list of true/false corresping to --ligands to denote which bidentate\n" +
-    "ligands are C2-symmetric\nDefault: no ligands are treated as symmetric",
+    "ligands are C2-symmetric\nDefault: try to determine if bidentate ligands are C2-symmetric",
 )
 
 coord_comp_parser.add_argument(
@@ -66,6 +66,7 @@ coord_comp_parser.add_argument(
     "-c",
     "--center-atom",
     required=True,
+    metavar="element",
     dest="center",
     help="central atom for coordination complexes"
 )

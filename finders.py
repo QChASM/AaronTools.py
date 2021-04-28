@@ -468,4 +468,87 @@ class CloserTo(Finder):
                 matching_atoms.append(atom)
         
         return matching_atoms
+
+
+class AmideCarbon(Finder):
+    """
+    amide carbons
+    trigonal planar carbons bonded to a linear oxygen and a
+    nitrogen with 3 bonds
+    """
+    def __repr__(self):
+        return "amide carbons"
+
+    def get_matching_atoms(self, atoms, geometry):
+        from AaronTools.atoms import BondOrder
+        matching_atoms = []
+        
+        carbons = geometry.find("C", VSEPR("trigonal planar"))
+        oxygens = geometry.find("O", VSEPR("linear 1"))
+        nitrogens = geometry.find("N", NumberOfBonds(3))
+        for carbon in carbons:
+            if (
+                    any(atom in oxygens for atom in carbon.connected)
+                    and any(atom in nitrogens for atom in carbon.connected)
+            ):
+                matching_atoms.append(carbon)
+        
+        return matching_atoms
+
+
+class Bridgehead(Finder):
+    """
+    bridgehead atoms
+    can specify ring sizes that the atoms bridge
+    """
+    def __init__(self, ring_sizes=None, match_exact=False):
+        """
+        ring_sizes  - list of int, size of rings (e.g. [6, 6] for atoms that bridge
+                      two 6-membered rings)
+                      not specifying yields bridgehead atoms for any ring size
+        match_exact - bool, if True, return atoms only bridging the specified rings
+                      if False, the ring_sizes is taken as a minimum (e.g. 
+                      ring_size=[6, 6], match_exact=False would also yield atoms
+                      bridging three 6-membered rings or two six-membered rings and
+                      a five-membered ring)
+        """
+        self.ring_sizes = ring_sizes
+        self.match_exact = match_exact
     
+    def __repr__(self):
+        if self.ring_sizes:
+            return "atoms that bridge %s-member rings" % " or ".join([str(x) for x in self.ring_sizes])
+        else:
+            return "bridgehead atoms"
+
+    def get_matching_atoms(self, atoms, geometry):
+        matching_atoms = []
+        for atom1 in atoms:
+            matching = True
+            if self.ring_sizes:
+                unfound_rings = [x for x in self.ring_sizes]
+            n_rings = 0
+            for i, atom2 in enumerate(atom1.connected):
+                for atom3 in atom1.connected[i:]:
+                    try:
+                        path = geometry.shortest_path(atom2, atom3, avoid=atom1)
+                        n_rings += 1
+                        if self.ring_sizes:
+                            ring_size = len(path) + 1
+                            if ring_size in unfound_rings:
+                                unfound_rings.remove(ring_size)
+                            elif self.match_exact:
+                                matching = False
+                                break
+                    except LookupError:
+                        pass
+
+                if not matching:
+                    break
+
+            if self.ring_sizes and not unfound_rings and matching:
+                matching_atoms.append(atom1)
+            elif n_rings > 1 and not self.ring_sizes:
+                matching_atoms.append(atom1)
+        
+        return matching_atoms

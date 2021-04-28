@@ -1,11 +1,40 @@
 import collections.abc
-from collections import OrderedDict
 import os
 import re
-import numpy as np
+from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
-from AaronTools.const import AARONTOOLS
+import numpy as np
+from AaronTools.const import AARONTOOLS, PHYSICAL
+
+
+def range_list(number_list, sep=",", sort=True):
+    """
+    Takes a list of numbers and puts them into a string containing ranges, eg:
+    [1, 2, 3, 5, 6, 7, 9, 10] -> "1-3,5-7,9,10"
+
+    :sep: the separator to use between consecutive ranges
+    :sort: sort the list before parsing
+    """
+    if sort:
+        number_list = sorted(number_list)
+    tmp = [[]]
+    for i, n in enumerate(number_list):
+        if i == 0:
+            tmp[-1] += [n]
+        elif n == number_list[i - 1] + 1:
+            tmp[-1] += [n]
+        else:
+            tmp += [[n]]
+    rv = ""
+    for t in tmp:
+        if len(t) > 2:
+            rv += "{}-{},".format(t[0], t[-1])
+        elif len(t) == 2:
+            rv += "{},{},".format(t[0], t[-1])
+        else:
+            rv += "{},".format(t[0])
+    return rv[:-1]
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -202,6 +231,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
     dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
     """
     from copy import deepcopy
+
     d1 = args[0]
     d2 = args[1:]
     if len(d2) > 1:
@@ -471,7 +501,7 @@ def rotation_matrix(theta, axis):
     axis = axis / np.linalg.norm(axis)
     dim = len(axis)
     outer_prod = np.dot(np.transpose([axis]), [axis])
-    outer_prod *= (1 - np.cos(theta))
+    outer_prod *= 1 - np.cos(theta)
     iden = np.identity(dim)
     cos_comp = iden * np.cos(theta)
     sin_comp = np.zeros((dim, dim))
@@ -488,7 +518,10 @@ def rotation_matrix(theta, axis):
 
     return np.array(
         [
-            [outer_prod[i][j] + cos_comp[i][j] + sin_comp[i][j] for i in range(0, dim)]
+            [
+                outer_prod[i][j] + cos_comp[i][j] + sin_comp[i][j]
+                for i in range(0, dim)
+            ]
             for j in range(0, dim)
         ]
     )
@@ -538,8 +571,8 @@ def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
     if not os.path.exists(grid_file):
         # maybe some other error type?
         raise NotImplementedError(
-            "cannot use Lebedev grid with %i points\n" % num +
-            "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
+            "cannot use Lebedev grid with %i points\n" % num
+            + "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
         )
     grid_data = np.loadtxt(grid_file)
     grid = grid_data[:, [0, 1, 2]]
@@ -566,8 +599,8 @@ def gauss_legendre_grid(start=-1, stop=1, num=32):
     if not os.path.exists(grid_file):
         # maybe some other error type?
         raise NotImplementedError(
-            "cannot use Gauss-Legendre grid with %i points\n" % num +
-            "use one of 20, 32, 64, 75, 99, 127"
+            "cannot use Gauss-Legendre grid with %i points\n" % num
+            + "use one of 20, 32, 64, 75, 99, 127"
         )
     grid_data = np.loadtxt(grid_file)
 
@@ -613,7 +646,8 @@ def perp_vector(vec):
         return u[:, -1]
 
     raise NotImplementedError(
-        "cannot determine vector perpendicular to %i-dimensional array" % vec.ndim
+        "cannot determine vector perpendicular to %i-dimensional array"
+        % vec.ndim
     )
 
 
@@ -625,3 +659,27 @@ def get_filename(path, include_parent_dir=True):
         fname = path
     fname, _ = os.path.splitext(fname)
     return fname
+
+
+def boltzmann_coefficients(energies, temperature):
+    """
+    returns boltzmann weights for the energies and T
+    energies - numpy array of energies in kcal/mol
+    temperature - T in K
+    """
+    min_nrg = min(energies)
+    energies -= min_nrg
+    weights = np.exp(-energies / (PHYSICAL.R * temperature))
+    return weights
+
+
+def boltzmann_average(energies, values, temperature):
+    """
+    returns the AVT result for the values corresponding to the energies
+    energies - np.array, energy for each state in kcal/mol
+    values - np.array, values that are weighted; the ith value corresponds to the ith energy
+    temperature - float, temperature in K
+    """
+    weights = boltzmann_coefficients(energies, temperature)
+    avg = np.dot(weights, values) / sum(weights)
+    return avg

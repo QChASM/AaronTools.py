@@ -196,9 +196,12 @@ for f in args.infile:
     geom.coord_shift(translate_vector, targets=targets)
 
     if args.outfile:
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(f))
         geom.write(
             append=True,
-            outfile=args.outfile.replace("$INFILE", get_filename(f))
+            outfile=outfile,
         )
     else:
         print(geom.write(outfile=False))

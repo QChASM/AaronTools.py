@@ -98,6 +98,18 @@ vbur_parser.add_argument(
 )
 
 vbur_parser.add_argument(
+    "-dr", "--scan",
+    default=[0, 1],
+    nargs=2,
+    type=float,
+    dest="scan",
+    metavar=["dR", "NUMBER"],
+    help="calculate %%Vbur with NUMBER different radii, starting with\n"
+    "the radius specified with -r/--radius and increasing\n"
+    "in increments in dR"
+)
+
+vbur_parser.add_argument(
     "-m", "--method",
     default="Lebedev",
     type=lambda x: x.capitalize() if x.lower() == "lebedev" else x.upper(),
@@ -168,29 +180,43 @@ for f in args.infile:
         else:
             warn("center not determined for %s" % f)
             continue
-
-    if args.exclude_atoms is not None:
-        targets = geom.find([targets, NotAny(args.exclude_atoms)])
-
-    try:
-        vbur = geom.percent_buried_volume(
-            targets=targets,
-            center=args.center,
-            radius=args.radius,
-            radii=args.radii,
-            scale=args.scale,
-            method=args.method,
-            rpoints=args.rpoints,
-            apoints=args.apoints,
-            min_iter=args.min_iter,
-        )
-
-        if len(args.infile) > 1:
-            s += "%20s:\t" % f
-
-        s += "%4.1f\n" % vbur
-    except Exception as e:
-        raise RuntimeError("calulation failed for %s: %s" % (f, e))
+    
+    targets = None
+    if args.exclude_atoms and not args.targets:
+        targets = (NotAny(args.exclude_atoms))
+    elif args.exclude_atoms and args.targets:
+        targets = (NotAny(args.exclude_atoms), args.targets)
+    else:
+        targets = NotAny(args.center)
+    
+    radius = args.radius
+    for i in range(0, int(args.scan[1])):
+        try:
+            vbur = geom.percent_buried_volume(
+                targets=targets,
+                center=args.center,
+                radius=radius,
+                radii=args.radii,
+                scale=args.scale,
+                method=args.method,
+                rpoints=args.rpoints,
+                apoints=args.apoints,
+                min_iter=args.min_iter,
+            )
+    
+            if i == 0:
+                if len(args.infile) > 1:
+                    s += "%-20s\n" % (f + ":")
+        
+                s += "radius\t%Vbur\n"
+            s += "%.2f\t%4.1f\n" % (radius, vbur)
+        except Exception as e:
+            raise RuntimeError("calulation failed for %s: %s" % (f, e))
+            break
+        
+        radius += args.scan[0]
+    else:
+        s += "\n"
 
 if not args.outfile:
     print(s.strip())

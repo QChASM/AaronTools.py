@@ -43,10 +43,19 @@ xyz_parser.add_argument(
 xyz_parser.add_argument(
     "-c", "--comment",
     type=str,
-    default="",
+    default=None,
     required=False,
     dest="comment",
     help="comment line"
+)
+
+xyz_parser.add_argument(
+    "-a", "--append",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="append",
+    help="append structures to output file if it already exists\nDefault: false"
 )
 
 args = xyz_parser.parse_args()
@@ -74,8 +83,7 @@ for f in args.infile:
     if not args.outfile:
         print(geom.write(outfile=False))
     else:
-        geom.write(
-            append=True,
-            outfile=args.outfile.replace("$INFILE", get_filename(f))
-        )
-
+        outfile = args.outfile
+        if "$INFILE" in outfile:
+            outfile = outfile.replace("$INFILE", get_filename(f))
+        geom.write(append=args.append, outfile=outfile)

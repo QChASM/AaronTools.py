@@ -68,11 +68,10 @@ class TestFromString(TestWithTimer):
             )
             self.is_NO2(sub)
 
-            with self.assertLogs(Substituent.LOG, level="WARNING"):
-                sub = Substituent.from_string(
-                    "O=[N]=O", form="smiles", strict_use_rdkit=True
-                )
-                self.is_NO2(sub)
+            sub = Substituent.from_string(
+                "O=[N]=O", form="smiles", strict_use_rdkit=True
+            )
+            self.is_NO2(sub)
 
         except (ImportError, ModuleNotFoundError):
             # I still want to test CACTVS things because sometimes they change stuff

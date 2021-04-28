@@ -267,10 +267,10 @@ for infile in args.infile:
             else:
                 outfile = args.outfile.replace("$i", str(conf + 1))
 
-            print_geom.write(
-                outfile=outfile.replace("$INFILE", get_filename(infile)),
-                append="$i" not in args.outfile
-            )
+            if "$INFILE" in outfile:
+                outfile = outfile.replace("$INFILE", get_filename(infile))
+
+            print_geom.write(outfile=outfile, append="$i" not in args.outfile)
 
 
 if args.outfile is None or args.list_info:

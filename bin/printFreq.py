@@ -1,22 +1,37 @@
 #! /usr/bin/env python3
-from AaronTools.comp_output import CompOutput
+from AaronTools.fileIO import FileReader
 
 
 def main(args):
-    comp = CompOutput(args.filename)
-    for i, key in enumerate(sorted(comp.frequency.by_frequency.keys())):
-        if args.type == "neg" and key > 0:
+    fr = FileReader(args.filename, just_geom=False)
+    if args.show:
+        s = "frequency\t"
+        for x in args.show:
+            if x == "vector":
+                continue
+            s += "%s\t" % x
+        print(s)
+    for i, data in enumerate(sorted(fr.other["frequency"].data, key=lambda x: x.frequency)):
+        if args.type == "neg" and data.frequency > 0:
             continue
-        if args.type == "pos" and key < 0:
+        if args.type == "pos" and data.frequency < 0:
             continue
-        if isinstance(args.type, int) and i > args.type:
+        if isinstance(args.type, int) and i + 1 > args.type:
             break
-        val = comp.frequency.by_frequency[key]
-        show = [val[x] for x in args.show if x != "vector"]
-        line = "{:9.4f}\t" + "{}\t" * len(show)
-        print(line.format(key, *show))
+        s = "%9.4f\t" % data.frequency
+        for x in args.show:
+            if x == "vector":
+                continue
+            val = getattr(data, x)
+            if isinstance(val, float):
+                s += "%9.4f\t" % val
+            else:
+                s += "%s\t" % str(val)
+        
+        print(s)
+        
         if "vector" in args.show:
-            print(val["vector"])
+            print(data.vector)
             print()
 
 
@@ -24,7 +39,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Prints frequencies from computational output file"
+        description="Prints frequencies from computational output file",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
         "filename", help="Completed QM output file with frequency info"
@@ -42,8 +58,9 @@ if __name__ == "__main__":
         "-s",
         type=str,
         nargs="*",
-        help="Specify what additional information to show",
-        choices=["intensity", "vector"],
+        help="Specify what additional information to show\n"
+        "Some info may not be available for certain file formats",
+        choices=["intensity", "vector", "forcek", "symmetry"],
         default=[],
     )
     args = parser.parse_args()
