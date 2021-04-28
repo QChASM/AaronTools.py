@@ -63,7 +63,7 @@ class EmpiricalDispersion:
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD2"]}}, None)
         elif any(
                 self.name.upper() == name for name in [
-                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"
+                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3", "D3ZERO"
                 ]
         ):
             return ({GAUSSIAN_ROUTE:{"EmpiricalDispersion":["GD3"]}}, None)
@@ -106,10 +106,10 @@ class EmpiricalDispersion:
             return ({ORCA_ROUTE:["D2"]}, None)
         elif any(
                 self.name.upper() == name for name in [
-                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"
+                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3", "D3ZERO"
                 ]
         ):
-            return ({ORCA_ROUTE:["D3"]}, None)
+            return ({ORCA_ROUTE:["D3ZERO"]}, None)
         elif any(
                 self.name.upper() == name for name in [
                     "BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ", "-D3BJ"
@@ -153,7 +153,7 @@ class EmpiricalDispersion:
             return ("-d2", None)
         elif any(
                 self.name.upper() == name for name in [
-                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3"
+                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3", "-D3", "D3ZERO"
                 ]
         ):
             return ("-d3", None)
