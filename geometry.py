@@ -79,7 +79,6 @@ class Geometry:
         self._iter_idx = None
         self._sigmat = None
         self._epsmat = None
-        self.LOG.debug("hello")
 
         if isinstance(structure, Geometry):
             # new from geometry

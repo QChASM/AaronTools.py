@@ -78,3 +78,4 @@ for f in args.infile:
             append=True,
             outfile=args.outfile.replace("$INFILE", get_filename(f))
         )
+
