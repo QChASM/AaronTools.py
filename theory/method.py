@@ -1,6 +1,27 @@
 """methods (e.g. DFT functionals, coupled-cluster methods) for Theory()"""
 
-KNOWN_SEMI_EMPIRICAL = ["AM1", "PM3", "PM6", "PM7", "HF-3C", "PM3MM", "PDDG"]
+KNOWN_SEMI_EMPIRICAL = [
+    "AM1",
+    "PM3",
+    "PM6",
+    "PM7",
+    "HF-3C",
+    "PM3MM",
+    "PDDG",
+    "RM1",
+    "MNDO",
+    "PM3-PDDG",
+    "MNDO-PDDG",
+    "PM3-CARB1",
+    "MNDO/d",
+    "AM1/d",
+    "DFTB2",
+    "DFTB3",
+    "AM1-D*",
+    "PM6-D",
+    "AM1-DH+",
+    "PM6-DH+",
+]
 
 class Method:
     """functional object
@@ -46,6 +67,8 @@ class Method:
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "orca.txt"), dtype=str)
         elif program.lower() == "psi4":
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "psi4.txt"), dtype=str)
+        elif program.lower() == "sqm":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "sqm.txt"), dtype=str)
         else:
             raise NotImplementedError("cannot validate method names for %s" % program)
         
@@ -138,6 +161,9 @@ class Method:
 
         return self.name.replace('ω', 'w'), None
 
+    def get_sqm(self):
+        """get method name that is appropriate for sqm"""
+        return self.name
 
 class SAPTMethod(Method):
     """

@@ -252,7 +252,8 @@ class Geometry:
         ligands,
         shape,
         c2_symmetric=None,
-        minimize=False
+        minimize=False,
+        session=None,
     ):
         """
         get all unique coordination complexes
@@ -276,7 +277,13 @@ class Geometry:
         from AaronTools.component import Component
         
         if c2_symmetric is None:
-            c2_symmetric = [False for lig in ligands]
+            c2_symmetric = []
+            for lig in ligands:
+                comp = Component(lig)
+                if not len(comp.key_atoms) == 2:
+                    c2_symmetric.append(False)
+                    continue
+                c2_symmetric.append(comp.c2_symmetric())
         
         bo = BondOrder()
         
@@ -285,13 +292,12 @@ class Geometry:
         start_atoms = Atom.get_shape(shape)
         n_coord = len(start_atoms) - 1
         start_atoms[0].element = center
+        start_atoms[0].reset()
         for atom in start_atoms[1:]:
             start_atoms[0].connected.add(atom)
             atom.connected.add(start_atoms[0])
             atom.element = "B"
-            atom._set_connectivity()
-            atom._set_radii()
-            atom._set_vdw()
+            atom.reset()
         geom = cls(start_atoms, refresh_connected=False)
 
         # we'll need to determine the formula of the requested complex
@@ -445,7 +451,10 @@ class Geometry:
                     )
                     # attach ligand
                     geom_copy.map_ligand(comp, key, minimize=minimize)
-                
+                    for key in comp.key_atoms:
+                        geom_copy.atoms[0].connected.add(key)
+                        key.connected.add(geom_copy.atoms[0])
+
                 for lig in symm_bidentate_names:
                     keys = mapping[start:start + 2]
                     start += 2
@@ -464,7 +473,10 @@ class Geometry:
                             as_group=False
                         )
                     geom_copy.map_ligand(comp, keys, minimize=minimize)
-                    
+                    for key in comp.key_atoms:
+                        geom_copy.atoms[0].connected.add(key)
+                        key.connected.add(geom_copy.atoms[0])
+
                 for lig in asymm_bidentate_names:
                     keys = mapping[start:start + 2]
                     start += 2
@@ -483,7 +495,10 @@ class Geometry:
                             as_group=False
                         )
                     geom_copy.map_ligand(comp, keys, minimize=minimize)
-            
+                    for key in comp.key_atoms:
+                        geom_copy.atoms[0].connected.add(key)
+                        key.connected.add(geom_copy.atoms[0])
+
                 geom_copy.name = "%s-%i_%s_%s" % (this_name, i + 1, point_group, subset)
                 geoms.append(geom_copy)
         
@@ -691,7 +706,7 @@ class Geometry:
         if out is not None:
             return out
 
-    def copy(self, atoms=None, name=None, comment=None):
+    def copy(self, atoms=None, name=None, comment=None, copy_atoms=True):
         """
         creates a new copy of the geometry
         parameters:
@@ -705,7 +720,9 @@ class Geometry:
         atoms = self._fix_connectivity(atoms)
         if hasattr(self, "components") and self.components is not None:
             self.fix_comment()
-        return Geometry([a.copy() for a in atoms], name, comment)
+        if copy_atoms:
+            return Geometry([a.copy() for a in atoms], name, comment)
+        return Geometry(atoms, name, comment)
 
     def parse_comment(self):
         """
@@ -3572,7 +3589,7 @@ class Geometry:
         return ring_fragment.atoms
 
     def change_element(
-        self, target, new_element, adjust_bonds=False, adjust_hydrogens=False
+        self, target, new_element, adjust_bonds=False, adjust_hydrogens=False, hold_steady=None
     ):
         """change the element of an atom on self
         target              - target atom
@@ -3583,6 +3600,8 @@ class Geometry:
                               tuple(int, str): remove specified number of hydrogens and
                                                set the geometry to the specified shape
                                                (see Atom.get_shape for a list of shapes)
+        hold_steady         - atom: atom bonded to target that will be held steady when
+                                    adjusting bonds; Default - longest fragment
         """
 
         def get_corresponding_shape(target, shape_object, frags):
@@ -3918,13 +3937,20 @@ class Geometry:
 
         # fix bond lengths if requested
         if adjust_bonds:
+            if hold_steady:
+                hold_steady = self.find(hold_steady)
             frags = [
                 self.get_fragment(atom, target) for atom in target.connected
             ]
             for i, frag in enumerate(sorted(frags, key=len, reverse=True)):
-                self.change_distance(
-                    target, frag[0], as_group=True, fix=2 if i == 0 else 1
-                )
+                if hold_steady:
+                    self.change_distance(
+                        target, frag[0], as_group=True, fix=2 if frag[0] in hold_steady else 1
+                    )
+                else:
+                    self.change_distance(
+                        target, frag[0], as_group=True, fix=2 if i == 0 else 1
+                    )
 
     def map_ligand(self, ligands, old_keys, minimize=True):
         """
