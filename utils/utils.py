@@ -527,6 +527,14 @@ def rotation_matrix(theta, axis):
     )
 
 
+def mirror_matrix(norm):
+    """mirror matrix for the specified norm"""
+    norm /= np.linalg.norm(norm)
+    A = np.identity(3)
+    B = np.outer(norm, norm)
+    return A + B
+
+
 def fibonacci_sphere(radius=1, center=np.zeros(3), num=500):
     """
     returns a grid of points that are equally spaced on a sphere
@@ -683,3 +691,22 @@ def boltzmann_average(energies, values, temperature):
     weights = boltzmann_coefficients(energies, temperature)
     avg = np.dot(weights, values) / sum(weights)
     return avg
+
+
+def glob_files(infiles):
+    """
+    globs input files
+    used for command line scripts because Windows doesn't support globbing...
+    """
+    from glob import glob
+    if infiles and not isinstance(infiles, str) and hasattr(infiles, "__iter__"):
+        infiles = [infiles]
+    
+    outfiles = []
+    for f in infiles:
+        if isinstance(f, str):
+            outfiles.extend(glob(f))
+        else:
+            outfiles.append(f)
+    
+    return outfiles
