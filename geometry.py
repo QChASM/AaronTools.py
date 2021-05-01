@@ -4169,7 +4169,7 @@ class Geometry:
                     hold_steady = self.find(hold_steady)
                 for j, frag in enumerate(sorted(frags, key=len, reverse=True)):
                     # print(j, frag)
-                    if j == 0 or hold_steady and frag[0] in hold_steady:
+                    if j == 0 or (hold_steady and frag[0] in hold_steady):
                         # skip the first fragment
                         # that's already aligned with one of the atoms on shape_object
                         first_frag = frag
@@ -4217,48 +4217,71 @@ class Geometry:
                 # don't do this if it isn't planar
                 if "planar" in new_shape:
                     for frag in frags:
-                        stop = frag[0]
-                        if len(stop.connected) > 1:
+                        if first_frag and frag is first_frag:
+                            stop = frag[0]
                             other_vsepr = stop.get_vsepr()[0]
                             if isinstance(other_vsepr, str) and "planar" in other_vsepr:
                                 min_torsion = None
                                 for atom in target.connected:
                                     if atom is stop:
                                         continue
-                                    
-                                    if not hold_steady or stop not in hold_steady:
-                                        torsion = self.dihedral(atom, target, stop, hold_steady[0])
+
+                                    for a4 in stop.connected:
+                                        if a4 is target:
+                                            continue
+                                        torsion = self.dihedral(atom, target, stop, a4)
+                                        # print("checking", atom, a4, torsion, min_torsion)
                                         if min_torsion is None or abs(torsion) < abs(min_torsion):
                                             min_torsion = torsion
-                                
-                                    else:
-                                        for a4 in stop.connected:
-                                            if a4 is target:
-                                                continue
-                                            torsion = self.dihedral(atom, target, stop, a4)
-                                            # print("checking", atom, a4, torsion, min_torsion)
-                                            if min_torsion is None or abs(torsion) < abs(min_torsion):
-                                                min_torsion = torsion
             
                                 if min_torsion is not None and abs(min_torsion) > 1e-2:
-                                    if hold_steady and stop in hold_steady:
-                                        angle = min_torsion
-                                        targs = []
-                                        for f in frags:
-                                            if f is frag:
-                                                continue
-                                            targs.extend(f)
-                                    
-                                    else:
-                                        angle = -1 * min_torsion
-                                        targs = frag
-                                    
+                                    angle = min_torsion
+                                    targs = []
+                                    self.write(outfile="test_ele.xyz")
+                                    for f in frags:
+                                        if f is frag:
+                                            continue
+                                        targs.extend(f)
+
                                     self.rotate(
                                         target.bond(stop),
                                         angle,
                                         targets=targs,
                                         center=target,
                                     )
+
+                    for frag in frags:
+                        if first_frag and frag is not first_frag:
+                            stop = frag[0]
+                            if len(stop.connected) > 1:
+                                other_vsepr = stop.get_vsepr()[0]
+                                if isinstance(other_vsepr, str) and "planar" in other_vsepr:
+                                    min_torsion = None
+                                    for atom in target.connected:
+                                        if atom is stop:
+                                            continue
+                                        for atom2 in stop.connected:
+                                            if atom2 is target:
+                                                continue
+                                            torsion = self.dihedral(
+                                                atom,
+                                                target,
+                                                stop,
+                                                atom2
+                                            )
+                                            if min_torsion is None or abs(torsion) < abs(min_torsion):
+                                                min_torsion = torsion
+
+                                    if min_torsion is not None and abs(min_torsion) > 1e-2:
+                                        angle = -1 * min_torsion
+                                        targs = frag
+                                        
+                                        self.rotate(
+                                            target.bond(stop),
+                                            angle,
+                                            targets=targs,
+                                            center=target,
+                                        )
 
         self.refresh_ranks()
 

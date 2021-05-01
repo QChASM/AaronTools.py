@@ -43,7 +43,8 @@ ir_parser.add_argument(
     help="type of plot\nDefault: transmittance",
 )
 
-ir_parser.add_argument(
+peak_options = ir_parser.add_argument_group("peak options")
+peak_options.add_argument(
     "-p", "--peak-type",
     type=str,
     choices=["pseudo-voigt", "gaussian", "lorentzian", "delta"],
@@ -52,7 +53,7 @@ ir_parser.add_argument(
     help="function for peaks\nDefault: pseudo-voigt",
 )
 
-ir_parser.add_argument(
+peak_options.add_argument(
     "-m", "--voigt-mixing",
     type=float,
     default=0.5,
@@ -60,7 +61,7 @@ ir_parser.add_argument(
     help="fraction of pseudo-Voigt that is Gaussian\nDefault: 0.5",
 )
 
-ir_parser.add_argument(
+peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
     default=15.0,
@@ -77,7 +78,9 @@ ir_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
-ir_parser.add_argument(
+
+scale_options = ir_parser.add_argument_group("scale frequencies")
+scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
     default=0.0,
@@ -86,7 +89,7 @@ ir_parser.add_argument(
     "Default: 0 (no scaling)",
 )
 
-ir_parser.add_argument(
+scale_options.add_argument(
     "-q", "--quadratic-scale",
     type=float,
     default=0.0,
@@ -103,7 +106,9 @@ ir_parser.add_argument(
     help="do not reverse x-axis",
 )
 
-ir_parser.add_argument(
+
+section_options = ir_parser.add_argument_group("x-axis interruptions")
+section_options.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="centers",
@@ -112,7 +117,7 @@ ir_parser.add_argument(
     "values should be separated by commas"
 )
 
-ir_parser.add_argument(
+section_options.add_argument(
     "-sw", "--section-widths",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
