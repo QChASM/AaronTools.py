@@ -1,6 +1,7 @@
 import collections.abc
 import os
 import re
+from math import acos
 from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
@@ -493,45 +494,38 @@ def to_closing(string, brace):
         return out
 
 
-def rotation_matrix(theta, axis):
+def rotation_matrix(theta, axis, renormalize=True):
     """rotation matrix for rotating theta radians about axis"""
     # I've only tested this for rotations in R3
-    if np.linalg.norm(axis) == 0:
-        axis = [1, 0, 0]
-    axis = axis / np.linalg.norm(axis)
+    if renormalize:
+        if np.linalg.norm(axis) == 0:
+            axis = [1, 0, 0]
+        axis = axis / np.linalg.norm(axis)
     dim = len(axis)
-    outer_prod = np.dot(np.transpose([axis]), [axis])
-    outer_prod *= 1 - np.cos(theta)
+    outer_prod = np.outer(axis, axis)
+    outer_prod *= (1 - np.cos(theta))
     iden = np.identity(dim)
     cos_comp = iden * np.cos(theta)
-    sin_comp = np.zeros((dim, dim))
+    sin_comp = np.sin(theta) * (np.ones((dim, dim)) - np.identity(dim))
+    cross_mat = np.zeros((dim, dim))
     for i in range(0, dim):
-        for j in range(0, dim):
-            if i != j:
-                if (i + j) % 2 != 0:
-                    p = -1
-                else:
-                    p = 1
-                if i > j:
-                    p = -p
-                sin_comp[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
+        for j in range(0, i):
+            p = 1
+            if (i + j) % 2 != 0:
+                p = -1
 
-    return np.array(
-        [
-            [
-                outer_prod[i][j] + cos_comp[i][j] + sin_comp[i][j]
-                for i in range(0, dim)
-            ]
-            for j in range(0, dim)
-        ]
-    )
+            cross_mat[i][j] = -1 * (p * axis[dim - (i + j)])
+            cross_mat[j][i] = (p * axis[dim - (i + j)])
+
+    return outer_prod + cos_comp + sin_comp * cross_mat
 
 
-def mirror_matrix(norm):
+def mirror_matrix(norm, renormalize=True):
     """mirror matrix for the specified norm"""
-    norm /= np.linalg.norm(norm)
+    if renormalize:
+        norm /= np.linalg.norm(norm)
     A = np.identity(3)
-    B = np.outer(norm, norm)
+    B = -2 * np.outer(norm, norm)
     return A + B
 
 
@@ -710,3 +704,21 @@ def glob_files(infiles):
             outfiles.append(f)
     
     return outfiles
+
+
+def angle_between_vectors(v1, v2, renormalize=True):
+    """returns the angle between v1 and v2 (numpy arrays)"""
+    if renormalize:
+        v1 = v1 / np.linalg.norm(v1)
+        v2 = v2 / np.linalg.norm(v2)
+    
+    v12 = v2 - v1
+    c2 = np.dot(v12, v12)
+    t = (c2 - 2) / -2
+    if t > 1:
+        t = 1
+    elif t < -1:
+        t = -1
+    
+    # math.acos is faster than numpy.arccos for non-arrays
+    return acos(t)

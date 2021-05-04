@@ -545,7 +545,7 @@ class Geometry:
     @property
     def elements(self):
         """ returns list of elements composing the atoms in the geometry """
-        return [a.element for a in self.atoms]
+        return np.array([a.element for a in self.atoms])
 
     @property
     def coords(self):
