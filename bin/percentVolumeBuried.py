@@ -7,6 +7,7 @@ from warnings import warn
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import NotAny
+from AaronTools.utils.utils import glob_files
 
 
 vbur_parser = argparse.ArgumentParser(
@@ -156,7 +157,7 @@ args = vbur_parser.parse_args()
 
 s = ""
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None))

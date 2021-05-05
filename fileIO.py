@@ -1527,12 +1527,13 @@ class FileReader:
                                 job_type.append(FrequencyJob())
                                 continue
 
-                            other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                             for opt in options:
                                 if opt.lower().startswith("grid"):
                                     grid_name = opt.split("=")[1]
                                     grid = IntegrationGrid(grid_name)
                                 else:
+                                    if "Integral" not in other_kwargs[GAUSSIAN_ROUTE]:
+                                        other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                                     other_kwargs[GAUSSIAN_ROUTE][
                                         "Integral"
                                     ].append(opt)

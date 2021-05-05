@@ -32,14 +32,16 @@ class SymmetryElement:
         full_coords2 = self.apply_operation(coords)
         error = 0
 
-        # with open("asdf.xyz", "w") as f:
-        #     s = "%i\n\n" % len(geom.atoms)
-        #     for atom, coord in zip(geom.atoms, full_coords2):
-        #         s += "%-2s   %7.5f   %7.5f  %7.5f\n" % (
-        #             atom.element,
-        #             *coord,
-        #         )
-        #     f.write(s)
+        # if isinstance(self, ProperRotation) and self.n == 3 and self.exp == 1:
+        #     with open("asdf.xyz", "w") as f:
+        #         s = "%i\n\n" % len(geom.atoms)
+        #         for atom, coord in zip(geom.atoms, full_coords2):
+        #             s += "%-2s   %7.5f   %7.5f  %7.5f\n" % (
+        #                 atom.element,
+        #                 *coord,
+        #             )
+        #         f.write(s)
+
         distances = dict()
         if groups is not None:
             group_names = groups
@@ -47,7 +49,6 @@ class SymmetryElement:
             group_names = geom.elements
         for group in set(group_names):
             ndx = (group_names == group).nonzero()[0]
-            atoms1 = [geom.atoms[i] for i in ndx]
             coords1 = np.take(coords, ndx, axis=0)
             coords2 = np.take(full_coords2, ndx, axis=0)
             dist_mat = distance_matrix(coords1, coords2)
@@ -56,22 +57,10 @@ class SymmetryElement:
             # treat values less than 1 as 1 to avoid numerical nonsense
             perp_dist = np.maximum(perp_dist, np.ones(len(ndx)))
         
-            for i in range(0, len(ndx)):
-                min_d = None
-                rj = perp_dist[i]
-
-                for j in range(0, len(coords2)):
-                    d = dist_mat[i, j] / rj
-                    if min_d is None or d < min_d:
-                        min_d = d
-            
-                if min_d > error:
-                    error = min_d
-                    if tolerance and error > tolerance:
-                        break
-            
-            if tolerance and error > tolerance:
-                break
+            error_mat = dist_mat / perp_dist
+            min_d = max(np.min(error_mat, axis=1))
+            if min_d > error:
+                error = min_d
 
         return error
 
@@ -225,12 +214,15 @@ class ImproperRotation(SymmetryElement):
 
 @addlogger
 class PointGroup:
+    
+    LOG = None
+    
     def __init__(
             self,
             geom,
             tolerance=0.1,
             max_rotation=6,
-            rotation_tolerance=0.01
+            rotation_tolerance=0.01,
     ):
         self.geom = geom
         self.center = geom.COM()
@@ -338,7 +330,7 @@ class PointGroup:
     
         atom_pairs = np.array(atom_pairs)
         atom_pair_norms = np.array(atom_pair_norms)
-    
+
         # s = ""
         # for v in atom_pair_norms:
         #     s += ".arrow   %f %f %f   " % tuple(com)
@@ -357,10 +349,8 @@ class PointGroup:
             angles = np.arccos(-0.5 * (c2 - 2))
             mask2 = angles < rotation_tolerance
             mask3 = angles > np.pi - rotation_tolerance
-            mask2[i] = False
-            mask3[i] = False
             mask *= np.invert(np.logical_or(mask2, mask3))
-    
+
         atom_axes = atom_axes[mask]
     
         # remove parallel/antiparallel axes for pairs of atoms
@@ -368,14 +358,14 @@ class PointGroup:
         for i, v in enumerate(atom_pairs):
             if not mask[i]:
                 continue
-            dv = atom_pairs - v
+            dv = np.delete(atom_pairs, i, axis=0) - v
             c2 = np.linalg.norm(dv, axis=1) ** 2
             angles = np.arccos(-0.5 * (c2 - 2))
             mask2 = angles < rotation_tolerance
             mask3 = angles > np.pi - rotation_tolerance
-            mask2[i] = False
-            mask3[i] = False
-            mask *= np.invert(np.logical_or(mask2, mask3))
+            mask4 = np.invert(np.logical_or(mask2, mask3))
+            mask[:i] *= mask4[:i]
+            mask[i + 1:] *= mask4[i:]
         
         atom_pairs = atom_pairs[mask]
         
@@ -384,17 +374,17 @@ class PointGroup:
         for i, v in enumerate(atom_pair_norms):
             if not mask[i]:
                 continue
-            dv = atom_pair_norms - v
+            dv = np.delete(atom_pair_norms, i, axis=0) - v
             c2 = np.linalg.norm(dv, axis=1) ** 2
             angles = np.arccos(-0.5 * (c2 - 2))
             mask2 = angles < rotation_tolerance
             mask3 = angles > np.pi - rotation_tolerance
-            mask2[i] = False
-            mask3[i] = False
-            mask *= np.invert(np.logical_or(mask2, mask3))
+            mask4 = np.invert(np.logical_or(mask2, mask3))
+            mask[:i] *= mask4[:i]
+            mask[i + 1:] *= mask4[i:]
         
         atom_pair_norms = atom_pair_norms[mask]
-    
+
         # s = ""
         # for v in atom_pair_norms:
         #     s += ".arrow   %f %f %f   " % tuple(com)
@@ -430,7 +420,7 @@ class PointGroup:
                 mask *= np.invert(np.logical_or(mask2, mask3))
             
             atom_pair_norms = atom_pair_norms[mask]
-    
+
         # s = ""
         # for v in atom_pair_norms:
         #     s += ".arrow   %f %f %f   " % tuple(com)
@@ -466,9 +456,9 @@ class PointGroup:
             
             atom_pairs = atom_pairs[mask]
         
+        # remove norms for pairs of atoms that are parallel/antiparallel
+        # to moment of inertia axes
         if len(atom_pair_norms):
-            # remove axes for pairs of atoms that are parallel/antiparallel
-            # to moment of inertia axes
             mask = np.ones(len(atom_pair_norms), dtype=bool)
             for i, v in enumerate(axes):
                 dv = atom_pair_norms - v
@@ -490,27 +480,36 @@ class PointGroup:
     
         # remove axes that are not orthogonal to moments of inertia axes
         if ortho_to:
+            mask = np.ones(len(atom_axes), dtype=bool)
+            pair_mask = np.ones(len(atom_pairs), dtype=bool)
             for v in ortho_to:
                 dv = atom_axes - v
                 c2 = np.linalg.norm(dv, axis=1) ** 2
                 angles = np.arccos(-0.5 * (c2 - 2))
-                mask = abs(angles - np.pi / 2) < rotation_tolerance
-                atom_axes = atom_axes[mask]
-    
+                mask1 = abs(angles - np.pi / 2) < rotation_tolerance
+                mask2 = angles < rotation_tolerance
+                mask3 = angles > np.pi - rotation_tolerance
+                mask *= np.invert(
+                    np.logical_or(mask1, mask2),
+                    mask3,
+                )
+        
                 if len(atom_pairs):
                     dv = atom_pairs - v
                     c2 = np.linalg.norm(dv, axis=1) ** 2
                     angles = np.arccos(-0.5 * (c2 - 2))
-                    mask = abs(angles - np.pi / 2) < rotation_tolerance
-                    atom_pairs = atom_pairs[mask]
-    
+                    pair_mask = abs(angles - np.pi / 2) < rotation_tolerance
+                    atom_pairs = atom_pairs[pair_mask]
+        
                 if len(atom_pair_norms):
                     dv = atom_pair_norms - v
                     c2 = np.linalg.norm(dv, axis=1) ** 2
                     angles = np.arccos(-0.5 * (c2 - 2))
-                    mask = abs(angles - np.pi / 2) < rotation_tolerance
-                    atom_pair_norms = atom_pair_norms[mask]
-    
+                    pair_mask = abs(angles - np.pi / 2) < rotation_tolerance
+                    atom_pair_norms = atom_pair_norms[pair_mask]
+            
+            atom_axes = atom_axes[mask]
+
         # s = ""
         # for v in atom_pair_norms:
         #     s += ".arrow   %f %f %f   " % tuple(com)
@@ -518,9 +517,9 @@ class PointGroup:
         #     s += "%f %f %f\n" % tuple(end)
         # with open("test2.bild", "w") as f:
         #     f.write(s)
-    
+
         checked_axes = 0
-        
+
         # find proper rotations along the axes we've found:
         # * moments of inertia axes
         # * COM -> atom vectors
@@ -576,46 +575,55 @@ class PointGroup:
             # TODO: replace with array operations like before
             for i, c2_1 in enumerate(c2_axes):
                 for c2_2 in c2_axes[:i]:
+                    axes = []
                     if len(c2_axes) == 3:
                         # T groups - check midpoint
-                        axis = c2_1.axis + c2_2.axis
+                        for c2_3 in c2_axes[i:]:
+                            axis = c2_1.axis + c2_2.axis + c2_3.axis
+                            axes.append(axis)
+                            axis = c2_1.axis + c2_2.axis - c2_3.axis
+                            axes.append(axis)
+                            axis = c2_1.axis - c2_2.axis + c2_3.axis
+                            axes.append(axis)
+                            axis = c2_1.axis - c2_2.axis - c2_3.axis
+                            axes.append(axis)
                     else:
                         # O, I groups - check cross product
-                        axis = np.cross(c2_1.axis, c2_2.axis)
+                        axes.append(np.cross(c2_1.axis, c2_2.axis))
                     
-                    # don't need to check if norm != 0 b/c we 
-                    # *hopefully* don't have any antiparallel C2 axes
-                    # if we do, we failed earlier b/c those would be
-                    # identical operations...
-                    axis /= np.linalg.norm(axis)
-                    dup = False
-                    for element in valid:
-                        if isinstance(element, ProperRotation):
-                            if 1 - abs(np.dot(element.axis, axis)) < rotation_tolerance: 
-                                dup = True
-                                break
-                    if dup:
-                        continue
-                    max_n = None
-                    for n in range(max_rotation, 1, -1):
-                        if max_n and max_n % n != 0:
+                    for axis in axes:
+                        norm = np.linalg.norm(axis)
+                        if norm < 1e-5:
                             continue
-                        for exp in range(1, 1 + n // 2):
-                            if exp > 1 and n % exp == 0:
+                        axis /= norm
+                        dup = False
+                        for element in valid:
+                            if isinstance(element, ProperRotation):
+                                if 1 - abs(np.dot(element.axis, axis)) < rotation_tolerance: 
+                                    dup = True
+                                    break
+                        if dup:
+                            continue
+                        max_n = None
+                        for n in range(max_rotation, 1, -1):
+                            if max_n and max_n % n != 0:
                                 continue
-                            rot = ProperRotation(com, axis, n, exp)
-                            checked_axes += 1
-                            error = rot.error(geom, tolerance, groups=atom_ids)
-                            if error <= tolerance:
-                                valid.append(rot)
-                                if not max_n:
-                                    max_n = n
-                                    check_axes.append(ax)
-                                if n > 2:
-                                    rot2 = ProperRotation(com, -axis, n, exp)
-                                    valid.append(rot2)
-                            elif exp == 1:
-                                break
+                            for exp in range(1, 1 + n // 2):
+                                if exp > 1 and n % exp == 0:
+                                    continue
+                                rot = ProperRotation(com, axis, n, exp)
+                                checked_axes += 1
+                                error = rot.error(geom, tolerance, groups=atom_ids)
+                                if error <= tolerance:
+                                    valid.append(rot)
+                                    if not max_n:
+                                        max_n = n
+                                        check_axes.append(ax)
+                                    if n > 2:
+                                        rot2 = ProperRotation(com, -axis, n, exp)
+                                        valid.append(rot2)
+                                elif exp == 1:
+                                    break
 
         # improper rotations
         # coincident with proper rotations and can be 1x or 2x
@@ -682,7 +690,58 @@ class PointGroup:
         # mirror axes
         # for I, O - only check c2 axes
         if degeneracy[0] != 3 or len(c2_axes) == 3:
-            args = tuple([arg for arg in [axes, atom_axes, atom_pair_norms] if len(arg)])
+            if len(atom_pair_norms):
+                mask = np.ones(len(atom_pair_norms), dtype=bool)
+                for i, v in enumerate(axes):
+                    dv = atom_pair_norms - v
+                    c2 = np.linalg.norm(dv, axis=1) ** 2
+                    angles = np.arccos(-0.5 * (c2 - 2))
+                    mask2 = angles < rotation_tolerance
+                    mask3 = angles > np.pi - rotation_tolerance
+                    mask *= np.invert(np.logical_or(mask2, mask3))
+                
+                atom_pair_norms = atom_pair_norms[mask]
+                
+                mask = np.ones(len(atom_pair_norms), dtype=bool)
+                for i, v in enumerate(check_axes):
+                    dv = atom_pair_norms - v
+                    c2 = np.linalg.norm(dv, axis=1) ** 2
+                    angles = np.arccos(-0.5 * (c2 - 2))
+                    mask2 = angles < rotation_tolerance
+                    mask3 = angles > np.pi - rotation_tolerance
+                    mask *= np.invert(np.logical_or(mask2, mask3))
+                
+                atom_pair_norms = atom_pair_norms[mask]
+
+            if check_axes:
+                check_axes = np.array(check_axes)
+                mask = np.ones(len(check_axes), dtype=bool)
+                for i, v in enumerate(axes):
+                    dv = check_axes - v
+                    c2 = np.linalg.norm(dv, axis=1) ** 2
+                    angles = np.arccos(-0.5 * (c2 - 2))
+                    mask2 = angles < rotation_tolerance
+                    mask3 = angles > np.pi - rotation_tolerance
+                    mask *= np.invert(np.logical_or(mask2, mask3))
+                
+                check_axes = check_axes[mask]
+
+                mask = np.ones(len(check_axes), dtype=bool)
+                for i, v in enumerate(atom_axes):
+                    dv = check_axes - v
+                    c2 = np.linalg.norm(dv, axis=1) ** 2
+                    angles = np.arccos(-0.5 * (c2 - 2))
+                    mask2 = angles < rotation_tolerance
+                    mask3 = angles > np.pi - rotation_tolerance
+                    mask *= np.invert(np.logical_or(mask2, mask3))
+                
+                check_axes = check_axes[mask]
+
+            args = tuple(
+                [arg for arg in [
+                    axes, atom_axes, atom_pair_norms, check_axes
+                ] if len(arg)]
+            )
             for ax in np.concatenate(args):
                 mirror = MirrorPlane(com, ax)
                 error = mirror.error(geom, tolerance, groups=atom_ids)
@@ -734,20 +793,35 @@ class PointGroup:
                 return "C_inf_v"
         
         Cn = dict()
+        has_inversion = False
+        has_mirror = False
         for ele in self.elements:
             if isinstance(ele, ProperRotation):
                 if ele.n not in Cn:
                     Cn[ele.n] = []
                 Cn[ele.n].append(ele)
+            if isinstance(ele, InversionCenter):
+                has_inversion = True
+            if isinstance(ele, MirrorPlane):
+                has_mirror = True
         
         for n in sorted(Cn.keys(), reverse=True):
             if len(Cn[n]) > 2 and n != 2:
                 if any(isinstance(ele, InversionCenter) for ele in self.elements):
                     if 5 in Cn.keys():
-                        return "Ih"
-                    return "Oh"
-                else:
-                    return "Td"
+                        if has_inversion:
+                            return "Ih"
+                        return "I"
+                    
+                    if has_inversion:
+                        return "Oh"
+                    return "O"
+                
+                if not has_mirror:
+                    return "T"
+                if has_inversion:
+                    return "Th"
+                return "Td"
 
         if Cn:
             has_sig_h = False
@@ -769,14 +843,15 @@ class PointGroup:
                         n_sig_v += 1
 
             n_perp = 0
-            for c2 in Cn[2]:
-                angle = angle_between_vectors(
-                    c2.axis,
-                    prin_ax.axis,
-                    renormalize=False
-                )
-                if abs(angle - np.pi / 2) < rotation_tolerance:
-                    n_perp += 1
+            if 2 in Cn:
+                for c2 in Cn[2]:
+                    angle = angle_between_vectors(
+                        c2.axis,
+                        prin_ax.axis,
+                        renormalize=False
+                    )
+                    if abs(angle - np.pi / 2) < rotation_tolerance:
+                        n_perp += 1
 
             if n_perp == max_n:
                 if has_sig_h:
@@ -799,10 +874,10 @@ class PointGroup:
             
             return "C%i" % max_n
             
-        if any(isinstance(ele, MirrorPlane) for ele in self.elements):
+        if has_mirror:
             return "Cs"
         
-        if any(isinstance(ele, InversionCenter) for ele in self.elements):
+        if has_inversion:
             return "Ci"
         
         return "C1"

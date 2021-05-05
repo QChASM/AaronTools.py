@@ -6,7 +6,7 @@ from sys import stdin
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 ring_parser = argparse.ArgumentParser(
     description="close rings on a geometry",
@@ -100,7 +100,7 @@ if args.list_avail:
     print(s.strip())
     exit(0)
 
-for infile in args.infile:
+for infile in glob_files(args.infile):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format, infile))

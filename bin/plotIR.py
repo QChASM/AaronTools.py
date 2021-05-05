@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from AaronTools.fileIO import FileReader
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
@@ -160,7 +160,7 @@ if args.exp_data:
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
-for f in args.infiles:
+for f in glob_files(args.infiles):
     fr = FileReader(f, just_geom=False)
 
     freq = fr.other["frequency"]

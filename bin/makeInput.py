@@ -7,7 +7,7 @@ import argparse
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.theory import *
-from AaronTools.utils.utils import combine_dicts, get_filename
+from AaronTools.utils.utils import combine_dicts, get_filename, glob_files
 
 theory_parser = argparse.ArgumentParser(
     description="print Gaussian, ORCA, Psi4, or SQM input file",
@@ -525,7 +525,7 @@ if args.comments:
 
 
 # Theory() is made for each file because we might be using things from the input file
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False, get_all=True)
@@ -695,6 +695,10 @@ for f in args.infile:
     elif args.use_prev and "theory" in infile.other:
         job_types = infile.other["theory"].job_type
 
+    grid = args.grid
+    if args.use_prev and "theory" in infile.other and not grid:
+        grid = infile.other["theory"].grid
+
     if args.charge is None:
         if "charge" in infile.other:
             charge = infile.other["charge"]
@@ -718,7 +722,7 @@ for f in args.infile:
     theory = Theory(
         method=method,
         basis=basis_set,
-        grid=args.grid,
+        grid=grid,
         solvent=solvent,
         job_type=job_types,
         empirical_dispersion=args.empirical_dispersion,

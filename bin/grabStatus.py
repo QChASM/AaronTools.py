@@ -5,6 +5,7 @@ import argparse
 
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
+from AaronTools.utils.utils import glob_files
 
 
 stat_parser = argparse.ArgumentParser(
@@ -47,7 +48,7 @@ s = ""
 
 header_vals = [None]
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False)

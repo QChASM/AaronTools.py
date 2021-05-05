@@ -9,7 +9,7 @@ import numpy as np
 from AaronTools.const import UNIT
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 unique_parser = argparse.ArgumentParser(
     description="determine which structures are unique",
@@ -81,7 +81,7 @@ mirror_mat[0][0] *= -1
 # dictionary of structures, which will be ordered by number of atoms, elements, etc.
 structures = {}
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None), just_geom=False)

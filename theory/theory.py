@@ -187,13 +187,13 @@ class Theory:
             if isinstance(self.job_type, JobType):
                 self.job_type = [self.job_type]
 
-            for i, job1 in enumerate(self.job_type):
-                for job2 in self.job_type[i + 1 :]:
-                    if type(job1) is type(job2):
-                        raise TypeError(
-                            "cannot run multiple jobs of the same type: %s, %s"
-                            % (str(job1), str(job2))
-                        )
+            # for i, job1 in enumerate(self.job_type):
+            #     for job2 in self.job_type[i + 1 :]:
+            #         if type(job1) is type(job2):
+            #             self.LOG.warning(
+            #                 "multiple jobs of the same type: %s, %s"
+            #                 % (str(job1), str(job2))
+            #             )
 
     def __setattr__(self, attr, val):
         if isinstance(val, str):

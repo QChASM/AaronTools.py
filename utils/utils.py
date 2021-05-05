@@ -497,16 +497,18 @@ def to_closing(string, brace):
 def rotation_matrix(theta, axis, renormalize=True):
     """rotation matrix for rotating theta radians about axis"""
     # I've only tested this for rotations in R3
+    dim = len(axis)
     if renormalize:
         if np.linalg.norm(axis) == 0:
-            axis = [1, 0, 0]
+            axis = np.zeros(dim)
+            axis[0] = 1.
         axis = axis / np.linalg.norm(axis)
-    dim = len(axis)
     outer_prod = np.outer(axis, axis)
-    outer_prod *= (1 - np.cos(theta))
+    cos_comp = np.cos(theta)
+    outer_prod *= (1 - cos_comp)
     iden = np.identity(dim)
-    cos_comp = iden * np.cos(theta)
-    sin_comp = np.sin(theta) * (np.ones((dim, dim)) - np.identity(dim))
+    cos_comp = iden * cos_comp
+    sin_comp = np.sin(theta) * (np.ones((dim, dim)) - iden)
     cross_mat = np.zeros((dim, dim))
     for i in range(0, dim):
         for j in range(0, i):
@@ -693,7 +695,7 @@ def glob_files(infiles):
     used for command line scripts because Windows doesn't support globbing...
     """
     from glob import glob
-    if infiles and not isinstance(infiles, str) and hasattr(infiles, "__iter__"):
+    if isinstance(infiles, str):
         infiles = [infiles]
     
     outfiles = []
