@@ -1542,7 +1542,7 @@ class Theory:
             for key, val in config._kwargs.items():
                 cmdline[key] = val
         # run types
-        if "gfn" in config["Job"]:
+        if "gfn" in config["Theory"]:
             cmdline["--gfn"] = config["Job"]["gfn"]
         if (
             style == "xtb"
@@ -1653,7 +1653,7 @@ class Theory:
                 "thf",
                 "toluene",
             ]:
-                gfn = config["Job"].get("gfn", fallback="2")
+                gfn = config["Theory"].get("gfn", fallback="2")
                 if gfn != "1" and solvent.lower() in ["benzene"]:
                     raise ValueError("%s is not a supported solvent" % solvent)
                 elif gfn != "2" and solvent.lower() in ["DMF", "n-hexane"]:

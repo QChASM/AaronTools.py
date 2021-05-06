@@ -111,6 +111,19 @@ class Config(configparser.ConfigParser):
             ]:
                 continue
             for option, value in self[section].items():
+                if section == "Geometry" and option.lower().startswith(
+                    "structure"
+                ):
+                    del self[section][option]
+                    option = option.split(".")
+                    option[0] = option[0].lower()
+                    option = ".".join(option)
+                    print(option)
+                    self[section][option] = value
+                    continue
+                if section == "Geometry" and "structure" in value.lower():
+                    re.sub("structure", "structure", value, flags=re.I)
+                    self[section][option] = value
                 if option.lower() != option:
                     self[section][option.lower()] = value
                     del self[section][option]
@@ -610,6 +623,13 @@ class Config(configparser.ConfigParser):
         return theory
 
     def get_template(self):
+        # captures name placeholder and iterator from for-loop initilaizer
+        for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
+        # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
+        parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
+        # captures config-style structure/suffix -> (structure.suffix, suffix)
+        structure_patt = re.compile("(structure\.(\S+?))\.?")
+
         def get_multiple(filenames, path=None, suffix=None):
             rv = []
             for name in filenames:
@@ -625,6 +645,47 @@ class Config(configparser.ConfigParser):
                     geom.name += ".{}".format(suffix)
                 rv += [(geom, kind)]
             return rv
+
+        def structure_assignment(line):
+            # assignments must be done outside of eval()
+            # left -> structure.suffix -> structure_dict["suffix"]
+            # right -> eval(right)
+            # left = right -> structure_dict[suffix] = eval(right)
+            left = line.split("=")[0].strip()
+            right = line.split("=")[1].strip()
+            suffix_match = parsed_struct_patt.search(left)
+            if suffix_match is None:
+                raise RuntimeError(
+                    "Can only assign to Geometry objects with names of the form `structure.suffix`"
+                )
+            suffix = suffix_match.group(2)
+            structure_dict[suffix] = eval(right, eval_dict)
+            structure_dict[suffix].name = ".".join(
+                structure_dict[suffix].name.split(".")[:-1] + [suffix]
+            )
+            if structure_dict[suffix].name.startswith("TS"):
+                kind_dict[suffix] = "TS"
+
+        def structure_suffix_parse(line, for_loop=None):
+            if for_loop is not None:
+                for_match, it_val = for_loop
+            for structure_match in structure_patt.findall(line):
+                # if our suffix is not the iterator, keep it's value for the dict key
+                if for_loop is None or structure_match[1] != for_match.group(
+                    1
+                ):
+                    suffix = structure_match[1]
+                else:
+                    suffix = str(it_val)
+                # change to dict-style syntax (structure.suffix -> structure["suffix"])
+                line = line.replace(
+                    structure_match[0],
+                    "structure['{}']".format(suffix),
+                )
+                if suffix not in structure_dict:
+                    structure_dict[suffix] = AaronTools.geometry.Geometry()
+                    kind_dict[suffix] = None
+            return line
 
         structure_dict = {}
         kind_dict = {}
@@ -705,13 +766,6 @@ class Config(configparser.ConfigParser):
         #    structure.name = structure.suffix.copy()
         #    structure.name.method_call(*args, **kwargs)
 
-        # captures name placeholder and iterator from for-loop initilaizer
-        for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
-        # captures config-style structure/suffix -> (structure.suffix, suffix)
-        structure_patt = re.compile("(structure\.(\S+?))\.?")
-        # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
-        parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
-
         if "Geometry" in self:
             for key in self["Geometry"]:
                 if not key.startswith("&for"):
@@ -732,40 +786,12 @@ class Config(configparser.ConfigParser):
                         line = line.strip()
                         if not line:
                             continue
-                        for structure_match in structure_patt.findall(line):
-                            # if our suffix is not the iterator, keep it's value for the dict key
-                            if structure_match[1] != for_match.group(1):
-                                suffix = structure_match[1]
-                            else:
-                                suffix = str(it_val)
-                            # change to dict-style syntax (structure.suffix -> structure["suffix"])
-                            line = line.replace(
-                                structure_match[0],
-                                "structure['{}']".format(suffix),
-                            )
-                            if suffix not in structure_dict:
-                                structure_dict[
-                                    suffix
-                                ] = AaronTools.geometry.Geometry()
-                                kind_dict[suffix] = None
+                        line = structure_suffix_parse(
+                            line,
+                            for_loop=(for_match, it_val),
+                        )
                         if "=" in line:
-                            # assignments must be done outside of eval()
-                            # left -> structure.suffix -> structure_dict["suffix"]
-                            # right -> eval(right)
-                            # left = right -> structure_dict[suffix] = eval(right)
-                            left = line.split("=")[0].strip()
-                            right = line.split("=")[1].strip()
-                            suffix_match = parsed_struct_patt.search(left)
-                            if suffix_match is None:
-                                raise RuntimeError(
-                                    "Can only assign to Geometry objects with names of the form `structure.suffix`"
-                                )
-                            suffix = suffix_match.group(2)
-                            structure_dict[suffix] = eval(right, eval_dict)
-                            structure_dict[suffix].name = ".".join(
-                                structure_dict[suffix].name.split(".")[:-1]
-                                + [suffix]
-                            )
+                            structure_assignment(line)
                         else:
                             eval(line, eval_dict)
 
@@ -775,17 +801,26 @@ class Config(configparser.ConfigParser):
 
         # apply functions found in [Geometry] section
         if "Geometry" in self and "&call" in self["Geometry"]:
-            for structure, kind in structure_list:
-                lines = self["Geometry"]["&call"]
-                for line in lines.split("\n"):
-                    if line.strip():
-                        eval(
-                            line.strip(),
-                            {
-                                "structure": structure,
-                                "Geometry": AaronTools.geometry.Geometry,
-                            },
-                        )
+            eval_dict = {
+                "Geometry": AaronTools.geometry.Geometry,
+                "structure": structure_dict,
+            }
+            lines = self["Geometry"]["&call"]
+            for line in lines.split("\n"):
+                line = structure_suffix_parse(line)
+                if parsed_struct_patt.search(line.strip()):
+                    try:
+                        eval(line.strip(), eval_dict)
+                    except SyntaxError:
+                        structure_assignment(line)
+                    for suffix in structure_dict:
+                        val = (structure_dict[suffix], kind_dict[suffix])
+                        if val not in structure_list:
+                            structure_list += [val]
+                elif line.strip():
+                    for structure, kind in structure_list:
+                        eval_dict["structure"] = structure
+                        eval(line.strip(), eval_dict)
         return structure_list
 
     def make_changes(self, structure):
