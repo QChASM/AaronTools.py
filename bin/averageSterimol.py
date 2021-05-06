@@ -10,7 +10,7 @@ from AaronTools.const import UNIT
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import boltzmann_coefficients
+from AaronTools.utils.utils import boltzmann_coefficients, glob_files
 
 def main(argv):
     sterimol_parser = argparse.ArgumentParser(
@@ -145,7 +145,7 @@ def main(argv):
         energies["G(Quasi-RRHO)"] = []
         energies["G(Quasi-Harmonic)"] = []
     
-    for infile in args.infiles:
+    for infile in glob_files(args.infiles):
         if args.input_format is not None:
             fr = FileReader((infile, args.input_format, infile), just_geom=False)
         else:

@@ -6,6 +6,7 @@ import argparse
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import *
+from AaronTools.utils.utils import glob_files
 
 vsepr_choices = [
     "linear_1",
@@ -278,7 +279,7 @@ elif args.delim == "semicolon":
 
 s = ""
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

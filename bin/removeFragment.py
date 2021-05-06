@@ -7,6 +7,7 @@ import sys
 import numpy as np
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import read_types, FileReader
+from AaronTools.utils.utils import glob_files, get_filename
 
 
 remove_frag_parser = argparse.ArgumentParser(
@@ -75,7 +76,7 @@ remove_frag_parser.add_argument(
 
 args = remove_frag_parser.parse_args()
 
-for infile in args.infile:
+for infile in glob_files(args.infile):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format[0], infile))

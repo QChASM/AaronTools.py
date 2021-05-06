@@ -165,6 +165,33 @@ class Component(Geometry):
 
         return names
 
+    def c2_symmetric(self, to_center=None, tolerance=0.1):
+        """determine if center-key atom axis is a C2 axis"""
+        # determine ranks
+        ranks = self.canonical_rank(
+            update=False,
+            break_ties=False,
+            invariant=False,
+        )
+        # remove the rank of atoms that are along the c2 axis
+        ranks_off_c2_axis = []
+        if to_center is None:
+            center = np.zeros(3)
+        else:
+            center = self.COM(to_center)
+        
+        v = self.COM(self.key_atoms) - center
+        v /= np.linalg.norm(v)
+        
+        for atom, rank in zip(self.atoms, ranks):
+            dist_along_v = np.dot(atom.coords - center, v)
+            if abs(np.linalg.norm(atom.coords - center) - dist_along_v) < tolerance:
+                continue
+            
+            ranks_off_c2_axis.append(rank)
+        
+        return all([ranks.count(x) % 2 == 0 for x in set(ranks_off_c2_axis)])
+
     def copy(self, atoms=None, name=None, comment=None):
         rv = super().copy()
         return Component(rv)

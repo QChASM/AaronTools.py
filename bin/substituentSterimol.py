@@ -6,6 +6,7 @@ import sys
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.utils import glob_files
 
 def main(argv):
     sterimol_parser = argparse.ArgumentParser(
@@ -103,7 +104,7 @@ def main(argv):
     if not args.vector:
         s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
     
-    for infile in args.infile:
+    for infile in glob_files(args.infile):
         if isinstance(infile, str):
             if args.input_format is not None:
                 f = FileReader((infile, args.input_format, infile))

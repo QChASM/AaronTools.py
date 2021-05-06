@@ -6,7 +6,7 @@ import sys
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 substitute_parser = argparse.ArgumentParser(
     description="replace an atom or substituent with another",
@@ -96,7 +96,7 @@ if args.list_avail:
     print(s.strip())
     sys.exit(0)
 
-for infile in args.infile:
+for infile in glob_files(args.infile):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format, infile))

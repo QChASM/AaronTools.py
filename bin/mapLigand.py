@@ -6,7 +6,7 @@ import sys
 from AaronTools.component import Component
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 def get_matching_ligands(name):
     name_info = name
@@ -137,7 +137,7 @@ if args.list_avail is not False:
     print(s.strip())
     sys.exit(0)
 
-for infile in args.infile:
+for infile in glob_files(args.infile):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format[0], infile))

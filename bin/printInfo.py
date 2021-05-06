@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.utils.utils import glob_files
 
 info_parser = argparse.ArgumentParser(
     description="print information in Gaussian, ORCA, or Psi4 output files",
@@ -88,7 +89,7 @@ s = ""
 
 np.set_printoptions(precision=5)
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False)

@@ -28,6 +28,8 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    SQM_COMMENT,
+    SQM_QMMM,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
@@ -59,6 +61,8 @@ THEORY_OPTIONS = [
     "PSI4_JOB",
     "PSI4_OPTKING",
     "PSI4_SETTINGS",
+    "SQM_COMMENT",
+    "SQM_QMMM",
 ]
 
 
@@ -1001,7 +1005,7 @@ class Config(configparser.ConfigParser):
                 # clean up metadata
                 del config[section][remove_key]
         # other job-specific additions
-        if "host" in config["HPC"]:
+        if config.has_section("HPC") and "host" in config["HPC"]:
             try:
                 config["HPC"]["work_dir"] = config["HPC"].get("remote_dir")
             except TypeError as e:
@@ -1009,6 +1013,8 @@ class Config(configparser.ConfigParser):
                     "Must specify remote working directory for HPC (remote_dir = /path/to/HPC/work/dir)"
                 ) from e
         else:
+            if not config.has_section("HPC"):
+                config.add_section("HPC")
             config["HPC"]["work_dir"] = config["DEFAULT"].get("top_dir")
         # parse user-supplied functions in config file
         config.parse_functions()

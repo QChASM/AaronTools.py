@@ -11,6 +11,7 @@ from numpy import isclose
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
+from AaronTools.utils.utils import glob_files
 
 
 thermo_parser = argparse.ArgumentParser(
@@ -129,7 +130,7 @@ else:
     output = ""
 
 if args.pattern is None:
-    infiles = args.infile
+    infiles = glob_files(args.infile)
 else:
     infiles = []
     if args.infile == [sys.stdin]:
@@ -149,7 +150,7 @@ else:
 
 if args.sp_file != [None]:
     if args.pattern is None:
-        sp_filenames = [f for  f in args.sp_file]
+        sp_filenames = glob_files([f for  f in args.sp_file])
 
     else:
         sp_filenames = []

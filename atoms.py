@@ -250,6 +250,12 @@ class Atom:
                 )
         return
 
+    def reset(self):
+        self._set_radii()
+        self._set_vdw()
+        self._set_connectivity()
+        self._set_saturation()
+
     def add_tag(self, *args):
         for a in args:
             if hasattr(a, "__iter__") and not isinstance(a, str):

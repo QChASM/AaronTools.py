@@ -6,7 +6,7 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 mirror_parser = argparse.ArgumentParser(
     description="mirror a molecular structure",
@@ -48,7 +48,7 @@ plane_options.add_argument(
     action="store_true",
     default=False,
     dest="yz_plane",
-    help="mirror across the yz plane"
+    help="mirror across the yz plane (default)"
 )
 
 plane_options.add_argument(
@@ -84,7 +84,7 @@ if args.xy_plane:
 if np.sum(eye) == 3:
     eye[0, 0] *= -1
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

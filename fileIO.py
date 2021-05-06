@@ -25,8 +25,9 @@ read_types = [
     "fchk",
     "crest",
     "xtb",
+    "sqmout",
 ]
-write_types = ["xyz", "com", "inp", "in"]
+write_types = ["xyz", "com", "inp", "in", "sqmin"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 NORM_FINISH = "Normal termination"
@@ -77,6 +78,7 @@ ERROR_ORCA = {
     "WARNING: Analytical MP2 frequency calculations": "NUMFREQ",
     "WARNING: Analytical Hessians are not yet implemented for meta-GGA functionals": "NUMFREQ",
     "ORCA finished with error return": "UNKNOWN",
+    "UNRECOGNIZED OR DUPLICATED KEYWORD(S) IN SIMPLE INPUT LINE": "TYPO",
 }
 
 # some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
@@ -169,6 +171,8 @@ class FileWriter:
                 style = "inp"
             elif style.lower() == "psi4":
                 style = "in"
+            elif style.lower() == "sqm":
+                style = "sqmin"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -206,6 +210,15 @@ class FileWriter:
             else:
                 raise TypeError(
                     "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "sqmin":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_sqm(geom, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
 
         return out
@@ -351,6 +364,42 @@ class FileWriter:
         if return_warnings:
             return warnings
 
+    @classmethod
+    def write_sqm(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
+        header, header_warnings = theory.make_header(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
+
+        s = header + mol
+        warnings = header_warnings + mol_warnings
+
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            if "step" in kwargs:
+                fname = "{}.{}.sqmin".format(geom.name, step2str(kwargs["step"]))
+            else:
+                fname = "{}.sqmin".format(geom.name)
+            with open(fname, "w") as f:
+                f.write(s)
+
+        elif outfile is False:
+            if return_warnings:
+                return s, warnings
+            return s
+
+        else:
+            with open(outfile, "w") as f:
+                f.write(s)
+
+        if return_warnings:
+            return warnings
+
+
 
 @addlogger
 class FileReader:
@@ -436,6 +485,8 @@ class FileReader:
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
                 self.read_xtb(f, freq_name=freq_name)
+            elif self.file_type == "sqmout":
+                self.read_sqm(f)
 
     def read_file(
         self, get_all=False, just_geom=True, freq_name=None, conf_name=None
@@ -480,6 +531,8 @@ class FileReader:
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
             self.read_xtb(f, freq_name=freq_name)
+        elif self.file_type == "sqmout":
+            self.read_sqm(f)
 
         f.close()
         return
@@ -1474,12 +1527,13 @@ class FileReader:
                                 job_type.append(FrequencyJob())
                                 continue
 
-                            other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                             for opt in options:
                                 if opt.lower().startswith("grid"):
                                     grid_name = opt.split("=")[1]
                                     grid = IntegrationGrid(grid_name)
                                 else:
+                                    if "Integral" not in other_kwargs[GAUSSIAN_ROUTE]:
+                                        other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                                     other_kwargs[GAUSSIAN_ROUTE][
                                         "Integral"
                                     ].append(opt)
@@ -1831,6 +1885,55 @@ class FileReader:
             with open(freq_name) as f_freq:
                 self.other["frequency"] = Frequency(f_freq.read())
 
+    def read_sqm(self, f):
+        lines = f.readlines()
+        
+        self.other["finished"] = False
+        
+        self.atoms = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if "Atomic Charges for Step" in line:
+                elements = []
+                for info in lines[i + 2:]:
+                    if not info.strip() or not info.split()[0].isdigit():
+                        break
+                    ele = info.split()[1]
+                    elements.append(ele)
+                i += len(elements) + 2
+                
+            if "Final Structure" in line:
+                k = 0
+                for info in lines[i + 4:]:
+                    data = info.split()
+                    coords = np.array([x for x in data[4:7]])
+                    self.atoms.append(
+                        Atom(
+                            name=str(k + 1),
+                            coords=coords,
+                            element=elements[k],
+                        )
+                    )
+                    k += 1
+                    if k == len(elements):
+                        break
+                i += k + 4
+            
+            if "Calculation Completed" in line:
+                self.other["finished"] = True
+    
+            if "Total SCF energy" in line:
+                self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
+
+            i += 1
+        
+        if not self.atoms:
+            # there's no atoms if there's an error
+            # error is probably on the last line
+            self.other["error"] = "UNKNOWN"
+            self.other["error_msg"] = line
+
 
 @addlogger
 class Frequency:
@@ -2154,7 +2257,10 @@ class Frequency:
         if point_spacing:
             x_values = []
             x = -point_spacing
-            while x < max(frequencies):
+            stop = max(frequencies)
+            if peak_type.lower() != "delta":
+                stop += 5 * fwhm
+            while x < stop:
                 x += point_spacing
                 x_values.append(x)
             

@@ -11,6 +11,7 @@ from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import BondedTo, ChiralCenters
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.utils import glob_files
 
 
 changechiral_parser = argparse.ArgumentParser(
@@ -99,7 +100,7 @@ args = changechiral_parser.parse_args()
 
 s = ""
 
-for infile in args.infile:
+for infile in glob_files(args.infile):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format[0], infile))

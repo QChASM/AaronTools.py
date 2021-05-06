@@ -27,6 +27,9 @@ GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writi
 GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
 GAUSSIAN_POST: list(str)
 GAUSSIAN_COMMENT: list(str)
+
+SQM_COMMENT: list(str)
+SQM_QMMM: dict()
 """
 
 ORCA_ROUTE = "simple" # simple input
@@ -52,6 +55,9 @@ GAUSSIAN_GEN_BASIS = "gen_basis" #gen or genecp basis section
 GAUSSIAN_GEN_ECP = "gen_ecp" #genecp ECP section
 GAUSSIAN_POST = "end_of_file" #after everything else (e.g. NBO options)
 GAUSSIAN_COMMENT = "comments" #comment line after the route
+
+SQM_COMMENT = "comments"
+SQM_QMMM = "qmmm"
 
 from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion

@@ -12,6 +12,7 @@ from AaronTools.theory import (
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    SQM_QMMM,
 )
 from AaronTools.utils.utils import range_list
 
@@ -41,7 +42,10 @@ class JobType:
     def get_psi4(self):
         """overwrite to return dict with PSI4_* keys"""
         pass
-
+    
+    def get_sqm(self):
+        """overwrite to return a dict with SQM_* keys"""
+        pass
 
 class OptimizationJob(JobType):
     """optimization job"""
@@ -682,6 +686,16 @@ class OptimizationJob(JobType):
         xcontrol += "$end\n"
         return xcontrol
 
+    def get_sqm(self):
+        """returns a dict(), warnings for optimization jobs"""
+        warnings = []
+        if self.transition_state:
+            warnings.append("cannot do TS optimization with sqm")
+        
+        if self.constraints:
+            warnings.append("cannot constrain sqm optimization")
+        
+        return dict(), warnings
 
 class FrequencyJob(JobType):
     """frequnecy job"""
@@ -729,6 +743,8 @@ class FrequencyJob(JobType):
 
         return out
 
+    def get_sqm(self):
+        raise NotImplementedError("cannot build frequnecy job input for sqm")
 
 class SinglePointJob(JobType):
     """single point energy"""
@@ -744,6 +760,10 @@ class SinglePointJob(JobType):
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
         return {PSI4_JOB: {"energy": []}}
+    
+    def get_sqm(self):
+        """returns a dict with keys: SQM_QMMM"""
+        return {SQM_QMMM: {"maxcyc": ["0"]}}
 
 
 class ForceJob(JobType):
