@@ -1334,8 +1334,28 @@ class FileReader:
                     freq_str, self.other["hpmodes"]
                 )
 
+            if "Anharmonic Infrared Spectroscopy" in line:
+                self.skip_lines(f, 5)
+                n += 5
+                anharm_str = ""
+                combinations_read = False
+                combinations = False
+                line = f.readline()
+                while not combinations_read:
+                    n += 1
+                    anharm_str += line
+                    if "Combination Bands" in line:
+                        combinations = True
+                    line = f.readline()
+                    if combinations and line == "\n":
+                        combinations_read = True
+                
+                self.other["frequency"].parse_gaussian_anharm(
+                    anharm_str.splitlines()
+                )
+
             # Thermo
-            if "Temperature" in line:
+            if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(
                     float_num.search(line).group(0)
                 )
@@ -1956,6 +1976,8 @@ class Frequency:
         :frequency: float
         :intensity: float
         :vector: (2D array) normal mode vectors
+        :forcek: float
+        :symmetry: str
         """
 
         def __init__(
@@ -1975,14 +1997,39 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
 
-    def __init__(self, data, hpmodes=None, style="log"):
+    class AnharmonicData:
+        """
+        ATTRIBUTES
+        :frequency: float
+        :intensity: float
+        :overtones: list(AnharmonicData)
+        :combinations: dict(int: AnharmonicData)
+        """
+
+        def __init__(
+            self,
+            frequency,
+            intensity,
+        ):
+            self.frequency = frequency
+            self.intensity = intensity
+            self.overtones = []
+            self.combinations = dict()
+        
+        def __lt__(self, other):
+            return self.frequency < other.frequency
+
+
+    def __init__(self, data, hpmodes=None, style="log", harmonic=True):
         """
         :data: should either be a str containing the lines of the output file
             with frequency information, or a list of Data objects
         :hpmodes: required when data is a string
         :form:    required when data is a string; denotes file format (log, out, ...)
+        :harmonic: bool, data is for anharmonic frequencies
         """
         self.data = []
+        self.anharm_data = None
         self.imaginary_frequencies = None
         self.real_frequencies = None
         self.lowest_frequency = None
@@ -2001,7 +2048,7 @@ class Frequency:
         else:
             return
 
-        lines = data.split("\n")
+        lines = data.splitlines()
         num_head = 0
         for line in lines:
             if "Harmonic frequencies" in line:
@@ -2009,14 +2056,25 @@ class Frequency:
         if hpmodes and num_head != 2:
             self.LOG.warning("Log file damaged, cannot get frequencies")
             return
-        if style == "log":
-            self.parse_lines(lines, hpmodes)
-        elif style == "out":
-            self.parse_orca_lines(lines, hpmodes)
-        elif style == "dat":
-            self.parse_psi4_lines(lines, hpmodes)
+        
+        if harmonic:
+            if style == "log":
+                self.parse_gaussian_lines(lines, hpmodes)
+            elif style == "out":
+                self.parse_orca_lines(lines, hpmodes)
+            elif style == "dat":
+                self.parse_psi4_lines(lines, hpmodes)
+            else:
+                raise RuntimeError(
+                    "no harmonic frequency parser for %s files" % style
+                )
         else:
-            raise RuntimeError("no frequency parser for %s files" % style)
+            if style == "log":
+                self.parse_gaussian_anharm(lines)
+            else:
+                raise RuntimeError(
+                    "no anharmonic frequency parser for %s files" % style
+                )
 
         self.sort_frequencies()
         return
@@ -2133,7 +2191,7 @@ class Frequency:
             inten = float(ir_info[2])
             self.data[t].intensity = inten
 
-    def parse_lines(self, lines, hpmodes):
+    def parse_gaussian_lines(self, lines, hpmodes):
         num_head = 0
         idx = -1
         modes = []
@@ -2208,6 +2266,76 @@ class Frequency:
             data.vector = np.array(mode, dtype=np.float64)
         return
 
+    def parse_gaussian_anharm(self, lines):
+        reading_combinations = False
+        reading_overtones = False
+        reading_fundamentals = False
+        
+        combinations = []
+        overtones = []
+        fundamentals = []
+        
+        mode_re = re.compile("(\d+)\((\d+)\)")
+        
+        for line in lines:
+            if "---" in line or "Mode" in line or not line.strip():
+                continue
+            if "Fundamental Bands" in line:
+                reading_fundamentals = True
+                continue
+            if "Overtones" in line:
+                reading_overtones = True
+                continue
+            if "Combination Bands" in line:
+                reading_combinations = True
+                continue
+
+            if reading_combinations:
+                info = line.split()
+                mode1 = mode_re.search(info[0])
+                mode2 = mode_re.search(info[1])
+                ndx_1 = int(mode1.group(1))
+                exp_1 = int(mode1.group(2))
+                ndx_2 = int(mode2.group(1))
+                exp_2 = int(mode2.group(2))
+                anharm_freq = float(info[3])
+                anharm_inten = float(info[4])
+                combinations.append(
+                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq, anharm_inten)
+                )
+            elif reading_overtones:
+                info = line.split()
+                mode = mode_re.search(info[0])
+                ndx = int(mode.group(1))
+                exp = int(mode.group(2))
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[3])
+                overtones.append(
+                    (ndx, exp, anharm_freq, anharm_inten)
+                )
+            elif reading_fundamentals:
+                info = line.split()
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[4])
+                fundamentals.append(
+                    (anharm_freq, anharm_inten)
+                )
+        
+        self.anharm_data = []
+        for mode in sorted(fundamentals, key=lambda pair: pair[0]):
+            self.anharm_data.append(
+                self.AnharmonicData(mode[0], mode[1])
+            )
+        for overtone in overtones:
+            ndx = len(fundamentals) - overtone[0]
+            data = self.anharm_data[ndx]
+            data.overtones.append(self.AnharmonicData(overtone[2], overtone[3]))
+        for combo in combinations:
+            ndx1 = len(fundamentals) - combo[0]
+            ndx2 = len(fundamentals) - combo[1]
+            data = self.anharm_data[ndx1]
+            data.combinations[ndx2] = [self.AnharmonicData(combo[4], combo[5])]
+
     def sort_frequencies(self):
         self.imaginary_frequencies = []
         self.real_frequencies = []
@@ -2236,6 +2364,7 @@ class Frequency:
             voigt_mixing=0.5,
             linear_scale=0.0,
             quadratic_scale=0.0,
+            anharmonic=False,
     ):
         """
         returns arrays of x_values, y_values for an IR plot
@@ -2250,10 +2379,36 @@ class Frequency:
         quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
         """
         # scale frequencies
-        frequencies = np.array([freq.frequency for freq in self.data if freq.frequency > 0])
+        if anharmonic and self.anharm_data:
+            frequencies = []
+            intensities = []
+            for data in self.anharm_data:
+                frequencies.append(data.frequency)
+                intensities.append(data.intensity)
+                for overtone in data.overtones:
+                    frequencies.append(overtone.frequency)
+                    intensities.append(overtone.intensity)
+                for key in data.combinations:
+                    for combo in data.combinations[key]:
+                        frequencies.append(combo.frequency)
+                        intensities.append(combo.intensity)
+            frequencies = np.array(frequencies)
+            intensities = np.array(intensities)
+        else:
+            if anharmonic:
+                self.LOG.warning(
+                    "plot of anharmonic frequencies requested but no anharmonic data"
+                    "is present"
+                )
+            frequencies = np.array(
+                [freq.frequency for freq in self.data if freq.frequency > 0]
+            )
+            intensities = [
+                freq.intensity for freq in self.data if freq.frequency > 0
+            ]
+
         frequencies -= linear_scale * frequencies + quadratic_scale * frequencies ** 2
-        intensities = [freq.intensity for freq in self.data if freq.frequency > 0]
-        
+
         if point_spacing:
             x_values = []
             x = -point_spacing

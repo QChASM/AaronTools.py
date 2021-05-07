@@ -55,7 +55,7 @@ pg_parser.add_argument(
 )
 
 pg_parser.add_argument(
-    "-a", "--angle-tolerance",
+    "-a", "--axis-tolerance",
     default=0.01,
     type=float,
     dest="rotation_tolerance",
