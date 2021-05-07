@@ -88,6 +88,26 @@ class Config(configparser.ConfigParser):
         "metadata",
     ]
 
+    @classmethod
+    def _process_content(cls, filename, quiet=True):
+        """
+        process file content to handle optional default section header
+        """
+        contents = filename
+        if os.path.isfile(filename):
+            try:
+                with open(filename) as f:
+                    contents = f.read()
+            except Exception as e:
+                if not quiet:
+                    cls.LOG.INFO("failed to read %s: %s", filename, e)
+                return ""
+        try:
+            configparser.ConfigParser().read_string(contents)
+        except configparser.MissingSectionHeaderError:
+            contents = "[DEFAULT]\n" + contents
+        return contents
+
     def __init__(
         self, infile=None, quiet=False, skip_user_default=False, **kwargs
     ):
@@ -122,7 +142,6 @@ class Config(configparser.ConfigParser):
                     option = option.split(".")
                     option[0] = option[0].lower()
                     option = ".".join(option)
-                    print(option)
                     self[section][option] = value
                     continue
                 if section == "Geometry" and "structure" in value.lower():
@@ -188,6 +207,10 @@ class Config(configparser.ConfigParser):
 
     def copy(self):
         config = Config(infile=None, quiet=True)
+        for section in config.sections():
+            config.remove_section(section)
+        for option in list(config["DEFAULT"].keys()):
+            config.remove_option("DEFAULT", option)
         for section in ["DEFAULT"] + self.sections():
             try:
                 config.add_section(section)
@@ -359,31 +382,7 @@ class Config(configparser.ConfigParser):
         return out
 
     def read(self, filename, quiet=True):
-        is_string = False
-        try:
-            # if infile is multi-line, it's probably a string and not a file name
-            if len(filename.splitlines()) > 1:
-                is_string = True
-                self.read_string(filename)
-            else:
-                success = super().read(filename)
-                if not quiet and len(success) == 0:
-                    try:
-                        with open(filename) as f:
-                            f.readline()
-                    except Exception as e:
-                        raise Exception(
-                            "failed to read %s\n%s" % (filename, e)
-                        ) from e
-        except configparser.MissingSectionHeaderError:
-            # add global options to default section
-            if is_string:
-                contents = filename
-            else:
-                with open(filename) as f:
-                    contents = f.read()
-            contents = "[DEFAULT]\n" + contents
-            self.read_string(contents)
+        self.read_string(self._process_content(filename, quiet=quiet))
 
     def _read_config(self, infile, quiet, skip_user_default):
         """
@@ -397,6 +396,7 @@ class Config(configparser.ConfigParser):
         if infile:
             filenames += [infile]
         local_only = False
+        job_include = None
         for i, filename in enumerate(filenames):
             if not quiet:
                 if os.path.isfile(filename):
@@ -404,12 +404,24 @@ class Config(configparser.ConfigParser):
                 else:
                     print("    ✗", end="  ")
                 print(filename)
-            self.read(filename, quiet=quiet)
+            content = self._process_content(filename)
+            self.read(content, quiet=quiet)
+            job_include = self.get("Job", "include", fallback=job_include)
+            if filename != infile:
+                self.remove_option("Job", "include")
             # local_only can only be overridden at the user level if "False" in the system config file
             if i == 0:
                 local_only = self["DEFAULT"].getboolean("local_only")
             elif local_only:
                 self["DEFAULT"]["local_only"] = str(local_only)
+        if "Job" in self:
+            type_spec = [
+                re.search("(?<!_)type", option) for option in self["Job"]
+            ]
+        else:
+            type_spec = []
+        if not any(type_spec):
+            self.set("Job", "include", job_include)
 
     def get_other_kwargs(self, section="Theory"):
         """
