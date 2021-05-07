@@ -22,9 +22,9 @@ class SymmetryElement:
         coords = coords - self.translation
         coords = np.matmul(coords, self.operation)
         coords += self.translation
-        
+
         return coords
-    
+
     def error(self, geom, tolerance=None, groups=None):
         """error in this symmetry element for the given geometry"""
         coords = geom.coords
@@ -42,7 +42,6 @@ class SymmetryElement:
         #             )
         #         f.write(s)
 
-        distances = dict()
         if groups is not None:
             group_names = groups
         else:
@@ -56,7 +55,7 @@ class SymmetryElement:
             perp_dist = self.perp_dist(coords1)
             # treat values less than 1 as 1 to avoid numerical nonsense
             perp_dist = np.maximum(perp_dist, np.ones(len(ndx)))
-        
+
             error_mat = dist_mat / perp_dist
             min_d = max(np.min(error_mat, axis=1))
             if min_d > error:
@@ -71,7 +70,7 @@ class Identity(SymmetryElement):
 
     def __repr__(self):
         return "E"
-    
+
     def __lt__(self, other):
         return False
 
@@ -89,7 +88,7 @@ class ProperRotation(SymmetryElement):
         self.axis = axis
         self.n = n
         self.exp = exp
-    
+
     def __repr__(self):
         if self.exp > 1:
             return "C%i^%i (%5.2f %5.2f %5.2f)" % (
@@ -101,7 +100,7 @@ class ProperRotation(SymmetryElement):
             self.n,
             *self.axis,
         )
-    
+
     def __lt__(self, other):
         if isinstance(other, Identity) or isinstance(other, InversionCenter):
             return False
@@ -110,7 +109,7 @@ class ProperRotation(SymmetryElement):
                 return self.exp > other.exp
             return self.n < other.n
         return False
-    
+
     def perp_dist(self, coords):
         v = coords - self.translation
         n = np.dot(v, self.axis)
@@ -125,13 +124,13 @@ class MirrorPlane(SymmetryElement):
         self.translation = center
         self.axis = axis
         self.operation = mirror_matrix(axis)
-    
+
     def __repr__(self):
         return "sigma (%5.2f %5.2f %5.2f)" % tuple(self.axis)
-    
+
     def __lt__(self, other):
         return True
-    
+
     def perp_dist(self, coords):
         v = coords - self.translation
         return np.dot(v, self.axis[:, None]).flatten()
@@ -153,7 +152,7 @@ class InversionCenter(SymmetryElement):
         return "i (%.2f %.2f %.2f)" % (
             *self.translation,
         )
-    
+
     def perp_dist(self, coords):
         v = coords - self.translation
         return np.linalg.norm(v, axis=1)
@@ -175,7 +174,7 @@ class ImproperRotation(SymmetryElement):
         self.translation = center
         self.n = n
         self.exp = exp
-    
+
     def __repr__(self):
         if self.exp > 1:
             return "S%i^%i (%5.2f %5.2f %5.2f)" % (
@@ -187,7 +186,7 @@ class ImproperRotation(SymmetryElement):
             self.n,
             *self.axis,
         )
-    
+
     def __lt__(self, other):
         if (
                 isinstance(other, Identity) or
@@ -200,23 +199,23 @@ class ImproperRotation(SymmetryElement):
                 return self.exp > other.exp
             return self.n < other.n
         return False
-    
+
     def perp_dist(self, coords):
         v = coords - self.translation
         n = np.dot(v, self.axis)
         p = np.outer(n, self.axis)
         ax_dist = np.linalg.norm(v - p, axis=1)
-        
+
         sig_dist = np.dot(v, self.axis[:, None]).flatten()
-    
+
         return np.minimum(ax_dist, sig_dist)
 
 
 @addlogger
 class PointGroup:
-    
+
     LOG = None
-    
+
     def __init__(
             self,
             geom,
@@ -252,12 +251,12 @@ class PointGroup:
         """
         CITATION = "doi:10.1002/jcc.22995"
         self.LOG.citation(CITATION)
-        
+
         moments, axes = geom.get_principle_axes()
         axes = axes.T
-    
+
         valid = [Identity()]
-        
+
         degeneracy = np.ones(3, dtype=int)
         for i, m1 in enumerate(moments):
             for j, m2 in enumerate(moments):
@@ -267,45 +266,53 @@ class PointGroup:
                     degeneracy[i] += 1
 
         com = self.center
-        
+
         inver = InversionCenter(com)
         error = inver.error(geom, tolerance)
         if error <= tolerance:
             valid.append(inver)
-    
+
         if any(np.isclose(m, 0) for m in moments):
             return valid
-    
+
         ortho_to = []
         for vec, degen in zip(axes, degeneracy):
             if any(d > 1 for d in degeneracy) and degen == 1:
                 ortho_to.append(vec)
             elif all(d == 1 for d in degeneracy):
                 ortho_to.append(vec)
-    
+
         # find vectors from COM to each atom
         # these might be proper rotation axes
         atom_axes = geom.coords - com
-        norms = np.linalg.norm(atom_axes, axis=1)
-        # don't want axis for an atom that is at the COM (0-vector)
-        atom_axes = np.take(atom_axes, np.nonzero(norms), axis=0)[0]
-        
+
         # atoms are grouped based on what they are bonded to
         atom_ids = np.array([a.get_neighbor_id() for a in geom.atoms])
-        atom_ids = np.take(atom_ids, np.nonzero(norms)).flatten()
-    
-        # normalize
-        norms = np.take(norms, np.nonzero(norms))
-        atom_axes /= norms.T
+
+        # find vectors normal to each pair of atoms
+        # these might be normal to a miror plane
+        atom_pair_norms = []
+        for i, v in enumerate(atom_axes):
+            dv = atom_axes - v
+            c2 = np.linalg.norm(dv, axis=1) ** 2
+            angles = np.arccos(-0.5 * (c2 - 2))
+            mask2 = angles < rotation_tolerance
+            mask3 = angles > np.pi - rotation_tolerance
+            mask = np.invert(np.logical_or(mask2, mask3))
+            
+            pair_n = np.cross(v, atom_axes[mask])
+            norms = np.linalg.norm(pair_n, axis=1)
+            pair_n = np.take(pair_n, np.nonzero(norms), axis=0)[0]
+            norms = np.take(norms, np.nonzero(norms), axis=0)
+            pair_n /= norms.T
+            atom_pair_norms.extend(pair_n.tolist())
+        
+        atom_pair_norms = np.array(atom_pair_norms)
 
         # find vectors to the midpoints between each
         # pair of like atoms
         # these might be proper rotations
         atom_pairs = []
-        
-        # find vectors normal to each pair of atoms
-        # these might be normal to a miror plane
-        atom_pair_norms = []
         for atom_id in set(atom_ids):
             ndx = (atom_ids == atom_id).nonzero()[0]
             subset_axes = np.take(atom_axes, ndx, axis=0)
@@ -318,18 +325,16 @@ class PointGroup:
                 norms = np.take(norms, np.nonzero(norms), axis=0)
                 pair_v /= norms.T
                 atom_pairs.extend(pair_v.tolist())
-    
-                mask = np.ones(len(subset_axes), dtype=bool)
-                mask[i] = False
-                pair_n = np.cross(v, subset_axes[mask])
-                norms = np.linalg.norm(pair_n, axis=1)
-                pair_n = np.take(pair_n, np.nonzero(norms), axis=0)[0]
-                norms = np.take(norms, np.nonzero(norms), axis=0)
-                pair_n /= norms.T
-                atom_pair_norms.extend(pair_n.tolist())
-    
+
         atom_pairs = np.array(atom_pairs)
-        atom_pair_norms = np.array(atom_pair_norms)
+        
+        norms = np.linalg.norm(atom_axes, axis=1)
+        # don't want axis for an atom that is at the COM (0-vector)
+        atom_axes = np.take(atom_axes, np.nonzero(norms), axis=0)[0]
+
+        # normalize
+        norms = np.take(norms, np.nonzero(norms))
+        atom_axes /= norms.T
 
         # s = ""
         # for v in atom_pair_norms:
@@ -338,7 +343,7 @@ class PointGroup:
         #     s += "%f %f %f\n" % tuple(end)
         # with open("test2.bild", "w") as f:
         #     f.write(s)
-    
+
         # remove parallel/antiparallel axes for single atoms
         mask = np.ones(len(atom_axes), dtype=bool)
         for i, v in enumerate(atom_axes):
@@ -352,7 +357,7 @@ class PointGroup:
             mask *= np.invert(np.logical_or(mask2, mask3))
 
         atom_axes = atom_axes[mask]
-    
+
         # remove parallel/antiparallel axes for pairs of atoms
         mask = np.ones(len(atom_pairs), dtype=bool)
         for i, v in enumerate(atom_pairs):
@@ -366,9 +371,9 @@ class PointGroup:
             mask4 = np.invert(np.logical_or(mask2, mask3))
             mask[:i] *= mask4[:i]
             mask[i + 1:] *= mask4[i:]
-        
+
         atom_pairs = atom_pairs[mask]
-        
+
         # remove parallel/antiparallel norms for pairs of atoms
         mask = np.ones(len(atom_pair_norms), dtype=bool)
         for i, v in enumerate(atom_pair_norms):
@@ -382,7 +387,7 @@ class PointGroup:
             mask4 = np.invert(np.logical_or(mask2, mask3))
             mask[:i] *= mask4[:i]
             mask[i + 1:] *= mask4[i:]
-        
+
         atom_pair_norms = atom_pair_norms[mask]
 
         # s = ""
@@ -392,7 +397,7 @@ class PointGroup:
         #     s += "%f %f %f\n" % tuple(end)
         # with open("test2.bild", "w") as f:
         #     f.write(s)
-    
+
         if len(atom_pairs):
             # remove axes for pairs of atoms that are parallel/antiparallel
             # to axes for single atoms
@@ -404,9 +409,9 @@ class PointGroup:
                 mask2 = angles < rotation_tolerance
                 mask3 = angles > np.pi - rotation_tolerance
                 mask *= np.invert(np.logical_or(mask2, mask3))
-        
+
             atom_pairs = atom_pairs[mask]
-        
+
         if len(atom_pair_norms):
             # remove norms for pairs of atoms that are parallel/antiparallel
             # to axes for single atoms
@@ -418,7 +423,7 @@ class PointGroup:
                 mask2 = angles < rotation_tolerance
                 mask3 = angles > np.pi - rotation_tolerance
                 mask *= np.invert(np.logical_or(mask2, mask3))
-            
+
             atom_pair_norms = atom_pair_norms[mask]
 
         # s = ""
@@ -428,7 +433,7 @@ class PointGroup:
         #     s += "%f %f %f\n" % tuple(end)
         # with open("test2.bild", "w") as f:
         #     f.write(s)
-    
+
         # remove axes for single atoms that are parallel/antiparallel
         # to moment of inertia axes
         mask = np.ones(len(atom_axes), dtype=bool)
@@ -439,9 +444,9 @@ class PointGroup:
             mask2 = angles < rotation_tolerance
             mask3 = angles > np.pi - rotation_tolerance
             mask *= np.invert(np.logical_or(mask2, mask3))
-        
+
         atom_axes = atom_axes[mask]
-    
+
         # remove axes for pairs of atoms that are parallel/antiparallel
         # to moment of inertia axes
         if len(atom_pairs):
@@ -453,9 +458,9 @@ class PointGroup:
                 mask2 = angles < rotation_tolerance
                 mask3 = angles > np.pi - rotation_tolerance
                 mask *= np.invert(np.logical_or(mask2, mask3))
-            
+
             atom_pairs = atom_pairs[mask]
-        
+
         # remove norms for pairs of atoms that are parallel/antiparallel
         # to moment of inertia axes
         if len(atom_pair_norms):
@@ -467,9 +472,9 @@ class PointGroup:
                 mask2 = angles < rotation_tolerance
                 mask3 = angles > np.pi - rotation_tolerance
                 mask *= np.invert(np.logical_or(mask2, mask3))
-            
+
             atom_pair_norms = atom_pair_norms[mask]
-    
+
         # s = ""
         # for v in atom_pair_norms:
         #     s += ".arrow   %f %f %f   " % tuple(com)
@@ -477,7 +482,7 @@ class PointGroup:
         #     s += "%f %f %f\n" % tuple(end)
         # with open("test2.bild", "w") as f:
         #     f.write(s)
-    
+
         # remove axes that are not orthogonal to moments of inertia axes
         if ortho_to:
             mask = np.ones(len(atom_axes), dtype=bool)
@@ -507,7 +512,7 @@ class PointGroup:
                     angles = np.arccos(-0.5 * (c2 - 2))
                     pair_mask = abs(angles - np.pi / 2) < rotation_tolerance
                     atom_pair_norms = atom_pair_norms[pair_mask]
-            
+        
             atom_axes = atom_axes[mask]
 
         # s = ""
@@ -562,7 +567,7 @@ class PointGroup:
                     elif exp == 1:
                         # can't have Cn^y if you don't have Cn
                         break
-    
+
         if degeneracy[0] == 3:
             # spherical top molecules need more checks related to C2 axes
             c2_axes = list(
@@ -590,7 +595,7 @@ class PointGroup:
                     else:
                         # O, I groups - check cross product
                         axes.append(np.cross(c2_1.axis, c2_2.axis))
-                    
+
                     for axis in axes:
                         norm = np.linalg.norm(axis)
                         if norm < 1e-5:
@@ -599,7 +604,7 @@ class PointGroup:
                         dup = False
                         for element in valid:
                             if isinstance(element, ProperRotation):
-                                if 1 - abs(np.dot(element.axis, axis)) < rotation_tolerance: 
+                                if 1 - abs(np.dot(element.axis, axis)) < rotation_tolerance:
                                     dup = True
                                     break
                         if dup:
@@ -631,24 +636,24 @@ class PointGroup:
         for element in valid:
             if not isinstance(element, ProperRotation):
                 continue
-            
+
             if element.exp != 1:
                 continue
-    
+
             for x in [1, 2]:
                 if x * element.n == 2:
                     # S2 is inversion - we already checked i
                     continue
-                    
+
                 for exp in range(1, 1 + (x * element.n) // 2):
                     if exp > 1 and (x * element.n) % exp == 0:
                         continue
-    
+
                     for element2 in valid:
                         if isinstance(element2, ImproperRotation):
                             angle = angle_between_vectors(element2.axis, element.axis)
                             if (
-                                    element2.exp == exp and 
+                                    element2.exp == exp and
                                     (
                                         angle < rotation_tolerance or
                                         angle > (np.pi - rotation_tolerance)
@@ -657,16 +662,16 @@ class PointGroup:
                             ):
                                 break
                     else:
-    
+
                         imp_rot = ImproperRotation(
                             element.translation,
                             element.axis,
                             x * element.n,
                             exp,
                         )
-                
+
                         error = imp_rot.error(geom, tolerance, groups=atom_ids)
-                
+
                         if error <= tolerance:
                             valid.append(imp_rot)
                             rot2 = ImproperRotation(
@@ -676,7 +681,7 @@ class PointGroup:
                                 exp
                             )
                             valid.append(rot2)
-    
+
                         elif exp == 1:
                             break
 
@@ -686,10 +691,14 @@ class PointGroup:
                 valid,
             )
         )
-    
+
         # mirror axes
         # for I, O - only check c2 axes
-        if degeneracy[0] != 3 or len(c2_axes) == 3:
+        if (
+                degeneracy[0] != 3 or
+                not c2_axes or
+                (degeneracy[0] == 3 and len(c2_axes) == 3)
+        ):
             if len(atom_pair_norms):
                 mask = np.ones(len(atom_pair_norms), dtype=bool)
                 for i, v in enumerate(axes):
@@ -699,9 +708,9 @@ class PointGroup:
                     mask2 = angles < rotation_tolerance
                     mask3 = angles > np.pi - rotation_tolerance
                     mask *= np.invert(np.logical_or(mask2, mask3))
-                
+
                 atom_pair_norms = atom_pair_norms[mask]
-                
+
                 mask = np.ones(len(atom_pair_norms), dtype=bool)
                 for i, v in enumerate(check_axes):
                     dv = atom_pair_norms - v
@@ -710,7 +719,7 @@ class PointGroup:
                     mask2 = angles < rotation_tolerance
                     mask3 = angles > np.pi - rotation_tolerance
                     mask *= np.invert(np.logical_or(mask2, mask3))
-                
+
                 atom_pair_norms = atom_pair_norms[mask]
 
             if check_axes:
@@ -723,7 +732,7 @@ class PointGroup:
                     mask2 = angles < rotation_tolerance
                     mask3 = angles > np.pi - rotation_tolerance
                     mask *= np.invert(np.logical_or(mask2, mask3))
-                
+
                 check_axes = check_axes[mask]
 
                 mask = np.ones(len(check_axes), dtype=bool)
@@ -734,7 +743,7 @@ class PointGroup:
                     mask2 = angles < rotation_tolerance
                     mask3 = angles > np.pi - rotation_tolerance
                     mask *= np.invert(np.logical_or(mask2, mask3))
-                
+
                 check_axes = check_axes[mask]
 
             args = tuple(
@@ -753,7 +762,7 @@ class PointGroup:
                 error = mirror.error(geom, tolerance, groups=atom_ids)
                 if error <= tolerance:
                     valid.append(mirror)
-    
+
         # s = ""
         # colors = ["black", "red", "blue", "green", "purple", "yellow", "cyan"]
         # for element in valid:
@@ -767,10 +776,10 @@ class PointGroup:
         #         s += ".arrow %f %f %f    " % tuple(com)
         #         end = com + 2 * element.axis
         #         s += "%f %f %f\n" % tuple(end)
-        # 
+        #
         # with open("test.bild", "w") as f:
         #     f.write(s)
-    
+
         return valid
 
     def determine_point_group(self, rotation_tolerance=0.01):
@@ -778,20 +787,20 @@ class PointGroup:
         determines point group of self by looing at self.elements
         rotation_tolerance - tolerance in radians for axes to be
         considered parallel/antiparallel/orthogonal
-        
+
         returns str for point group name
         """
         moments, axes = self.geom.get_principle_axes()
         linear = False
         if any(np.isclose(m, 0) for m in moments):
             linear = True
-        
+
         if linear:
             if any(isinstance(ele, InversionCenter) for ele in self.elements):
                 return "D_inf_h"
             else:
                 return "C_inf_v"
-        
+
         Cn = dict()
         has_inversion = False
         has_mirror = False
@@ -804,7 +813,7 @@ class PointGroup:
                 has_inversion = True
             if isinstance(ele, MirrorPlane):
                 has_mirror = True
-        
+
         for n in sorted(Cn.keys(), reverse=True):
             if len(Cn[n]) > 2 and n != 2:
                 if any(isinstance(ele, InversionCenter) for ele in self.elements):
@@ -812,11 +821,11 @@ class PointGroup:
                         if has_inversion:
                             return "Ih"
                         return "I"
-                    
+
                     if has_inversion:
                         return "Oh"
                     return "O"
-                
+
                 if not has_mirror:
                     return "T"
                 if has_inversion:
@@ -826,10 +835,10 @@ class PointGroup:
         if Cn:
             has_sig_h = False
             n_sig_v = 0
-            
+
             max_n = max(Cn.keys())
             prin_ax = Cn[max_n][0]
-            
+
             for ele in self.elements:
                 if isinstance(ele, MirrorPlane):
                     angle = angle_between_vectors(
@@ -838,7 +847,7 @@ class PointGroup:
                     if angle < rotation_tolerance or abs(np.pi - angle) < rotation_tolerance:
                         has_sig_h = True
                         continue
-                    
+
                     if abs(angle - np.pi / 2) < rotation_tolerance:
                         n_sig_v += 1
 
@@ -859,25 +868,25 @@ class PointGroup:
 
                 if n_sig_v == max_n:
                     return "D%id" % max_n
-                
+
                 return "D%i" % max_n
-            
+
             if has_sig_h:
                 return "C%ih" % max_n
-            
+
             if n_sig_v == max_n:
                 return "C%iv" % max_n
-            
+
             for ele in self.elements:
                 if isinstance(ele, ImproperRotation) and ele.n == 2 * max_n:
                     return "S%i" % (2 * max_n)
-            
+
             return "C%i" % max_n
-            
+
         if has_mirror:
             return "Cs"
-        
+
         if has_inversion:
             return "Ci"
-        
+
         return "C1"

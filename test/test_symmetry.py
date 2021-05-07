@@ -10,8 +10,10 @@ class TestFinder(TestWithTimer):
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
     c60 = os.path.join(prefix, "test_files", "c60.xyz")
     adamantane = os.path.join(prefix, "test_files", "adamantane.xyz")
+    methane = os.path.join(prefix, "test_files", "methane.xyz")
     c3h4 = os.path.join(prefix, "test_files", "c3h4.xyz")
     h2o = os.path.join(prefix, "test_files", "h2o.xyz")
+    meoh = os.path.join(prefix, "test_files", "MeOH.xyz")
 
     chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
     chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
@@ -25,6 +27,13 @@ class TestFinder(TestWithTimer):
         pg = PointGroup(mol)
         
         self.assertEqual(pg.name, "D6h")
+
+    def test_Cs(self):
+        # test to see if interpolated geometry is correct
+        mol = Geometry(self.meoh, refresh_ranks=False)
+        pg = PointGroup(mol)
+        
+        self.assertEqual(pg.name, "Cs")
 
     def test_C1(self):
         mol1 = Geometry(self.chiral_ring, refresh_ranks=False)
@@ -63,6 +72,11 @@ class TestFinder(TestWithTimer):
         pg = PointGroup(mol)
         
         self.assertEqual(pg.name, "Td")
+        
+        mol = Geometry(self.methane, refresh_ranks=False)
+        pg = PointGroup(mol)
+        
+        self.assertEqual(pg.name, "Td")
 
     def test_D2d(self):
         mol = Geometry(self.c3h4, refresh_ranks=False)
@@ -80,6 +94,7 @@ class TestFinder(TestWithTimer):
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(TestFinder("test_D6h"))
+    suite.addTest(TestFinder("test_Cs"))
     suite.addTest(TestFinder("test_C1"))
     suite.addTest(TestFinder("test_Ih"))
     suite.addTest(TestFinder("test_Td"))

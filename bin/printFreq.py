@@ -11,28 +11,79 @@ def main(args):
                 continue
             s += "%s\t" % x
         print(s)
-    for i, data in enumerate(sorted(fr.other["frequency"].data, key=lambda x: x.frequency)):
-        if args.type == "neg" and data.frequency > 0:
-            continue
-        if args.type == "pos" and data.frequency < 0:
-            continue
-        if isinstance(args.type, int) and i + 1 > args.type:
-            break
-        s = "%9.4f\t" % data.frequency
-        for x in args.show:
-            if x == "vector":
+    freq = fr.other["frequency"]
+    if not any((args.fundamentals, args.overtones, args.combinations)):
+        for i, data in enumerate(sorted(freq.data, key=lambda x: x.frequency)):
+            if args.type == "neg" and data.frequency > 0:
                 continue
-            val = getattr(data, x)
-            if isinstance(val, float):
-                s += "%9.4f\t" % val
-            else:
-                s += "%s\t" % str(val)
-        
-        print(s)
-        
-        if "vector" in args.show:
-            print(data.vector)
-            print()
+            if args.type == "pos" and data.frequency < 0:
+                continue
+            if isinstance(args.type, int) and i + 1 > args.type:
+                break
+            s = "%9.4f\t" % data.frequency
+            for x in args.show:
+                if x == "vector":
+                    continue
+                val = getattr(data, x)
+                if isinstance(val, float):
+                    s += "%9.4f\t" % val
+                else:
+                    s += "%s\t" % str(val)
+            
+            print(s)
+            
+            if "vector" in args.show:
+                print(data.vector)
+                print()
+    if freq.anharm_data:
+        for i, data in enumerate(sorted(freq.anharm_data, key=lambda x: x.frequency)):
+            if args.fundamentals:
+                s = "%9.4f\t" % data.frequency
+                for x in args.show:
+                    if not hasattr(data, x):
+                        continue
+                    val = getattr(data, x)
+                    if isinstance(val, float):
+                        s += "%9.4f\t" % val
+                    else:
+                        s += "%s\t" % str(val)
+                
+                print(s)
+            
+            if args.overtones:
+                for k, overtone in enumerate(data.overtones):
+                    s = "%i x %9.4f = %9.4f\t" % (
+                        (k + 2), data.frequency, overtone.frequency
+                    )
+                    for x in args.show:
+                        if not hasattr(overtone, x):
+                            continue
+                        val = getattr(overtone, x)
+                        if isinstance(val, float):
+                            s += "%9.4f\t" % val
+                        else:
+                            s += "%s\t" % str(val)
+                    
+                    print(s)
+            
+            if args.combinations:
+                for key in data.combinations:
+                    for combo in data.combinations[key]:
+                        s = "%9.4f + %9.4f = %9.4f\t" % (
+                            data.frequency,
+                            freq.anharm_data[key].frequency,
+                            combo.frequency,
+                        )
+                        for x in args.show:
+                            if not hasattr(combo, x):
+                                continue
+                            val = getattr(combo, x)
+                            if isinstance(val, float):
+                                s += "%9.4f\t" % val
+                            else:
+                                s += "%s\t" % str(val)
+
+                        print(s)
 
 
 if __name__ == "__main__":
@@ -62,6 +113,30 @@ if __name__ == "__main__":
         "Some info may not be available for certain file formats",
         choices=["intensity", "vector", "forcek", "symmetry"],
         default=[],
+    )
+    parser.add_argument(
+        "--fundamentals",
+        "-f",
+        action="store_true",
+        default=False,
+        dest="fundamentals",
+        help="print anharmonic fundamental frequencies for files with anharmonic data",
+    )
+    parser.add_argument(
+        "--overtone-bands",
+        "-ob",
+        action="store_true",
+        default=False,
+        dest="overtones",
+        help="print overtone frequencies for files with anharmonic data",
+    )
+    parser.add_argument(
+        "--combination-bands",
+        "-cb",
+        action="store_true",
+        default=False,
+        dest="combinations",
+        help="print combination frequencies for files with anharmonic data",
     )
     args = parser.parse_args()
     try:

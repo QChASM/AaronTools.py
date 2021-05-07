@@ -43,6 +43,18 @@ ir_parser.add_argument(
     help="type of plot\nDefault: transmittance",
 )
 
+
+# TODO: figure out more anharmonic options
+# anharmonic_options = ir_parser.add_argument_group("anharmonic options")
+ir_parser.add_argument(
+    "-na", "--harmonic",
+    action="store_false",
+    default=True,
+    dest="anharmonic",
+    help="force to use harmonic frequencies when anharmonic data is in the file",
+)
+
+
 peak_options = ir_parser.add_argument_group("peak options")
 peak_options.add_argument(
     "-p", "--peak-type",
@@ -181,6 +193,7 @@ for f in glob_files(args.infiles):
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
+        anharmonic=freq.anharm_data and args.anharmonic,
     )
 
     if args.fig_width:
