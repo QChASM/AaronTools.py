@@ -319,14 +319,16 @@ class Config(configparser.ConfigParser):
             ppn = 4
             memory = %{ $ppn * 2 }GB --> memory = 8GB
         """
-        func_patt = re.compile("%{(.*?)}")
+        func_patt = re.compile("(%{(.*?)})")
         attr_patt = re.compile("\$([a-zA-Z0-9_:]+)")
         for section in ["DEFAULT"] + self.sections():
             # evaluate functions
             for key, val in self[section].items():
-                for match in func_patt.findall(val):
-                    eval_match = match
-                    for attr in attr_patt.findall(match):
+                match_list = func_patt.findall(val)
+                while match_list:
+                    match = match_list.pop()
+                    eval_match = match[1]
+                    for attr in attr_patt.findall(match[1]):
                         if ":" in attr:
                             from_section, option = attr.split(":")
                         else:
@@ -342,9 +344,13 @@ class Config(configparser.ConfigParser):
                             )
                         )
                     except (NameError, SyntaxError):
-                        eval_match = eval_match.strip()
-                    val = val.replace("%{" + match + "}", str(eval_match))
+                        if attr_patt.findall(eval_match):
+                            eval_match = "%{" + eval_match.strip() + "}"
+                        else:
+                            eval_match = eval_match.strip()
+                    val = val.replace(match[0], str(eval_match))
                     self[section][key] = val
+                    match_list = func_patt.findall(val)
 
     def getlist(self, section, option, *args, delim=",", **kwargs):
         """returns a list of option values by splitting on the delimiter specified by delim"""
