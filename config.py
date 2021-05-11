@@ -597,7 +597,7 @@ class Config(configparser.ConfigParser):
                         theory.geometry.freeze()
                         theory.geometry.relax(self._changed_list)
                     elif "constrain" in job_type[1]:
-                        self.get_constraints(theory.geometry)
+                        constraints = self.get_constraints(theory.geometry)
                     elif "ts" == job_type[1]:
                         ts = True
 
