@@ -540,7 +540,8 @@ class PointGroup:
                     # divisible by all other coincident axes
                     continue
                 # look for C5^2 stuff
-                for exp in range(1, 1 + n // 2):
+                # for exp in range(1, 1 + n // 2):
+                for exp in range(1, 2):
                     if exp > 1 and n % exp == 0:
                         # skip things like C4^2 b/c that's just C2
                         continue
@@ -613,7 +614,8 @@ class PointGroup:
                         for n in range(max_rotation, 1, -1):
                             if max_n and max_n % n != 0:
                                 continue
-                            for exp in range(1, 1 + n // 2):
+                            # for exp in range(1, 1 + n // 2):
+                            for exp in range(1, 2):
                                 if exp > 1 and n % exp == 0:
                                     continue
                                 rot = ProperRotation(com, axis, n, exp)
@@ -645,7 +647,8 @@ class PointGroup:
                     # S2 is inversion - we already checked i
                     continue
 
-                for exp in range(1, 1 + (x * element.n) // 2):
+                # for exp in range(1, 1 + (x * element.n) // 2):
+                for exp in range(1, 2):
                     if exp > 1 and (x * element.n) % exp == 0:
                         continue
 

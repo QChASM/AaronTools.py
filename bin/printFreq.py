@@ -111,7 +111,9 @@ if __name__ == "__main__":
         nargs="*",
         help="Specify what additional information to show\n"
         "Some info may not be available for certain file formats",
-        choices=["intensity", "vector", "forcek", "symmetry"],
+        choices=["intensity", "vector", "forcek",
+        "symmetry", "delta_anh", "harmonic_frequency",
+        "harmonic_intensity"],
         default=[],
     )
     parser.add_argument(

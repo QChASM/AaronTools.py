@@ -1997,10 +1997,12 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
 
+
     class AnharmonicData:
         """
         ATTRIBUTES
         :frequency: float
+        :harmonic: Data() or None
         :intensity: float
         :overtones: list(AnharmonicData)
         :combinations: dict(int: AnharmonicData)
@@ -2010,14 +2012,26 @@ class Frequency:
             self,
             frequency,
             intensity,
+            harmonic,
         ):
             self.frequency = frequency
+            self.harmonic = harmonic
+            if harmonic:
+                self.delta_anh = frequency - harmonic.frequency
             self.intensity = intensity
             self.overtones = []
             self.combinations = dict()
         
         def __lt__(self, other):
             return self.frequency < other.frequency
+
+        @property
+        def harmonic_frequency(self):
+            return self.harmonic.frequency
+
+        @property
+        def harmonic_intensity(self):
+            return self.harmonic.intensity
 
 
     def __init__(self, data, hpmodes=None, style="log", harmonic=True):
@@ -2298,43 +2312,56 @@ class Frequency:
                 exp_1 = int(mode1.group(2))
                 ndx_2 = int(mode2.group(1))
                 exp_2 = int(mode2.group(2))
+                harm_freq = float(info[2])
                 anharm_freq = float(info[3])
                 anharm_inten = float(info[4])
+                harm_inten = 0
                 combinations.append(
-                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq, anharm_inten)
+                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq,
+                    anharm_inten, harm_freq, harm_inten)
                 )
             elif reading_overtones:
                 info = line.split()
                 mode = mode_re.search(info[0])
                 ndx = int(mode.group(1))
                 exp = int(mode.group(2))
+                harm_freq = float(info[1])
                 anharm_freq = float(info[2])
                 anharm_inten = float(info[3])
+                harm_inten = 0
                 overtones.append(
-                    (ndx, exp, anharm_freq, anharm_inten)
+                    (ndx, exp, anharm_freq, anharm_inten, harm_freq, harm_inten)
                 )
             elif reading_fundamentals:
                 info = line.split()
+                harm_freq = float(info[1])
                 anharm_freq = float(info[2])
                 anharm_inten = float(info[4])
+                harm_inten = float(info[3])
                 fundamentals.append(
-                    (anharm_freq, anharm_inten)
+                    (anharm_freq, anharm_inten, harm_freq, harm_inten)
                 )
         
         self.anharm_data = []
-        for mode in sorted(fundamentals, key=lambda pair: pair[0]):
+        for i, mode in enumerate(sorted(fundamentals, key=lambda pair: pair[2])):
             self.anharm_data.append(
-                self.AnharmonicData(mode[0], mode[1])
+                self.AnharmonicData(mode[0], mode[1], harmonic=self.data[i])
             )
         for overtone in overtones:
             ndx = len(fundamentals) - overtone[0]
             data = self.anharm_data[ndx]
-            data.overtones.append(self.AnharmonicData(overtone[2], overtone[3]))
+            harm_data = self.Data(overtone[4], intensity=overtone[5])
+            data.overtones.append(
+                self.AnharmonicData(overtone[2], overtone[3], harmonic=harm_data)
+            )
         for combo in combinations:
             ndx1 = len(fundamentals) - combo[0]
             ndx2 = len(fundamentals) - combo[1]
             data = self.anharm_data[ndx1]
-            data.combinations[ndx2] = [self.AnharmonicData(combo[4], combo[5])]
+            harm_data = self.Data(combo[6], intensity=combo[7])
+            data.combinations[ndx2] = [
+                self.AnharmonicData(combo[4], combo[5], harmonic=harm_data)
+            ]
 
     def sort_frequencies(self):
         self.imaginary_frequencies = []
