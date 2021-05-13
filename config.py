@@ -134,7 +134,7 @@ class Config(configparser.ConfigParser):
                 "Results",
             ]:
                 continue
-            for option, value in self[section].items():
+            for option, value in list(self[section].items()):
                 if section == "Geometry" and option.lower().startswith(
                     "structure"
                 ):
