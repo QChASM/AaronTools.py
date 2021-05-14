@@ -1354,6 +1354,30 @@ class FileReader:
                     anharm_str.splitlines()
                 )
 
+            # X matrix for anharmonic
+            if "Total Anharmonic X Matrix" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                n_freq = len(self.other["frequency"].data)
+                n_sections = int(np.ceil(n_freq / 5))
+                x_matrix = np.zeros((n_freq, n_freq))
+                for section in range(0, n_sections):
+                    header = f.readline()
+                    n += 1
+                    for j in range(5 * section, n_freq):
+                        line = f.readline()
+                        n += 1
+                        ll = 5 * section
+                        ul = 5 * section + min(j - ll + 1, 5)
+                        x_matrix[j, ll:ul] = [
+                            float(x.replace("D", "e")) for x in line.split()[1:]
+                        ]
+                x_matrix += np.tril(x_matrix, k=-1).T
+                self.other["X_matrix"] = x_matrix
+
+            if "Total X0" in line:
+                self.other["X0"] = float(line.split()[5])
+
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(
@@ -2381,6 +2405,10 @@ class Frequency:
         else:
             self.lowest_frequency = None
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
+
+    @property
+    def real_anharmonic_frequencies(self):
+        return [mode.frequency for mode in self.anharm_data if mode.frequency > 0]
 
     def get_ir_data(
             self,

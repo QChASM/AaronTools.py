@@ -53,7 +53,13 @@ class CompOutput:
     LOG = None
     LOGLEVEL = "debug"
 
-    def __init__(self, fname="", get_all=True, freq_name=None, conf_name=None):
+    def __init__(
+        self,
+        fname="",
+        get_all=True,
+        freq_name=None,
+        conf_name=None,
+    ):
         self.geometry = None
         self.opts = None
         self.opt_steps = None
@@ -158,11 +164,17 @@ class CompOutput:
 
         return rv.rstrip()
 
-    def calc_zpe(self):
+    def calc_zpe(self, anharmonic=False):
         """returns ZPVE correction"""
         hc = PHYSICAL.PLANCK * PHYSICAL.SPEED_OF_LIGHT / UNIT.HART_TO_JOULE
-        vib = sum(self.frequency.real_frequencies)
-        zpve = 0.5 * hc * vib
+        if anharmonic:
+            vib = sum(self.frequency.real_frequencies)
+            x = np.tril(self.other["X_matrix"]).sum()
+            x0 = self.other["X0"]
+            zpve = hc * (0.5 * vib + 0.25 * x + x0)
+        else:
+            vib = sum(self.frequency.real_frequencies)
+            zpve = 0.5 * hc * vib
         return zpve
 
     def therm_corr(self, temperature=None, v0=100, method="RRHO"):
@@ -306,7 +318,7 @@ class CompOutput:
 
         return Ecorr, Hcorr, Stot
 
-    def calc_G_corr(self, temperature=None, v0=0, method="RRHO"):
+    def calc_G_corr(self, temperature=None, v0=0, method="RRHO", **kwargs):
         """
         returns quasi rrho free energy correction (Eh)
         temperature: float, temperature; default is self.temperature
@@ -314,13 +326,13 @@ class CompOutput:
         method: str (RRHO, QRRHO, QHARM) method for treating entropy
                 see CompOutput.therm_corr for references
         """
-        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method)
+        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method, **kwargs)
         T = temperature if temperature is not None else self.temperature
         Gcorr_qRRHO = Hcorr - T * Stot
 
         return Gcorr_qRRHO
 
-    def calc_Grimme_G(self, temperature=None, v0=100):
+    def calc_Grimme_G(self, temperature=None, v0=100, **kwargs):
         """
         returns quasi rrho free energy (Eh)
         see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
@@ -328,7 +340,7 @@ class CompOutput:
         18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
         """
         Gcorr_qRRHO = self.calc_G_corr(
-            temperature=temperature, v0=v0, method=self.QUASI_RRHO
+            temperature=temperature, v0=v0, method=self.QUASI_RRHO, **kwargs
         )
         return Gcorr_qRRHO + self.energy
 
@@ -447,10 +459,12 @@ class CompOutput:
         return geom
 
     def compute_rot_temps(self):
-        """sets self's 'rotational_temperature' attribute by using self.geometry
+        """
+        sets self's 'rotational_temperature' attribute by using self.geometry
         not recommended b/c atoms should be specific isotopes, but this uses
         average atomic weights
-        exists because older versions of ORCA don't print rotational temperatures"""
+        exists because older versions of ORCA don't print rotational temperatures
+        """
         COM = self.geometry.COM(mass_weight=True)
         self.geometry.coord_shift(-COM)
         inertia_mat = np.zeros((3, 3))

@@ -105,6 +105,7 @@ thermo_parser.add_argument(
     help="search subdirectories of current directory for files matching PATTERN"
 )
 
+
 args = thermo_parser.parse_args()
 
 if args.csv is None:
@@ -120,14 +121,19 @@ if args.csv:
     elif args.csv == "space":
         delim = " "
 
-    output = delim.join([
+    anharm_header = delim.join([
+        "E", "E+ZPE", "E+ZPE(anh)", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)",
+        "ZPE", "ZPE(anh)", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
+        "SP_File", "Thermo_File"
+    ])
+    harm_header = delim.join([
         "E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)",
         "ZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
         "SP_File", "Thermo_File"
     ])
-    output += "\n"
-else:
-    output = ""
+
+header = None
+output = ""
 
 if args.pattern is None:
     infiles = glob_files(args.infile)
@@ -199,7 +205,14 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
                     "when no input file is given, stdin is read and a format must be specified"
                 )
 
-    co = CompOutput(infile)
+    if "frequency" not in infile.other:
+        warn("no frequencies in %s - skipping" % f)
+        continue
+    freq = infile.other["frequency"]
+
+    co = CompOutput(
+        infile,
+    )
 
     if sp_nrg is None:
         nrg = co.energy
@@ -216,6 +229,8 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
             )
 
     dE, dH, s = co.therm_corr(temperature=args.temp)
+    if freq.anharm_data:
+        ZPVE_anh = co.calc_zpe(anharmonic=True)
     rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
     qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO")
     qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM")
@@ -227,7 +242,16 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
 
     if args.csv:
         nrg_str = "%.6f" % nrg
-        corrections = [co.ZPVE, dH, rrho_dG, qrrho_dG, qharm_dG]
+        corrections = [co.ZPVE]
+        if freq.anharm_data:
+            if header != anharm_header:
+                output += "%s\n" % anharm_header
+                header = anharm_header
+            corrections.append(ZPVE_anh)
+        elif header != harm_header:
+            output += "%s\n" % harm_header
+            header = harm_header
+        corrections.extend([dH, rrho_dG, qrrho_dG, qharm_dG])
         therm = [nrg + correction for correction in corrections]
         output += delim.join(
             [nrg_str] +
@@ -242,6 +266,10 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
             nrg
         )
         output += "    E+ZPE             = %.6f Eh  (ZPE = %.6f)\n" % (nrg + co.ZPVE, co.ZPVE)
+        if freq.anharm_data:
+            output += "    E+ZPE(anh)        = %.6f Eh  (ZPE(anh) = %.6f)\n" % (
+                nrg + ZPVE_anh, ZPVE_anh
+            )
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
         output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
         output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)

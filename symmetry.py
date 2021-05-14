@@ -287,7 +287,18 @@ class PointGroup:
         atom_axes = geom.coords - com
 
         # atoms are grouped based on what they are bonded to
-        atom_ids = np.array([a.get_neighbor_id() for a in geom.atoms])
+        # if there's not many atoms, don't bother splitting them up
+        # based on ranks
+        if len(geom.atoms) < 50:
+            atom_ids = np.array([a.get_neighbor_id() for a in geom.atoms])
+        else:
+            atom_ids = np.array(
+                geom.canonical_rank(
+                    update=False,
+                    break_ties=False,
+                    invariant=False,
+                )
+            )
 
         # find vectors normal to each pair of atoms
         # these might be normal to a miror plane
