@@ -904,3 +904,26 @@ class PointGroup:
             return "Ci"
 
         return "C1"
+
+    @property
+    def symmetry_number(self):
+        """external symmetry number"""
+        n = 1
+        for ele in self.elements:
+            if isinstance(ele, ProperRotation):
+                if ele.n > n:
+                    n = ele.n
+            
+            elif isinstance(ele, ImproperRotation):
+                if ele.n / 2 > n:
+                    n = ele.n
+        
+        if self.name.startswith("D"):
+            n *= 2
+        if self.name.startswith("T"):
+            n *= 4
+        if self.name.startswith("O"):
+            n *= 6
+        if self.name.startswith("I"):
+            n *= 12
+        return n

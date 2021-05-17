@@ -1390,6 +1390,31 @@ class FileReader:
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot
+            
+            # rotational constants from anharmonic frequency jobs
+            if "Rotational Constants (in MHz)" in line:
+                self.skip_lines(f, 2)
+                n += 2
+                equilibrium_rotational_temperature = np.zeros(3)
+                ground_rotational_temperature = np.zeros(3)
+                centr_rotational_temperature = np.zeros(3)
+                for i in range(0, 3):
+                    line = f.readline()
+                    n += 1
+                    info = line.split()
+                    Be = float(info[1])
+                    B00 = float(info[3])
+                    B0 = float(info[5])
+                    equilibrium_rotational_temperature[i] = Be
+                    ground_rotational_temperature[i] = B00
+                    centr_rotational_temperature[i] = B0
+                equilibrium_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                ground_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                centr_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
+                self.other["ground_rotational_temperature"] = ground_rotational_temperature
+                self.other["centr_rotational_temperature"] = centr_rotational_temperature
+            
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
