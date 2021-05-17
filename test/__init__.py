@@ -52,6 +52,7 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
     :debug: print info useful for debugging
     """
     if debug:
+        print("before alignment")
         print(ref.write("ref", outfile=False))
         print(test.write("test", outfile=False))
 
@@ -88,6 +89,11 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
     rmsd = test.RMSD(
         ref, align=debug, heavy_only=heavy_only, sort=sort, debug=debug
     )
+    if debug:
+        print("after alignment")
+        print(ref.write("ref", outfile=False))
+        print(test.write("test", outfile=False))
+
     if debug:
         print("RMSD:", rmsd[2], "\tTHRESH:", thresh)
         rmsd[0].write("ref")
