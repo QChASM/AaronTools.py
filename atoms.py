@@ -89,7 +89,7 @@ class Atom:
 
     LOG = None
 
-    BondOrder()
+    _bo = BondOrder()
 
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None
@@ -155,11 +155,14 @@ class Atom:
         ):
             return self._rank > other._rank
 
-        a = self.get_invariant()
-        b = other.get_invariant()
-        if a != b:
-            return a > b
+        if self._rank is None or other._rank is None:
+            # print("getting invariants during <", self._rank, other._rank)
+            a = self.get_invariant()
+            b = other.get_invariant()
+            if a != b:
+                return a > b
 
+        # print("using names")
         a = self.name.split(".")
         b = other.name.split(".")
         while len(a) < len(b):
@@ -305,7 +308,7 @@ class Atom:
         # number of non-hydrogen connections
         # number of bonds with heavy atoms and their element
         t = []
-        for h in sorted(set(heavy)):
+        for h in set(heavy):
             t.extend([h, heavy.count(h)])
 
         # number of connected hydrogens
