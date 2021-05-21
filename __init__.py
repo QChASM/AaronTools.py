@@ -15,6 +15,8 @@ for filename in [
 ]:
     try:
         config.read(filename)
+    except FileNotFoundError:
+        continue
     except configparser.MissingSectionHeaderError:
         # add global options to default section
         with open(filename) as f:
@@ -111,6 +113,7 @@ class CitationHandler(logging.FileHandler):
             # didn't bother to set the environment variable and just
             # uses the default
             from AaronTools.const import AARONLIB
+
             if "$AARONLIB" in filename:
                 filename = filename.replace("$AARONLIB", AARONLIB)
             elif "${AARONLIB}" in filename:

@@ -382,7 +382,10 @@ class Config(configparser.ConfigParser):
         return out
 
     def read(self, filename, quiet=True):
-        self.read_string(self._process_content(filename, quiet=quiet))
+        try:
+            self.read_string(self._process_content(filename, quiet=quiet))
+        except configparser.ParsingError:
+            pass
 
     def _read_config(self, infile, quiet, skip_user_default):
         """
