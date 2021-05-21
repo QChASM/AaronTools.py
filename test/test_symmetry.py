@@ -3,7 +3,7 @@ import os
 import unittest
 
 from AaronTools.geometry import Geometry
-from AaronTools.test import TestWithTimer, prefix, rmsd_tol
+from AaronTools.test import TestWithTimer, prefix
 from AaronTools.symmetry import PointGroup
 
 class TestFinder(TestWithTimer):
@@ -26,21 +26,21 @@ class TestFinder(TestWithTimer):
         # test to see if interpolated geometry is correct
         mol = Geometry(self.benzene, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "D6h")
 
     def test_Cs(self):
         # test to see if interpolated geometry is correct
         mol = Geometry(self.meoh, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "Cs")
 
     def test_S4(self):
         # test to see if interpolated geometry is correct
         mol = Geometry(self.Me_NO2_4, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "S4")
 
     def test_C1(self):
@@ -61,43 +61,42 @@ class TestFinder(TestWithTimer):
 
         mol4 = Geometry(self.chiral_mol_3, refresh_ranks=False)
         pg = PointGroup(mol4)
-        
+
         self.assertEqual(pg.name, "C1")
 
         mol5 = Geometry(self.chiral_mol_4, refresh_ranks=False)
         pg = PointGroup(mol5)
-        
+
         self.assertEqual(pg.name, "C1")
 
     def test_Ih(self):
         mol = Geometry(self.c60, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "Ih")
 
     def test_Td(self):
         mol = Geometry(self.adamantane, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "Td")
-        
+
         mol = Geometry(self.methane, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "Td")
 
     def test_D2d(self):
         mol = Geometry(self.c3h4, refresh_ranks=False)
         pg = PointGroup(mol)
-        
+
         self.assertEqual(pg.name, "D2d")
 
     def test_C2v(self):
         mol = Geometry(self.h2o, refresh_ranks=False)
         pg = PointGroup(mol)
-        
-        self.assertEqual(pg.name, "C2v")
 
+        self.assertEqual(pg.name, "C2v")
 
 def suite():
     suite = unittest.TestSuite()
@@ -113,5 +112,11 @@ def suite():
 
 
 if __name__ == "__main__":
+    # import cProfile
+
+    # profile = cProfile.Profile()
+    # profile.enable()
     runner = unittest.TextTestRunner()
     runner.run(suite())
+    # profile.disable()
+    # profile.print_stats()

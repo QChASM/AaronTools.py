@@ -25,9 +25,14 @@ class SymmetryElement:
 
         return coords
 
-    def error(self, geom, tolerance=None, groups=None):
-        """error in this symmetry element for the given geometry"""
-        coords = geom.coords
+    def error(self, geom=None, tolerance=None, groups=None, coords=None):
+        """
+        error in this symmetry element for the given geometry
+        either geom or coords and groups must be given
+        if groups is not given and geom is, atoms will be grouped by element
+        """
+        if coords is None:
+            coords = geom.coords
 
         full_coords2 = self.apply_operation(coords)
         error = 0
@@ -251,6 +256,8 @@ class PointGroup:
         """
         CITATION = "doi:10.1002/jcc.22995"
         self.LOG.citation(CITATION)
+
+        coords = geom.coords
 
         moments, axes = geom.get_principle_axes()
         axes = axes.T
@@ -558,7 +565,7 @@ class PointGroup:
                         continue
                     # see if the error associated with the element is reasonable
                     rot = ProperRotation(com, ax, n, exp)
-                    error = rot.error(geom, tolerance, groups=atom_ids)
+                    error = rot.error(tolerance, groups=atom_ids, coords=coords)
                     checked_axes += 1
                     if error <= tolerance:
                         # print(geom.atoms[i])
@@ -631,7 +638,7 @@ class PointGroup:
                                     continue
                                 rot = ProperRotation(com, axis, n, exp)
                                 checked_axes += 1
-                                error = rot.error(geom, tolerance, groups=atom_ids)
+                                error = rot.error(tolerance, groups=atom_ids, coords=coords)
                                 if error <= tolerance:
                                     valid.append(rot)
                                     if not max_n:
@@ -684,7 +691,7 @@ class PointGroup:
                             exp,
                         )
 
-                        error = imp_rot.error(geom, tolerance, groups=atom_ids)
+                        error = imp_rot.error(tolerance, groups=atom_ids, coords=coords)
 
                         if error <= tolerance:
                             valid.append(imp_rot)
@@ -767,13 +774,13 @@ class PointGroup:
             )
             for ax in np.concatenate(args):
                 mirror = MirrorPlane(com, ax)
-                error = mirror.error(geom, tolerance, groups=atom_ids)
+                error = mirror.error(tolerance, groups=atom_ids, coords=coords)
                 if error <= tolerance:
                     valid.append(mirror)
         else:
             for element in c2_axes:
                 mirror = MirrorPlane(com, element.axis)
-                error = mirror.error(geom, tolerance, groups=atom_ids)
+                error = mirror.error(tolerance, groups=atom_ids, coords=coords)
                 if error <= tolerance:
                     valid.append(mirror)
 
