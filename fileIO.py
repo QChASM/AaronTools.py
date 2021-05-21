@@ -1354,6 +1354,30 @@ class FileReader:
                     anharm_str.splitlines()
                 )
 
+            # X matrix for anharmonic
+            if "Total Anharmonic X Matrix" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                n_freq = len(self.other["frequency"].data)
+                n_sections = int(np.ceil(n_freq / 5))
+                x_matrix = np.zeros((n_freq, n_freq))
+                for section in range(0, n_sections):
+                    header = f.readline()
+                    n += 1
+                    for j in range(5 * section, n_freq):
+                        line = f.readline()
+                        n += 1
+                        ll = 5 * section
+                        ul = 5 * section + min(j - ll + 1, 5)
+                        x_matrix[j, ll:ul] = [
+                            float(x.replace("D", "e")) for x in line.split()[1:]
+                        ]
+                x_matrix += np.tril(x_matrix, k=-1).T
+                self.other["X_matrix"] = x_matrix
+
+            if "Total X0" in line:
+                self.other["X0"] = float(line.split()[5])
+
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(
@@ -1366,6 +1390,31 @@ class FileReader:
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot
+            
+            # rotational constants from anharmonic frequency jobs
+            if "Rotational Constants (in MHz)" in line:
+                self.skip_lines(f, 2)
+                n += 2
+                equilibrium_rotational_temperature = np.zeros(3)
+                ground_rotational_temperature = np.zeros(3)
+                centr_rotational_temperature = np.zeros(3)
+                for i in range(0, 3):
+                    line = f.readline()
+                    n += 1
+                    info = line.split()
+                    Be = float(info[1])
+                    B00 = float(info[3])
+                    B0 = float(info[5])
+                    equilibrium_rotational_temperature[i] = Be
+                    ground_rotational_temperature[i] = B00
+                    centr_rotational_temperature[i] = B0
+                equilibrium_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                ground_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                centr_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
+                self.other["ground_rotational_temperature"] = ground_rotational_temperature
+                self.other["centr_rotational_temperature"] = centr_rotational_temperature
+            
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
@@ -2381,6 +2430,10 @@ class Frequency:
         else:
             self.lowest_frequency = None
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
+
+    @property
+    def real_anharmonic_frequencies(self):
+        return [mode.frequency for mode in self.anharm_data if mode.frequency > 0]
 
     def get_ir_data(
             self,
