@@ -1240,7 +1240,7 @@ class Geometry:
         targets = self.atoms
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
-        
+
         coords = self.coordinates(targets)
         dists = distance_matrix(coords, coords)
         
@@ -1289,7 +1289,7 @@ class Geometry:
                         bo_sums[j] += bond_order
 
             for atom2 in atom1.connected:
-                if atom2 in self.atoms:
+                if atom2 in targets:
                     continue
                 if atom2.element == "H":
                     hydrogen_bonds[i] += 1
@@ -2721,11 +2721,14 @@ class Geometry:
         return_vector - returned dictionary will have tuples of start, end
                         for vectors to represent the parameters in 3D space
         at_L - L value to calculate sterimol parameters at
+               Used for Sterimol2Vec 
         """
         from AaronTools.finders import BondedTo
         from scipy.spatial import ConvexHull
 
         CITATION = "doi:10.1002/ps.2780070410"
+        if at_L:
+            CITATION += "; doi:10.5281/zenodo.4702098"
         self.LOG.citation(CITATION)
 
         targets = self.find(targets)
@@ -2840,6 +2843,7 @@ class Geometry:
             L_vec = vector["L"][1] - vector["L"][0]
             L_vec *= at_L / np.linalg.norm(L_vec)
             vector["L"] = (vector["L"][0], vector["L"][0] + L_vec)
+            L = at_L
             for i in range(0, len(coords)):
                 if L_vals[i] - 2 * radius_list[i] > at_L:
                     radius_list[i] = -1
@@ -3499,6 +3503,8 @@ class Geometry:
             self.detect_substituents()
 
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
+            if len(sub.atoms) < 2:
+                continue
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(
@@ -4456,9 +4462,9 @@ class Geometry:
                 
                 expected_bo = "%.1f" % float(min(frag_bo, target_bo))
                 # print(expected_bo)
-                key = frag[0]._bo.key(frag[0], target)
+                key = bo.key(frag[0], target)
                 try:
-                    expected_dist = frag[0]._bo.bonds[key][expected_bo]
+                    expected_dist = bo.bonds[key][expected_bo]
                 except KeyError:
                     expected_dist = None
                 

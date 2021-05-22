@@ -171,8 +171,8 @@ class Substituent(Geometry):
             return len(self.atoms) < len(other.atoms)
         
         for a, b in zip(
-            self.reorder(start=self.atoms[0]),
-            other.reorder(start=other.atoms[0]),
+            self.reorder(start=self.atoms[0])[0],
+            other.reorder(start=other.atoms[0])[0],
         ):
             if a < b and not b < a:
                 return True
