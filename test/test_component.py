@@ -114,8 +114,8 @@ def suite():
     # suite.addTest(TestComponent("test_detect_backbone"))
     # suite.addTest(TestComponent("test_sub_rotate"))
     # suite.addTest(TestComponent("test_substitute"))
-    # suite.addTest(TestComponent("test_minimize_torsion"))
-    suite.addTest(TestComponent("test_cone_angle"))
+    suite.addTest(TestComponent("test_minimize_torsion"))
+    # suite.addTest(TestComponent("test_cone_angle"))
     return suite
 
 

@@ -156,6 +156,8 @@ class Atom:
             return self._rank > other._rank
 
         if self._rank is None or other._rank is None:
+            # if the ranks are the same, we have little reason to
+            # believe the invariants will differ
             # print("getting invariants during <", self._rank, other._rank)
             a = self.get_invariant()
             b = other.get_invariant()
@@ -308,7 +310,7 @@ class Atom:
         # number of non-hydrogen connections
         # number of bonds with heavy atoms and their element
         t = []
-        for h in set(heavy):
+        for h in sorted(set(heavy)):
             t.extend([h, heavy.count(h)])
 
         # number of connected hydrogens

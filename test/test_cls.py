@@ -830,8 +830,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
             sys.executable,
             os.path.join(self.aarontools_bin, "substituentSterimol.py"),
             TestCLS.benzene,
-            "-s",
-            "1",
+            "-s", "1",
             "-a" "12",
         ]
 
@@ -854,11 +853,48 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         # don't include filename in test b/c that will be different
         for ref_item, test_item in zip(
-            ref_status_line.split()[:3], test_line.split()[:3]
+            ref_status_line.split()[:6], test_line.split()[:6]
         ):
             if ref_item != test_item:
                 print(ref_item, test_item)
             self.assertTrue(ref_item == test_item)
+
+        # sterimol2vec test
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "substituentSterimol.py"),
+            TestCLS.benzene,
+            "-s", "1",
+            "-a" "12",
+            "-al", "2,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3"
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        if len(err) != 0:
+            raise RuntimeError(err)
+
+        ref = """B1      B2      B3      B4      B5      L       file
+        1.67    1.67    3.35    3.35    3.35    2.00    test_files\benzene.xyz
+        1.67    1.67    3.33    3.33    3.33    2.10    test_files\benzene.xyz
+        1.69    1.69    3.31    3.31    3.31    2.20    test_files\benzene.xyz
+        1.70    1.70    3.27    3.27    3.27    2.30    test_files\benzene.xyz
+        1.70    1.70    3.23    3.23    3.23    2.40    test_files\benzene.xyz
+        1.70    1.70    3.17    3.17    3.17    2.50    test_files\benzene.xyz
+        1.69    1.69    3.09    3.10    3.10    2.60    test_files\benzene.xyz
+        1.67    1.67    3.00    3.01    3.01    2.70    test_files\benzene.xyz
+        1.65    1.65    2.89    2.89    2.89    2.80    test_files\benzene.xyz
+        1.62    1.62    2.83    2.83    2.83    2.90    test_files\benzene.xyz
+        1.59    1.59    2.80    2.80    2.80    3.00    test_files\benzene.xyz
+        
+        """
+        
+        for ref_line, test_line in zip(out.decode("utf-8").splitlines(), ref.splitlines()):
+            for ref_val, test_val in zip(ref_line.split()[:-1], test_line.split()[:-1]):
+                if ref_val != test_val:
+                    print(ref_line, test_line)
+                self.assertEqual(ref_val, test_val)
 
     def test_coneAngle(self):
         """test coneAngle.py"""
@@ -899,10 +935,64 @@ thermochemistry from test_files/normal.log at 298.00 K:
         angle = float(out)
         self.assertTrue(abs(angle - 194.6) <= 0.1)
 
+    def test_ligandSterimol(self):
+        """test ligandSterimol.py"""
+
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "ligandSterimol.py"),
+            "-r", "umn",
+            TestCLS.tm_simple,
+            "-k", "35,36",
+            "-c", "34",
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+
+        ref = """B1      B2      B3      B4      B5      L       file
+        3.99    5.35    5.63    6.28    6.31    9.65    test_files\catalysts\tm_single-lig.xyz
+        
+        """
+
+        for ref_line, test_line in zip(out.decode("utf-8").splitlines(), ref.splitlines()):
+            for ref_val, test_val in zip(ref_line.split()[:-1], test_line.split()[:-1]):
+                if ref_val != test_val:
+                    print(ref_line, test_line)
+                self.assertEqual(ref_val, test_val)
+
+        # Sterimol2Vec
+        args = [
+            sys.executable,
+            os.path.join(self.aarontools_bin, "ligandSterimol.py"),
+            "-r", "umn",
+            TestCLS.tm_simple,
+            "-k", "35,36",
+            "-c", "34",
+            "-al", "2.5,3,3.5,4"
+        ]
+
+        proc = Popen(args, stdout=PIPE, stderr=PIPE)
+        out, err = proc.communicate()
+        
+        ref = """B1      B2      B3      B4      B5      L       file
+        3.94    4.81    5.36    6.27    6.28    2.50    test_files\catalysts\tm_single-lig.xyz
+        3.75    4.63    5.12    6.05    6.05    3.00    test_files\catalysts\tm_single-lig.xyz
+        3.18    4.08    5.33    5.44    5.60    3.50    test_files\catalysts\tm_single-lig.xyz
+        2.39    3.85    4.71    4.95    5.41    4.00    test_files\catalysts\tm_single-lig.xyz
+        
+        """
+
+        for ref_line, test_line in zip(out.decode("utf-8").splitlines(), ref.splitlines()):
+            for ref_val, test_val in zip(ref_line.split()[:-1], test_line.split()[:-1]):
+                if ref_val != test_val:
+                    print(ref_line, test_line)
+                self.assertEqual(ref_val, test_val)
+
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_grabThermo"))
+    suite.addTest(TestCLS("test_ligandSterimol"))
     return suite
 
 
