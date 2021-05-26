@@ -1,6 +1,4 @@
 """various job types for Theory() instances"""
-import itertools as it
-
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,

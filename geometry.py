@@ -1271,7 +1271,7 @@ class Geometry:
                 return float(closest[0])
             except KeyError:
                 return 1
-        
+
         heavy_bonds = [0 for a in targets]
         bo_sums = [0 for a in targets]
         atom_numbers = [ELEMENTS.index(a.element) for a in targets]
@@ -2770,7 +2770,7 @@ class Geometry:
         if isinstance(radii, dict):
             radii_dict = radii
         elif isinstance(radii, list):
-            radii_list = radii
+            radius_list = radii
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":

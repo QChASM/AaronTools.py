@@ -1128,6 +1128,40 @@ class FileReader:
 
                     self.other["gradient"] = grad
 
+                elif "MAYER POPULATION ANALYSIS" in line:
+                    self.skip_lines(f, 2)
+                    n += 2
+                    line = f.readline()
+                    data = dict()
+                    headers = []
+                    while line.strip():
+                        info = line.split()
+                        header = info[0]
+                        name = " ".join(info[2:])
+                        headers.append(header)
+                        data[header] = (name, [])
+                        line = f.readline()
+                    self.skip_lines(f, 1)
+                    n += 1
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        info = line.split()[2:]
+                        for header, val in zip(headers, info):
+                            data[header][1].append(float(val))
+                    
+                    for header in headers:
+                        self.other[data[header][0]] = np.array(data[header][1])
+
+                elif line.startswith("LOEWDIN ATOMIC CHARGES"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = np.zeros(len(self.atoms))
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges[i] = float(line.split()[-1])
+                    self.other["Löwdin Charges"] = charges
+
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
 
@@ -1482,6 +1516,27 @@ class FileReader:
                     gradient[i] = np.array([float(x) for x in info[2:]])
 
                 self.other["forces"] = gradient
+
+            # atomic charges
+            if "Mulliken charges:" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                charges = []
+                for i in range(0, len(self.atoms)):
+                    line = f.readline()
+                    n += 1
+                    charges.append(float(line.split()[2]))
+                self.other["Mulliken Charges"] = charges 
+            
+            if "APT charges:" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                charges = []
+                for i in range(0, len(self.atoms)):
+                    line = f.readline()
+                    n += 1
+                    charges.append(float(line.split()[2]))
+                self.other["APT Charges"] = charges 
 
             # capture errors
             # only keep first error, want to fix one at a time
