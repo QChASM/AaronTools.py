@@ -2,6 +2,7 @@
 import unittest
 import random
 import numpy as np
+import os
 
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.geometry import Geometry
@@ -9,7 +10,7 @@ from AaronTools.test import prefix, TestWithTimer
 from AaronTools.oniomatoms import OniomAtom, ChargeSum, OniomSanity
 
 class TestBondOrder(TestWithTimer):
-    small_mol = prefix + "test_files/malonate-3_waters.xyz"
+    small_mol = os.path.join(prefix, "test_files", "malonate-3_waters.xyz")
 
     def test_get(self):
         mol = Geometry(TestBondOrder.small_mol)
@@ -48,7 +49,7 @@ class TestBondOrder(TestWithTimer):
 
 class TestOniomAtoms(TestWithTimer):
     # Test constants
-    small_mol = prefix + "test_files/malonate-3_waters.xyz"
+    small_mol = os.path.join(prefix, "test_files", "malonate-3_waters.xyz")
 
     # helper functions
     def read_xyz(self, fname):
@@ -152,8 +153,8 @@ class TestOniomAtoms(TestWithTimer):
                 sorted(old_tags.union(new_tags)), sorted(atom.tags))
 
     def test_get_invariant(self):
-        pentane = Geometry(prefix + "test_files/pentane.xyz")
-        mol = Geometry(prefix + "test_files/6a2e5am1hex.xyz")
+        pentane = Geometry(os.path.join(prefix, "test_files", "pentane.xyz"))
+        mol = Geometry(os.path.join(prefix, "test_files", "6a2e5am1hex.xyz"))
 
         s = ''
         for a in pentane.atoms:

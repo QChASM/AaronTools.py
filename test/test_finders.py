@@ -105,7 +105,19 @@ class TestFinder(TestWithTimer):
 
         out = mol.find(NumberOfBonds(3))
         self.assertTrue(all([atom in mol.find('C') for atom in out]))
-    
+
+    def test_Aromatics(self):
+        mol = Geometry(self.benzene)
+
+        out,out2,out3 = mol.find(Aromatics())
+        self.assertTrue(all([atom in mol.find('C') for atom in out]))
+
+    def test_OfType(self):
+        mol = Geometry(self.benzene)
+
+        out = mol.find(OfType('ha'))
+        self.assertTrue(all([atom in mol.find('H') for atom in out]))
+
     def test_ChiralCenters(self):
         mol = Geometry(self.ligand)
 
@@ -151,6 +163,8 @@ def suite():
     suite.addTest(TestFinder("test_BondedElements"))
     suite.addTest(TestFinder("test_NumberOfBonds"))
     suite.addTest(TestFinder("test_ChiralCenters"))
+    suite.addTest(TestFinder("test_Aromatics"))
+    suite.addTest(TestFinder("test_OfType"))
     return suite
 
 

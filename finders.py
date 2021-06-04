@@ -1,6 +1,7 @@
 """finders are used by Geometry.find to locate atoms in a more general way"""
 import numpy as np
-
+from itertools import combinations
+from AaronTools.atoms import BondOrder
 
 class Finder:
     def get_matching_atoms(self, atoms, geometry=None):
@@ -74,7 +75,10 @@ class BondedTo(Finder):
 
     def get_matching_atoms(self, atoms, geometry=None):
         """returns list(Atom) that are within a radius of a point"""
-        return [atom for atom in atoms if atom in self.atom.connected]
+        try:
+            return [atom for atom in atoms if atom in self.atom.connected]
+        except AttributeError:
+            pass
 
 
 class WithinRadiusFromPoint(Finder):
@@ -189,10 +193,11 @@ class HasAttribute(Finder):
 class VSEPR(Finder):
     """atoms with the specified VSEPR geometry
     see Atom.get_shape for a list of valid vsepr_geometry strings"""
-    def __init__(self, vsepr_geometry):
+    def __init__(self, vsepr_geometry, cutoff=0.5):
         super().__init__()
         
         self.vsepr = vsepr_geometry
+        self.cutoff = cutoff
     
     def __repr__(self):
         return "atoms with %s shape" % self.vsepr
@@ -203,7 +208,7 @@ class VSEPR(Finder):
             out = atom.get_vsepr()
             if out is not None:
                 shape, score = atom.get_vsepr()
-                if shape == self.vsepr and score < 0.5:
+                if shape == self.vsepr and score < self.cutoff:
                     matching_atoms.append(atom)
         
         return matching_atoms
@@ -468,4 +473,246 @@ class CloserTo(Finder):
                 matching_atoms.append(atom)
         
         return matching_atoms
-    
+
+class IsElement(Finder):
+    """all atoms of the specified element"""
+    def __init__(self, element):
+        super().__init__()
+
+        self.element = element
+
+    def __repr__(self):
+        return "atoms of the element '%s'" % self.element
+
+    def get_matching_atoms(self, atoms, geometry=None):
+        """returns List(Atom) of atoms of that element"""
+        return [atom for atom in atoms if atom.element == self.element]
+
+class OfType(Finder):
+    """all atoms of the specified GAFF atom type
+    if ignore_metals = True (default), bonding with metals will not count towards VSEPR shapes"""
+    def __init__(self, atomtype, ignore_metals=True):
+        super().__init__()
+
+        self.atomtype = atomtype.capitalize()
+        if self.atomtype in {'Br', 'Cl'}:
+            self.element = self.atomtype
+        else:
+            self.split_type = list(self.atomtype)
+            self.element = self.split_type[0]
+        self.ignore_metals = ignore_metals
+
+    def get_matching_atoms(self, atoms, geometry):
+        """returns List(Atom) that are of the given atom type"""
+        if self.ignore_metals == True:
+            for atom in AnyTransitionMetal().get_matching_atoms(atoms):
+                geometry = geometry - atom
+            atoms = geometry.atoms
+
+        class CustomError(Exception):
+            pass
+
+        shapes = {'C1': ['linear 1', 'linear 2'],
+                  'C2': ['trigonal planar', 'bent 2 planar'],
+                  'C3': ['trigonal pyramidal', 'tetrahedral'],
+                   'C': ['trigonal planar'],
+                  'Ha': ['linear 1'],
+                  'Hc': ['linear 1'],
+                  'N1': ['linear 1', 'linear 2'],
+                  'N2': ['bent 2 planar', 'bent 2 tetrahedral'],
+                  'N3': ['trigonal pyramidal', 'bent 3 tetrahedral'],
+                  'N4': ['tetrahedral'],
+                  'Na': ['trigonal planar'],
+                  'S4': ['trigonal planar'],
+                  'S6': ['tetrahedral'],
+                  'P3': ['trigonal pyramidal'],
+                  'P4': ['trigonal planar'],
+                  'P5': ['tetrahedral'],
+                  'Ca': ['trigonal planar', 'bent 2 planar'],
+                   'N': ['trigonal planar'],
+                  'Nh': ['trigonal planar'],
+                  'Os': ['bent 2 tetrahedral', 'bent 2 planar']}
+
+        """helper functions"""
+        def is_carbonyl(atom):
+            """returns True if atom is carbonyl carbon"""
+            for connected in atom.connected:
+                if connected.element == 'O' and connected in BondedElements(atom.element).get_matching_atoms(atoms):
+                    carbonyl = True
+                    break
+                else:
+                    carbonyl = False
+            return carbonyl
+
+        def is_carboxyl(atom):
+            """returns True if atom is carboxyl carbon"""
+            o_counter = 0
+            if is_carbonyl(atom):
+                for connected in atom.connected:
+                    if connected.element == 'O':
+                        o_counter += 1
+                if o_counter == 2:
+                    return True
+            else:
+                return False
+
+        def is_water(atom):
+            if atom.element == 'O':
+                h_counter = 0
+                for connected in atom.connected:
+                    if connected.element == 'H': h_counter +=1
+                if h_counter == 2: return True
+                else: return False
+            else: return False
+
+        def is_amide(atom):
+            if atom.element == 'N':
+                for connected in atom.connected:
+                    if is_carbonyl(connected):
+                        return True
+                        break
+                    else: return False
+            else: return False
+
+        matching_atoms = []
+        if self.atomtype in {'F', 'Cl', 'Br', 'I'}: 
+            for atom in IsElement(self.atomtype).get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.split_type[0] == 'H' and self.atomtype not in {'Ha', 'Hc'}:
+            if self.split_type[1] in {'o','w'}:
+                for atom in BondedElements('O').get_matching_atoms(atoms):
+                    for connected in atom.connected:
+                        if self.atomtype == 'Hw' and is_water(connected): matching_atoms.append(atom)
+                        elif self.atomtype == 'Ho' and not is_water(connected): matching_atoms.append(atom)
+            else:
+                for atom in BondedElements(self.split_type[1].capitalize()).get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.atomtype in {'O', 'S2', 'P2'}:
+            for atom in BondedElements('C').get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.atomtype in {'C', 'C2', 'Ca', 'Na', 'Nh', 'Ha', 'Hc','N'}:
+            aromatics, charge, fused = Aromatics().get_matching_atoms(atoms, geometry)
+            for shape in shapes.get(self.atomtype):
+                for atom in VSEPR(shape).get_matching_atoms(atoms):
+                    if self.atomtype == 'Ca' and atom in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'C2' and atom not in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'C' and is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'N' and is_amide(atom) and atom not in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype == 'Na' and charge == 1 and atom.element == 'N' and not is_carboxyl(atom) and len(matching_atoms) == 0 and atom in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype == 'Na' and atom not in aromatics and not is_carboxyl(atom) and not is_amide(atom): matching_atoms.append(atom)
+                    elif self.atomtype in {'Na','Nh'} and charge == 1 and atom.element == 'N' and len(matching_atoms) > 0 and atom in aromatics:
+                        raise CustomError("Indistinguishable nitrogens in aromatic ring")
+                    elif self.atomtype == 'Nh' and charge == 0 and atom.element == 'N' and atom in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype in {'Hc', 'Ha'}:
+                        for connected in atom.connected:
+                            if self.atomtype == 'Ha' and connected.element == 'C' and connected in aromatics: matching_atoms.append(atom)
+                            elif self.atomtype == 'Hc' and connected.element == 'C' and connected not in aromatics: matching_atoms.append(atom)
+        elif self.atomtype in {'Oh', 'Os', 'Sh', 'Ss','Ow'}:
+            for shape in shapes.get('Os'):
+                for atom in VSEPR(shape,cutoff=0.7).get_matching_atoms(atoms):
+                    counter = 0
+                    for connected in atom.connected:
+                        if self.split_type[1] == 'h' and connected.element == 'H' and not is_water(atom): matching_atoms.append(atom)
+                        elif self.split_type[1] == 'w' and is_water(atom) and atom not in matching_atoms: matching_atoms.append(atom)
+                        elif self.split_type[1] == 's' and connected.element != 'H': counter +=1
+                    if counter == 2: matching_atoms.append(atom)
+        elif self.atomtype == 'No':
+            for atom in IsElement('N').get_matching_atoms(atoms):
+                if is_carboxyl(atom): matching_atoms.append(atom)
+        else:
+            for shape in shapes.get(self.atomtype):
+                for atom in VSEPR(shape).get_matching_atoms(atoms): matching_atoms.append(atom)
+        matching_atoms = [match for match in matching_atoms if match.element == self.element]
+        return matching_atoms
+
+class Aromatics(Finder):
+    """all atoms in aromatic rings"""
+    def __init__(self, return_rings=False):
+        super().__init__()
+
+        self.return_rings = return_rings
+
+    def __repr__(self):
+        return "atoms that are in aromatic rings"
+
+    def get_matching_atoms(self, atoms, geometry):
+        """returns List(Atom) of atoms in aromatic rings"""
+
+        def pairs(length):
+            """makes pairs of indices in connected_atoms for shortest_path to loop over"""
+            num = int(length)
+            indices = combinations(np.arange(num), 2)
+            return np.array([index for index in indices])
+
+        def is_aromatic(num):
+            """returns true if the number follows the huckel rule of 4n + 2"""
+            num = int(num)
+            for i in range(0,11):
+                if (4*i + 2) == num:
+                    aromatic = True
+                    break
+                else:
+                    aromatic = False
+            return aromatic
+
+        def dict_name(string):
+            """returns the name of the dictionary that corresponds to the vsepr shape"""
+            a = "_"
+            name = a.join(string.split())
+            return name
+
+        bent_2_planar = {'C': 1, 'S': 1, 'O': 1, 'N': 1, 'P': 1}
+        bent_2_tetrahedral = {'S': 2, 'O': 2, 'C': 0}
+        trigonal_planar = {'C': 1, 'N': 2, 'P': 2, 'B': 0}
+        bent_3_tetrahedral = {'N': 2}
+
+        matching_atoms = []
+        unchecked_atoms = list(geometry.atoms)
+        fused = 0
+        charge=0
+        rings = []
+        for atom in unchecked_atoms:
+            fusedRing = False
+            if atom.element != 'H' and (atom.get_vsepr()[0] == 'trigonal planar' or atom.get_vsepr()[0] == 'bent 2 planar' or atom.get_vsepr()[0] == 'bent 2 tetrahedral'):
+                n_aromatic = 0
+                connected_atoms = []
+                for atm in atom.connected:
+                    if atm.element != 'H':
+                        connected_atoms.append(atm)
+                for i in range(0,len(connected_atoms)):
+                    n_aromatic = 0
+                    try:
+                        path = list(geometry.shortest_path(connected_atoms[pairs(len(connected_atoms))[i,0]].name, connected_atoms[pairs(len(connected_atoms))[i,1]].name, avoid=atom.name))
+                        ring=True
+                    except LookupError:
+                        ring=False
+                    if ring==True:
+                        ring = path
+                        ring.append(atom)
+                        rings.append(ring)
+                        huckel_num = 0
+                        try:
+                            for checked_atom in path:
+                                unchecked_atoms.remove(checked_atom)
+                        except ValueError:
+                            fusedRing=True
+                        for ring_atom in ring:
+                            try:
+                                huckel_num = huckel_num + eval(dict_name(ring_atom.get_vsepr()[0]))[ring_atom.element]
+                            except:
+                                huckel_num = 0
+                                break
+                        if (huckel_num % 2) != 0:
+                            n_counter = 0
+                            for ring_atom in ring:
+                                if ring_atom.element == 'N': n_counter += 1
+                            if n_counter == 2: huckel_num = huckel_num - 2
+                            else: huckel_num = huckel_num - 1
+                            charge += 1
+                        if is_aromatic(huckel_num) == True:
+                            for match in ring:
+                                if match not in matching_atoms:
+                                    matching_atoms.append(match)
+            if fusedRing == True:
+                fused+=1
+        if self.return_rings == True:
+            return matching_atoms, charge, fused, rings
+        else: 
+            return matching_atoms, charge, fused

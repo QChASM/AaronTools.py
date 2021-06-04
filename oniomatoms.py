@@ -21,6 +21,10 @@ class OniomAtom(Atom):
         self.coords = np.array(coords, dtype=float)
         self.flag = bool(flag)
         self.name = str(name).strip()
+        try:
+            self.index = int(self.name)
+        except ValueError:
+            pass
 
         if hasattr(tags, "__iter__") and not isinstance(tags, str):
             self.tags = set(tags)
@@ -50,7 +54,7 @@ class OniomAtom(Atom):
             self.atomtype=atomtype
         elif atomtype not in ATOM_TYPES:
             self.atomtype=atomtype
-            raise ValueError("Atom type " + self.atomtype + " not in reference")
+            #raise ValueError("Atom type " + self.atomtype + " not in reference")
         else:
             self.atomtype=atomtype
 

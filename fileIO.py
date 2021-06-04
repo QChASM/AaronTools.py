@@ -503,9 +503,9 @@ class FileReader:
         fname,
         get_all=False,
         just_geom=True,
+        oniom=False,
         freq_name=None,
         conf_name=None,
-        oniom=False,
     ):
         """
         :fname: either a string specifying the file name of the file to read
@@ -541,7 +541,7 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(
-                get_all, just_geom, freq_name=freq_name, conf_name=conf_name, oniom
+                get_all, just_geom, oniom, freq_name=freq_name, conf_name=conf_name 
             )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
@@ -571,7 +571,7 @@ class FileReader:
                 self.read_xtb(f, freq_name=freq_name)
 
     def read_file(
-        self, get_all=False, just_geom=True, freq_name=None, conf_name=None, oniom=False
+        self, get_all=False, just_geom=True, oniom=False, freq_name=None, conf_name=None 
     ):
         """
         Reads geometry information from fname.
