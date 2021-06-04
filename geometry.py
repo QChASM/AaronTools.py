@@ -2715,6 +2715,8 @@ class Geometry:
         return_vector: bool/returns dict of tuple(vector start, vector end) instead
         radii: "bondi" - Bondi vdW radii
                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+               dict()  - radii are values and elements are keys
+               list()  - list of radii corresponding to targets
 
         L_axis: vector defining L-axis
         targets: atoms to include in the parameter calculation
