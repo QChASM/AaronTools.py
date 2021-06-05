@@ -36,6 +36,8 @@ info.add_argument(
     dest="mo_ndx",
     default=None,
     help="index of molecular orbital to print (0-indexed)\n"
+    "can also give 'homo' or 'lumo' for highest occupied or\n"
+    "lowest unoccupied molecular orbital\n"
     "Default: highest occupied MO in the ground state"
 )
 info.add_argument(
@@ -73,6 +75,19 @@ cube_parser.add_argument(
     "Default: determine directions using SVD"
 )
 
+cube_parser.add_argument(
+    "-n", "--number-of-jobs",
+    type=int,
+    default=1,
+    dest="n_jobs",
+    help="number of processes to spawn when evaluating\n"
+    "basis functions\n"
+    "this is on top of NumPy's and NumExpr's multithreading,\n"
+    "so if NumPy/NumExpr use 8 threads and n_jobs=2, you can\n"
+    "expect to see 16 threads in use\n"
+)
+
+
 args = cube_parser.parse_args()
 
 if args.mo_ndx and args.mo_ndx.isnumeric():
@@ -95,6 +110,7 @@ for f in glob_files(args.infile):
         spacing=args.spacing,
         style="cube",
         xyz=args.xyz,
+        n_jobs=args.n_jobs,
     )
     
     if not args.outfile:
