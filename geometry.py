@@ -4245,7 +4245,12 @@ class Geometry:
 
                 new_shape = shape
 
-            shape_object = Geometry(Atom.get_shape(new_shape))
+            shape_coords = Atom.get_shape(new_shape)
+            shape_atoms = [
+                Atom(name="%i" % i, coords=coords, element="X") for i, coords in
+                enumerate(shape_coords)
+            ]
+            shape_object = Geometry(shape_atoms)
 
             if (
                 len(shape_object.atoms[1:]) - len(target.connected)

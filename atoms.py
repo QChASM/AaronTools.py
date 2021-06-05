@@ -365,6 +365,8 @@ class Atom:
 
     def bond(self, other):
         """returns the vector self-->other"""
+        if isinstance(other, np.ndarray):
+            return other - np.array(self.coords)
         return np.array(other.coords) - np.array(self.coords)
 
     def dist(self, other):
@@ -484,12 +486,15 @@ class Atom:
         elif shape_name == "tetrahedral":
             return cls.tetrahedral_shape()
         elif shape_name == "sawhorse":
-            return (
-                cls.trigonal_bipyramidal_shape()[0:3]
-                + cls.trigonal_bipyramidal_shape()[-2:]
-            )
+            return np.concatenate((
+                cls.trigonal_bipyramidal_shape()[0:3,],
+                cls.trigonal_bipyramidal_shape()[-2:,],
+            ))
         elif shape_name == "seesaw":
-            return cls.octahedral_shape()[0:3] + cls.octahedral_shape()[-2:]
+            return np.concatenate((
+                cls.octahedral_shape()[0:3],
+                cls.octahedral_shape()[-2:],
+            ))
         elif shape_name == "square planar":
             return cls.octahedral_shape()[0:5]
         elif shape_name == "trigonal pyramidal":
@@ -562,350 +567,376 @@ class Atom:
     @classmethod
     def linear_shape(cls):
         """returns a list of 3 dummy atoms in a linear shape"""
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="2")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([-1.0, 0.0, 0.0])
 
-        return [center, pos1, pos2]
+        return np.array([center, pos1, pos2])
 
     @classmethod
     def trigonal_planar_shape(cls):
         """returns a list of 4 dummy atoms in a trigonal planar shape"""
         positions = cls.trigonal_bipyramidal_shape()
-        return positions[:-2]
+        return positions[:-2,]
 
     @classmethod
     def tetrahedral_shape(cls):
         """returns a list of 5 dummy atoms in a tetrahedral shape"""
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom(
-            "X", np.array([0.57735, -0.81650, 0.0]), name="1"
-        )
-        pos2 = Atom(
-            "X", np.array([0.57735, 0.81650, 0.0]), name="2"
-        )
-        pos3 = Atom(
-            "X", np.array([-0.57735, 0.0, 0.81650]), name="3"
-        )
-        pos4 = Atom(
-            "X", np.array([-0.57735, 0.0, -0.81650]), name="4"
-        )
+        center = np.zeros(3)
+        pos1 = np.array([0.57735, -0.81650, 0.0])
+        pos2 = np.array([0.57735, 0.81650, 0.0])
+        pos3 = np.array([-0.57735, 0.0, 0.81650])
+        pos4 = np.array([-0.57735, 0.0, -0.81650])
 
-        return [center, pos1, pos2, pos3, pos4]
+        return np.array([center, pos1, pos2, pos3, pos4])
 
     @classmethod
     def trigonal_bipyramidal_shape(cls):
         """returns a list of 6 dummy atoms in a trigonal bipyramidal shape"""
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom(
-            "X", np.array([-0.5, 0.86603, 0.0]), name="2"
-        )
-        pos3 = Atom(
-            "X", np.array([-0.5, -0.86603, 0.0]), name="3"
-        )
-        pos4 = Atom("X", np.array([0.0, 0.0, 1.0]), name="4")
-        pos5 = Atom("X", np.array([0.0, 0.0, -1.0]), name="5")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([-0.5, 0.86603, 0.0])
+        pos3 = np.array([-0.5, -0.86603, 0.0])
+        pos4 = np.array([0.0, 0.0, 1.0])
+        pos5 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5]
+        return np.array([center, pos1, pos2, pos3, pos4, pos5])
 
     @classmethod
     def octahedral_shape(cls):
         """returns a list of 7 dummy atoms in an octahedral shape"""
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.0, 1.0, 0.0]), name="2")
-        pos3 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="3")
-        pos4 = Atom("X", np.array([0.0, -1.0, 0.0]), name="4")
-        pos5 = Atom("X", np.array([0.0, 0.0, 1.0]), name="5")
-        pos6 = Atom("X", np.array([0.0, 0.0, -1.0]), name="6")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.0, 1.0, 0.0])
+        pos3 = np.array([-1.0, 0.0, 0.0])
+        pos4 = np.array([0.0, -1.0, 0.0])
+        pos5 = np.array([0.0, 0.0, 1.0])
+        pos6 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6]
+        return np.array([center, pos1, pos2, pos3, pos4, pos5, pos6])
 
     @classmethod
     def trigonal_prismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([-0.6547, -0.3780, 0.6547]), name="1")
-        pos2 = Atom("X", np.array([-0.6547, -0.3780, -0.6547]), name="2")
-        pos3 = Atom("X", np.array([0.6547, -0.3780, 0.6547]), name="3")
-        pos4 = Atom("X", np.array([0.6547, -0.3780, -0.6547]), name="4")
-        pos5 = Atom("X", np.array([0.0, 0.7559, 0.6547]), name="5")
-        pos6 = Atom("X", np.array([0.0, 0.7559, -0.6547]), name="6")
+        center = np.zeros(3)
+        pos1 = np.array([-0.6547, -0.3780, 0.6547])
+        pos2 = np.array([-0.6547, -0.3780, -0.6547])
+        pos3 = np.array([0.6547, -0.3780, 0.6547])
+        pos4 = np.array([0.6547, -0.3780, -0.6547])
+        pos5 = np.array([0.0, 0.7559, 0.6547])
+        pos6 = np.array([0.0, 0.7559, -0.6547])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6]
+        return np.array([center, pos1, pos2, pos3, pos4, pos5, pos6])
 
     @classmethod
     def capped_octahedral_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, 0.0, 1.0]), name="1")
-        pos2 = Atom("X", np.array([0.9777, 0.0, 0.2101]), name="2")
-        pos3 = Atom("X", np.array([0.1698, 0.9628, 0.2101]), name="3")
-        pos4 = Atom("X", np.array([-0.9187, 0.3344, 0.2102]), name="4")
-        pos5 = Atom("X", np.array([-0.4888, -0.8467, 0.2102]), name="5")
-        pos6 = Atom("X", np.array([0.3628, -0.6284, -0.6881]), name="6")
-        pos7 = Atom("X", np.array([-0.2601, 0.4505, -0.8540]), name="7")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, 0.0, 1.0])
+        pos2 = np.array([0.9777, 0.0, 0.2101])
+        pos3 = np.array([0.1698, 0.9628, 0.2101])
+        pos4 = np.array([-0.9187, 0.3344, 0.2102])
+        pos5 = np.array([-0.4888, -0.8467, 0.2102])
+        pos6 = np.array([0.3628, -0.6284, -0.6881])
+        pos7 = np.array([-0.2601, 0.4505, -0.8540])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        )
 
     @classmethod
     def capped_trigonal_prismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, 0.0, 1.0]), name="1")
-        pos2 = Atom("X", np.array([0.6869, 0.6869, 0.2374]), name="2")
-        pos3 = Atom("X", np.array([-0.6869, 0.6869, 0.2374]), name="3")
-        pos4 = Atom("X", np.array([0.6869, -0.6869, 0.2374]), name="4")
-        pos5 = Atom("X", np.array([-0.6869, -0.6869, 0.2374]), name="5")
-        pos6 = Atom("X", np.array([0.6175, 0.0, -0.7866]), name="6")
-        pos7 = Atom("X", np.array([-0.6175, 0.0, -0.7866]), name="7")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, 0.0, 1.0])
+        pos2 = np.array([0.6869, 0.6869, 0.2374])
+        pos3 = np.array([-0.6869, 0.6869, 0.2374])
+        pos4 = np.array([0.6869, -0.6869, 0.2374])
+        pos5 = np.array([-0.6869, -0.6869, 0.2374])
+        pos6 = np.array([0.6175, 0.0, -0.7866])
+        pos7 = np.array([-0.6175, 0.0, -0.7866])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        )
 
     @classmethod
     def pentagonal_bipyraminal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.3090, 0.9511, 0.0]), name="2")
-        pos3 = Atom("X", np.array([-0.8090, 0.5878, 0.0]), name="3")
-        pos4 = Atom("X", np.array([-0.8090, -0.5878, 0.0]), name="4")
-        pos5 = Atom("X", np.array([0.3090, -0.9511, 0.0]), name="5")
-        pos6 = Atom("X", np.array([0.0, 0.0, 1.0]), name="6")
-        pos7 = Atom("X", np.array([0.0, 0.0, -1.0]), name="7")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.3090, 0.9511, 0.0])
+        pos3 = np.array([-0.8090, 0.5878, 0.0])
+        pos4 = np.array([-0.8090, -0.5878, 0.0])
+        pos5 = np.array([0.3090, -0.9511, 0.0])
+        pos6 = np.array([0.0, 0.0, 1.0])
+        pos7 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7]
+        )
 
     @classmethod
     def biaugmented_trigonal_prismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([-0.6547, -0.3780, 0.6547]), name="1")
-        pos2 = Atom("X", np.array([-0.6547, -0.3780, -0.6547]), name="2")
-        pos3 = Atom("X", np.array([0.6547, -0.3780, 0.6547]), name="3")
-        pos4 = Atom("X", np.array([0.6547, -0.3780, -0.6547]), name="4")
-        pos5 = Atom("X", np.array([0.0, 0.7559, 0.6547]), name="5")
-        pos6 = Atom("X", np.array([0.0, 0.7559, -0.6547]), name="6")
-        pos7 = Atom("X", np.array([0.0, -1.0, 0.0]), name="7")
-        pos8 = Atom("X", np.array([-0.8660, 0.5, 0.0]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([-0.6547, -0.3780, 0.6547])
+        pos2 = np.array([-0.6547, -0.3780, -0.6547])
+        pos3 = np.array([0.6547, -0.3780, 0.6547])
+        pos4 = np.array([0.6547, -0.3780, -0.6547])
+        pos5 = np.array([0.0, 0.7559, 0.6547])
+        pos6 = np.array([0.0, 0.7559, -0.6547])
+        pos7 = np.array([0.0, -1.0, 0.0])
+        pos8 = np.array([-0.8660, 0.5, 0.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def cubic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.5775, 0.5774, 0.5774]), name="1")
-        pos2 = Atom("X", np.array([0.5775, 0.5774, -0.5774]), name="2")
-        pos3 = Atom("X", np.array([0.5775, -0.5774, 0.5774]), name="3")
-        pos4 = Atom("X", np.array([-0.5775, 0.5774, 0.5774]), name="4")
-        pos5 = Atom("X", np.array([0.5775, -0.5774, -0.5774]), name="5")
-        pos6 = Atom("X", np.array([-0.5775, 0.5774, -0.5774]), name="6")
-        pos7 = Atom("X", np.array([-0.5775, -0.5774, 0.5774]), name="7")
-        pos8 = Atom("X", np.array([-0.5775, -0.5774, -0.5774]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([0.5775, 0.5774, 0.5774])
+        pos2 = np.array([0.5775, 0.5774, -0.5774])
+        pos3 = np.array([0.5775, -0.5774, 0.5774])
+        pos4 = np.array([-0.5775, 0.5774, 0.5774])
+        pos5 = np.array([0.5775, -0.5774, -0.5774])
+        pos6 = np.array([-0.5775, 0.5774, -0.5774])
+        pos7 = np.array([-0.5775, -0.5774, 0.5774])
+        pos8 = np.array([-0.5775, -0.5774, -0.5774])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def elongated_trigonal_bipyramidal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.6547, 0.0, 0.7559]), name="1")
-        pos2 = Atom("X", np.array([-0.6547, 0.0, 0.7559]), name="2")
-        pos3 = Atom("X", np.array([0.6547, 0.6547, -0.3780]), name="3")
-        pos4 = Atom("X", np.array([-0.6547, 0.6547, -0.3780]), name="4")
-        pos5 = Atom("X", np.array([0.6547, -0.6547, -0.3780]), name="5")
-        pos6 = Atom("X", np.array([-0.6547, -0.6547, -0.3780]), name="6")
-        pos7 = Atom("X", np.array([1.0, 0.0, 0.0]), name="7")
-        pos8 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([0.6547, 0.0, 0.7559])
+        pos2 = np.array([-0.6547, 0.0, 0.7559])
+        pos3 = np.array([0.6547, 0.6547, -0.3780])
+        pos4 = np.array([-0.6547, 0.6547, -0.3780])
+        pos5 = np.array([0.6547, -0.6547, -0.3780])
+        pos6 = np.array([-0.6547, -0.6547, -0.3780])
+        pos7 = np.array([1.0, 0.0, 0.0])
+        pos8 = np.array([-1.0, 0.0, 0.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def hexagonal_bipyramidal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, -1.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.8660, -0.5, 0.0]), name="2")
-        pos3 = Atom("X", np.array([0.8660, 0.5, 0.0]), name="3")
-        pos4 = Atom("X", np.array([0.0, 1.0, 0.0]), name="4")
-        pos5 = Atom("X", np.array([-0.8660, 0.5, 0.0]), name="5")
-        pos6 = Atom("X", np.array([-0.8660, -0.5, 0.0]), name="6")
-        pos7 = Atom("X", np.array([0.0, 0.0, 1.0]), name="7")
-        pos8 = Atom("X", np.array([0.0, 0.0, -1.0]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, -1.0, 0.0])
+        pos2 = np.array([0.8660, -0.5, 0.0])
+        pos3 = np.array([0.8660, 0.5, 0.0])
+        pos4 = np.array([0.0, 1.0, 0.0])
+        pos5 = np.array([-0.8660, 0.5, 0.0])
+        pos6 = np.array([-0.8660, -0.5, 0.0])
+        pos7 = np.array([0.0, 0.0, 1.0])
+        pos8 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def square_antiprismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, 0.0, 1.0]), name="1")
-        pos2 = Atom("X", np.array([0.9653, 0.0, 0.2612]), name="2")
-        pos3 = Atom("X", np.array([-0.5655, 0.7823, 0.2612]), name="3")
-        pos4 = Atom("X", np.array([-0.8825, -0.3912, 0.2612]), name="4")
-        pos5 = Atom("X", np.array([0.1999, -0.9444, 0.2612]), name="5")
-        pos6 = Atom("X", np.array([0.3998, 0.7827, -0.4776]), name="6")
-        pos7 = Atom("X", np.array([-0.5998, 0.1620, -0.7836]), name="7")
-        pos8 = Atom("X", np.array([0.4826, -0.3912, -0.7836]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, 0.0, 1.0])
+        pos2 = np.array([0.9653, 0.0, 0.2612])
+        pos3 = np.array([-0.5655, 0.7823, 0.2612])
+        pos4 = np.array([-0.8825, -0.3912, 0.2612])
+        pos5 = np.array([0.1999, -0.9444, 0.2612])
+        pos6 = np.array([0.3998, 0.7827, -0.4776])
+        pos7 = np.array([-0.5998, 0.1620, -0.7836])
+        pos8 = np.array([0.4826, -0.3912, -0.7836])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def trigonal_dodecahedral_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([-0.5997, 0.0, 0.8002]), name="1")
-        pos2 = Atom("X", np.array([0.0, -0.9364, 0.3509]), name="2")
-        pos3 = Atom("X", np.array([0.5998, 0.0, 0.8002]), name="3")
-        pos4 = Atom("X", np.array([0.0, 0.9364, 0.3509]), name="4")
-        pos5 = Atom("X", np.array([-0.9364, 0.0, -0.3509]), name="5")
-        pos6 = Atom("X", np.array([0.0, -0.5997, -0.8002]), name="6")
-        pos7 = Atom("X", np.array([0.9365, 0.0, -0.3509]), name="7")
-        pos8 = Atom("X", np.array([0.0, 0.5997, -0.8002]), name="8")
+        center = np.zeros(3)
+        pos1 = np.array([-0.5997, 0.0, 0.8002])
+        pos2 = np.array([0.0, -0.9364, 0.3509])
+        pos3 = np.array([0.5998, 0.0, 0.8002])
+        pos4 = np.array([0.0, 0.9364, 0.3509])
+        pos5 = np.array([-0.9364, 0.0, -0.3509])
+        pos6 = np.array([0.0, -0.5997, -0.8002])
+        pos7 = np.array([0.9365, 0.0, -0.3509])
+        pos8 = np.array([0.0, 0.5997, -0.8002])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8]
+        )
 
     @classmethod
     def heptagonal_bipyramidal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.6235, 0.7818, 0.0]), name="2")
-        pos3 = Atom("X", np.array([-0.2225, 0.9749, 0.0]), name="3")
-        pos4 = Atom("X", np.array([-0.9010, 0.4339, 0.0]), name="4")
-        pos5 = Atom("X", np.array([-0.9010, -0.4339, 0.0]), name="5")
-        pos6 = Atom("X", np.array([-0.2225, -0.9749, 0.0]), name="6")
-        pos7 = Atom("X", np.array([0.6235, -0.7818, 0.0]), name="7")
-        pos8 = Atom("X", np.array([0.0, 0.0, 1.0]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, -1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.6235, 0.7818, 0.0])
+        pos3 = np.array([-0.2225, 0.9749, 0.0])
+        pos4 = np.array([-0.9010, 0.4339, 0.0])
+        pos5 = np.array([-0.9010, -0.4339, 0.0])
+        pos6 = np.array([-0.2225, -0.9749, 0.0])
+        pos7 = np.array([0.6235, -0.7818, 0.0])
+        pos8 = np.array([0.0, 0.0, 1.0])
+        pos9 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def capped_cube_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.6418, 0.6418, 0.4196]), name="1")
-        pos2 = Atom("X", np.array([0.6418, -0.6418, 0.4196]), name="2")
-        pos3 = Atom("X", np.array([-0.6418, 0.6418, 0.4196]), name="3")
-        pos4 = Atom("X", np.array([-0.6418, -0.6418, 0.4196]), name="4")
-        pos5 = Atom("X", np.array([0.5387, 0.5387, -0.6478]), name="5")
-        pos6 = Atom("X", np.array([0.5387, -0.5387, -0.6478]), name="6")
-        pos7 = Atom("X", np.array([-0.5387, 0.5387, -0.6478]), name="7")
-        pos8 = Atom("X", np.array([-0.5387, -0.5387, -0.6478]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, 1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([0.6418, 0.6418, 0.4196])
+        pos2 = np.array([0.6418, -0.6418, 0.4196])
+        pos3 = np.array([-0.6418, 0.6418, 0.4196])
+        pos4 = np.array([-0.6418, -0.6418, 0.4196])
+        pos5 = np.array([0.5387, 0.5387, -0.6478])
+        pos6 = np.array([0.5387, -0.5387, -0.6478])
+        pos7 = np.array([-0.5387, 0.5387, -0.6478])
+        pos8 = np.array([-0.5387, -0.5387, -0.6478])
+        pos9 = np.array([0.0, 0.0, 1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def capped_square_antiprismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.9322, 0.0, 0.3619]), name="1")
-        pos2 = Atom("X", np.array([-0.9322, 0.0, 0.3619]), name="2")
-        pos3 = Atom("X", np.array([0.0, 0.9322, 0.3619]), name="3")
-        pos4 = Atom("X", np.array([0.0, -0.9322, 0.3619]), name="4")
-        pos5 = Atom("X", np.array([0.5606, 0.5606, -0.6095]), name="5")
-        pos6 = Atom("X", np.array([-0.5606, 0.5606, -0.6095]), name="6")
-        pos7 = Atom("X", np.array([-0.5606, -0.5606, -0.6095]), name="7")
-        pos8 = Atom("X", np.array([0.5606, -0.5606, -0.6095]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, 1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([0.9322, 0.0, 0.3619])
+        pos2 = np.array([-0.9322, 0.0, 0.3619])
+        pos3 = np.array([0.0, 0.9322, 0.3619])
+        pos4 = np.array([0.0, -0.9322, 0.3619])
+        pos5 = np.array([0.5606, 0.5606, -0.6095])
+        pos6 = np.array([-0.5606, 0.5606, -0.6095])
+        pos7 = np.array([-0.5606, -0.5606, -0.6095])
+        pos8 = np.array([0.5606, -0.5606, -0.6095])
+        pos9 = np.array([0.0, 0.0, 1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def enneagonal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.7660, 0.6428, 0.0]), name="2")
-        pos3 = Atom("X", np.array([0.1736, 0.9848, 0.0]), name="3")
-        pos4 = Atom("X", np.array([-0.5, 0.8660, 0.0]), name="4")
-        pos5 = Atom("X", np.array([-0.9397, 0.3420, 0.0]), name="5")
-        pos6 = Atom("X", np.array([-0.9397, -0.3420, 0.0]), name="6")
-        pos7 = Atom("X", np.array([-0.5, -0.8660, 0.0]), name="7")
-        pos8 = Atom("X", np.array([0.1736, -0.9848, 0.0]), name="8")
-        pos9 = Atom("X", np.array([0.7660, -0.6428, 0.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.7660, 0.6428, 0.0])
+        pos3 = np.array([0.1736, 0.9848, 0.0])
+        pos4 = np.array([-0.5, 0.8660, 0.0])
+        pos5 = np.array([-0.9397, 0.3420, 0.0])
+        pos6 = np.array([-0.9397, -0.3420, 0.0])
+        pos7 = np.array([-0.5, -0.8660, 0.0])
+        pos8 = np.array([0.1736, -0.9848, 0.0])
+        pos9 = np.array([0.7660, -0.6428, 0.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def hula_hoop_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.5, 0.8660, 0.0]), name="2")
-        pos3 = Atom("X", np.array([-0.5, 0.8660, 0.0]), name="3")
-        pos4 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="4")
-        pos5 = Atom("X", np.array([-0.5, -0.8660, 0.0]), name="5")
-        pos6 = Atom("X", np.array([0.5, -0.8660, 0.0]), name="6")
-        pos7 = Atom("X", np.array([0.0, 0.0, 1.0]), name="7")
-        pos8 = Atom("X", np.array([0.5, 0.0, -0.8660]), name="8")
-        pos9 = Atom("X", np.array([-0.5, 0.0, -0.8660]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.5, 0.8660, 0.0])
+        pos3 = np.array([-0.5, 0.8660, 0.0])
+        pos4 = np.array([-1.0, 0.0, 0.0])
+        pos5 = np.array([-0.5, -0.8660, 0.0])
+        pos6 = np.array([0.5, -0.8660, 0.0])
+        pos7 = np.array([0.0, 0.0, 1.0])
+        pos8 = np.array([0.5, 0.0, -0.8660])
+        pos9 = np.array([-0.5, 0.0, -0.8660])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def triangular_cupola_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
-        pos2 = Atom("X", np.array([0.5, 0.8660, 0.0]), name="2")
-        pos3 = Atom("X", np.array([-0.5, 0.8660, 0.0]), name="3")
-        pos4 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="4")
-        pos5 = Atom("X", np.array([0.5, -0.8660, 0.0]), name="5")
-        pos6 = Atom("X", np.array([-0.5, -0.8660, 0.0]), name="6")
-        pos7 = Atom("X", np.array([0.5, 0.2887, -0.8165]), name="7")
-        pos8 = Atom("X", np.array([-0.5, 0.2887, -0.8165]), name="8")
-        pos9 = Atom("X", np.array([0.0, -0.5774, -0.8165]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([1.0, 0.0, 0.0])
+        pos2 = np.array([0.5, 0.8660, 0.0])
+        pos3 = np.array([-0.5, 0.8660, 0.0])
+        pos4 = np.array([-1.0, 0.0, 0.0])
+        pos5 = np.array([0.5, -0.8660, 0.0])
+        pos6 = np.array([-0.5, -0.8660, 0.0])
+        pos7 = np.array([0.5, 0.2887, -0.8165])
+        pos8 = np.array([-0.5, 0.2887, -0.8165])
+        pos9 = np.array([0.0, -0.5774, -0.8165])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def tridiminished_icosahedral_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([-0.2764, 0.8507, -0.4472]), name="1")
-        pos2 = Atom("X", np.array([-0.8944, 0.0, -0.4472]), name="2")
-        pos3 = Atom("X", np.array([-0.2764, -0.8507, -0.4472]), name="3")
-        pos4 = Atom("X", np.array([0.7236, -0.5257, -0.4472]), name="4")
-        pos5 = Atom("X", np.array([0.8944, 0.0, 0.4472]), name="5")
-        pos6 = Atom("X", np.array([0.2764, 0.8507, 0.4472]), name="6")
-        pos7 = Atom("X", np.array([-0.7236, -0.5257, 0.4472]), name="7")
-        pos8 = Atom("X", np.array([0.0, 0.0, 1.0]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, -1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([-0.2764, 0.8507, -0.4472])
+        pos2 = np.array([-0.8944, 0.0, -0.4472])
+        pos3 = np.array([-0.2764, -0.8507, -0.4472])
+        pos4 = np.array([0.7236, -0.5257, -0.4472])
+        pos5 = np.array([0.8944, 0.0, 0.4472])
+        pos6 = np.array([0.2764, 0.8507, 0.4472])
+        pos7 = np.array([-0.7236, -0.5257, 0.4472])
+        pos8 = np.array([0.0, 0.0, 1.0])
+        pos9 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def muffin_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, 0.9875, 0.1579]), name="1")
-        pos2 = Atom("X", np.array([0.9391, 0.3051, 0.1579]), name="2")
-        pos3 = Atom("X", np.array([0.5804, -0.7988, 0.1579]), name="3")
-        pos4 = Atom("X", np.array([-0.5804, -0.7988, 0.1579]), name="4")
-        pos5 = Atom("X", np.array([-0.9391, 0.3055, 0.1579]), name="5")
-        pos6 = Atom("X", np.array([-0.5799, -0.3356, -0.7423]), name="6")
-        pos7 = Atom("X", np.array([0.5799, -0.3356, -0.7423]), name="7")
-        pos8 = Atom("X", np.array([0.0, 0.6694, -0.7429]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, 1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, 0.9875, 0.1579])
+        pos2 = np.array([0.9391, 0.3051, 0.1579])
+        pos3 = np.array([0.5804, -0.7988, 0.1579])
+        pos4 = np.array([-0.5804, -0.7988, 0.1579])
+        pos5 = np.array([-0.9391, 0.3055, 0.1579])
+        pos6 = np.array([-0.5799, -0.3356, -0.7423])
+        pos7 = np.array([0.5799, -0.3356, -0.7423])
+        pos8 = np.array([0.0, 0.6694, -0.7429])
+        pos9 = np.array([0.0, 0.0, 1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def octagonal_pyramidal_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.7071, -0.7071, 0.0]), name="1")
-        pos2 = Atom("X", np.array([1.0, 0.0, 0.0]), name="2")
-        pos3 = Atom("X", np.array([0.7071, 0.7071, 0.0]), name="3")
-        pos4 = Atom("X", np.array([0.0, 1.0, 0.0]), name="4")
-        pos5 = Atom("X", np.array([-0.7071, 0.7071, 0.0]), name="5")
-        pos6 = Atom("X", np.array([-1.0, 0.0, 0.0]), name="6")
-        pos7 = Atom("X", np.array([-0.7071, -0.7071, 0.0]), name="7")
-        pos8 = Atom("X", np.array([0.0, -1.0, 0.0]), name="8")
-        pos9 = Atom("X", np.array([0.0, 0.0, -1.0]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([0.7071, -0.7071, 0.0])
+        pos2 = np.array([1.0, 0.0, 0.0])
+        pos3 = np.array([0.7071, 0.7071, 0.0])
+        pos4 = np.array([0.0, 1.0, 0.0])
+        pos5 = np.array([-0.7071, 0.7071, 0.0])
+        pos6 = np.array([-1.0, 0.0, 0.0])
+        pos7 = np.array([-0.7071, -0.7071, 0.0])
+        pos8 = np.array([0.0, -1.0, 0.0])
+        pos9 = np.array([0.0, 0.0, -1.0])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @classmethod
     def tricapped_trigonal_prismatic_shape(cls):
-        center = Atom("X", np.zeros(3), name="0")
-        pos1 = Atom("X", np.array([0.0, 0.0, 1.0]), name="1")
-        pos2 = Atom("X", np.array([-0.2357, 0.9129, 0.3333]), name="2")
-        pos3 = Atom("X", np.array([-0.9428, 0.0, 0.3333]), name="3")
-        pos4 = Atom("X", np.array([0.2357, -0.9129, 0.3333]), name="4")
-        pos5 = Atom("X", np.array([0.9428, 0.0, 0.3333]), name="5")
-        pos6 = Atom("X", np.array([0.5303, 0.6847, -0.5]), name="6")
-        pos7 = Atom("X", np.array([-0.5303, -0.6847, -0.5]), name="7")
-        pos8 = Atom("X", np.array([-0.5893, 0.4564, -0.6667]), name="8")
-        pos9 = Atom("X", np.array([0.5893, -0.4564, -0.6667]), name="9")
+        center = np.zeros(3)
+        pos1 = np.array([0.0, 0.0, 1.0])
+        pos2 = np.array([-0.2357, 0.9129, 0.3333])
+        pos3 = np.array([-0.9428, 0.0, 0.3333])
+        pos4 = np.array([0.2357, -0.9129, 0.3333])
+        pos5 = np.array([0.9428, 0.0, 0.3333])
+        pos6 = np.array([0.5303, 0.6847, -0.5])
+        pos7 = np.array([-0.5303, -0.6847, -0.5])
+        pos8 = np.array([-0.5893, 0.4564, -0.6667])
+        pos9 = np.array([0.5893, -0.4564, -0.6667])
 
-        return [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        return np.array(
+            [center, pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9]
+        )
 
     @staticmethod
     def new_shape(old_shape, new_connectivity, bond_change):
@@ -1133,7 +1164,7 @@ class Atom:
         best_score = None
         best_shape = None
         for shape in try_shapes:
-            X = np.array([position.coords for position in try_shapes[shape]])
+            X = try_shapes[shape]
             r2 = np.matmul(np.transpose(X), X)
             u, s2, vh = np.linalg.svd(r2)
 
