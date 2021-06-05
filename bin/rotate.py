@@ -8,7 +8,7 @@ from warnings import warn
 import numpy as np
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 rotate_parser = argparse.ArgumentParser(
     description="rotate a fragment or molecule's coordinates",
@@ -194,7 +194,7 @@ elif args.num is not None and args.angle is not None:
 if not args.radians:
     args.angle = np.deg2rad(args.angle)
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

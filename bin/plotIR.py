@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from AaronTools.fileIO import FileReader
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, glob_files
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
@@ -43,7 +43,20 @@ ir_parser.add_argument(
     help="type of plot\nDefault: transmittance",
 )
 
+
+# TODO: figure out more anharmonic options
+# anharmonic_options = ir_parser.add_argument_group("anharmonic options")
 ir_parser.add_argument(
+    "-na", "--harmonic",
+    action="store_false",
+    default=True,
+    dest="anharmonic",
+    help="force to use harmonic frequencies when anharmonic data is in the file",
+)
+
+
+peak_options = ir_parser.add_argument_group("peak options")
+peak_options.add_argument(
     "-p", "--peak-type",
     type=str,
     choices=["pseudo-voigt", "gaussian", "lorentzian", "delta"],
@@ -52,7 +65,7 @@ ir_parser.add_argument(
     help="function for peaks\nDefault: pseudo-voigt",
 )
 
-ir_parser.add_argument(
+peak_options.add_argument(
     "-m", "--voigt-mixing",
     type=float,
     default=0.5,
@@ -60,7 +73,7 @@ ir_parser.add_argument(
     help="fraction of pseudo-Voigt that is Gaussian\nDefault: 0.5",
 )
 
-ir_parser.add_argument(
+peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
     default=15.0,
@@ -77,7 +90,9 @@ ir_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
-ir_parser.add_argument(
+
+scale_options = ir_parser.add_argument_group("scale frequencies")
+scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
     default=0.0,
@@ -86,7 +101,7 @@ ir_parser.add_argument(
     "Default: 0 (no scaling)",
 )
 
-ir_parser.add_argument(
+scale_options.add_argument(
     "-q", "--quadratic-scale",
     type=float,
     default=0.0,
@@ -103,7 +118,9 @@ ir_parser.add_argument(
     help="do not reverse x-axis",
 )
 
-ir_parser.add_argument(
+
+section_options = ir_parser.add_argument_group("x-axis interruptions")
+section_options.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="centers",
@@ -112,7 +129,7 @@ ir_parser.add_argument(
     "values should be separated by commas"
 )
 
-ir_parser.add_argument(
+section_options.add_argument(
     "-sw", "--section-widths",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
@@ -155,7 +172,7 @@ if args.exp_data:
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
-for f in args.infiles:
+for f in glob_files(args.infiles):
     fr = FileReader(f, just_geom=False)
 
     freq = fr.other["frequency"]
@@ -176,6 +193,7 @@ for f in args.infiles:
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
+        anharmonic=freq.anharm_data and args.anharmonic,
     )
 
     if args.fig_width:

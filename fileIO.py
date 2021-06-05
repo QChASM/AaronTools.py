@@ -12,6 +12,21 @@ from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.oniomatoms import OniomAtom
 from AaronTools.theory import *
 
+try:
+    # numexpr can be used to evaluate some array operations
+    # more quickly
+    import numexpr as ne
+    _WITH_NE = True
+except (ModuleNotFoundError, ImportError):
+    _WITH_NE = False
+
+try:
+    # joblib can be used to evaluate a function in parallel
+    from joblib import Parallel, delayed
+    _WITH_JOBLIB = True
+except (ModuleNotFoundError, ImportError) as e:
+    _WITH_JOBLIB = False
+
 read_types = [
     "xyz",
     "log",
@@ -26,8 +41,9 @@ read_types = [
     "fchk",
     "crest",
     "xtb",
+    "sqmout",
 ]
-write_types = ["xyz", "com", "inp", "in"]
+write_types = ["xyz", "com", "inp", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
 float_num = re.compile("[-+]?\d+\.?\d*")
 LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
@@ -57,6 +73,7 @@ ERROR = {
     "Atomic number out of range for .* basis set.": "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
+    "A syntax error was detected in the input line": "SYNTAX",
     "Unknown message": "UNKNOWN",
     "Atoms in 1 layers were given but there should be 2": "LAYER",
     "MM function not complete": "MM_PARAM",
@@ -85,6 +102,7 @@ ERROR_ORCA = {
     "WARNING: Analytical MP2 frequency calculations": "NUMFREQ",
     "WARNING: Analytical Hessians are not yet implemented for meta-GGA functionals": "NUMFREQ",
     "ORCA finished with error return": "UNKNOWN",
+    "UNRECOGNIZED OR DUPLICATED KEYWORD(S) IN SIMPLE INPUT LINE": "TYPO",
 }
 
 # some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html
@@ -177,6 +195,8 @@ class FileWriter:
                 style = "inp"
             elif style.lower() == "psi4":
                 style = "in"
+            elif style.lower() == "sqm":
+                style = "sqmin"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -196,11 +216,14 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_com(geom, theory, outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
+            if "oniom" in kwargs:
+                out = cls.write_oniom_com(geom, step, theory, outfile, **kwargs)
+            elif "oniom" not in kwargs:
+                out = cls.write_com(geom, step, theory, outfile, **kwargs)
         elif style.lower() == "inp":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -219,11 +242,17 @@ class FileWriter:
                 raise TypeError(
                     "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
-#todo work on integrating oniom into theory objects
-            if "oniom" in kwargs:
-                out = cls.write_oniom_com(geom, step, theory, outfile, **kwargs)
-            elif "oniom" not in kwargs:
-                out = cls.write_com(geom, step, theory, outfile, **kwargs)
+        elif style.lower() == "sqmin":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_sqm(geom, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "cube":
+            out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
         return out
 
@@ -487,7 +516,241 @@ class FileWriter:
         if return_warnings:
             return warnings
 
+    @classmethod
+    def write_sqm(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
+        header, header_warnings = theory.make_header(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="sqm", return_warnings=True, **kwargs
+        )
 
+        s = header + mol
+        warnings = header_warnings + mol_warnings
+
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            if "step" in kwargs:
+                fname = "{}.{}.sqmin".format(geom.name, step2str(kwargs["step"]))
+            else:
+                fname = "{}.sqmin".format(geom.name)
+            with open(fname, "w") as f:
+                f.write(s)
+
+        elif outfile is False:
+            if return_warnings:
+                return s, warnings
+            return s
+
+        else:
+            with open(outfile, "w") as f:
+                f.write(s)
+
+        if return_warnings:
+            return warnings
+
+    @classmethod
+    def write_cube(
+        cls, geom, orbitals=None, outfile=None, mo=None, ao=None,
+        padding=4., spacing=0.35, alpha=True, xyz=False, n_jobs=1,
+        **kwargs
+    ):
+        """
+        write a cube file for a molecular orbital
+        geom - geometry
+        orbitals - Orbitals()
+        outfile - output destination
+        mo - index of molecular orbital or "homo" for ground state
+             highest occupied molecular orbital or "lumo" for first
+             ground state unoccupied MO
+        ao - index of atomic orbital to print
+        padding - padding around geom's coordinates
+        spacing - targeted spacing between points
+        n_jobs - number of parallel threads to use
+                 this is on top of NumPy's and NumExpr's multithreading, so
+                 if NumPy/NumExpr use 8 threads and n_jobs=2, you can
+                 expect to see 16 threads in use
+                 the peak memory used will also increase linearly
+                 with n_jobs
+                 if the joblib module is not available or n_jobs <= 1,
+                 no parallelization will be attempted
+        """
+        if orbitals is None:
+            raise RuntimeError(
+                "no Orbitals() instance given to FileWriter.write_cube"
+            )
+        
+        def get_standard_axis():
+            geom_coords = geom.coords
+    
+            x_min = np.min(geom_coords[:,0])
+            x_max = np.max(geom_coords[:,0])
+            y_min = np.min(geom_coords[:,1])
+            y_max = np.max(geom_coords[:,1])
+            z_min = np.min(geom_coords[:,2])
+            z_max = np.max(geom_coords[:,2])
+            
+            r1 = 2 * padding + x_max - x_min
+            n_pts1 = int(r1 // spacing) + 1
+            d1 = r1 / (n_pts1 - 1)
+            v1 = (d1, 0., 0.)
+            r2 = 2 * padding + y_max - y_min
+            n_pts2 = int(r2 // spacing) + 1
+            d2 = r2 / (n_pts2 - 1)
+            v2 = (0., d2, 0.)
+            r3 = 2 * padding + z_max - z_min
+            n_pts3 = int(r3 // spacing) + 1
+            d3 = r3 / (n_pts3 - 1)
+            v3 = (0., 0., d3)
+            com = np.array([x_min, y_min, z_min]) - padding
+            return n_pts1, n_pts2, n_pts3, v1, v2, v3, com
+        
+        if xyz:
+            n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
+        else:
+            test_coords = geom.coords - geom.COM()
+            covar = np.dot(test_coords.T, test_coords)
+            try:
+                u, s, vh = np.linalg.svd(covar)
+                v1 = u[:,0]
+                v2 = u[:,1]
+                v3 = u[:,2]
+                new_coords = np.dot(test_coords, u)
+                x1 = np.dot(test_coords, v1)
+                x2 = np.dot(test_coords, v2)
+                x3 = np.dot(test_coords, v3)
+                xr_max = np.max(new_coords[:,0])
+                xr_min = np.min(new_coords[:,0])
+                yr_max = np.max(new_coords[:,1])
+                yr_min = np.min(new_coords[:,1])
+                zr_max = np.max(new_coords[:,2])
+                zr_min = np.min(new_coords[:,2])
+                m = np.mean(new_coords, axis=0)
+                com = np.array([xr_min, yr_min, zr_min]) - padding
+                com = np.dot(u, com)
+                com += geom.COM()
+                r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
+                r2 = 2 * padding + np.linalg.norm(yr_max - yr_min)
+                r3 = 2 * padding + np.linalg.norm(zr_max - zr_min)
+                n_pts1 = int(r1 // spacing) + 1
+                n_pts2 = int(r2 // spacing) + 1
+                n_pts3 = int(r3 // spacing) + 1
+                v1 *= r1 / (n_pts1 - 1)
+                v2 *= r2 / (n_pts2 - 1)
+                v3 *= r3 / (n_pts3 - 1)
+            except np.linalg.LinAlgError:
+                n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
+
+        # cube file uses atomic units
+        v1 /= UNIT.A0_TO_BOHR
+        v2 /= UNIT.A0_TO_BOHR
+        v3 /= UNIT.A0_TO_BOHR
+        com /= UNIT.A0_TO_BOHR
+
+        if mo is None and ao is None:
+            mo = "homo"
+
+        if ao is not None:
+            mo = np.zeros(orbitals.n_mos)
+            mo[ao] = 1.
+
+        if isinstance(mo, str):
+            if mo.lower() == "homo":
+                mo = max(orbitals.n_alpha, orbitals.n_beta) - 1
+            elif mo.lower() == "lumo":
+                mo = max(orbitals.n_alpha, orbitals.n_beta)
+            else:
+                raise TypeError("mo should be an integer, \"homo\", or \"lumo\"")
+            if mo < 0:
+                mo = 0
+        s = ""
+        s += " %s\n" % geom.comment
+        if ao is None:
+            s += " mo index: %i\n" % mo
+        else:
+            s += " ao inedx: %i\n" % ao
+        # the '-' in front of the number of atoms indicates that this is
+        # MO info so there's an extra data entry between the molecule
+        # and the function values
+        s += " -%i %13.5f %13.5f %13.5f 1\n" % (
+            len(geom.atoms), *com,
+        )
+        
+        # the basis vectors of cube files are ordered based on the
+        # spacing between points along that axis
+        # or maybe it's the number of points?
+        # we use the first one
+        arr = []
+        v_list = []
+        n_list = []
+        for n, v in sorted(
+            zip(
+                [n_pts1, n_pts2, n_pts3], [v1, v2, v3]
+            ),
+            key=lambda p: np.linalg.norm(p[1])
+        ):
+            s += " %5i %13.5f %13.5f %13.5f\n" % (
+                n, *v
+            )
+            arr.append(np.linspace(0, n - 1, num=n, dtype=int))
+            v_list.append(v)
+            n_list.append(n)
+        # contruct an array of points for the grid
+        ndx = np.vstack(
+            np.mgrid[0:n_list[0], 0:n_list[1], 0:n_list[2]]
+        ).reshape(3, np.prod(n_list)).T
+        coords = np.matmul(ndx, v_list)
+        del ndx
+        coords += com
+
+        # write the structure in bohr
+        for atom in geom.atoms:
+            s += " %5i %13.5f %13.5f %13.5f %13.5f\n" % (
+                ELEMENTS.index(atom.element), ELEMENTS.index(atom.element),
+                atom.coords[0] / UNIT.A0_TO_BOHR,
+                atom.coords[1] / UNIT.A0_TO_BOHR,
+                atom.coords[2] / UNIT.A0_TO_BOHR,
+            )
+        
+        # extra section - only for MO data
+        if ao is None:
+            s += " %5i %5i\n" % (1, mo + 1)
+        else:
+            s += " %5i %5i\n" % (1, ao + 1)
+        
+        # get values for this MO
+        mo_val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
+
+        # write to a file
+        for n1 in range(0, n_list[0]):
+            for n2 in range(0, n_list[1]):
+                val_ndx = n1 * n_list[2] * n_list[1] + n2 * n_list[2]
+                val_subset = mo_val[val_ndx:val_ndx + n_list[2]]
+                for i, val in enumerate(val_subset):
+                    if abs(val) < 1e-30:
+                        val = 0
+                    s += "%13.5e" % val
+                    if (i + 1) % 6 == 0:
+                        s += "\n"
+                s += "\n"
+        
+        if outfile is None:
+            # if no output file is specified, use the name of the geometry
+            with open(geom.name + ".cube", "w") as f:
+                f.write(s)
+        elif outfile is False:
+            # if no output file is desired, just return the file contents
+            return s
+        else:
+            # write output to the requested destination
+            with open(outfile, "w") as f:
+                f.write(s)            
+        return
+
+
+@addlogger
 class FileReader:
     """
     Attributes:
@@ -497,6 +760,9 @@ class FileReader:
         atoms [Atom] or [OniomAtom]
         other {}
     """
+
+    LOG = None
+    LOGLEVEL = "DEBUG"
 
     def __init__(
         self,
@@ -569,6 +835,8 @@ class FileReader:
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
                 self.read_xtb(f, freq_name=freq_name)
+            elif self.file_type == "sqmout":
+                self.read_sqm(f)
 
     def read_file(
         self, get_all=False, just_geom=True, oniom=False, freq_name=None, conf_name=None 
@@ -613,6 +881,8 @@ class FileReader:
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
             self.read_xtb(f, freq_name=freq_name)
+        elif self.file_type == "sqmout":
+            self.read_sqm(f)
 
         f.close()
         return
@@ -705,7 +975,7 @@ class FileReader:
         read TRIPOS mol2
         """
         atoms = []
-        
+
         lines = f.readlines()
         i = 0
         while i < len(lines):
@@ -715,7 +985,7 @@ class FileReader:
                 n_atoms = int(info[0])
                 n_bonds = int(info[1])
                 i += 3
-                
+
             elif lines[i].startswith("@<TRIPOS>ATOM"):
                 for j in range(0, n_atoms):
                     i += 1
@@ -723,10 +993,12 @@ class FileReader:
                     # name = info[1]
                     coords = np.array([float(x) for x in info[2:5]])
                     element = re.match("([A-Za-z]+)", info[5]).group(1)
-                    atoms.append(Atom(element=element, coords=coords, name=str(j + 1)))
-            
+                    atoms.append(
+                        Atom(element=element, coords=coords, name=str(j + 1))
+                    )
+
                 self.atoms = atoms
-            
+
             elif lines[i].startswith("@<TRIPOS>BOND"):
                 for j in range(0, n_bonds):
                     i += 1
@@ -734,7 +1006,7 @@ class FileReader:
                     a1, a2 = [int(ndx) - 1 for ndx in info[1:3]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
-            
+
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
@@ -1218,6 +1490,129 @@ class FileReader:
 
                     self.other["gradient"] = grad
 
+                elif "MAYER POPULATION ANALYSIS" in line:
+                    self.skip_lines(f, 2)
+                    n += 2
+                    line = f.readline()
+                    data = dict()
+                    headers = []
+                    while line.strip():
+                        info = line.split()
+                        header = info[0]
+                        name = " ".join(info[2:])
+                        headers.append(header)
+                        data[header] = (name, [])
+                        line = f.readline()
+                    self.skip_lines(f, 1)
+                    n += 1
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        info = line.split()[2:]
+                        for header, val in zip(headers, info):
+                            data[header][1].append(float(val))
+                    
+                    for header in headers:
+                        self.other[data[header][0]] = np.array(data[header][1])
+
+                elif line.startswith("LOEWDIN ATOMIC CHARGES"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = np.zeros(len(self.atoms))
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges[i] = float(line.split()[-1])
+                    self.other["Löwdin Charges"] = charges
+
+                elif line.startswith("BASIS SET IN INPUT FORMAT"):
+                    # read basis set primitive info
+                    self.skip_lines(f, 3)
+                    n += 3
+                    line = f.readline()
+                    n += 1
+                    self.other["basis_set_by_ele"] = dict()
+                    while "--" not in line:
+                        new_gto = re.search("NewGTO\s+(\S+)", line)
+                        if new_gto:
+                            ele = new_gto.group(1)
+                            line = f.readline()
+                            n += 1
+                            primitives = []
+                            while "end" not in line:
+                                shell_type, n_prim = line.split()
+                                n_prim = int(n_prim)
+                                exponents = []
+                                con_coeffs = []
+                                for i in range(0, n_prim):
+                                    line = f.readline()
+                                    n += 1
+                                    info = line.split()
+                                    exponent = float(info[1])
+                                    con_coeff = [float(x) for x in info[2:]]
+                                    exponents.append(exponent)
+                                    con_coeffs.append(con_coeff)
+                                primitives.append(
+                                    (
+                                        shell_type,
+                                        n_prim,
+                                        exponents,
+                                        con_coeffs,
+                                    )
+                                )
+                                line = f.readline()
+                                n += 1
+                            self.other["basis_set_by_ele"][ele] = primitives
+                        line = f.readline()
+                        n += 1
+
+                elif line.startswith("MOLECULAR ORBITALS"):
+                    # read molecular orbitals
+                    self.skip_lines(f, 1)
+                    n += 1
+                    line = f.readline()
+                    self.other["mo_coefficients"] = []
+                    self.other["mo_nrgs"] = []
+                    self.other["mo_occupancies"] = []
+                    self.other["shell_to_atom"] = []
+                    at_info = re.compile(
+                        "\s*(\d+)\S\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
+                    )
+                    mo_coefficients = []
+                    orbit_nrgs = []
+                    occupancy = []
+                    while line.strip() != "":
+                        at_match = at_info.match(line)
+                        if at_match:
+                            ndx = int(at_match.group(1))
+                            self.other["shell_to_atom"].append(ndx)
+                            coeffs = []
+                            # there might not always be a space between the coefficients
+                            # so we can't just split(), but they are formatted
+                            for i in range(17, len(line), 10):
+                                coeffs.append(float(line[i: i + 9]))
+                            for coeff, mo in zip(coeffs, mo_coefficients):
+                                mo.append(coeff)
+                        elif "--" not in line:
+                            orbit_nrgs = occupancy
+                            occupancy = [float(x) for x in line.split()]
+                        elif "--" in line:
+                            self.other["mo_nrgs"].extend(orbit_nrgs)
+                            self.other["mo_occupancies"].extend(occupancy)
+                            if mo_coefficients:
+                                self.other["mo_coefficients"].extend(mo_coefficients)
+                            mo_coefficients = [[] for x in orbit_nrgs]
+                        line = f.readline()
+                        n += 1
+                    self.other["mo_coefficients"].extend(mo_coefficients)
+                    self.other["mo_occupancies"].extend(occupancy)
+                    self.other["mo_nrgs"].extend(orbit_nrgs)
+
+                elif line.startswith("N(Alpha)  "):
+                    self.other["n_alpha"] = int(np.rint(float(line.split()[2])))
+
+                elif line.startswith("N(Beta)  "):
+                    self.other["n_beta"] = int(np.rint(float(line.split()[2])))
+
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
 
@@ -1235,6 +1630,9 @@ class FileReader:
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
+            
+            if "mo_coefficients" in self.other and "basis_set_by_ele" in self.other:
+                self.other["orbitals"] = Orbitals(self)
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -1424,8 +1822,52 @@ class FileReader:
                     freq_str, self.other["hpmodes"]
                 )
 
+            if "Anharmonic Infrared Spectroscopy" in line:
+                self.skip_lines(f, 5)
+                n += 5
+                anharm_str = ""
+                combinations_read = False
+                combinations = False
+                line = f.readline()
+                while not combinations_read:
+                    n += 1
+                    anharm_str += line
+                    if "Combination Bands" in line:
+                        combinations = True
+                    line = f.readline()
+                    if combinations and line == "\n":
+                        combinations_read = True
+                
+                self.other["frequency"].parse_gaussian_anharm(
+                    anharm_str.splitlines()
+                )
+
+            # X matrix for anharmonic
+            if "Total Anharmonic X Matrix" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                n_freq = len(self.other["frequency"].data)
+                n_sections = int(np.ceil(n_freq / 5))
+                x_matrix = np.zeros((n_freq, n_freq))
+                for section in range(0, n_sections):
+                    header = f.readline()
+                    n += 1
+                    for j in range(5 * section, n_freq):
+                        line = f.readline()
+                        n += 1
+                        ll = 5 * section
+                        ul = 5 * section + min(j - ll + 1, 5)
+                        x_matrix[j, ll:ul] = [
+                            float(x.replace("D", "e")) for x in line.split()[1:]
+                        ]
+                x_matrix += np.tril(x_matrix, k=-1).T
+                self.other["X_matrix"] = x_matrix
+
+            if "Total X0" in line:
+                self.other["X0"] = float(line.split()[5])
+
             # Thermo
-            if "Temperature" in line:
+            if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(
                     float_num.search(line).group(0)
                 )
@@ -1436,6 +1878,31 @@ class FileReader:
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot
+            
+            # rotational constants from anharmonic frequency jobs
+            if "Rotational Constants (in MHz)" in line:
+                self.skip_lines(f, 2)
+                n += 2
+                equilibrium_rotational_temperature = np.zeros(3)
+                ground_rotational_temperature = np.zeros(3)
+                centr_rotational_temperature = np.zeros(3)
+                for i in range(0, 3):
+                    line = f.readline()
+                    n += 1
+                    info = line.split()
+                    Be = float(info[1])
+                    B00 = float(info[3])
+                    B0 = float(info[5])
+                    equilibrium_rotational_temperature[i] = Be
+                    ground_rotational_temperature[i] = B00
+                    centr_rotational_temperature[i] = B0
+                equilibrium_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                ground_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                centr_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
+                self.other["ground_rotational_temperature"] = ground_rotational_temperature
+                self.other["centr_rotational_temperature"] = centr_rotational_temperature
+            
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
@@ -1503,6 +1970,27 @@ class FileReader:
                     gradient[i] = np.array([float(x) for x in info[2:]])
 
                 self.other["forces"] = gradient
+
+            # atomic charges
+            if "Mulliken charges:" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                charges = []
+                for i in range(0, len(self.atoms)):
+                    line = f.readline()
+                    n += 1
+                    charges.append(float(line.split()[2]))
+                self.other["Mulliken Charges"] = charges 
+            
+            if "APT charges:" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                charges = []
+                for i in range(0, len(self.atoms)):
+                    line = f.readline()
+                    n += 1
+                    charges.append(float(line.split()[2]))
+                self.other["APT Charges"] = charges 
 
             # capture errors
             # only keep first error, want to fix one at a time
@@ -1617,12 +2105,13 @@ class FileReader:
                                 job_type.append(FrequencyJob())
                                 continue
 
-                            other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                             for opt in options:
                                 if opt.lower().startswith("grid"):
                                     grid_name = opt.split("=")[1]
                                     grid = IntegrationGrid(grid_name)
                                 else:
+                                    if "Integral" not in other_kwargs[GAUSSIAN_ROUTE]:
+                                        other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
                                     other_kwargs[GAUSSIAN_ROUTE][
                                         "Integral"
                                     ].append(opt)
@@ -1644,18 +2133,22 @@ class FileReader:
                                 other_kwargs[GAUSSIAN_ROUTE][option] = []
                                 continue
 
-                    theory = Theory(
-                        charge=self.other["charge"],
-                        multiplicity=self.other["multiplicity"],
-                        job_type=job_type,
-                        basis=basis,
-                        method=method,
-                        grid=grid,
-                        solvent=solvent,
-                    )
-
-                    self.other["theory"] = theory
                     self.other["other_kwargs"] = other_kwargs
+                    try:
+                        theory = Theory(
+                            charge=self.other["charge"],
+                            multiplicity=self.other["multiplicity"],
+                            job_type=job_type,
+                            basis=basis,
+                            method=method,
+                            grid=grid,
+                            solvent=solvent,
+                        )
+                        self.other["theory"] = theory
+                    except KeyError:
+                        # if there is a serious error, too little info may be available
+                        # to properly create the theory object
+                        pass
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -1837,6 +2330,9 @@ class FileReader:
         real_info = re.compile(
             "([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
         )
+        char_info = re.compile(
+            "([\S\s]+?)\s*C\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+        )
 
         theory = Theory()
 
@@ -1845,7 +2341,11 @@ class FileReader:
         i = 0
         while i < len(lines):
             line = lines[i]
-            if i == 1:
+            if i == 0:
+                other["comment"] = line.strip()
+            elif i == 1:
+                i += 1
+                line = lines[i]
                 job_info = line.split()
                 if job_info[0] == "SP":
                     theory.job_type = [SinglePointJob()]
@@ -1867,6 +2367,7 @@ class FileReader:
 
             int_match = int_info.match(line)
             real_match = real_info.match(line)
+            char_match = char_info.match(line)
             if int_match is not None:
                 data = int_match.group(1)
                 value = int_match.group(3)
@@ -1901,6 +2402,13 @@ class FileReader:
                     else:
                         other[data] = float(value)
 
+            # elif char_match is not None:
+            #     data = char_match.group(1)
+            #     value = char_match.group(3)
+            #     if not just_geom:
+            #         other[data] = lines[i + 1]
+            #         i += 1
+
             i += 1
 
         self.other = other
@@ -1914,6 +2422,11 @@ class FileReader:
                 name=str(n + 1),
             )
             self.atoms.append(atom)
+        
+        try:
+            self.other["orbitals"] = Orbitals(self)
+        except NotImplementedError:
+            pass
 
     def read_crest(self, f, conf_name=None):
         """
@@ -1972,8 +2485,19 @@ class FileReader:
         line = True
         self.other["finished"] = False
         self.other["error"] = None
+        self.atoms = []
+        self.comment = ""
         while line:
             line = f.readline()
+            if "Optimized Geometry" in line:
+                line = f.readline()
+                n_atoms = int(line.strip())
+                line = f.readline()
+                self.comment = " ".join(line.strip().split()[2:])
+                for i in range(n_atoms):
+                    line = f.readline()
+                    elem, x, y, z = line.split()
+                    self.atoms.append(Atom(element=elem, coords=[x, y, z]))
             if "normal termination" in line:
                 self.other["finished"] = True
             if "abnormal termination" in line:
@@ -2000,6 +2524,55 @@ class FileReader:
             with open(freq_name) as f_freq:
                 self.other["frequency"] = Frequency(f_freq.read())
 
+    def read_sqm(self, f):
+        lines = f.readlines()
+        
+        self.other["finished"] = False
+        
+        self.atoms = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if "Atomic Charges for Step" in line:
+                elements = []
+                for info in lines[i + 2:]:
+                    if not info.strip() or not info.split()[0].isdigit():
+                        break
+                    ele = info.split()[1]
+                    elements.append(ele)
+                i += len(elements) + 2
+                
+            if "Final Structure" in line:
+                k = 0
+                for info in lines[i + 4:]:
+                    data = info.split()
+                    coords = np.array([x for x in data[4:7]])
+                    self.atoms.append(
+                        Atom(
+                            name=str(k + 1),
+                            coords=coords,
+                            element=elements[k],
+                        )
+                    )
+                    k += 1
+                    if k == len(elements):
+                        break
+                i += k + 4
+            
+            if "Calculation Completed" in line:
+                self.other["finished"] = True
+    
+            if "Total SCF energy" in line:
+                self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
+
+            i += 1
+        
+        if not self.atoms:
+            # there's no atoms if there's an error
+            # error is probably on the last line
+            self.other["error"] = "UNKNOWN"
+            self.other["error_msg"] = line
+
 
 @addlogger
 class Frequency:
@@ -2022,6 +2595,8 @@ class Frequency:
         :frequency: float
         :intensity: float
         :vector: (2D array) normal mode vectors
+        :forcek: float
+        :symmetry: str
         """
 
         def __init__(
@@ -2041,14 +2616,53 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
 
-    def __init__(self, data, hpmodes=None, style="log"):
+
+    class AnharmonicData:
+        """
+        ATTRIBUTES
+        :frequency: float
+        :harmonic: Data() or None
+        :intensity: float
+        :overtones: list(AnharmonicData)
+        :combinations: dict(int: AnharmonicData)
+        """
+
+        def __init__(
+            self,
+            frequency,
+            intensity,
+            harmonic,
+        ):
+            self.frequency = frequency
+            self.harmonic = harmonic
+            if harmonic:
+                self.delta_anh = frequency - harmonic.frequency
+            self.intensity = intensity
+            self.overtones = []
+            self.combinations = dict()
+        
+        def __lt__(self, other):
+            return self.frequency < other.frequency
+
+        @property
+        def harmonic_frequency(self):
+            return self.harmonic.frequency
+
+        @property
+        def harmonic_intensity(self):
+            return self.harmonic.intensity
+
+
+    def __init__(self, data, hpmodes=None, style="log", harmonic=True):
         """
         :data: should either be a str containing the lines of the output file
             with frequency information, or a list of Data objects
         :hpmodes: required when data is a string
         :form:    required when data is a string; denotes file format (log, out, ...)
+        :harmonic: bool, data is for anharmonic frequencies
         """
         self.data = []
+        self.anharm_data = None
         self.imaginary_frequencies = None
         self.real_frequencies = None
         self.lowest_frequency = None
@@ -2067,7 +2681,7 @@ class Frequency:
         else:
             return
 
-        lines = data.split("\n")
+        lines = data.splitlines()
         num_head = 0
         for line in lines:
             if "Harmonic frequencies" in line:
@@ -2075,14 +2689,25 @@ class Frequency:
         if hpmodes and num_head != 2:
             self.LOG.warning("Log file damaged, cannot get frequencies")
             return
-        if style == "log":
-            self.parse_lines(lines, hpmodes)
-        elif style == "out":
-            self.parse_orca_lines(lines, hpmodes)
-        elif style == "dat":
-            self.parse_psi4_lines(lines, hpmodes)
+        
+        if harmonic:
+            if style == "log":
+                self.parse_gaussian_lines(lines, hpmodes)
+            elif style == "out":
+                self.parse_orca_lines(lines, hpmodes)
+            elif style == "dat":
+                self.parse_psi4_lines(lines, hpmodes)
+            else:
+                raise RuntimeError(
+                    "no harmonic frequency parser for %s files" % style
+                )
         else:
-            raise RuntimeError("no frequency parser for %s files" % style)
+            if style == "log":
+                self.parse_gaussian_anharm(lines)
+            else:
+                raise RuntimeError(
+                    "no anharmonic frequency parser for %s files" % style
+                )
 
         self.sort_frequencies()
         return
@@ -2199,7 +2824,7 @@ class Frequency:
             inten = float(ir_info[2])
             self.data[t].intensity = inten
 
-    def parse_lines(self, lines, hpmodes):
+    def parse_gaussian_lines(self, lines, hpmodes):
         num_head = 0
         idx = -1
         modes = []
@@ -2274,6 +2899,89 @@ class Frequency:
             data.vector = np.array(mode, dtype=np.float64)
         return
 
+    def parse_gaussian_anharm(self, lines):
+        reading_combinations = False
+        reading_overtones = False
+        reading_fundamentals = False
+        
+        combinations = []
+        overtones = []
+        fundamentals = []
+        
+        mode_re = re.compile("(\d+)\((\d+)\)")
+        
+        for line in lines:
+            if "---" in line or "Mode" in line or not line.strip():
+                continue
+            if "Fundamental Bands" in line:
+                reading_fundamentals = True
+                continue
+            if "Overtones" in line:
+                reading_overtones = True
+                continue
+            if "Combination Bands" in line:
+                reading_combinations = True
+                continue
+
+            if reading_combinations:
+                info = line.split()
+                mode1 = mode_re.search(info[0])
+                mode2 = mode_re.search(info[1])
+                ndx_1 = int(mode1.group(1))
+                exp_1 = int(mode1.group(2))
+                ndx_2 = int(mode2.group(1))
+                exp_2 = int(mode2.group(2))
+                harm_freq = float(info[2])
+                anharm_freq = float(info[3])
+                anharm_inten = float(info[4])
+                harm_inten = 0
+                combinations.append(
+                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq,
+                    anharm_inten, harm_freq, harm_inten)
+                )
+            elif reading_overtones:
+                info = line.split()
+                mode = mode_re.search(info[0])
+                ndx = int(mode.group(1))
+                exp = int(mode.group(2))
+                harm_freq = float(info[1])
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[3])
+                harm_inten = 0
+                overtones.append(
+                    (ndx, exp, anharm_freq, anharm_inten, harm_freq, harm_inten)
+                )
+            elif reading_fundamentals:
+                info = line.split()
+                harm_freq = float(info[1])
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[4])
+                harm_inten = float(info[3])
+                fundamentals.append(
+                    (anharm_freq, anharm_inten, harm_freq, harm_inten)
+                )
+        
+        self.anharm_data = []
+        for i, mode in enumerate(sorted(fundamentals, key=lambda pair: pair[2])):
+            self.anharm_data.append(
+                self.AnharmonicData(mode[0], mode[1], harmonic=self.data[i])
+            )
+        for overtone in overtones:
+            ndx = len(fundamentals) - overtone[0]
+            data = self.anharm_data[ndx]
+            harm_data = self.Data(overtone[4], intensity=overtone[5])
+            data.overtones.append(
+                self.AnharmonicData(overtone[2], overtone[3], harmonic=harm_data)
+            )
+        for combo in combinations:
+            ndx1 = len(fundamentals) - combo[0]
+            ndx2 = len(fundamentals) - combo[1]
+            data = self.anharm_data[ndx1]
+            harm_data = self.Data(combo[6], intensity=combo[7])
+            data.combinations[ndx2] = [
+                self.AnharmonicData(combo[4], combo[5], harmonic=harm_data)
+            ]
+
     def sort_frequencies(self):
         self.imaginary_frequencies = []
         self.real_frequencies = []
@@ -2293,6 +3001,10 @@ class Frequency:
             self.lowest_frequency = None
         self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
 
+    @property
+    def real_anharmonic_frequencies(self):
+        return [mode.frequency for mode in self.anharm_data if mode.frequency > 0]
+
     def get_ir_data(
             self,
             point_spacing=None,
@@ -2302,6 +3014,7 @@ class Frequency:
             voigt_mixing=0.5,
             linear_scale=0.0,
             quadratic_scale=0.0,
+            anharmonic=False,
     ):
         """
         returns arrays of x_values, y_values for an IR plot
@@ -2316,14 +3029,43 @@ class Frequency:
         quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
         """
         # scale frequencies
-        frequencies = np.array([freq.frequency for freq in self.data if freq.frequency > 0])
+        if anharmonic and self.anharm_data:
+            frequencies = []
+            intensities = []
+            for data in self.anharm_data:
+                frequencies.append(data.frequency)
+                intensities.append(data.intensity)
+                for overtone in data.overtones:
+                    frequencies.append(overtone.frequency)
+                    intensities.append(overtone.intensity)
+                for key in data.combinations:
+                    for combo in data.combinations[key]:
+                        frequencies.append(combo.frequency)
+                        intensities.append(combo.intensity)
+            frequencies = np.array(frequencies)
+            intensities = np.array(intensities)
+        else:
+            if anharmonic:
+                self.LOG.warning(
+                    "plot of anharmonic frequencies requested but no anharmonic data"
+                    "is present"
+                )
+            frequencies = np.array(
+                [freq.frequency for freq in self.data if freq.frequency > 0]
+            )
+            intensities = [
+                freq.intensity for freq in self.data if freq.frequency > 0
+            ]
+
         frequencies -= linear_scale * frequencies + quadratic_scale * frequencies ** 2
-        intensities = [freq.intensity for freq in self.data if freq.frequency > 0]
-        
+
         if point_spacing:
             x_values = []
             x = -point_spacing
-            while x < max(frequencies):
+            stop = max(frequencies)
+            if peak_type.lower() != "delta":
+                stop += 5 * fwhm
+            while x < stop:
                 x += point_spacing
                 x_values.append(x)
             
@@ -2601,3 +3343,960 @@ class Frequency:
         # it wouldn't be centered
         # so instead the x-axis label is this
         figure.text(0.5, 0.0, r"wavenumber (cm$^{-1}$)" , ha="center", va="bottom")
+
+
+@addlogger
+class Orbitals:
+    """
+    stores functions for the shells in a basis set
+    for evaluation at arbitrary points
+    attributes:
+    basis_functions - list(len=n_shell) of lists(len=n_prim_per_shell)
+                      of functions
+                      function takes the arguments:
+                      r2 - float array like, squared distance from the
+                           shell's center to each point being evaluated
+                      x - float or array like, distance from the shell's
+                          center to the point(s) being evaluated along
+                          the x axis
+                      y and z - same as x for the corresponding axis
+    beta_functions - same as alpha_functions or None if no beta info is
+                     present
+    alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
+                         molecular orbitals for alpha electrons
+    beta_coefficients - same as alpha_coefficients for beta electrons
+    shell_coords - array(shape=(n_shells, 3)), coordinates of each shell
+                   in Angstroms
+    shell_types - list(str, len=n_shell), type of each shell (e.g. s, 
+                  p, sp, 5d, 6d...)
+    n_shell - number of shells
+    n_prim_per_shell - list(len=n_shell), number of primitives per shell
+    n_mos - number of molecular orbitals
+    exponents - array, exponents for primitives in Eh
+                each shell
+    alpha_nrgs - array(len=n_mos), energy of alpha MO's
+    beta_nrgs - array(len=n_mos), energy of beta MO's
+    contraction_coeff - array, contraction coefficients for each primitive
+                        in each shell
+    n_alpha - int, number of alpha electrons
+    n_beta - int, number of beta electrons
+    """
+    
+    LOG = None
+    
+    def __init__(self, filereader):
+        if filereader.file_type == "fchk":
+            self._load_fchk_data(filereader)
+        elif filereader.file_type == "out":
+            self._load_orca_out_data(filereader)
+        else:
+            raise NotImplementedError(
+                "cannot load orbital info from %s files" % filereader.file_type
+            )
+    
+    def _load_fchk_data(self, filereader):
+        from scipy.special import factorial2
+        
+        if "Coordinates of each shell" in filereader.other:
+            self.shell_coords = np.reshape(
+                filereader.other["Coordinates of each shell"],
+                (len(filereader.other["Shell types"]), 3)
+            )
+        else:
+            center_coords = []
+            for ndx in filereader.other["Shell to atom map"]:
+                center_coords.append(filereader.atoms[ndx - 1].coords)
+            self.center_coords = np.array(center_coords)
+        self.contraction_coeff = filereader.other["Contraction coefficients"]
+        self.exponents = filereader.other["Primitive exponents"]
+        self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
+
+        def gau_norm(a, l):
+            """
+            normalization for gaussian primitives that depends on
+            the exponential (a) and the total angular momentum (l)
+            """
+            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3. / 4))
+            t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
+            return t1 * t2
+        # get functions for norm of s, p, 5d, and 7f
+        s_norm = lambda a, l=0: gau_norm(a, l)
+        p_norm = lambda a, l=1: gau_norm(a, l)
+        d_norm = lambda a, l=2: gau_norm(a, l)
+        f_norm = lambda a, l=3: gau_norm(a, l)
+        
+        self.basis_functions = list()
+        
+        self.n_mos = 0
+        self.shell_types = []
+        shell_i = 0
+        for n_prim, shell in zip(
+            self.n_prim_per_shell,
+            filereader.other["Shell types"],
+        ):
+            exponents = self.exponents[shell_i: shell_i + n_prim]
+            con_coeff = self.contraction_coeff[shell_i: shell_i + n_prim]
+            
+            if shell == 0:
+                # s functions
+                self.shell_types.append("s")
+                self.n_mos += 1
+                norms = s_norm(exponents)
+                def s_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    return np.dot(con_coeff * norms, e_r2)
+                self.basis_functions.append([s_func])
+        
+            elif shell == 1:
+                # p functions
+                self.shell_types.append("p")
+                self.n_mos += 3
+                norms = p_norm(exponents)
+                def px_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * x
+                def py_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * y
+                def pz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * z
+                self.basis_functions.append([px_func, py_func, pz_func])
+        
+            elif shell == -1:
+                # s=p functions
+                self.shell_types.append("sp")
+                self.n_mos += 4
+                norm_s = s_norm(exponents)
+                norm_p = p_norm(exponents)
+                sp_coeff = filereader.other["P(S=P) Contraction coefficients"][shell_i: shell_i + n_prim]
+                def s_func(
+                    r2, x, y, z,
+                    alpha=exponents,
+                    s_coeff=con_coeff,
+                    s_norms=norm_s,
+                ):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    sp_val_s = np.dot(s_coeff * s_norms, e_r2)
+                    return sp_val_s
+                def px_func(
+                    r2, x, y, z,
+                    alpha=exponents,
+                    p_coeff=sp_coeff,
+                    p_norms=norm_p,
+                ):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    sp_val_p = np.dot(p_coeff * p_norms, e_r2)
+                    return sp_val_p * x
+                def py_func(
+                    r2, x, y, z,
+                    alpha=exponents,
+                    p_coeff=sp_coeff,
+                    p_norms=norm_p,
+                ):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    sp_val_p = np.dot(p_coeff * p_norms, e_r2)
+                    return sp_val_p * y
+                def pz_func(
+                    r2, x, y, z,
+                    alpha=exponents,
+                    p_coeff=sp_coeff,
+                    p_norms=norm_p,
+                ):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    sp_val_p = np.dot(p_coeff * p_norms, e_r2)
+                    return sp_val_p * z
+                self.basis_functions.append([s_func, px_func, py_func, pz_func])
+        
+            elif shell == 2:
+                # cartesian d functions
+                self.shell_types.append("6d")
+                self.n_mos += 6
+                norms = d_norm(exponents)
+                def dxx_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xx = ne.evaluate("x * x")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xx = x ** 2
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xx
+        
+                def dyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yy = ne.evaluate("y * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yy = y * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yy
+        
+                def dzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        zz = ne.evaluate("z * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        zz = z * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * zz
+        
+                def dxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xy = ne.evaluate("sqrt(3) * x * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xy = np.sqrt(3) * x * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xy
+        
+                def dxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xz = ne.evaluate("sqrt(3) * x * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xz = np.sqrt(3) * x * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xz
+        
+                def dyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yz = ne.evaluate("sqrt(3) * y * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yz = np.sqrt(3) * y * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yz
+                self.basis_functions.append(
+                    [dxx_func, dyy_func, dzz_func, dxy_func, dxz_func, dyz_func]
+                )
+        
+            elif shell == -2:
+                # pure d functions
+                self.shell_types.append("5d")
+                self.n_mos += 5
+                norms = d_norm(exponents)
+                def dz2r2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        z2r2 = ne.evaluate("0.5 * (3 * z * z - r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        z2r2 = 0.5 * (3 * z * z - r2)
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * z2r2
+                def dxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xz = ne.evaluate("sqrt(3) * x * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xz = np.sqrt(3) * x * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xz
+                def dyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yz = ne.evaluate("sqrt(3) * y * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yz = np.sqrt(3) * y * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yz
+                def dx2y2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        x2y2 = ne.evaluate("sqrt(3) * (x * x - y * y) / 2")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        x2y2 = np.sqrt(3) * (x ** 2 - y ** 2) / 2
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * x2y2
+                def dxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xy = ne.evaluate("sqrt(3) * x * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xy = np.sqrt(3) * x * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xy
+        
+                self.basis_functions.append(
+                    [dz2r2_func, dxz_func, dyz_func, dx2y2_func, dxy_func]
+                )
+        
+            elif shell == 3:
+                # 10f functions
+                self.shell_types.append("10f")
+                self.n_mos += 10
+                norms = f_norm(exponents)
+                def fxxx_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xxx = ne.evaluate("x * x * x")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xxx = x * x * x
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xxx
+                def fyyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yyy = ne.evaluate("y * y * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yyy = y * y * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yyy
+                def fzzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        zzz = ne.evaluate("z * z * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        zzz = z * z * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * zzz
+                def fxyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xyy = ne.evaluate("sqrt(5) * x * y * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xyy = np.sqrt(5) * x * y * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xyy
+                def fxxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xxy = ne.evaluate("sqrt(5) * x * x * y")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xxy = np.sqrt(5) * x * x * y
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xxy
+                def fxxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xxz = ne.evaluate("sqrt(5) * x * x * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xxz = np.sqrt(5) * x * x * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xxz
+                def fxzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xzz = ne.evaluate("sqrt(5) * x * z * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xzz = np.sqrt(5) * x * z * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xzz
+                def fyzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yzz = ne.evaluate("sqrt(5) * y * z * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yzz = np.sqrt(5) * y * z * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yzz
+                def fyyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yyz = ne.evaluate("sqrt(5) * y * y * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yyz = np.sqrt(5) * y * y * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yyz
+                def fxyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xyz = ne.evaluate("sqrt(15) * x * y * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xyz = np.sqrt(15) * x * y * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xyz
+                self.basis_functions.append([
+                    fxxx_func, fyyy_func, fzzz_func,
+                    fxyy_func, fxxy_func, fxxz_func, fxzz_func, fyzz_func, fyyz_func,
+                    fxyz_func,
+                ])
+        
+            elif shell == -3:
+                # pure f functions
+                self.shell_types.append("7f")
+                self.n_mos += 7
+                norms = f_norm(exponents)
+                def fz3zr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        z3zr2 = ne.evaluate("z * (5 * z * z - 3 * r2) / 2")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        z3zr2 = z * (5 * z * z - 3 * r2) / 2
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * z3zr2
+                def fxz2xr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                    return s_val * xz2xr2
+                def fyz2yr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        yz2yr2 = ne.evaluate("sqrt(3) * y * (5 * z * z - r2) / (2 * sqrt(2))")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * yz2yr2
+                def fx2zy2z_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        x2zr2z = ne.evaluate("sqrt(15) * z * (x * x - y * y) / 2")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * x2zr2z
+                def fxyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        xyz = ne.evaluate("sqrt(15) * x * y * z")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        xyz = np.sqrt(15) * x * y * z
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * xyz
+                def fx3y2x_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        x3r2x = ne.evaluate("sqrt(5) * x * (x * x - 3 * y * y) / (2 * sqrt(2))")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        x3r2x = np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * x3r2x
+                def fx2yy3_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
+                    if _WITH_NE:
+                        a_r2 = np.outer(-alpha, r2)
+                        e_r2 = ne.evaluate("exp(a_r2)")
+                        x2yy3 = ne.evaluate("sqrt(5) * y * (3 * x * x - y * y) / (2 * sqrt(2))")
+                    else:
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    return s_val * x2yy3
+        
+                self.basis_functions.append([
+                    fz3zr2_func, fxz2xr2_func, fyz2yr2_func, fx2zy2z_func,
+                    fxyz_func, fx3y2x_func, fx2yy3_func,
+                ])
+        
+            else:
+                self.LOG.warning("cannot parse shell with type %i" % shell)
+    
+            shell_i += n_prim
+                
+        self.alpha_coefficients = np.reshape(
+            filereader.other["Alpha MO coefficients"], (self.n_mos, self.n_mos),
+        )
+        if "Beta MO coefficients" in filereader.other:
+            self.beta_coefficients = np.reshape(
+                filereader.other["Beta MO coefficients"], (self.n_mos, self.n_mos),
+            )
+        self.n_alpha = filereader.other["Number of alpha electrons"]
+        if "Number of beta electrons" in filereader.other:
+            self.n_beta = filereader.other["Number of beta electrons"]
+
+    def _load_orca_out_data(self, filereader):
+        from scipy.special import factorial2
+        self.shell_coords = []
+        self.basis_functions = []
+        self.alpha_nrgs = np.array(filereader.other["mo_nrgs"])
+        self.alpha_coefficients = np.array(filereader.other["mo_coefficients"])
+        self.beta_coefficients = None
+        self.beta_nrgs = None
+        self.shell_types = []
+        self.n_mos = 0
+        
+        def gau_norm(a, l):
+            """
+            normalization for gaussian primitives that depends on
+            the exponential (a) and the total angular momentum (l)
+            """
+            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3. / 4))
+            t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
+            return t1 * t2
+        # get functions for norm of s, p, 5d, and 7f
+        s_norm = lambda a, l=0: gau_norm(a, l)
+        p_norm = lambda a, l=1: gau_norm(a, l)
+        d_norm = lambda a, l=2: gau_norm(a, l)
+        f_norm = lambda a, l=3: gau_norm(a, l)
+        
+        # ORCA order differs from FCHK in a few places:
+        # pz, px, py instead of ox, py, pz
+        # f(3xy^2 - x^3) instead of f(x^3 - 3xy^2)
+        # f(y^3 - 3x^2y) instead of f(3x^2y - y^3)
+        for atom in filereader.atoms:
+            ele = atom.element
+            for shell_type, n_prim, exponents, con_coeff in filereader.other["basis_set_by_ele"][ele]:
+                self.shell_coords.append(atom.coords)
+                exponents = np.array(exponents)
+                con_coeff = np.array(con_coeff)
+                if shell_type.lower() == "s":
+                    self.shell_types.append("s")
+                    self.n_mos += 1
+                    norms = s_norm(exponents)
+                    def s_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        return np.dot(con_coeff * norms, e_r2)
+                    self.basis_functions.append([s_func])
+                elif shell_type.lower() == "p":
+                    self.shell_types.append("p")
+                    self.n_mos += 3
+                    norms = p_norm(exponents)
+                    def pz_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * z
+                    def px_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                     ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * x
+                    def py_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * y
+                    self.basis_functions.append([pz_func, px_func, py_func])
+                elif shell_type.lower() == "d":
+                    self.shell_types.append("5d")
+                    self.n_mos += 5
+                    norms = d_norm(exponents)
+                    def dz2r2_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            z2r2 = ne.evaluate("0.5 * (3 * z * z - r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            z2r2 = 0.5 * (3 * z * z - r2)
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * z2r2
+                    def dxz_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            xz = ne.evaluate("sqrt(3) * x * z")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            xz = np.sqrt(3) * x * z
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * xz
+                    def dyz_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        yz = np.sqrt(3) * y * z
+                        return s_val * yz
+                    def dx2y2_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            x2y2 = ne.evaluate("sqrt(3) * (x * x - y * y) / 2")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            x2y2 = np.sqrt(3) * (x ** 2 - y ** 2) / 2
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * x2y2
+                    def dxy_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            xy = ne.evaluate("sqrt(3) * x * y")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            xy = np.sqrt(3) * x * y
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * xy
+                
+                    self.basis_functions.append(
+                        [dz2r2_func, dxz_func, dyz_func, dx2y2_func, dxy_func]
+                    )
+                elif shell_type.lower() == "f":
+                    self.shell_types.append("7f")
+                    self.n_mos += 7
+                    norms = f_norm(exponents)
+                    def fz3zr2_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            z3zr2 = ne.evaluate("z * (5 * z * z - 3 * r2) / 2")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * z3zr2
+                    def fxz2xr2_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            xz2xr2 = ne.evaluate(
+                                "sqrt(3) * x * (5 * z * z - r2) / (2 * sqrt(2))"
+                            )
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * xz2xr2
+                    def fyz2yr2_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            yz2yr2 = ne.evaluate(
+                                "sqrt(3) * y * (5 * z * z - r2) / (2 * sqrt(2))"
+                            )
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * yz2yr2
+                    def fx2zy2z_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            x2zr2z = ne.evaluate("sqrt(15) * z * (x * x - y * y) / 2")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * x2zr2z
+                    def fxyz_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            xyz = ne.evaluate("sqrt(15) * x * y * z")
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            xyz = np.sqrt(15) * x * y * z
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * xyz
+                    def fx3y2x_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            x3r2x = ne.evaluate(
+                                "sqrt(5) * x * (3 * y * y - x * x) / (2 * sqrt(2))"
+                            )
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            x3r2x = np.sqrt(5) * x * (3 * y ** 2 - x ** 2) / (2 * np.sqrt(2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        x3r2x = np.sqrt(5) * x * (3 * y ** 2 - x ** 2) / (2 * np.sqrt(2))
+                        return s_val * x3r2x
+                    def fx2yy3_func(
+                        r2, x, y, z,
+                        alpha=exponents,
+                        con_coeff=con_coeff[:,0],
+                        norms=norms
+                    ):
+                        if _WITH_NE:
+                            a_r2 = np.outer(-alpha, r2)
+                            e_r2 = ne.evaluate("exp(a_r2)")
+                            x2yy3 = ne.evaluate(
+                                "sqrt(5) * y * (y * y - 3 * x * x) / (2 * sqrt(2))"
+                            )
+                        else:
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            x2yy3 = np.sqrt(5) * y * (y ** 2 - 3 * x ** 2) / (2 * np.sqrt(2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        return s_val * x2yy3
+
+                    self.basis_functions.append([
+                        fz3zr2_func,
+                        fxz2xr2_func, fyz2yr2_func,
+                        fx2zy2z_func, fxyz_func,
+                        fx3y2x_func, fx2yy3_func,
+                    ])
+                else:
+                    self.LOG.warning("cannot handle shell of type %s" % shell_type)
+        
+        self.shell_coords = np.array(self.shell_coords) / UNIT.A0_TO_BOHR
+        if "n_alpha" not in filereader.other:
+            tot_electrons = sum(ELEMENTS.index(atom.element) for atom in filereader.atoms)
+            self.n_beta = tot_electrons // 2
+            self.n_alpha = tot_electrons - self.n_beta
+        else:
+            self.n_alpha = filereader.other["n_alpha"]
+            self.n_beta = filereader.other["n_beta"]
+
+    def mo_value(self, mo, coords, alpha=True, n_jobs=1):
+        """
+        get the MO evaluated at the specified coords
+        m - index of molecular orbital or an array of MO coefficients
+        coords - numpy array of points (N,3) or (3,)
+        alpha - use alpha coefficients (default)
+        n_jobs - number of parallel threads to use
+                 this is on top of NumPy's and NumExpr's multithreading, so
+                 if NumPy/NumExpr use 8 threads and n_jobs=2, you can
+                 expect to see 16 threads in use
+                 the peak memory used will also increase linearly
+                 with n_jobs
+                 if the joblib module is not available or n_jobs <= 1,
+                 no parallelization will be attempted
+        """
+        # val is the running sum of MO values
+        if alpha:
+            coeff = self.alpha_coefficients
+        else:
+            coeff = self.beta_coefficients
+        
+        if isinstance(mo, int):
+            coeff = coeff[mo]
+        else:
+            coeff = mo
+
+        # calculate AO values for each shell at each point
+        # multiply by the MO coefficient and add to val
+        def get_value(arr):
+            ao = 0
+            prev_center = None
+            if coords.ndim == 1:
+                val = 0
+            else:
+                val = np.zeros(len(coords))
+            for coord, shell_funcs in zip(self.shell_coords, self.basis_functions):
+                # don't calculate distances until we find an AO
+                # in this shell that has a non-zero MO coefficient
+                calced_dist = False
+                for func in shell_funcs:
+                    if arr[ao] == 0:
+                        ao += 1
+                        continue
+                    if not calced_dist:
+                        calced_dist = True
+                        if prev_center is None or np.linalg.norm(coord - prev_center) > 1e-13:
+                            prev_center = coord
+                            if _WITH_NE:
+                                d_coord = ne.evaluate("coords - coord")
+                            else:
+                                d_coord = coords - coord
+                            if coords.ndim == 1:
+                                r2 = np.dot(d_coord, d_coord)
+                            else:
+                                if _WITH_NE:
+                                    r2 = ne.evaluate("sum(d_coord * d_coord, axis=1)")
+                                else:
+                                    r2 = np.sum(d_coord * d_coord, axis=1)
+                    if coords.ndim == 1:
+                        res = func(r2, d_coord[0], d_coord[1], d_coord[2])
+                    else:
+                        res = func(r2, d_coord[:,0], d_coord[:,1], d_coord[:,2])
+                    val += arr[ao] * res
+                    ao += 1
+            return val
+        
+        if not _WITH_JOBLIB and n_jobs > 1:
+            self.LOG.warning(
+                "multithreading requested but joblib could not be imported\n"
+                "basis functions will not be evaluated in parallel"
+            )
+        
+        if _WITH_JOBLIB and n_jobs > 1:
+            # get all shells grouped by coordinates
+            # this reduces the number of times we will need to
+            # calculate the distance from all the coords to
+            # a shell's center
+            prev_coords = None
+            arrays = [np.zeros(self.n_mos) for i in range(0, n_jobs)]
+            counts = np.zeros(n_jobs, dtype=int)
+            ndx = 0
+            add_to = 0
+            for i, coord in enumerate(self.shell_coords):
+                if prev_coords is None or np.linalg.norm(coord - prev_coords) > 1e-13:
+                    prev_coords = coord
+                    add_to = np.argmin(counts)
+                    counts[add_to] += 1
+                arrays[add_to][ndx:ndx + len(self.basis_functions[i])] = coeff[
+                    ndx:ndx + len(self.basis_functions[i])
+                ]
+                ndx += len(self.basis_functions[i])
+
+            # prefer="threads" is used b/c numpy/numexpr leave
+            # GIL or something
+            # this is typically significantly faster than
+            # prefer="processes"
+            out = Parallel(n_jobs=n_jobs, prefer="threads")(
+                delayed(get_value)(arr) for arr in arrays
+            )            
+            return sum(out)
+        return get_value(coeff)

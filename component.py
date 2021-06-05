@@ -1,16 +1,15 @@
 """For more complicated geometry manipulation and complex building"""
 import os
 import re
-from glob import glob
 
 import numpy as np
 
-from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
+from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII, ELEMENTS
 from AaronTools.fileIO import read_types
-from AaronTools.finders import BondedTo, CloserTo
+from AaronTools.finders import BondedTo, CloserTo, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import perp_vector
 
 
 class Component(Geometry):
@@ -27,7 +26,7 @@ class Component(Geometry):
 
     AARON_LIBS = os.path.join(AARONLIB, "Ligands")
     BUILTIN = os.path.join(AARONTOOLS, "Ligands")
-
+    
     def __init__(
         self,
         structure,
@@ -36,6 +35,7 @@ class Component(Geometry):
         tag=None,
         to_center=None,
         key_atoms=None,
+        detect_backbone=True,
     ):
         """
         comp is either a file, a geometry, or an atom list
@@ -44,7 +44,7 @@ class Component(Geometry):
         self.name = name
         self.comment = comment
         self.other = {}
-        self.substituents = None
+        self.substituents = []
         self.backbone = None
         self.key_atoms = []
 
@@ -92,7 +92,8 @@ class Component(Geometry):
             self.key_atoms = self.find(key_atoms)
         for a in self.key_atoms:
             a.tags.add("key")
-        self.detect_backbone(to_center)
+        if detect_backbone:
+            self.detect_backbone(to_center)
         self.rebuild()
 
     def __lt__(self, other):
@@ -165,6 +166,69 @@ class Component(Geometry):
 
         return names
 
+    def c2_symmetric(self, to_center=None, tolerance=0.1):
+        """determine if center-key atom axis is a C2 axis"""
+        # determine ranks
+        ranks = self.canonical_rank(
+            update=False,
+            break_ties=False,
+            invariant=False,
+        )
+        # remove the rank of atoms that are along the c2 axis
+        ranks_off_c2_axis = []
+        if to_center is None:
+            center = np.zeros(3)
+        else:
+            center = self.COM(to_center)
+        
+        v = self.COM(self.key_atoms) - center
+        v /= np.linalg.norm(v)
+        
+        for atom, rank in zip(self.atoms, ranks):
+            dist_along_v = np.dot(atom.coords - center, v)
+            if abs(np.linalg.norm(atom.coords - center) - dist_along_v) < tolerance:
+                continue
+            
+            ranks_off_c2_axis.append(rank)
+        
+        return all([ranks.count(x) % 2 == 0 for x in set(ranks_off_c2_axis)])
+
+    def sterimol(self, to_center=None, bisect_L=False, **kwargs):
+        """
+        calculate ligand sterimol parameters for the ligand
+        to_center - atom the ligand is coordinated to
+        bisect_L - L axis will bisect (or analogous for higher denticity
+                   ligands) the L-M-L angle
+                   Default - center to centroid of key atoms
+        **kwargs - arguments passed to Geometry.sterimol
+        """
+        if to_center is not None:
+            center = self.find(to_center)
+        else:
+            center = self.find(
+                [BondedTo(atom) for atom in self.key_atoms], NotAny(self.atoms)
+            )
+        
+        if len(center) != 1:
+            raise TypeError(
+                "wrong number of center atoms specified;\n"
+                "expected 1, got %i" % len(center)
+            )
+        center = center[0]
+        
+        if bisect_L:
+            L_axis = np.zeros(3)
+            for atom in self.key_atoms:
+                v = center.bond(atom)
+                v /= np.linalg.norm(v)
+                v /= len(self.key_atoms)
+                L_axis += v
+        else:
+            L_axis = self.COM(self.key_atoms) - center.coords
+            L_axis /= np.linalg.norm(L_axis)
+        
+        return super().sterimol(L_axis, center, self.atoms, **kwargs)
+
     def copy(self, atoms=None, name=None, comment=None):
         rv = super().copy()
         return Component(rv)
@@ -202,7 +266,14 @@ class Component(Geometry):
 
                 frag_a = self.get_fragment(a, b)
                 frag_b = self.get_fragment(b, a)
-                if sorted(frag_a) == sorted(frag_b):
+                if (
+                        len(frag_a) == len(frag_b) and 
+                        sorted(
+                            frag_a, key=lambda x: ELEMENTS.index(x.element)
+                        ) == sorted(
+                            frag_b, key=lambda x: ELEMENTS.index(x.element)
+                        )
+                ):
                     continue
 
                 if len(frag_a) == 1 and frag_a[0].element == "H":
@@ -657,7 +728,7 @@ class Component(Geometry):
             c = 0
             for i, atom1 in enumerate(atom_list):
                 for j, atom2 in enumerate(atom_list[:i]):
-                    for k, atom3 in enumerate(atom_list[i + 1 :]):
+                    for k, atom3 in enumerate(atom_list[i + 1:]):
                         c += 1
                         ndx_i = self.atoms.index(atom1)
                         ndx_j = self.atoms.index(atom2)

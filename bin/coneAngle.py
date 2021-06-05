@@ -7,6 +7,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.component import Component
 from AaronTools.finders import AnyTransitionMetal
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.utils.utils import glob_files
 
 cone_parser = argparse.ArgumentParser(
     description="calculate ligand cone angles",
@@ -106,7 +107,7 @@ args = cone_parser.parse_args()
 
 s = ""
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None))
@@ -123,7 +124,7 @@ for f in args.infile:
 
     ligand = geom.get_fragment(args.key_atoms, stop=args.center)
 
-    comp = Component(ligand, key_atoms=args.key_atoms)
+    comp = Component(ligand, key_atoms=args.key_atoms, detect_backbone=False)
 
     angle = comp.cone_angle(
         center=geom.find(args.center),

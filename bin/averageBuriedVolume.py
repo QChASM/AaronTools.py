@@ -11,7 +11,7 @@ from AaronTools.fileIO import FileReader
 from AaronTools.finders import NotAny, AnyTransitionMetal, AnyNonTransitionMetal
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import boltzmann_coefficients
+from AaronTools.utils.utils import boltzmann_coefficients, glob_files
 
 def main(argv):
     vbur_parser = argparse.ArgumentParser(
@@ -205,7 +205,7 @@ def main(argv):
         energies["G(Quasi-RRHO)"] = []
         energies["G(Quasi-Harmonic)"] = []
     
-    for infile in args.infiles:
+    for infile in glob_files(args.infiles):
         if args.input_format is not None:
             fr = FileReader((infile, args.input_format, infile), just_geom=False)
         else:
@@ -230,7 +230,6 @@ def main(argv):
     
     s = ""
     for nrg_type in energies:
-        s += "weighted using %s:\n" % nrg_type
         energies_arr = np.array(energies[nrg_type])
         energies_arr *= UNIT.HART_TO_KCAL
         if args.verbose and nrg_type == "E":
@@ -248,8 +247,10 @@ def main(argv):
                     apoints=args.apoints,
                     min_iter=args.min_iter,
                 )
-                s += "%.1f\t%s\n" % (data, f)
+                s += "%.1f%%\t%s\n" % (data, f)
+            s += "\n"
 
+        s += "weighted using %s:\n" % nrg_type
         data = Geometry.weighted_percent_buried_volume(
             geoms,
             energies_arr,

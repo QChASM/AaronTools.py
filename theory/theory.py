@@ -1,5 +1,4 @@
 """for constructing headers and footers for input files"""
-import itertools as it
 import re
 
 from AaronTools.const import ELEMENTS, UNIT
@@ -25,13 +24,15 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    SQM_COMMENT,
+    SQM_QMMM,
 )
 from AaronTools.utils.utils import combine_dicts
 
 from .basis import ECP, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
-from .job_types import JobType
+from .job_types import JobType, SinglePointJob
 from .method import KNOWN_SEMI_EMPIRICAL, Method, SAPTMethod
 
 
@@ -171,7 +172,7 @@ class Theory:
             if self.basis is None:
                 self.basis = BasisSet(ecp=ecp)
             else:
-                self.basis.ecp = BasisSet(ecp=ecp)
+                self.basis.ecp = BasisSet(ecp=ecp).ecp
 
         if empirical_dispersion is not None:
             if not isinstance(empirical_dispersion, EmpiricalDispersion):
@@ -185,13 +186,13 @@ class Theory:
             if isinstance(self.job_type, JobType):
                 self.job_type = [self.job_type]
 
-            for i, job1 in enumerate(self.job_type):
-                for job2 in self.job_type[i + 1 :]:
-                    if type(job1) is type(job2):
-                        raise TypeError(
-                            "cannot run multiple jobs of the same type: %s, %s"
-                            % (str(job1), str(job2))
-                        )
+            # for i, job1 in enumerate(self.job_type):
+            #     for job2 in self.job_type[i + 1 :]:
+            #         if type(job1) is type(job2):
+            #             self.LOG.warning(
+            #                 "multiple jobs of the same type: %s, %s"
+            #                 % (str(job1), str(job2))
+            #             )
 
     def __setattr__(self, attr, val):
         if isinstance(val, str):
@@ -257,7 +258,7 @@ class Theory:
     ):
         """
         geom: Geometry
-        style: str, gaussian, orca, or psi4
+        style: str, gaussian, orca, psi4, or sqm
         conditional_kwargs: dict - keys are ORCA_*, PSI4_*, or GAUSSIAN_*
             items in conditional_kwargs will only be added
             to the input if they would otherwise be preset
@@ -334,6 +335,11 @@ class Theory:
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
+        elif style == "sqm":
+            return self.get_sqm_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
         raise NotImplementedError("no get_header method for style: %s" % style)
 
     def make_molecule(
@@ -345,7 +351,7 @@ class Theory:
     ):
         """
         geom: Geometry()
-        style: gaussian, psi4
+        style: gaussian, psi4, or sqm
         conditional_kwargs: dict() of keyword: value pairs
         kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
         """
@@ -402,6 +408,11 @@ class Theory:
 
         elif style == "psi4":
             return self.get_psi4_molecule(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "sqm":
+            return self.get_sqm_molecule(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
@@ -663,7 +674,6 @@ class Theory:
 
         if return_warnings:
             return out_str, warnings
-
         return out_str
 
     def get_gaussian_molecule(
@@ -701,10 +711,18 @@ class Theory:
 
         s = ""
 
+        # atom specs need flag column before coords if any atoms frozen
+        has_frozen = False
+        for atom in self.geometry.atoms:
+            if atom.flag:
+                has_frozen = True
+                break
         for atom, coord in zip(
             self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
             s += "%-2s" % atom.element
+            if has_frozen:
+                s += " % 2d" % (-1 if atom.flag else 0)
             for val in coord:
                 s += "  "
                 if isinstance(val, float):
@@ -1121,8 +1139,10 @@ class Theory:
             other_kw_dict[PSI4_COORDINATES]["coords"] = self.geometry.coords
 
         s = ""
-        
-        if isinstance(self.method, SAPTMethod) and not hasattr(self.charge, "__iter__"):
+
+        if isinstance(self.method, SAPTMethod) and not hasattr(
+            self.charge, "__iter__"
+        ):
             warnings.append(
                 "for a SAPTMethod, charge and multiplicity should both be lists\n"
                 "with the first item being the overall charge/multiplicity and\n"
@@ -1130,7 +1150,7 @@ class Theory:
                 "corresponding monomer"
             )
             return s, warnings
-        
+
         if (
             isinstance(self.method, SAPTMethod)
             and sum(self.multiplicity[1:]) - len(self.multiplicity[1:]) + 1
@@ -1159,8 +1179,12 @@ class Theory:
                         "corresponding monomer"
                     )
                 s += "    %2i %i\n" % (self.charge[0], self.multiplicity[0])
-                if len(self.charge) > 1 and self.charge[0] != sum(self.charge[1:]):
-                    warnings.append("total charge is not equal to sum of monomer charges")
+                if len(self.charge) > 1 and self.charge[0] != sum(
+                    self.charge[1:]
+                ):
+                    warnings.append(
+                        "total charge is not equal to sum of monomer charges"
+                    )
             else:
                 s += "    %2i %i\n" % (self.charge, self.multiplicity)
 
@@ -1501,39 +1525,74 @@ class Theory:
         return out_str
 
     def get_xtb_cmdline(self, config):
+        """
+        Uses the config and job type to set command line options for xtb and crest jobs
+
+        Returns a dictionary of option=val pairs; val is None when option doesn't take
+        an argument. This dict should be parsed by the caller into the command line
+        string.
+        """
         if len(self.job_type) > 1:
             raise NotImplementedError(
                 "Multiple job types not supported for crest/xtb"
             )
-        job_type = self.job_type[0]
         cmdline = {}
+        job_type = self.job_type[0]
         style = config["Job"]["exec_type"]
+        if style not in ["xtb", "crest"]:
+            raise NotImplementedError(
+                "Wrong executable type: %s (can only get command line options "
+                "for `xtb` or `crest`)" % style
+            )
 
+        # pull in stuff set by resolve_error
         if config._args:
             for arg in config._args:
                 cmdline[arg] = None
         if config._kwargs:
             for key, val in config._kwargs.items():
                 cmdline[key] = val
-
-        if self.charge != 0:
-            cmdline["chrg"] = self.charge
-        if self.multiplicity != 1:
-            cmdline["uhf"] = self.multiplicity - 1
-        if "gfn" in config["Job"]:
-            cmdline["gfn"] = config["Job"]["gfn"]
-        if style == "xtb" and hasattr(job_type, "transition_state"):
-            cmdline["optts"] = None
+        # run types
+        if "gfn" in config["Theory"]:
+            cmdline["--gfn"] = config["Job"]["gfn"]
+        if (
+            style == "xtb"
+            and hasattr(job_type, "transition_state")
+            and job_type.transition_state
+        ):
+            cmdline["--optts"] = None
         elif style == "xtb":
-            cmdline["opt"] = None
+            cmdline["--opt"] = None
+
+        # charge/mult/temp
+        if self.charge != 0:
+            cmdline["--chrg"] = self.charge
+        if self.multiplicity != 1:
+            cmdline["--uhf"] = self.multiplicity - 1
         if style == "crest":
-            cmdline["temp"] = config["Theory"].get(
+            cmdline["--temp"] = config["Theory"].get(
                 "temperature", fallback="298"
             )
         else:
-            cmdline["etemp"] = config["Theory"].get(
+            cmdline["--etemp"] = config["Theory"].get(
                 "temperature", fallback="298"
             )
+
+        # screening parameters
+        if (
+            style == "crest"
+            and "energy_cutoff" in config["Job"]
+            and config["Job"].getfloat("energy_cutoff") > 6
+        ):
+            cmdline["--ewin"] = config["Job"]["energy_cutoff"]
+        if (
+            style == "crest"
+            and "rmsd_cutoff" in config["Job"]
+            and config["Job"].getfloat("rmsd_cutoff") < 0.125
+        ):
+            cmdline["--rthr"] = config["Job"]["rmsd_cutoff"]
+
+        # solvent stuff
         if (
             "solvent_model" in config["Theory"]
             and config["Theory"]["solvent_model"] == "alpb"
@@ -1541,8 +1600,10 @@ class Theory:
             solvent = config["Theory"]["solvent"].split()
             if len(solvent) > 1:
                 solvent, ref = solvent
+            elif len(solvent) == 1:
+                solvent, ref = solvent[0], None
             else:
-                ref = "bar1M"
+                raise ValueError
             if solvent.lower() not in [
                 "acetone",
                 "acetonitrile",
@@ -1570,14 +1631,14 @@ class Theory:
                 "water",
             ]:
                 raise ValueError("%s is not a supported solvent" % solvent)
-            if ref.lower() not in ["reference", "bar1m"]:
+            if ref is not None and ref.lower() not in ["reference", "bar1m"]:
                 raise ValueError(
                     "%s Gsolv reference state not supported" % ref
                 )
-            if style.lower() == "crest":
-                cmdline["alpb"] = "{}".format(solvent)
+            if style.lower() == "crest" or ref is None:
+                cmdline["--alpb"] = "{}".format(solvent)
             else:
-                cmdline["alpb"] = "{} {}".format(solvent, ref)
+                cmdline["--alpb"] = "{} {}".format(solvent, ref)
         elif (
             "solvent_model" in config["Theory"]
             and config["Theory"]["solvent_model"] == "gbsa"
@@ -1586,7 +1647,7 @@ class Theory:
             if len(solvent) > 1:
                 solvent, ref = solvent
             else:
-                ref = "bar1M"
+                solvent, ref = solvent[0], None
             if solvent.lower() not in [
                 "acetone",
                 "acetonitrile",
@@ -1600,35 +1661,141 @@ class Theory:
                 "h2o",
                 "methanol",
                 "n-hexane",
-                "thf" "toluene",
+                "thf",
+                "toluene",
             ]:
-                gfn = config["Job"].get("gfn", fallback="2")
+                gfn = config["Theory"].get("gfn", fallback="2")
                 if gfn != "1" and solvent.lower() in ["benzene"]:
                     raise ValueError("%s is not a supported solvent" % solvent)
                 elif gfn != "2" and solvent.lower() in ["DMF", "n-hexane"]:
                     raise ValueError("%s is not a supported solvent" % solvent)
                 else:
                     raise ValueError("%s is not a supported solvent" % solvent)
-            if ref.lower() not in ["reference", "bar1m"]:
+            if ref is not None and ref.lower() not in ["reference", "bar1m"]:
                 raise ValueError(
                     "%s Gsolv reference state not supported" % ref
                 )
-            if style.lower() == "crest":
-                cmdline["gbsa"] = "{}".format(solvent)
+            if style.lower() == "crest" or ref is None:
+                cmdline["--gbsa"] = "{}".format(solvent)
             else:
-                cmdline["gbsa"] = "{} {}".format(solvent, ref)
-        opt_string = config["Theory"].get("cmdline", "")
-        for key, val in cmdline.items():
-            if val is not None:
-                opt_string += " --{} {}".format(key, val)
-            else:
-                opt_string += " --{}".format(key)
-        return opt_string.strip()
+                cmdline["--gbsa"] = "{} {}".format(solvent, ref)
 
-    def get_xcontrol(self, config):
+        other = config["Job"].get("cmdline", fallback="").split()
+        i = 0
+        while i < len(other):
+            if other[i].startswith("-"):
+                key = other[i]
+                cmdline[key] = None
+            else:
+                cmdline[key] = other[i]
+            i += 1
+        return cmdline
+
+    def get_xcontrol(self, config, ref=None):
         if len(self.job_type) > 1:
             raise NotImplementedError(
                 "Multiple job types not supported for crest/xtb"
             )
         job_type = self.job_type[0]
-        return job_type.get_xcontrol(config)
+        return job_type.get_xcontrol(config, ref=ref)
+
+    def get_sqm_header(
+            self,
+            return_warnings=False,
+            conditional_kwargs=None,
+            **other_kw_dict,
+    ):
+        """retruns header, warnings_list for sqm job"""
+        
+        warnings = []
+   
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        # job stuff
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict, job_warnings = job.get_sqm()
+                warnings.extend(job_warnings)
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        s = ""
+
+        # charge and mult
+        other_kw_dict = combine_dicts(
+            {
+                SQM_QMMM: {
+                    "qmcharge": [str(self.charge)],
+                    "spin": [str(self.multiplicity)],
+                }
+            },
+            other_kw_dict,
+        )
+
+        # comment
+        if SQM_COMMENT not in other_kw_dict:
+            if self.geometry.comment:
+                other_kw_dict[SQM_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[SQM_COMMENT] = [self.geometry.name]
+
+        for comment in other_kw_dict[SQM_COMMENT]:
+            for line in comment.split("\n"):
+                s += "%s" % line
+            s += "\n"
+        
+        # method
+        if self.method:
+            method = self.method.get_sqm()
+            warning = self.method.sanity_check_method(method, "sqm")
+            if warning:
+                warnings.append(warning)
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {SQM_QMMM: {"qm_theory": [method]}}
+            )
+        
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        # options
+        s += " &qmmm\n"
+        for key in other_kw_dict[SQM_QMMM]:
+            if not other_kw_dict[SQM_QMMM][key]:
+                continue
+            s += "   %s=" % key
+            option = other_kw_dict[SQM_QMMM][key][0]
+            if option.isdigit():
+                s += "%s,\n" % option
+            elif any(option.lower() == b for b in [".true.", ".false."]):
+                s += "%s,\n" % option
+            else:
+                s += "'%s',\n" % option
+        s += " /\n"
+        
+        return s, warnings
+    
+    def get_sqm_molecule(
+        self,
+        **kwargs,
+    ):
+        """returns molecule specification for sqm input"""
+        
+        warnings = []
+        s = ""
+
+        for atom in self.geometry.atoms:
+            s += " %2i  %2s  %9.5f  %9.5f  %9.5f\n" % (
+                ELEMENTS.index(atom.element),
+                atom.element,
+                atom.coords[0],
+                atom.coords[1],
+                atom.coords[2],
+            )
+        
+        return s.rstrip(), warnings

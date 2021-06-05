@@ -13,7 +13,10 @@ from AaronTools.test import TestWithTimer, prefix
 class TestConfig(TestWithTimer):
     LOG = None
     USER_SPECIFIC = ["metadata", "infile", (".*", ".*_dir")]
-    config_list = [("blank.ini", None), ("HOH.ini", None)]
+    config_list = [
+        ("blank.ini", None),
+        ("HOH.ini", None),
+    ]
 
     def test_init(self):
         for i, (config_name, config) in enumerate(TestConfig.config_list):
@@ -90,12 +93,24 @@ class TestConfig(TestWithTimer):
                 dihedral += 360
             self.assertEqual(float(structure.name.split(".")[-1]), dihedral)
 
+    def test_call_on_suffix(self):
+        config = Config(
+            os.path.join(prefix, "test_files", "structure_suffix.ini"),
+            quiet=True,
+            skip_user_default=True,
+        )
+
+        structure_list = config.get_template()
+        for structure, kind in structure_list:
+            print(structure, kind)
+
 
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(TestConfig("test_init"))
     suite.addTest(TestConfig("test_parse_changes"))
     suite.addTest(TestConfig("test_for_loop"))
+    suite.addTest(TestConfig("test_call_on_suffix"))
     return suite
 
 

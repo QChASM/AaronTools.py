@@ -28,6 +28,8 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    SQM_COMMENT,
+    SQM_QMMM,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
@@ -59,6 +61,8 @@ THEORY_OPTIONS = [
     "PSI4_JOB",
     "PSI4_OPTKING",
     "PSI4_SETTINGS",
+    "SQM_COMMENT",
+    "SQM_QMMM",
 ]
 
 
@@ -84,6 +88,26 @@ class Config(configparser.ConfigParser):
         "metadata",
     ]
 
+    @classmethod
+    def _process_content(cls, filename, quiet=True):
+        """
+        process file content to handle optional default section header
+        """
+        contents = filename
+        if os.path.isfile(filename):
+            try:
+                with open(filename) as f:
+                    contents = f.read()
+            except Exception as e:
+                if not quiet:
+                    cls.LOG.INFO("failed to read %s: %s", filename, e)
+                return ""
+        try:
+            configparser.ConfigParser().read_string(contents)
+        except configparser.MissingSectionHeaderError:
+            contents = "[DEFAULT]\n" + contents
+        return contents
+
     def __init__(
         self, infile=None, quiet=False, skip_user_default=False, **kwargs
     ):
@@ -96,6 +120,7 @@ class Config(configparser.ConfigParser):
         configparser.ConfigParser.__init__(
             self, interpolation=None, comment_prefixes=("#"), **kwargs
         )
+        self.infile = infile
         if not quiet:
             print("Reading configuration...")
         self._read_config(infile, quiet, skip_user_default)
@@ -109,13 +134,27 @@ class Config(configparser.ConfigParser):
                 "Results",
             ]:
                 continue
-            for option, value in self[section].items():
+            for option, value in list(self[section].items()):
+                if section == "Geometry" and option.lower().startswith(
+                    "structure"
+                ):
+                    del self[section][option]
+                    option = option.split(".")
+                    option[0] = option[0].lower()
+                    option = ".".join(option)
+                    self[section][option] = value
+                    continue
+                if section == "Geometry" and "structure" in value.lower():
+                    re.sub("structure", "structure", value, flags=re.I)
+                    self[section][option] = value
                 if option.lower() != option:
                     self[section][option.lower()] = value
                     del self[section][option]
 
         # handle included sections
         self._parse_includes()
+        if infile is not None:
+            self.read(infile)
 
         # set additional default values
         if infile:
@@ -129,6 +168,9 @@ class Config(configparser.ConfigParser):
                         infile, start=self["DEFAULT"]["top_dir"]
                     ).split(".")[:-1]
                 )
+        else:
+            if "top_dir" not in self["DEFAULT"]:
+                self["DEFAULT"]["top_dir"] = os.path.abspath(os.path.curdir)
 
         # handle substitutions/mapping
         self._changes = {}
@@ -138,7 +180,6 @@ class Config(configparser.ConfigParser):
         # for passing to Theory(*args, **kwargs)
         self._args = []
         self._kwargs = {}
-        self.infile = infile
 
         # metadata is username and project name
         self.metadata = {
@@ -166,6 +207,10 @@ class Config(configparser.ConfigParser):
 
     def copy(self):
         config = Config(infile=None, quiet=True)
+        for section in config.sections():
+            config.remove_section(section)
+        for option in list(config["DEFAULT"].keys()):
+            config.remove_option("DEFAULT", option)
         for section in ["DEFAULT"] + self.sections():
             try:
                 config.add_section(section)
@@ -192,7 +237,7 @@ class Config(configparser.ConfigParser):
         for section in ["Substitution", "Mapping"]:
             if section not in self:
                 continue
-            if "reopt" in self[section].getboolean(section, "reopt"):
+            if self[section].getboolean("reopt", fallback=False):
                 self._changes[""] = ({}, None)
             for key, val in self[section].items():
                 if key in self["DEFAULT"]:
@@ -297,14 +342,16 @@ class Config(configparser.ConfigParser):
             ppn = 4
             memory = %{ $ppn * 2 }GB --> memory = 8GB
         """
-        func_patt = re.compile("%{(.*?)}")
+        func_patt = re.compile("(%{(.*?)})")
         attr_patt = re.compile("\$([a-zA-Z0-9_:]+)")
         for section in ["DEFAULT"] + self.sections():
             # evaluate functions
             for key, val in self[section].items():
-                for match in func_patt.findall(val):
-                    eval_match = match
-                    for attr in attr_patt.findall(match):
+                match_list = func_patt.findall(val)
+                while match_list:
+                    match = match_list.pop()
+                    eval_match = match[1]
+                    for attr in attr_patt.findall(match[1]):
                         if ":" in attr:
                             from_section, option = attr.split(":")
                         else:
@@ -320,15 +367,25 @@ class Config(configparser.ConfigParser):
                             )
                         )
                     except (NameError, SyntaxError):
-                        eval_match = eval_match.strip()
-                    val = val.replace("%{" + match + "}", str(eval_match))
+                        if attr_patt.findall(eval_match):
+                            eval_match = "%{" + eval_match.strip() + "}"
+                        else:
+                            eval_match = eval_match.strip()
+                    val = val.replace(match[0], str(eval_match))
                     self[section][key] = val
+                    match_list = func_patt.findall(val)
 
     def getlist(self, section, option, *args, delim=",", **kwargs):
         """returns a list of option values by splitting on the delimiter specified by delim"""
         raw = self.get(section, option, *args, **kwargs)
         out = [x.strip() for x in raw.split(delim) if len(x.strip()) > 0]
         return out
+
+    def read(self, filename, quiet=True):
+        try:
+            self.read_string(self._process_content(filename, quiet=quiet))
+        except configparser.ParsingError:
+            pass
 
     def _read_config(self, infile, quiet, skip_user_default):
         """
@@ -342,6 +399,7 @@ class Config(configparser.ConfigParser):
         if infile:
             filenames += [infile]
         local_only = False
+        job_include = None
         for i, filename in enumerate(filenames):
             if not quiet:
                 if os.path.isfile(filename):
@@ -349,30 +407,24 @@ class Config(configparser.ConfigParser):
                 else:
                     print("    ✗", end="  ")
                 print(filename)
-            try:
-                # if infile is multi-line, it's probably a string and not a file name
-                if len(filename.splitlines()) > 1:
-                    self.read_string(filename)
-                else:
-                    success = self.read(filename)
-                    if not quiet and len(success) == 0:
-                        try:
-                            with open(filename) as f:
-                                f.readline()
-                        except Exception as e:
-                            raise Exception(
-                                "failed to read %s\n%s" % (filename, e)
-                            ) from e
-            except configparser.MissingSectionHeaderError:
-                # add global options to default section
-                with open(filename) as f:
-                    contents = "[DEFAULT]\n" + f.read()
-                self.read_string(contents)
+            content = self._process_content(filename)
+            self.read(content, quiet=quiet)
+            job_include = self.get("Job", "include", fallback=job_include)
+            if filename != infile:
+                self.remove_option("Job", "include")
             # local_only can only be overridden at the user level if "False" in the system config file
             if i == 0:
                 local_only = self["DEFAULT"].getboolean("local_only")
             elif local_only:
                 self["DEFAULT"]["local_only"] = str(local_only)
+        if "Job" in self:
+            type_spec = [
+                re.search("(?<!_)type", option) for option in self["Job"]
+            ]
+        else:
+            type_spec = []
+        if not any(type_spec):
+            self.set("Job", "include", job_include)
 
     def get_other_kwargs(self, section="Theory"):
         """
@@ -415,7 +467,7 @@ class Config(configparser.ConfigParser):
             PSI4_COMMENT,
         ]
 
-        job_kwargs = [
+        theory_kwargs = [
             "method",
             "charge",
             "multiplicity",
@@ -429,10 +481,13 @@ class Config(configparser.ConfigParser):
         out = {}
         for option in two_layer:
             value = self[section].get(option, fallback=False)
+            value = self._kwargs.get(option, value)
             if value:
-                # if it's got brackets, it's probably a python-looking dictionary
-                # eval it instead of parsing
-                if "{" in value:
+                if isinstance(value, dict):
+                    out[option] = value
+                elif "{" in value:
+                    # if it's got brackets, it's probably a python-looking dictionary
+                    # eval it instead of parsing
                     out[option] = eval(value, {})
                 else:
                     out[option] = {}
@@ -447,6 +502,7 @@ class Config(configparser.ConfigParser):
 
         for option in two_layer_single_value:
             value = self.get(section, option, fallback=False)
+            value = self._kwargs.get(option, value)
             if value:
                 if "{" in value:
                     out[option] = eval(value, {})
@@ -463,15 +519,51 @@ class Config(configparser.ConfigParser):
 
         for option in one_layer:
             value = self[section].get(option, fallback=False)
+            value = self._kwargs.get(option, value)
             if value:
                 out[option] = value.splitlines()
 
-        for option in job_kwargs:
+        for option in theory_kwargs:
             value = self[section].get(option, fallback=False)
             if value:
                 out[option] = value
 
         return out
+
+    def get_constraints(self, geometry):
+        constraints = {}
+        try:
+            con_list = re.findall("\(.*?\)", self["Geometry"]["constraints"])
+        except KeyError:
+            try:
+                geometry.parse_comment()
+                con_list = geometry.other["constraint"]
+            except KeyError:
+                raise RuntimeError(
+                    "Constraints for forming/breaking bonds must be specified for TS search"
+                )
+        for con in con_list:
+            tmp = []
+            try:
+                for c in eval(con, {}):
+                    tmp += geometry.find(str(c))
+            except TypeError:
+                for c in con:
+                    tmp += geometry.find(str(c))
+            con = [a.name for a in tmp]
+            if len(con) == 1:
+                constraints.setdefault("atoms", [])
+                constraints["atoms"] += [con]
+            elif len(con) == 2:
+                constraints.setdefault("bonds", [])
+                constraints["bonds"] += [con]
+            elif len(con) == 3:
+                constraints.setdefault("angles", [])
+                constraints["angles"] += [con]
+            elif len(con) == 4:
+                constraints.setdefault("torsions", [])
+                constraints["torsions"] += [con]
+        return constraints
 
     def get_theory(self, geometry, section="Theory"):
         """
@@ -508,40 +600,7 @@ class Config(configparser.ConfigParser):
                         theory.geometry.freeze()
                         theory.geometry.relax(self._changed_list)
                     elif "constrain" in job_type[1]:
-                        constraints = {}
-                        try:
-                            con_list = re.findall(
-                                "\(.*?\)", self["Geometry"]["constraints"]
-                            )
-                        except KeyError:
-                            try:
-                                theory.geometry.parse_comment()
-                                con_list = theory.geometry.other["constraint"]
-                            except KeyError:
-                                raise RuntimeError(
-                                    "Constraints for forming/breaking bonds must be specified for TS search"
-                                )
-                        for con in con_list:
-                            tmp = []
-                            try:
-                                for c in eval(con, {}):
-                                    tmp += geometry.find(str(c))
-                            except TypeError:
-                                for c in con:
-                                    tmp += geometry.find(str(c))
-                            con = [a.name for a in tmp]
-                            if len(con) == 1:
-                                constraints.setdefault("atoms", [])
-                                constraints["atoms"] += [con]
-                            elif len(con) == 2:
-                                constraints.setdefault("bonds", [])
-                                constraints["bonds"] += [con]
-                            elif len(con) == 3:
-                                constraints.setdefault("angles", [])
-                                constraints["angles"] += [con]
-                            elif len(con) == 4:
-                                constraints.setdefault("torsions", [])
-                                constraints["torsions"] += [con]
+                        constraints = self.get_constraints(theory.geometry)
                     elif "ts" == job_type[1]:
                         ts = True
 
@@ -589,6 +648,13 @@ class Config(configparser.ConfigParser):
         return theory
 
     def get_template(self):
+        # captures name placeholder and iterator from for-loop initilaizer
+        for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
+        # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
+        parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
+        # captures config-style structure/suffix -> (structure.suffix, suffix)
+        structure_patt = re.compile("(structure\.(\S+?))\.?")
+
         def get_multiple(filenames, path=None, suffix=None):
             rv = []
             for name in filenames:
@@ -605,6 +671,47 @@ class Config(configparser.ConfigParser):
                 rv += [(geom, kind)]
             return rv
 
+        def structure_assignment(line):
+            # assignments must be done outside of eval()
+            # left -> structure.suffix -> structure_dict["suffix"]
+            # right -> eval(right)
+            # left = right -> structure_dict[suffix] = eval(right)
+            left = line.split("=")[0].strip()
+            right = line.split("=")[1].strip()
+            suffix_match = parsed_struct_patt.search(left)
+            if suffix_match is None:
+                raise RuntimeError(
+                    "Can only assign to Geometry objects with names of the form `structure.suffix`"
+                )
+            suffix = suffix_match.group(2)
+            structure_dict[suffix] = eval(right, eval_dict)
+            structure_dict[suffix].name = ".".join(
+                structure_dict[suffix].name.split(".")[:-1] + [suffix]
+            )
+            if structure_dict[suffix].name.startswith("TS"):
+                kind_dict[suffix] = "TS"
+
+        def structure_suffix_parse(line, for_loop=None):
+            if for_loop is not None:
+                for_match, it_val = for_loop
+            for structure_match in structure_patt.findall(line):
+                # if our suffix is not the iterator, keep it's value for the dict key
+                if for_loop is None or structure_match[1] != for_match.group(
+                    1
+                ):
+                    suffix = structure_match[1]
+                else:
+                    suffix = str(it_val)
+                # change to dict-style syntax (structure.suffix -> structure["suffix"])
+                line = line.replace(
+                    structure_match[0],
+                    "structure['{}']".format(suffix),
+                )
+                if suffix not in structure_dict:
+                    structure_dict[suffix] = AaronTools.geometry.Geometry()
+                    kind_dict[suffix] = None
+            return line
+
         structure_dict = {}
         kind_dict = {}
         structure_list = []
@@ -614,7 +721,7 @@ class Config(configparser.ConfigParser):
             if "template" in self["Reaction"]:
                 path = os.path.join(
                     AARONLIB,
-                    "TS_geoms",
+                    "template_geoms",
                     self["Reaction"]["reaction"],
                     self["Reaction"]["template"],
                 )
@@ -623,7 +730,7 @@ class Config(configparser.ConfigParser):
             else:
                 path = os.path.join(
                     AARONLIB,
-                    "TS_geoms",
+                    "template_geoms",
                     self["Reaction"]["reaction"],
                 )
                 for dirpath, dirnames, filenames in os.walk(path):
@@ -673,7 +780,8 @@ class Config(configparser.ConfigParser):
                 if "Geometry" in self and "comment" in self["Geometry"]:
                     structure.comment = self["Geometry"]["comment"]
                     structure.parse_comment()
-                structure.name += ".{}".format(suffix)
+                if suffix:
+                    structure.name += ".{}".format(suffix)
                 structure_dict[suffix] = structure
                 kind_dict[suffix] = None
 
@@ -682,13 +790,6 @@ class Config(configparser.ConfigParser):
         # &for name in <iterator>:
         #    structure.name = structure.suffix.copy()
         #    structure.name.method_call(*args, **kwargs)
-
-        # captures name placeholder and iterator from for-loop initilaizer
-        for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
-        # captures config-style structure/suffix -> (structure.suffix, suffix)
-        structure_patt = re.compile("(structure\.(\S+?))\.?")
-        # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
-        parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
 
         if "Geometry" in self:
             for key in self["Geometry"]:
@@ -710,40 +811,12 @@ class Config(configparser.ConfigParser):
                         line = line.strip()
                         if not line:
                             continue
-                        for structure_match in structure_patt.findall(line):
-                            # if our suffix is not the iterator, keep it's value for the dict key
-                            if structure_match[1] != for_match.group(1):
-                                suffix = structure_match[1]
-                            else:
-                                suffix = str(it_val)
-                            # change to dict-style syntax (structure.suffix -> structure["suffix"])
-                            line = line.replace(
-                                structure_match[0],
-                                "structure['{}']".format(suffix),
-                            )
-                            if suffix not in structure_dict:
-                                structure_dict[
-                                    suffix
-                                ] = AaronTools.geometry.Geometry()
-                                kind_dict[suffix] = None
+                        line = structure_suffix_parse(
+                            line,
+                            for_loop=(for_match, it_val),
+                        )
                         if "=" in line:
-                            # assignments must be done outside of eval()
-                            # left -> structure.suffix -> structure_dict["suffix"]
-                            # right -> eval(right)
-                            # left = right -> structure_dict[suffix] = eval(right)
-                            left = line.split("=")[0].strip()
-                            right = line.split("=")[1].strip()
-                            suffix_match = parsed_struct_patt.search(left)
-                            if suffix_match is None:
-                                raise RuntimeError(
-                                    "Can only assign to Geometry objects with names of the form `structure.suffix`"
-                                )
-                            suffix = suffix_match.group(2)
-                            structure_dict[suffix] = eval(right, eval_dict)
-                            structure_dict[suffix].name = ".".join(
-                                structure_dict[suffix].name.split(".")[:-1]
-                                + [suffix]
-                            )
+                            structure_assignment(line)
                         else:
                             eval(line, eval_dict)
 
@@ -753,18 +826,79 @@ class Config(configparser.ConfigParser):
 
         # apply functions found in [Geometry] section
         if "Geometry" in self and "&call" in self["Geometry"]:
-            for structure, kind in structure_list:
-                lines = self["Geometry"]["&call"]
-                for line in lines.split("\n"):
-                    if line.strip():
-                        eval(
-                            line.strip(),
-                            {
-                                "structure": structure,
-                                "Geometry": AaronTools.geometry.Geometry,
-                            },
-                        )
+            eval_dict = {
+                "Geometry": AaronTools.geometry.Geometry,
+                "structure": structure_dict,
+            }
+            lines = self["Geometry"]["&call"]
+            for line in lines.split("\n"):
+                line = structure_suffix_parse(line)
+                if parsed_struct_patt.search(line.strip()):
+                    try:
+                        eval(line.strip(), eval_dict)
+                    except SyntaxError:
+                        structure_assignment(line)
+                    for suffix in structure_dict:
+                        val = (structure_dict[suffix], kind_dict[suffix])
+                        if val not in structure_list:
+                            structure_list += [val]
+                elif line.strip():
+                    for structure, kind in structure_list:
+                        eval_dict["structure"] = structure
+                        eval(line.strip(), eval_dict)
         return structure_list
+
+    def make_changes(self, structure):
+        if not self._changes:
+            return structure
+        changed = []
+        for name, (changes, kind) in self._changes.items():
+            for key, val in changes.items():
+                if kind == "Substitution" and "(" not in key:
+                    # regular substitutions
+                    for k in key.split(","):
+                        k = k.strip()
+                        if val.lower() == "none":
+                            structure -= structure.get_fragment(k)
+                        else:
+                            sub = structure.substitute(val, k)
+                            for atom in sub:
+                                changed += [atom.name]
+                elif kind == "Substitution":
+                    # fused ring substitutions
+                    target_patt = re.compile("\((.*?)\)")
+                    for k in target_patt.findall(key):
+                        k = [i.strip() for i in k.split(",")]
+                        if val.lower() == "none":
+                            structure -= structure.get_fragment(*k)
+                        else:
+                            sub = structure.ring_substitute(k, val)
+                            for atom in sub:
+                                changed += [atom.name]
+                elif kind == "Mapping":
+                    key = [k.strip() for k in key.split(",")]
+                    new_ligands = structure.map_ligand(val, key)
+                    for ligand in new_ligands:
+                        for atom in ligand:
+                            changed += [atom.name]
+        try:
+            con_list = list(
+                eval(self["Geometry"].get("constraints", "[]"), {})
+            )
+        except KeyError:
+            structure.parse_comment()
+            try:
+                con_list = structure.other["constraint"]
+            except KeyError:
+                con_list = []
+        for con in con_list:
+            for c in con:
+                try:
+                    changed.remove(str(c))
+                except ValueError:
+                    pass
+        self._changed_list = changed
+        return structure
 
     def _parse_includes(self):
         """
@@ -892,7 +1026,7 @@ class Config(configparser.ConfigParser):
                 # clean up metadata
                 del config[section][remove_key]
         # other job-specific additions
-        if "host" in config["HPC"]:
+        if config.has_section("HPC") and "host" in config["HPC"]:
             try:
                 config["HPC"]["work_dir"] = config["HPC"].get("remote_dir")
             except TypeError as e:
@@ -900,6 +1034,8 @@ class Config(configparser.ConfigParser):
                     "Must specify remote working directory for HPC (remote_dir = /path/to/HPC/work/dir)"
                 ) from e
         else:
+            if not config.has_section("HPC"):
+                config.add_section("HPC")
             config["HPC"]["work_dir"] = config["DEFAULT"].get("top_dir")
         # parse user-supplied functions in config file
         config.parse_functions()

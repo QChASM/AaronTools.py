@@ -3,15 +3,14 @@
 import sys
 from os.path import splitext
 import argparse
-from warnings import warn
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.theory import *
-from AaronTools.utils.utils import combine_dicts, get_filename
+from AaronTools.utils.utils import combine_dicts, get_filename, glob_files
 
 theory_parser = argparse.ArgumentParser(
-    description="print Gaussian, ORCA, or Psi4 input file",
+    description="print Gaussian, ORCA, Psi4, or SQM input file",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -48,7 +47,7 @@ theory_parser.add_argument(
     type=str,
     default=None,
     dest="out_format",
-    choices=["gaussian", "orca", "psi4"],
+    choices=["gaussian", "orca", "psi4", "sqm"],
     help="file format of output",
 )
 
@@ -472,6 +471,11 @@ gaussian_options.add_argument(
 
 args = theory_parser.parse_args()
 
+if not args.method and not args.use_prev:
+    sys.stderr.write("no method specified; -m/--method or -u/--use-previous is required")
+    theory_parser.print_help()
+    sys.exit(1)
+
 kwargs = {}
 
 blocks = getattr(args, ORCA_BLOCKS)
@@ -521,7 +525,7 @@ if args.comments:
 
 
 # Theory() is made for each file because we might be using things from the input file
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False, get_all=True)
@@ -691,6 +695,10 @@ for f in args.infile:
     elif args.use_prev and "theory" in infile.other:
         job_types = infile.other["theory"].job_type
 
+    grid = args.grid
+    if args.use_prev and "theory" in infile.other and not grid:
+        grid = infile.other["theory"].grid
+
     if args.charge is None:
         if "charge" in infile.other:
             charge = infile.other["charge"]
@@ -714,7 +722,7 @@ for f in args.infile:
     theory = Theory(
         method=method,
         basis=basis_set,
-        grid=args.grid,
+        grid=grid,
         solvent=solvent,
         job_type=job_types,
         empirical_dispersion=args.empirical_dispersion,
@@ -725,12 +733,8 @@ for f in args.infile:
     )
 
 
-    if args.out_format == "gaussian":
-        style = "com"
-    elif args.out_format == "orca":
-        style = "inp"
-    elif args.out_format == "psi4":
-        style = "in"
+    if args.out_format:
+        style = args.out_format
     else:
         if args.outfile:
             style = splitext(args.outfile)[-1].lstrip(".")
@@ -766,4 +770,4 @@ for f in args.infile:
         print(out)
     
     for warning in warnings:
-        warn(warning)
+        Geometry.LOG.warning(warning)

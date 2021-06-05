@@ -5,6 +5,7 @@ from warnings import warn
 
 from AaronTools.config import Config
 from AaronTools.job_control import SubmitProcess
+from AaronTools.utils.utils import glob_files
 
 config = Config(quiet=True)
 
@@ -98,7 +99,7 @@ submit_parser.add_argument(
 
 args = submit_parser.parse_args()
 
-for i, f in enumerate(args.infile):
+for i, f in enumerate(glob_files(args.infile)):
     # TODO: if processors etc. is not specified, read the input file to see if
     #       processors were specified
 

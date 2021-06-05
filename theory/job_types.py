@@ -1,6 +1,4 @@
 """various job types for Theory() instances"""
-import itertools as it
-
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,
@@ -12,7 +10,9 @@ from AaronTools.theory import (
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    SQM_QMMM,
 )
+from AaronTools.utils.utils import range_list
 
 
 class JobType:
@@ -40,7 +40,10 @@ class JobType:
     def get_psi4(self):
         """overwrite to return dict with PSI4_* keys"""
         pass
-
+    
+    def get_sqm(self):
+        """overwrite to return a dict with SQM_* keys"""
+        pass
 
 class OptimizationJob(JobType):
     """optimization job"""
@@ -627,52 +630,70 @@ class OptimizationJob(JobType):
 
         return out
 
-    def get_xcontrol(self, config):
+    def get_xcontrol(self, config, ref=None):
         """
         Generates xcontrol file constraints
 
         Returns: dict(xcontrol)
         """
+        if ref is None:
+            ref = "ref.xyz"
         xcontrol = ""
         # only put constraints in xcontrol file so this works with Crest also
-        if self.constraints:
+        frozen = [i + 1 for i, a in enumerate(self.geometry) if bool(a.flag)]
+        if frozen:
+            frozen = range_list(frozen)
+            xcontrol += "$fix\n"
+            xcontrol += "  atoms: {}\n".format(frozen)
+            xcontrol += "  freeze: {}\n".format(frozen)
+        elif self.constraints:
             xcontrol += "$constrain\n"
             xcontrol += "  force constant={}\n".format(
                 config["Job"].get("constrain_force", fallback="0.5")
             )
             xcontrol += "  reference={}\n".format(
-                config["Job"].get("constrain_ref", fallback="ref.xyz")
+                config["Job"].get("constrain_ref", fallback=ref)
             )
             constrained = set([])
             for bond in self.constraints.get("bonds", []):
                 bond = self.geometry.find(bond)
-                constrained.union(bond)
+                constrained.update(bond)
                 xcontrol += "  distance: {},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in bond)
                 )
             for angle in self.constraints.get("angles", []):
                 angle = self.geometry.find(angle)
-                constrained.union(angle)
+                constrained.update(angle)
                 xcontrol += "  angle: {},{},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in angle)
                 )
             for dihedral in self.constraints.get("torsions", []):
                 dihedral = self.geometry.find(dihedral)
-                constrained.union(dihedral)
+                constrained.update(dihedral)
                 xcontrol += "  dihedral: {},{},{},{},auto\n".format(
                     *(self.geometry.atoms.index(c) + 1 for c in dihedral)
                 )
             relaxed = {
-                str(i + 1)
+                i + 1
                 for i, a in enumerate(self.geometry.atoms)
                 if a not in constrained
             }
-            relaxed = ",".join(sorted(relaxed, key=lambda x: int(x)))
+            relaxed = range_list(relaxed)
             xcontrol += "$metadyn\n"
             xcontrol += "  atoms: {}\n".format(relaxed)
         xcontrol += "$end\n"
         return xcontrol
 
+    def get_sqm(self):
+        """returns a dict(), warnings for optimization jobs"""
+        warnings = []
+        if self.transition_state:
+            warnings.append("cannot do TS optimization with sqm")
+        
+        if self.constraints:
+            warnings.append("cannot constrain sqm optimization")
+        
+        return dict(), warnings
 
 class FrequencyJob(JobType):
     """frequnecy job"""
@@ -720,6 +741,8 @@ class FrequencyJob(JobType):
 
         return out
 
+    def get_sqm(self):
+        raise NotImplementedError("cannot build frequnecy job input for sqm")
 
 class SinglePointJob(JobType):
     """single point energy"""
@@ -735,6 +758,10 @@ class SinglePointJob(JobType):
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
         return {PSI4_JOB: {"energy": []}}
+    
+    def get_sqm(self):
+        """returns a dict with keys: SQM_QMMM"""
+        return {SQM_QMMM: {"maxcyc": ["0"]}}
 
 
 class ForceJob(JobType):

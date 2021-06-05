@@ -2,9 +2,11 @@
 
 import sys
 import argparse
+import re
 import numpy as np
 
 from AaronTools.fileIO import FileReader, read_types
+from AaronTools.utils.utils import glob_files
 
 info_parser = argparse.ArgumentParser(
     description="print information in Gaussian, ORCA, or Psi4 output files",
@@ -88,7 +90,7 @@ s = ""
 
 np.set_printoptions(precision=5)
 
-for f in args.infile:
+for f in glob_files(args.infile):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False)
@@ -108,12 +110,16 @@ for f in args.infile:
 
     else:
         s += "%s:\n" % f
-        missing_keys = [key for key in args.info if key not in infile.other.keys()]
+        missing_keys = [
+            key for key in args.info if not any(
+                re.search(key, data_key, flags=re.IGNORECASE) for data_key in infile.other.keys()
+            )
+        ]
         if missing_keys:
             s += "\nmissing some info: %s\n" % ", ".join(missing_keys)
 
         for key in infile.other.keys():
-            if args.info == [] or any(key.lower() == info.lower() for info in args.info):
+            if args.info == [] or any(re.search(info, key, flags=re.IGNORECASE) for info in args.info):
                 if isinstance(infile.other[key], str):
                     if args.csv:
                         s += "\"%s\"%s%s\n" % (key, sep, infile.other[key])
@@ -134,7 +140,9 @@ for f in args.infile:
                         s += "\"%s\"%s%.8f\n" % (key, sep, infile.other[key])
                     else:
                         s += "\t%-30s =\t%.8f\n" % (key, infile.other[key])
-                elif isinstance(infile.other[key], list):
+                elif isinstance(infile.other[key], list) or (
+                    isinstance(infile.other[key], np.ndarray) and infile.other[key].ndim == 1
+                ):
                     if args.csv:
                         s += "\"%s\"%s%s\n" % (
                             key, sep, sep.join([str(x) for x in infile.other[key]])

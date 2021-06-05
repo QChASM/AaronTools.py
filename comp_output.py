@@ -1,11 +1,9 @@
 #! /usr/bin/env python3
-import logging
-import warnings
 from collections.abc import MutableSequence
-from pprint import pprint
 
 import numpy as np
 
+from AaronTools import addlogger, getlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import PHYSICAL, UNIT
 from AaronTools.fileIO import FileReader
@@ -14,34 +12,27 @@ from AaronTools.utils.utils import float_vec, uptri2sym
 
 
 def obj_to_dict(obj, skip_attrs=None):
+    # log = getlogger(level="debug")
     if skip_attrs is None:
         skip_attrs = []
+    if isinstance(obj, Geometry):
+        return obj.comment, [str(a) for a in obj]
     rv = {}
     if hasattr(obj, "__dict__"):
         for attr in obj.__dict__:
             if attr in skip_attrs:
                 continue
             val = getattr(obj, attr)
-            if isinstance(val, Geometry):
-                val = list(zip(val.elements, val.coords))
-            elif isinstance(val, MutableSequence):
+            if isinstance(val, MutableSequence):
                 val = [obj_to_dict(v) for v in val]
             else:
                 val = obj_to_dict(val)
-            if isinstance(val, dict):
-                tmp = {}
-                for k, v in val.items():
-                    tmp[str(k)] = v
-                val = tmp
             rv[str(attr)] = val
         return rv
-    else:
-        return obj
+    return obj
 
 
-ATOMSPEC = "{:10s} {:3s} {: .6f} {: .6f} {: .6f}"
-
-
+@addlogger
 class CompOutput:
     """
     Attributes:
@@ -59,9 +50,16 @@ class CompOutput:
     QUASI_HARMONIC = "QHARM"
     QUASI_RRHO = "QRRHO"
     RRHO = "RRHO"
-    LOG = logging.getLogger(__name__)
+    LOG = None
+    LOGLEVEL = "debug"
 
-    def __init__(self, fname="", get_all=True, freq_name=None, conf_name=None):
+    def __init__(
+        self,
+        fname="",
+        get_all=True,
+        freq_name=None,
+        conf_name=None,
+    ):
         self.geometry = None
         self.opts = None
         self.opt_steps = None
@@ -128,14 +126,14 @@ class CompOutput:
         if "conformers" in from_file.other:
             self.conformers = []
             for comment, atoms in from_file.other["conformers"]:
-                self.conformers += [Geometry(atoms, comment=comment)]
+                self.conformers.append(Geometry(atoms, comment=comment))
             del from_file.other["conformers"]
 
         for k in keys:
             if k in from_file.other:
-                self.__setattr__(k, from_file.other[k])
-                # del from_file.other[k]
-        self.other = from_file.other
+                setattr(self, k, from_file.other[k])
+        
+        self.other = {k:v for k, v in from_file.other.items() if k not in keys}
 
         if self.rotational_temperature is None and self.geometry:
             self.compute_rot_temps()
@@ -149,29 +147,6 @@ class CompOutput:
 
     def to_dict(self, skip_attrs=None):
         return obj_to_dict(self, skip_attrs=skip_attrs)
-
-    def to_store(self):
-        data = {}
-        for key, val in data.items():
-            if key in ["opts"]:
-                del data[key]
-            elif key == "conformers" and val is not None:
-                tmp = {}
-                for i, v in enumerate(val):
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore")
-                        tmp[i] = hash(v)
-                data[key] = tmp
-            elif key == "geometry" and val is not None:
-                data[key] = [
-                    ATOMSPEC.format(a.name, a.element, *a.coords)
-                    for a in val.atoms
-                ]
-            elif isinstance(val, MutableSequence):
-                val = [obj_to_dict(v) for v in val]
-            else:
-                val = obj_to_dict(val)
-        return data
 
     def get_progress(self):
         rv = ""
@@ -189,11 +164,17 @@ class CompOutput:
 
         return rv.rstrip()
 
-    def calc_zpe(self):
+    def calc_zpe(self, anharmonic=False):
         """returns ZPVE correction"""
         hc = PHYSICAL.PLANCK * PHYSICAL.SPEED_OF_LIGHT / UNIT.HART_TO_JOULE
-        vib = sum(self.frequency.real_frequencies)
-        zpve = 0.5 * hc * vib
+        if anharmonic:
+            vib = sum(self.frequency.real_frequencies)
+            x = np.tril(self.other["X_matrix"]).sum()
+            x0 = self.other["X0"]
+            zpve = hc * (0.5 * vib + 0.25 * x + x0)
+        else:
+            vib = sum(self.frequency.real_frequencies)
+            zpve = 0.5 * hc * vib
         return zpve
 
     def therm_corr(self, temperature=None, v0=100, method="RRHO"):
@@ -207,8 +188,8 @@ class CompOutput:
         method: str - type of quasi treatment:
                 RRHO  - no quasi treatment
                 QRRHO - Grimme's quasi-RRHO
-                see Grimme, S. (2012), Supramolecular Binding Thermodynamics by 
-                Dispersion‐Corrected Density Functional Theory. Chem. Eur. J., 
+                see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
+                Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
                 18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
                 QHARM - Truhlar's quasi-harmonic
                 see J. Phys. Chem. B 2011, 115, 49, 14556–14562
@@ -337,7 +318,7 @@ class CompOutput:
 
         return Ecorr, Hcorr, Stot
 
-    def calc_G_corr(self, temperature=None, v0=0, method="RRHO"):
+    def calc_G_corr(self, temperature=None, v0=0, method="RRHO", **kwargs):
         """
         returns quasi rrho free energy correction (Eh)
         temperature: float, temperature; default is self.temperature
@@ -345,21 +326,21 @@ class CompOutput:
         method: str (RRHO, QRRHO, QHARM) method for treating entropy
                 see CompOutput.therm_corr for references
         """
-        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method)
+        Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method, **kwargs)
         T = temperature if temperature is not None else self.temperature
         Gcorr_qRRHO = Hcorr - T * Stot
 
         return Gcorr_qRRHO
 
-    def calc_Grimme_G(self, temperature=None, v0=100):
+    def calc_Grimme_G(self, temperature=None, v0=100, **kwargs):
         """
         returns quasi rrho free energy (Eh)
-        see Grimme, S. (2012), Supramolecular Binding Thermodynamics by 
-        Dispersion‐Corrected Density Functional Theory. Chem. Eur. J., 
+        see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
+        Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
         18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
         """
         Gcorr_qRRHO = self.calc_G_corr(
-            temperature=temperature, v0=v0, method=self.QUASI_RRHO
+            temperature=temperature, v0=v0, method=self.QUASI_RRHO, **kwargs
         )
         return Gcorr_qRRHO + self.energy
 
@@ -478,12 +459,14 @@ class CompOutput:
         return geom
 
     def compute_rot_temps(self):
-        """sets self's 'rotational_temperature' attribute by using self.geometry
+        """
+        sets self's 'rotational_temperature' attribute by using self.geometry
         not recommended b/c atoms should be specific isotopes, but this uses
         average atomic weights
-        exists because older versions of ORCA don't print rotational temperatures"""
-        self.geometry.coord_shift(-self.geometry.COM(mass_weight=True))
-
+        exists because older versions of ORCA don't print rotational temperatures
+        """
+        COM = self.geometry.COM(mass_weight=True)
+        self.geometry.coord_shift(-COM)
         inertia_mat = np.zeros((3, 3))
         for atom in self.geometry.atoms:
             for i in range(0, 3):
@@ -515,3 +498,5 @@ class CompOutput:
         self.rotational_temperature = [
             PHYSICAL.PLANCK * const / PHYSICAL.KB for const in rot_consts
         ]
+        # shift geometry back
+        self.geometry.coord_shift(COM)

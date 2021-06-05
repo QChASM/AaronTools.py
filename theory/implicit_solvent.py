@@ -540,7 +540,7 @@ class ImplicitSolvent:
         """returns dict() with solvent information for psi4 input files"""
 
         if self.solvent.lower() == "gas":
-            return (dict(), warnings)
+            return (dict(), [])
 
         raise NotImplementedError(
             "ImplicitSolvent cannot generate Psi4 solvent settings yet"

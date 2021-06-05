@@ -1,11 +1,41 @@
 import collections.abc
-from collections import OrderedDict
 import os
 import re
-import numpy as np
+from math import acos
+from collections import OrderedDict
 
 import AaronTools.atoms as Atoms
+import numpy as np
 from AaronTools.const import AARONTOOLS, PHYSICAL
+
+
+def range_list(number_list, sep=",", sort=True):
+    """
+    Takes a list of numbers and puts them into a string containing ranges, eg:
+    [1, 2, 3, 5, 6, 7, 9, 10] -> "1-3,5-7,9,10"
+
+    :sep: the separator to use between consecutive ranges
+    :sort: sort the list before parsing
+    """
+    if sort:
+        number_list = sorted(number_list)
+    tmp = [[]]
+    for i, n in enumerate(number_list):
+        if i == 0:
+            tmp[-1] += [n]
+        elif n == number_list[i - 1] + 1:
+            tmp[-1] += [n]
+        else:
+            tmp += [[n]]
+    rv = ""
+    for t in tmp:
+        if len(t) > 2:
+            rv += "{}-{},".format(t[0], t[-1])
+        elif len(t) == 2:
+            rv += "{},{},".format(t[0], t[-1])
+        else:
+            rv += "{},".format(t[0])
+    return rv[:-1]
 
 
 def progress_bar(this, max_num, name=None, width=50):
@@ -202,6 +232,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
     dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
     """
     from copy import deepcopy
+
     d1 = args[0]
     d2 = args[1:]
     if len(d2) > 1:
@@ -463,35 +494,41 @@ def to_closing(string, brace):
         return out
 
 
-def rotation_matrix(theta, axis):
+def rotation_matrix(theta, axis, renormalize=True):
     """rotation matrix for rotating theta radians about axis"""
     # I've only tested this for rotations in R3
-    if np.linalg.norm(axis) == 0:
-        axis = [1, 0, 0]
-    axis = axis / np.linalg.norm(axis)
     dim = len(axis)
-    outer_prod = np.dot(np.transpose([axis]), [axis])
-    outer_prod *= (1 - np.cos(theta))
+    if renormalize:
+        if np.linalg.norm(axis) == 0:
+            axis = np.zeros(dim)
+            axis[0] = 1.
+        axis = axis / np.linalg.norm(axis)
+    outer_prod = np.outer(axis, axis)
+    cos_comp = np.cos(theta)
+    outer_prod *= (1 - cos_comp)
     iden = np.identity(dim)
-    cos_comp = iden * np.cos(theta)
-    sin_comp = np.zeros((dim, dim))
+    cos_comp = iden * cos_comp
+    sin_comp = np.sin(theta) * (np.ones((dim, dim)) - iden)
+    cross_mat = np.zeros((dim, dim))
     for i in range(0, dim):
-        for j in range(0, dim):
-            if i != j:
-                if (i + j) % 2 != 0:
-                    p = -1
-                else:
-                    p = 1
-                if i > j:
-                    p = -p
-                sin_comp[i][j] = p * np.sin(theta) * axis[dim - (i + j)]
+        for j in range(0, i):
+            p = 1
+            if (i + j) % 2 != 0:
+                p = -1
 
-    return np.array(
-        [
-            [outer_prod[i][j] + cos_comp[i][j] + sin_comp[i][j] for i in range(0, dim)]
-            for j in range(0, dim)
-        ]
-    )
+            cross_mat[i][j] = -1 * (p * axis[dim - (i + j)])
+            cross_mat[j][i] = (p * axis[dim - (i + j)])
+
+    return outer_prod + cos_comp + sin_comp * cross_mat
+
+
+def mirror_matrix(norm, renormalize=True):
+    """mirror matrix for the specified norm"""
+    if renormalize:
+        norm /= np.linalg.norm(norm)
+    A = np.identity(3)
+    B = -2 * np.outer(norm, norm)
+    return A + B
 
 
 def fibonacci_sphere(radius=1, center=np.zeros(3), num=500):
@@ -538,8 +575,8 @@ def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
     if not os.path.exists(grid_file):
         # maybe some other error type?
         raise NotImplementedError(
-            "cannot use Lebedev grid with %i points\n" % num +
-            "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
+            "cannot use Lebedev grid with %i points\n" % num
+            + "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
         )
     grid_data = np.loadtxt(grid_file)
     grid = grid_data[:, [0, 1, 2]]
@@ -566,8 +603,8 @@ def gauss_legendre_grid(start=-1, stop=1, num=32):
     if not os.path.exists(grid_file):
         # maybe some other error type?
         raise NotImplementedError(
-            "cannot use Gauss-Legendre grid with %i points\n" % num +
-            "use one of 20, 32, 64, 75, 99, 127"
+            "cannot use Gauss-Legendre grid with %i points\n" % num
+            + "use one of 20, 32, 64, 75, 99, 127"
         )
     grid_data = np.loadtxt(grid_file)
 
@@ -613,7 +650,8 @@ def perp_vector(vec):
         return u[:, -1]
 
     raise NotImplementedError(
-        "cannot determine vector perpendicular to %i-dimensional array" % vec.ndim
+        "cannot determine vector perpendicular to %i-dimensional array"
+        % vec.ndim
     )
 
 
@@ -649,3 +687,43 @@ def boltzmann_average(energies, values, temperature):
     weights = boltzmann_coefficients(energies, temperature)
     avg = np.dot(weights, values) / sum(weights)
     return avg
+
+
+def glob_files(infiles):
+    """
+    globs input files
+    used for command line scripts because Windows doesn't support globbing...
+    """
+    from glob import glob
+    if isinstance(infiles, str):
+        infiles = [infiles]
+    
+    outfiles = []
+    for f in infiles:
+        if isinstance(f, str):
+            outfiles.extend(glob(f))
+        else:
+            outfiles.append(f)
+    
+    if not outfiles:
+        raise RuntimeError("no files could be found for %s" % ", ".join(infiles))
+    
+    return outfiles
+
+
+def angle_between_vectors(v1, v2, renormalize=True):
+    """returns the angle between v1 and v2 (numpy arrays)"""
+    if renormalize:
+        v1 = v1 / np.linalg.norm(v1)
+        v2 = v2 / np.linalg.norm(v2)
+    
+    v12 = v2 - v1
+    c2 = np.dot(v12, v12)
+    t = (c2 - 2) / -2
+    if t > 1:
+        t = 1
+    elif t < -1:
+        t = -1
+    
+    # math.acos is faster than numpy.arccos for non-arrays
+    return acos(t)

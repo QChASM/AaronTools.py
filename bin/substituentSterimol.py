@@ -6,6 +6,7 @@ import sys
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.utils import glob_files
 
 def main(argv):
     sterimol_parser = argparse.ArgumentParser(
@@ -77,7 +78,16 @@ def main(argv):
         "Default: L value is from VDW radii of target atom to outer\n"
         "VDW radii of atoms projected onto L-axis"
     )
-    
+
+    sterimol_parser.add_argument(
+        "-al", "--at-L",
+        default=[None],
+        dest="L_value",
+        type=lambda x: [float(v) for v in x.split(",")],
+        help="get widths at specific L values (comma-separated)\n"
+        "Default: use the entire ligand",
+    )
+
     sterimol_parser.add_argument(
         "-v", "--vector",
         action="store_true",
@@ -103,7 +113,7 @@ def main(argv):
     if not args.vector:
         s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
     
-    for infile in args.infile:
+    for infile in glob_files(args.infile):
         if isinstance(infile, str):
             if args.input_format is not None:
                 f = FileReader((infile, args.input_format, infile))
@@ -121,26 +131,32 @@ def main(argv):
         end = geom.find(avoid)[0]
         frag = geom.get_fragment(target, stop=end)
         sub = Substituent(frag, end=end, detect=False)
-        data = sub.sterimol(return_vector=args.vector, radii=args.radii, old_L=args.old_L)
-        if args.vector:
-            for key, color in zip(
-                    ["B1", "B2", "B3", "B4", "B5", "L"],
-                    ["black", "green", "purple", "orange", "red", "blue"]
-            ):
-                start, end = data[key]
-                s += ".color %s\n" % color
-                s += ".note Sterimol %s\n" % key
-                s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
-        else:
-            s += "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n" % (
-                data["B1"],
-                data["B2"],
-                data["B3"],
-                data["B4"],
-                data["B5"],
-                data["L"],
-                infile,
+        for val in args.L_value:
+            data = sub.sterimol(
+                return_vector=args.vector,
+                radii=args.radii,
+                old_L=args.old_L,
+                at_L=val,
             )
+            if args.vector:
+                for key, color in zip(
+                        ["B1", "B2", "B3", "B4", "B5", "L"],
+                        ["black", "green", "purple", "orange", "red", "blue"]
+                ):
+                    start, end = data[key]
+                    s += ".color %s\n" % color
+                    s += ".note Sterimol %s\n" % key
+                    s += ".arrow %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f\n" % (*start, *end)
+            else:
+                s += "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n" % (
+                    data["B1"],
+                    data["B2"],
+                    data["B3"],
+                    data["B4"],
+                    data["B5"],
+                    data["L"],
+                    infile,
+                )
     
     if not args.outfile:
         print(s)
