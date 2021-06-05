@@ -564,18 +564,17 @@ class Atom:
     def tetrahedral_shape(cls):
         """returns a list of 5 dummy atoms in a tetrahedral shape"""
         center = Atom("X", np.zeros(3), name="0")
-        angle = np.deg2rad(109.471 / 2)
         pos1 = Atom(
-            "X", np.array([np.cos(angle), -np.sin(angle), 0.0]), name="1"
+            "X", np.array([0.57735, -0.81650, 0.0]), name="1"
         )
         pos2 = Atom(
-            "X", np.array([np.cos(angle), np.sin(angle), 0.0]), name="2"
+            "X", np.array([0.57735, 0.81650, 0.0]), name="2"
         )
         pos3 = Atom(
-            "X", np.array([-np.cos(angle), 0.0, np.sin(angle)]), name="3"
+            "X", np.array([-0.57735, 0.0, 0.81650]), name="3"
         )
         pos4 = Atom(
-            "X", np.array([-np.cos(angle), 0.0, -np.sin(angle)]), name="4"
+            "X", np.array([-0.57735, 0.0, -0.81650]), name="4"
         )
 
         return [center, pos1, pos2, pos3, pos4]
@@ -584,13 +583,12 @@ class Atom:
     def trigonal_bipyramidal_shape(cls):
         """returns a list of 6 dummy atoms in a trigonal bipyramidal shape"""
         center = Atom("X", np.zeros(3), name="0")
-        angle = np.deg2rad(120)
         pos1 = Atom("X", np.array([1.0, 0.0, 0.0]), name="1")
         pos2 = Atom(
-            "X", np.array([np.cos(angle), np.sin(angle), 0.0]), name="2"
+            "X", np.array([-0.5, 0.86603, 0.0]), name="2"
         )
         pos3 = Atom(
-            "X", np.array([np.cos(angle), -np.sin(angle), 0.0]), name="3"
+            "X", np.array([-0.5, -0.86603, 0.0]), name="3"
         )
         pos4 = Atom("X", np.array([0.0, 0.0, 1.0]), name="4")
         pos5 = Atom("X", np.array([0.0, 0.0, -1.0]), name="5")
@@ -1087,7 +1085,7 @@ class Atom:
             r2 = np.matmul(np.transpose(X), X)
             u, s2, vh = np.linalg.svd(r2)
 
-            score = sum([abs(x1 - x2) for x1, x2 in zip(s1, s2)])
+            score = sum(np.abs(s1 - s2))
             if best_score is None or score < best_score:
                 best_score = score
                 best_shape = shape

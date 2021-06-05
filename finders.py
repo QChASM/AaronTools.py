@@ -509,6 +509,8 @@ class OfType(Finder):
                 geometry = geometry - atom
             atoms = geometry.atoms
 
+        atoms = [atom for atom in atoms if atom.element == self.element]
+
         class CustomError(Exception):
             pass
 
@@ -643,14 +645,7 @@ class Aromatics(Finder):
 
         def is_aromatic(num):
             """returns true if the number follows the huckel rule of 4n + 2"""
-            num = int(num)
-            for i in range(0,11):
-                if (4*i + 2) == num:
-                    aromatic = True
-                    break
-                else:
-                    aromatic = False
-            return aromatic
+            return (int(num) - 2) % 4 == 0
 
         def dict_name(string):
             """returns the name of the dictionary that corresponds to the vsepr shape"""
@@ -658,10 +653,14 @@ class Aromatics(Finder):
             name = a.join(string.split())
             return name
 
-        bent_2_planar = {'C': 1, 'S': 1, 'O': 1, 'N': 1, 'P': 1}
-        bent_2_tetrahedral = {'S': 2, 'O': 2, 'C': 0}
-        trigonal_planar = {'C': 1, 'N': 2, 'P': 2, 'B': 0}
-        bent_3_tetrahedral = {'N': 2}
+        contribution = {
+            "bent 2 planar": {'C': 1, 'S': 1, 'O': 1, 'N': 1, 'P': 1},
+            "bent 2 tetrahedral": {'S': 2, 'O': 2, 'C': 0},
+            "trigonal planar": {'C': 1, 'N': 2, 'P': 2, 'B': 0},
+            "bent 3 tetrahedral": {'N': 2},
+        }
+
+        aromatic_elements = ["B", "C", "N", "O", "P", "S"]
 
         matching_atoms = []
         unchecked_atoms = list(geometry.atoms)
@@ -669,42 +668,49 @@ class Aromatics(Finder):
         charge=0
         rings = []
         for atom in unchecked_atoms:
+            if not any(atom.element == aromatic_element for aromatic_element in aromatic_elements):
+                continue
+            vsepr = atom.get_vsepr()[0]
             fusedRing = False
-            if atom.element != 'H' and (atom.get_vsepr()[0] == 'trigonal planar' or atom.get_vsepr()[0] == 'bent 2 planar' or atom.get_vsepr()[0] == 'bent 2 tetrahedral'):
-                n_aromatic = 0
-                connected_atoms = []
-                for atm in atom.connected:
-                    if atm.element != 'H':
-                        connected_atoms.append(atm)
-                for i in range(0,len(connected_atoms)):
-                    n_aromatic = 0
-                    try:
-                        path = list(geometry.shortest_path(connected_atoms[pairs(len(connected_atoms))[i,0]].name, connected_atoms[pairs(len(connected_atoms))[i,1]].name, avoid=atom.name))
-                        ring=True
-                    except LookupError:
-                        ring=False
-                    if ring==True:
+            if any(vsepr == ring_vsepr for ring_vsepr in ['trigonal planar', 'bent 2 planar', 'bent 2 tetrahedral']):
+                for i, a1 in enumerate(atom.connected):
+                    if not any(a1.element == aromatic_element for aromatic_element in aromatic_elements):
+                        continue
+                    for a2 in list(atom.connected)[:i]:
+                        if not any(a2.element == aromatic_element for aromatic_element in aromatic_elements):
+                            continue
+                        try:
+                            path = geometry.shortest_path(a1, a2, avoid=atom)
+                        except LookupError:
+                            continue
+
                         ring = path
-                        ring.append(atom)
-                        rings.append(ring)
                         huckel_num = 0
                         try:
-                            for checked_atom in path:
-                                unchecked_atoms.remove(checked_atom)
-                        except ValueError:
-                            fusedRing=True
-                        for ring_atom in ring:
+                            huckel_num += contribution[vsepr][atom.element]
+                        except IndexError:
+                            continue
+                        ring.append(atom)
+                        rings.append(ring)
+                        for checked_atom in path:
                             try:
-                                huckel_num = huckel_num + eval(dict_name(ring_atom.get_vsepr()[0]))[ring_atom.element]
-                            except:
+                                unchecked_atoms.remove(checked_atom)
+                            except ValueError:
+                                fusedRing=True
+                        for ring_atom in ring:
+                            if ring_atom is atom:
+                                continue
+                            try:
+                                huckel_num += contribution[ring_atom.get_vsepr()[0]][ring_atom.element]
+                            except LookupError:
                                 huckel_num = 0
                                 break
                         if (huckel_num % 2) != 0:
                             n_counter = 0
                             for ring_atom in ring:
                                 if ring_atom.element == 'N': n_counter += 1
-                            if n_counter == 2: huckel_num = huckel_num - 2
-                            else: huckel_num = huckel_num - 1
+                            if n_counter == 2: huckel_num -= 2
+                            else: huckel_num -= 1
                             charge += 1
                         if is_aromatic(huckel_num) == True:
                             for match in ring:
