@@ -164,7 +164,7 @@ setup(
     # Similar to `install_requires` above, these must be valid existing
     # projects.
     extras_require={  # Optional
-        "extras": ["pdfminer", "jinja2", "matplotlib", "numexpr", "joblib"],
+        "extras": ["pdfminer", "jinja2", "matplotlib"],
     },
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow

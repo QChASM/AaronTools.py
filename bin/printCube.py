@@ -76,14 +76,13 @@ cube_parser.add_argument(
 )
 
 cube_parser.add_argument(
-    "-n", "--number-of-jobs",
+    "-nt", "--number-of-threads",
     type=int,
     default=1,
     dest="n_jobs",
-    help="number of processes to spawn when evaluating\n"
-    "basis functions\n"
-    "this is on top of NumPy's and NumExpr's multithreading,\n"
-    "so if NumPy/NumExpr use 8 threads and n_jobs=2, you can\n"
+    help="number of threads to use when evaluating basis functions"
+    "this is on top of NumPy's multithreading,\n"
+    "so if NumPy uses 8 threads and n_jobs=2, you can\n"
     "expect to see 16 threads in use\n"
 )
 
