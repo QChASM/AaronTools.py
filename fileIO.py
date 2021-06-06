@@ -3,6 +3,7 @@ import os
 import re
 from copy import deepcopy
 from io import IOBase, StringIO
+import concurrent.futures
 
 import numpy as np
 
@@ -11,14 +12,6 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.oniomatoms import OniomAtom
 from AaronTools.theory import *
-
-try:
-    # numexpr can be used to evaluate some array operations
-    # more quickly
-    import numexpr as ne
-    _WITH_NE = True
-except (ModuleNotFoundError, ImportError):
-    _WITH_NE = False
 
 try:
     # joblib can be used to evaluate a function in parallel
@@ -569,13 +562,9 @@ class FileWriter:
         padding - padding around geom's coordinates
         spacing - targeted spacing between points
         n_jobs - number of parallel threads to use
-                 this is on top of NumPy's and NumExpr's multithreading, so
-                 if NumPy/NumExpr use 8 threads and n_jobs=2, you can
+                 this is on top of NumPy's multithreading, so
+                 if NumPy uses 8 threads and n_jobs=2, you can
                  expect to see 16 threads in use
-                 the peak memory used will also increase linearly
-                 with n_jobs
-                 if the joblib module is not available or n_jobs <= 1,
-                 no parallelization will be attempted
         """
         if orbitals is None:
             raise RuntimeError(
@@ -3360,6 +3349,14 @@ class Orbitals:
                           center to the point(s) being evaluated along
                           the x axis
                       y and z - same as x for the corresponding axis
+                      mo_coeffs - list(len=funcs_per_shell), MO coefficients
+                                  for the functions in this shell (e.g. 3
+                                  coefficients for the p shell); order
+                                  might depend on input file format
+                                  for example, FCHK files will be px, py, pz
+                                  ORCA files will be pz, px, py
+    funcs_per_shell - list(len=n_shell), number of basis functions for
+                      each shell
     beta_functions - same as alpha_functions or None if no beta info is
                      present
     alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
@@ -3410,6 +3407,7 @@ class Orbitals:
         self.contraction_coeff = filereader.other["Contraction coefficients"]
         self.exponents = filereader.other["Primitive exponents"]
         self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
+        self.funcs_per_shell = []
 
         def gau_norm(a, l):
             """
@@ -3441,427 +3439,240 @@ class Orbitals:
                 # s functions
                 self.shell_types.append("s")
                 self.n_mos += 1
+                self.funcs_per_shell.append(1)
                 norms = s_norm(exponents)
-                def s_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    return np.dot(con_coeff * norms, e_r2)
-                self.basis_functions.append([s_func])
+                def s_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    if isinstance(mo_coeffs, float):
+                        return mo_coeffs * np.dot(con_coeff * norms, e_r2)
+                    return mo_coeffs[0] * np.dot(con_coeff * norms, e_r2)
+                self.basis_functions.append(s_shell)
         
             elif shell == 1:
                 # p functions
                 self.shell_types.append("p")
                 self.n_mos += 3
+                self.funcs_per_shell.append(3)
                 norms = p_norm(exponents)
-                def px_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                def p_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
                     s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * x
-                def py_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
+                    if isinstance(r2, float):
+                        res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * y
-                def pz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * z
-                self.basis_functions.append([px_func, py_func, pz_func])
+                        res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        res += mo_coeffs[0] * x
+                    if mo_coeffs[1] != 0:
+                        res += mo_coeffs[1] * y
+                    if mo_coeffs[2] != 0:
+                        res += mo_coeffs[2] * z
+                    return res * s_val
+                self.basis_functions.append(p_shell)
         
             elif shell == -1:
                 # s=p functions
                 self.shell_types.append("sp")
                 self.n_mos += 4
+                self.funcs_per_shell.append(4)
                 norm_s = s_norm(exponents)
                 norm_p = p_norm(exponents)
                 sp_coeff = filereader.other["P(S=P) Contraction coefficients"][shell_i: shell_i + n_prim]
-                def s_func(
-                    r2, x, y, z,
+                def sp_shell(
+                    r2, x, y, z, mo_coeffs,
                     alpha=exponents,
                     s_coeff=con_coeff,
+                    p_coeff=sp_coeff,
                     s_norms=norm_s,
+                    p_norms=norm_p,
                 ):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                    e_r2 = np.exp(np.outer(-alpha, r2))
                     sp_val_s = np.dot(s_coeff * s_norms, e_r2)
-                    return sp_val_s
-                def px_func(
-                    r2, x, y, z,
-                    alpha=exponents,
-                    p_coeff=sp_coeff,
-                    p_norms=norm_p,
-                ):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
                     sp_val_p = np.dot(p_coeff * p_norms, e_r2)
-                    return sp_val_p * x
-                def py_func(
-                    r2, x, y, z,
-                    alpha=exponents,
-                    p_coeff=sp_coeff,
-                    p_norms=norm_p,
-                ):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
+                    if isinstance(r2, float):
+                        s_res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    sp_val_p = np.dot(p_coeff * p_norms, e_r2)
-                    return sp_val_p * y
-                def pz_func(
-                    r2, x, y, z,
-                    alpha=exponents,
-                    p_coeff=sp_coeff,
-                    p_norms=norm_p,
-                ):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
+                        s_res = np.zeros(len(r2))
+                    if isinstance(r2, float):
+                        p_res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    sp_val_p = np.dot(p_coeff * p_norms, e_r2)
-                    return sp_val_p * z
-                self.basis_functions.append([s_func, px_func, py_func, pz_func])
+                        p_res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        s_res += mo_coeffs[0]
+                    if mo_coeffs[1] != 0:
+                        p_res += mo_coeffs[1] * x
+                    if mo_coeffs[2] != 0:
+                        p_res += mo_coeffs[2] * y
+                    if mo_coeffs[3] != 0:
+                        p_res += mo_coeffs[3] * z
+                    return s_res * sp_val_s + p_res * sp_val_p
+                self.basis_functions.append(sp_shell)
         
             elif shell == 2:
                 # cartesian d functions
                 self.shell_types.append("6d")
                 self.n_mos += 6
+                self.funcs_per_shell.append(6)
                 norms = d_norm(exponents)
-                def dxx_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xx = ne.evaluate("x * x")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                        xx = x ** 2
+                def d_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
                     s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xx
-        
-                def dyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yy = ne.evaluate("y * y")
+                    if isinstance(r2, float):
+                        res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        xx = x * x
+                        res += mo_coeffs[0] * xx
+                    if mo_coeffs[1] != 0:
                         yy = y * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yy
-        
-                def dzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        zz = ne.evaluate("z * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[1] * yy
+                    if mo_coeffs[2] != 0:
                         zz = z * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * zz
-        
-                def dxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xy = ne.evaluate("sqrt(3) * x * y")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[2] * zz
+                    if mo_coeffs[3] != 0:
                         xy = np.sqrt(3) * x * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xy
-        
-                def dxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xz = ne.evaluate("sqrt(3) * x * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[3] * xy
+                    if mo_coeffs[4] != 0:
                         xz = np.sqrt(3) * x * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xz
-        
-                def dyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yz = ne.evaluate("sqrt(3) * y * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[4] * xz
+                    if mo_coeffs[5] != 0:
                         yz = np.sqrt(3) * y * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yz
-                self.basis_functions.append(
-                    [dxx_func, dyy_func, dzz_func, dxy_func, dxz_func, dyz_func]
-                )
+                        res += mo_coeffs[5] * yz
+                    return res * s_val
+                self.basis_functions.append(d_shell)
         
             elif shell == -2:
                 # pure d functions
                 self.shell_types.append("5d")
                 self.n_mos += 5
+                self.funcs_per_shell.append(5)
                 norms = d_norm(exponents)
-                def dz2r2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        z2r2 = ne.evaluate("0.5 * (3 * z * z - r2)")
+                def d_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    if isinstance(r2, float):
+                        res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
                         z2r2 = 0.5 * (3 * z * z - r2)
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * z2r2
-                def dxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xz = ne.evaluate("sqrt(3) * x * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[0] * z2r2
+                    if mo_coeffs[1] != 0:
                         xz = np.sqrt(3) * x * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xz
-                def dyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yz = ne.evaluate("sqrt(3) * y * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[1] * xz
+                    if mo_coeffs[2] != 0:
                         yz = np.sqrt(3) * y * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yz
-                def dx2y2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        x2y2 = ne.evaluate("sqrt(3) * (x * x - y * y) / 2")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[2] * yz
+                    if mo_coeffs[3] != 0:
                         x2y2 = np.sqrt(3) * (x ** 2 - y ** 2) / 2
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * x2y2
-                def dxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xy = ne.evaluate("sqrt(3) * x * y")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[3] * x2y2
+                    if mo_coeffs[4] != 0:
                         xy = np.sqrt(3) * x * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xy
+                        res += mo_coeffs[4] * xy
+                    return res * s_val
         
-                self.basis_functions.append(
-                    [dz2r2_func, dxz_func, dyz_func, dx2y2_func, dxy_func]
-                )
+                self.basis_functions.append(d_shell)
         
             elif shell == 3:
                 # 10f functions
                 self.shell_types.append("10f")
                 self.n_mos += 10
+                self.funcs_per_shell.append(10)
                 norms = f_norm(exponents)
-                def fxxx_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xxx = ne.evaluate("x * x * x")
+                def f_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    if isinstance(r2, float):
+                        res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
                         xxx = x * x * x
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xxx
-                def fyyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yyy = ne.evaluate("y * y * y")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[0] * xxx
+                    if mo_coeffs[1] != 0:
                         yyy = y * y * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yyy
-                def fzzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        zzz = ne.evaluate("z * z * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[1] * yyy
+                    if mo_coeffs[2] != 0:
                         zzz = z * z * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * zzz
-                def fxyy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xyy = ne.evaluate("sqrt(5) * x * y * y")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[2] * zzz
+                    if mo_coeffs[3] != 0:
                         xyy = np.sqrt(5) * x * y * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xyy
-                def fxxy_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xxy = ne.evaluate("sqrt(5) * x * x * y")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[3] * xyy
+                    if mo_coeffs[4] != 0:
                         xxy = np.sqrt(5) * x * x * y
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xxy
-                def fxxz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xxz = ne.evaluate("sqrt(5) * x * x * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[4] * xxy
+                    if mo_coeffs[5] != 0:
                         xxz = np.sqrt(5) * x * x * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xxz
-                def fxzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xzz = ne.evaluate("sqrt(5) * x * z * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[5] * xxz
+                    if mo_coeffs[6] != 0:
                         xzz = np.sqrt(5) * x * z * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xzz
-                def fyzz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yzz = ne.evaluate("sqrt(5) * y * z * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[6] * xxz
+                    if mo_coeffs[7] != 0:
                         yzz = np.sqrt(5) * y * z * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yzz
-                def fyyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yyz = ne.evaluate("sqrt(5) * y * y * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[7] * yzz
+                    if mo_coeffs[8] != 0:
                         yyz = np.sqrt(5) * y * y * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yyz
-                def fxyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xyz = ne.evaluate("sqrt(15) * x * y * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[8] * yyz
+                    if mo_coeffs[9] != 0:
                         xyz = np.sqrt(15) * x * y * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xyz
-                self.basis_functions.append([
-                    fxxx_func, fyyy_func, fzzz_func,
-                    fxyy_func, fxxy_func, fxxz_func, fxzz_func, fyzz_func, fyyz_func,
-                    fxyz_func,
-                ])
+                        res += mo_coeffs[9] * xyz
+                    return res * s_val
+                self.basis_functions.append(f_shell)
         
             elif shell == -3:
                 # pure f functions
                 self.shell_types.append("7f")
                 self.n_mos += 7
+                self.funcs_per_shell.append(7)
                 norms = f_norm(exponents)
-                def fz3zr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        z3zr2 = ne.evaluate("z * (5 * z * z - 3 * r2) / 2")
+                def f_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    if isinstance(r2, float):
+                        res = 0
                     else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
                         z3zr2 = z * (5 * z * z - 3 * r2) / 2
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * z3zr2
-                def fxz2xr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                    return s_val * xz2xr2
-                def fyz2yr2_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        yz2yr2 = ne.evaluate("sqrt(3) * y * (5 * z * z - r2) / (2 * sqrt(2))")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[0] * z3zr2
+                    if mo_coeffs[1] != 0:
+                        xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        res += mo_coeffs[1] * xz2xr2
+                    if mo_coeffs[2] != 0:
                         yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * yz2yr2
-                def fx2zy2z_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        x2zr2z = ne.evaluate("sqrt(15) * z * (x * x - y * y) / 2")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[2] * yz2yr2
+                    if mo_coeffs[3] != 0:
                         x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * x2zr2z
-                def fxyz_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        xyz = ne.evaluate("sqrt(15) * x * y * z")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[3] * x2zr2z
+                    if mo_coeffs[4] != 0:
                         xyz = np.sqrt(15) * x * y * z
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * xyz
-                def fx3y2x_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        x3r2x = ne.evaluate("sqrt(5) * x * (x * x - 3 * y * y) / (2 * sqrt(2))")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[4] * xyz
+                    if mo_coeffs[5] != 0:
                         x3r2x = np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * x3r2x
-                def fx2yy3_func(r2, x, y, z, alpha=exponents, con_coeff=con_coeff, norms=norms):
-                    if _WITH_NE:
-                        a_r2 = np.outer(-alpha, r2)
-                        e_r2 = ne.evaluate("exp(a_r2)")
-                        x2yy3 = ne.evaluate("sqrt(5) * y * (3 * x * x - y * y) / (2 * sqrt(2))")
-                    else:
-                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        res += mo_coeffs[5] * x3r2x
+                    if mo_coeffs[6] != 0:
                         x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
-                    s_val = np.dot(con_coeff * norms, e_r2)
-                    return s_val * x2yy3
+                        res += mo_coeffs[6] * x2yy3
+                    return res * s_val
         
                 self.basis_functions.append([
                     fz3zr2_func, fxz2xr2_func, fyz2yr2_func, fx2zy2z_func,
@@ -3893,6 +3704,7 @@ class Orbitals:
         self.beta_coefficients = None
         self.beta_nrgs = None
         self.shell_types = []
+        self.funcs_per_shell = []
         self.n_mos = 0
         
         def gau_norm(a, l):
@@ -3921,272 +3733,114 @@ class Orbitals:
                 con_coeff = np.array(con_coeff)
                 if shell_type.lower() == "s":
                     self.shell_types.append("s")
+                    self.funcs_per_shell.append(1)
                     self.n_mos += 1
                     norms = s_norm(exponents)
-                    def s_func(
-                        r2, x, y, z,
+                    def s_shell(
+                        r2, x, y, z, mo_coeff,
                         alpha=exponents,
                         con_coeff=con_coeff[:,0],
                         norms=norms
                     ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                        return np.dot(con_coeff * norms, e_r2)
-                    self.basis_functions.append([s_func])
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        if isinstance(mo_coeff, float):
+                            return mo_coeff * np.dot(con_coeff * norms, e_r2)
+                        return mo_coeff[0] * np.dot(con_coeff * norms, e_r2)
+                    self.basis_functions.append(s_shell)
                 elif shell_type.lower() == "p":
                     self.shell_types.append("p")
+                    self.funcs_per_shell.append(3)
                     self.n_mos += 3
                     norms = p_norm(exponents)
-                    def pz_func(
-                        r2, x, y, z,
+                    def p_shell(
+                        r2, x, y, z, mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff[:,0],
-                        norms=norms
+                        norms=norms,
                     ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * z
-                    def px_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                     ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * x
-                    def py_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * y
-                    self.basis_functions.append([pz_func, px_func, py_func])
+
+                        res = np.zeros(len(s_val))
+                        if mo_coeffs[0] != 0:
+                            res += mo_coeffs[0] * z
+                        if mo_coeffs[1] != 0:
+                            res += mo_coeffs[1] * x
+                        if mo_coeffs[2] != 0:
+                            res += mo_coeffs[2] * y
+
+                        return res * s_val
+                    self.basis_functions.append(p_shell)
                 elif shell_type.lower() == "d":
                     self.shell_types.append("5d")
+                    self.funcs_per_shell.append(5)
                     self.n_mos += 5
                     norms = d_norm(exponents)
-                    def dz2r2_func(
-                        r2, x, y, z,
+                    def d_shell(
+                        r2, x, y, z, mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff[:,0],
                         norms=norms
                     ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            z2r2 = ne.evaluate("0.5 * (3 * z * z - r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        res = np.zeros(len(s_val))
+                        if mo_coeffs[0] != 0:
                             z2r2 = 0.5 * (3 * z * z - r2)
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * z2r2
-                    def dxz_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            xz = ne.evaluate("sqrt(3) * x * z")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[0] * z2r2
+                        if mo_coeffs[1] != 0:
                             xz = np.sqrt(3) * x * z
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * xz
-                    def dyz_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        yz = np.sqrt(3) * y * z
-                        return s_val * yz
-                    def dx2y2_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            x2y2 = ne.evaluate("sqrt(3) * (x * x - y * y) / 2")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[1] * xz
+                        if mo_coeffs[2] != 0:
+                            yz = np.sqrt(3) * y * z
+                            res += mo_coeffs[2] * yz
+                        if mo_coeffs[3] != 0:
                             x2y2 = np.sqrt(3) * (x ** 2 - y ** 2) / 2
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * x2y2
-                    def dxy_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            xy = ne.evaluate("sqrt(3) * x * y")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[3] * x2y2
+                        if mo_coeffs[4] != 0:
                             xy = np.sqrt(3) * x * y
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * xy
+                            res += mo_coeffs[4] * xy
+                        return res * s_val
                 
-                    self.basis_functions.append(
-                        [dz2r2_func, dxz_func, dyz_func, dx2y2_func, dxy_func]
-                    )
+                    self.basis_functions.append(d_shell)
                 elif shell_type.lower() == "f":
                     self.shell_types.append("7f")
+                    self.funcs_per_shell.append(7)
                     self.n_mos += 7
                     norms = f_norm(exponents)
-                    def fz3zr2_func(
-                        r2, x, y, z,
+                    def f_shell(
+                        r2, x, y, z, mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff[:,0],
                         norms=norms
                     ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            z3zr2 = ne.evaluate("z * (5 * z * z - 3 * r2) / 2")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        res = np.zeros(len(s_val))
+                        if mo_coeffs[0] != 0:
                             z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * z3zr2
-                    def fxz2xr2_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            xz2xr2 = ne.evaluate(
-                                "sqrt(3) * x * (5 * z * z - r2) / (2 * sqrt(2))"
-                            )
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[0] * z3zr2
+                        if mo_coeffs[1] != 0:
                             xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * xz2xr2
-                    def fyz2yr2_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            yz2yr2 = ne.evaluate(
-                                "sqrt(3) * y * (5 * z * z - r2) / (2 * sqrt(2))"
-                            )
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[1] * xz2xr2
+                        if mo_coeffs[2] != 0:
                             yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * yz2yr2
-                    def fx2zy2z_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            x2zr2z = ne.evaluate("sqrt(15) * z * (x * x - y * y) / 2")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[2] * yz2yr2
+                        if mo_coeffs[3] != 0:
                             x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * x2zr2z
-                    def fxyz_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            xyz = ne.evaluate("sqrt(15) * x * y * z")
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[3] * x2zr2z
+                        if mo_coeffs[4] != 0:
                             xyz = np.sqrt(15) * x * y * z
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * xyz
-                    def fx3y2x_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            x3r2x = ne.evaluate(
-                                "sqrt(5) * x * (3 * y * y - x * x) / (2 * sqrt(2))"
-                            )
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[4] * xyz
+                        if mo_coeffs[5] != 0:
                             x3r2x = np.sqrt(5) * x * (3 * y ** 2 - x ** 2) / (2 * np.sqrt(2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        x3r2x = np.sqrt(5) * x * (3 * y ** 2 - x ** 2) / (2 * np.sqrt(2))
-                        return s_val * x3r2x
-                    def fx2yy3_func(
-                        r2, x, y, z,
-                        alpha=exponents,
-                        con_coeff=con_coeff[:,0],
-                        norms=norms
-                    ):
-                        if _WITH_NE:
-                            a_r2 = np.outer(-alpha, r2)
-                            e_r2 = ne.evaluate("exp(a_r2)")
-                            x2yy3 = ne.evaluate(
-                                "sqrt(5) * y * (y * y - 3 * x * x) / (2 * sqrt(2))"
-                            )
-                        else:
-                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            res += mo_coeffs[5] * x3r2x
+                        if mo_coeffs[6] != 0:
                             x2yy3 = np.sqrt(5) * y * (y ** 2 - 3 * x ** 2) / (2 * np.sqrt(2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        return s_val * x2yy3
+                            res += mo_coeffs[5] * x2yy3
+                        return res * s_val
 
-                    self.basis_functions.append([
-                        fz3zr2_func,
-                        fxz2xr2_func, fyz2yr2_func,
-                        fx2zy2z_func, fxyz_func,
-                        fx3y2x_func, fx2yy3_func,
-                    ])
+                    self.basis_functions.append(f_shell)
                 else:
                     self.LOG.warning("cannot handle shell of type %s" % shell_type)
         
@@ -4206,13 +3860,9 @@ class Orbitals:
         coords - numpy array of points (N,3) or (3,)
         alpha - use alpha coefficients (default)
         n_jobs - number of parallel threads to use
-                 this is on top of NumPy's and NumExpr's multithreading, so
-                 if NumPy/NumExpr use 8 threads and n_jobs=2, you can
+                 this is on top of NumPy's multithreading, so
+                 if NumPy uses 8 threads and n_jobs=2, you can
                  expect to see 16 threads in use
-                 the peak memory used will also increase linearly
-                 with n_jobs
-                 if the joblib module is not available or n_jobs <= 1,
-                 no parallelization will be attempted
         """
         # val is the running sum of MO values
         if alpha:
@@ -4234,44 +3884,34 @@ class Orbitals:
                 val = 0
             else:
                 val = np.zeros(len(coords))
-            for coord, shell_funcs in zip(self.shell_coords, self.basis_functions):
+            for coord, shell, n_func in zip(
+                self.shell_coords, self.basis_functions, self.funcs_per_shell,
+            ):
                 # don't calculate distances until we find an AO
                 # in this shell that has a non-zero MO coefficient
-                calced_dist = False
-                for func in shell_funcs:
-                    if arr[ao] == 0:
-                        ao += 1
-                        continue
-                    if not calced_dist:
-                        calced_dist = True
-                        if prev_center is None or np.linalg.norm(coord - prev_center) > 1e-13:
-                            prev_center = coord
-                            if _WITH_NE:
-                                d_coord = ne.evaluate("coords - coord")
-                            else:
-                                d_coord = coords - coord
-                            if coords.ndim == 1:
-                                r2 = np.dot(d_coord, d_coord)
-                            else:
-                                if _WITH_NE:
-                                    r2 = ne.evaluate("sum(d_coord * d_coord, axis=1)")
-                                else:
-                                    r2 = np.sum(d_coord * d_coord, axis=1)
+                if not np.count_nonzero(arr[ao:ao + n_func]):
+                    ao += n_func
+                    continue
+                if prev_center is None or np.linalg.norm(coord - prev_center) > 1e-13:
+                    prev_center = coord
+                    d_coord = coords - coord
                     if coords.ndim == 1:
-                        res = func(r2, d_coord[0], d_coord[1], d_coord[2])
+                        r2 = np.dot(d_coord, d_coord)
                     else:
-                        res = func(r2, d_coord[:,0], d_coord[:,1], d_coord[:,2])
-                    val += arr[ao] * res
-                    ao += 1
+                        r2 = np.sum(d_coord * d_coord, axis=1)
+                if coords.ndim == 1:
+                    res = shell(
+                        r2, d_coord[0], d_coord[1], d_coord[2], arr[ao:ao + n_func]
+                    )
+                else:
+                    res = shell(
+                        r2, d_coord[:,0], d_coord[:,1], d_coord[:,2], arr[ao:ao + n_func]
+                    )
+                val += res
+                ao += n_func
             return val
-        
-        if not _WITH_JOBLIB and n_jobs > 1:
-            self.LOG.warning(
-                "multithreading requested but joblib could not be imported\n"
-                "basis functions will not be evaluated in parallel"
-            )
-        
-        if _WITH_JOBLIB and n_jobs > 1:
+
+        if n_jobs > 1:
             # get all shells grouped by coordinates
             # this reduces the number of times we will need to
             # calculate the distance from all the coords to
@@ -4286,17 +3926,17 @@ class Orbitals:
                     prev_coords = coord
                     add_to = np.argmin(counts)
                     counts[add_to] += 1
-                arrays[add_to][ndx:ndx + len(self.basis_functions[i])] = coeff[
-                    ndx:ndx + len(self.basis_functions[i])
+                arrays[add_to][ndx:ndx + self.funcs_per_shell[i]] = coeff[
+                    ndx:ndx + self.funcs_per_shell[i]
                 ]
-                ndx += len(self.basis_functions[i])
+                ndx += self.funcs_per_shell[i]
 
             # prefer="threads" is used b/c numpy/numexpr leave
             # GIL or something
             # this is typically significantly faster than
             # prefer="processes"
-            out = Parallel(n_jobs=n_jobs, prefer="threads")(
-                delayed(get_value)(arr) for arr in arrays
-            )            
-            return sum(out)
-        return get_value(coeff)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_jobs) as executor:
+                out = [executor.submit(get_value, arr) for arr in arrays]
+            return sum([shells.result() for shells in out])
+        val = get_value(coeff)
+        return val
