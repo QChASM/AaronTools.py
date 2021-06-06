@@ -293,14 +293,17 @@ class Geometry:
 
         # create a geometry with the specified shape
         # change the elements from dummy atoms to something else
-        start_atoms = Atom.get_shape(shape)
+        start_shape = Atom.get_shape(shape)
+        start_atoms = [
+            Atom(element="B", coords=coords, name="%i" % i) for i, coords in
+            enumerate(start_shape)
+        ]
         n_coord = len(start_atoms) - 1
         start_atoms[0].element = center
         start_atoms[0].reset()
         for atom in start_atoms[1:]:
             start_atoms[0].connected.add(atom)
             atom.connected.add(start_atoms[0])
-            atom.element = "B"
             atom.reset()
         geom = cls(start_atoms, refresh_connected=False)
 
