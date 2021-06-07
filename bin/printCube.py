@@ -52,9 +52,9 @@ cube_parser.add_argument(
     "-s", "--spacing",
     type=float,
     dest="spacing",
-    default=0.35,
+    default=0.2,
     help="spacing between points in the cube file\n"
-    "Default: 0.35",
+    "Default: 0.2",
 )
 
 cube_parser.add_argument(
@@ -84,6 +84,7 @@ cube_parser.add_argument(
     "this is on top of NumPy's multithreading,\n"
     "so if NumPy uses 8 threads and n_jobs=2, you can\n"
     "expect to see 16 threads in use\n"
+    "Default: 1"
 )
 
 
