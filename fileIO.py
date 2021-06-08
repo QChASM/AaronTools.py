@@ -6,6 +6,7 @@ from io import IOBase, StringIO
 import concurrent.futures
 
 import numpy as np
+from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
@@ -13,12 +14,6 @@ from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.oniomatoms import OniomAtom
 from AaronTools.theory import *
 
-try:
-    # joblib can be used to evaluate a function in parallel
-    from joblib import Parallel, delayed
-    _WITH_JOBLIB = True
-except (ModuleNotFoundError, ImportError) as e:
-    _WITH_JOBLIB = False
 
 read_types = [
     "xyz",
@@ -547,7 +542,7 @@ class FileWriter:
     @classmethod
     def write_cube(
         cls, geom, orbitals=None, outfile=None, mo=None, ao=None,
-        padding=4., spacing=0.35, alpha=True, xyz=False, n_jobs=1,
+        padding=4., spacing=0.2, alpha=True, xyz=False, n_jobs=1,
         **kwargs
     ):
         """
@@ -558,6 +553,7 @@ class FileWriter:
         mo - index of molecular orbital or "homo" for ground state
              highest occupied molecular orbital or "lumo" for first
              ground state unoccupied MO
+             can also be an array of MO coefficients
         ao - index of atomic orbital to print
         padding - padding around geom's coordinates
         spacing - targeted spacing between points
@@ -570,17 +566,20 @@ class FileWriter:
             raise RuntimeError(
                 "no Orbitals() instance given to FileWriter.write_cube"
             )
-        
+
         def get_standard_axis():
+            """returns info to set up a grid along the x, y, and z axes"""
             geom_coords = geom.coords
-    
+
+            # get range of geom's coordinates
             x_min = np.min(geom_coords[:,0])
             x_max = np.max(geom_coords[:,0])
             y_min = np.min(geom_coords[:,1])
             y_max = np.max(geom_coords[:,1])
             z_min = np.min(geom_coords[:,2])
             z_max = np.max(geom_coords[:,2])
-            
+
+            # add padding, figure out vectors
             r1 = 2 * padding + x_max - x_min
             n_pts1 = int(r1 // spacing) + 1
             d1 = r1 / (n_pts1 - 1)
@@ -595,17 +594,24 @@ class FileWriter:
             v3 = (0., 0., d3)
             com = np.array([x_min, y_min, z_min]) - padding
             return n_pts1, n_pts2, n_pts3, v1, v2, v3, com
-        
+
         if xyz:
             n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
         else:
             test_coords = geom.coords - geom.COM()
             covar = np.dot(test_coords.T, test_coords)
             try:
+                # use SVD on the coordinate covariance matrix
+                # this decreases the volume of the box we're making
+                # that means less work for higher resolution
+                # for many structures, this only decreases the volume
+                # by like 5%
                 u, s, vh = np.linalg.svd(covar)
                 v1 = u[:,0]
                 v2 = u[:,1]
                 v3 = u[:,2]
+                # change basis of coordinates to the singular vectors
+                # this is how we determine the range + padding
                 new_coords = np.dot(test_coords, u)
                 x1 = np.dot(test_coords, v1)
                 x2 = np.dot(test_coords, v2)
@@ -616,8 +622,8 @@ class FileWriter:
                 yr_min = np.min(new_coords[:,1])
                 zr_max = np.max(new_coords[:,2])
                 zr_min = np.min(new_coords[:,2])
-                m = np.mean(new_coords, axis=0)
                 com = np.array([xr_min, yr_min, zr_min]) - padding
+                # move the COM back to the xyz space of the original molecule
                 com = np.dot(u, com)
                 com += geom.COM()
                 r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
@@ -638,9 +644,12 @@ class FileWriter:
         v3 /= UNIT.A0_TO_BOHR
         com /= UNIT.A0_TO_BOHR
 
+        # default to HOMO
         if mo is None and ao is None:
             mo = "homo"
 
+        # an atomic orbital was requested
+        # set up an array of zeros, but 1 for that AO
         if ao is not None:
             mo = np.zeros(orbitals.n_mos)
             mo[ao] = 1.
@@ -666,7 +675,7 @@ class FileWriter:
         s += " -%i %13.5f %13.5f %13.5f 1\n" % (
             len(geom.atoms), *com,
         )
-        
+
         # the basis vectors of cube files are ordered based on the
         # spacing between points along that axis
         # or maybe it's the number of points?
@@ -702,13 +711,13 @@ class FileWriter:
                 atom.coords[1] / UNIT.A0_TO_BOHR,
                 atom.coords[2] / UNIT.A0_TO_BOHR,
             )
-        
+
         # extra section - only for MO data
         if ao is None:
             s += " %5i %5i\n" % (1, mo + 1)
         else:
             s += " %5i %5i\n" % (1, ao + 1)
-        
+
         # get values for this MO
         mo_val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
 
@@ -724,7 +733,7 @@ class FileWriter:
                     if (i + 1) % 6 == 0:
                         s += "\n"
                 s += "\n"
-        
+
         if outfile is None:
             # if no output file is specified, use the name of the geometry
             with open(geom.name + ".cube", "w") as f:
@@ -735,7 +744,7 @@ class FileWriter:
         else:
             # write output to the requested destination
             with open(outfile, "w") as f:
-                f.write(s)            
+                f.write(s)
         return
 
 
@@ -1499,7 +1508,7 @@ class FileReader:
                         info = line.split()[2:]
                         for header, val in zip(headers, info):
                             data[header][1].append(float(val))
-                    
+
                     for header in headers:
                         self.other[data[header][0]] = np.array(data[header][1])
 
@@ -1539,7 +1548,7 @@ class FileReader:
                                     exponent = float(info[1])
                                     con_coeff = [float(x) for x in info[2:]]
                                     exponents.append(exponent)
-                                    con_coeffs.append(con_coeff)
+                                    con_coeffs.extend(con_coeff)
                                 primitives.append(
                                     (
                                         shell_type,
@@ -1576,9 +1585,9 @@ class FileReader:
                             self.other["shell_to_atom"].append(ndx)
                             coeffs = []
                             # there might not always be a space between the coefficients
-                            # so we can't just split(), but they are formatted
-                            for i in range(17, len(line), 10):
-                                coeffs.append(float(line[i: i + 9]))
+                            # so we can't just split(), but they are formatted(-ish)
+                            for coeff in re.findall("-?\d+\.\d+", line[16:]):
+                                coeffs.append(float(coeff))
                             for coeff, mo in zip(coeffs, mo_coefficients):
                                 mo.append(coeff)
                         elif "--" not in line:
@@ -1619,7 +1628,7 @@ class FileReader:
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
-            
+
             if "mo_coefficients" in self.other and "basis_set_by_ele" in self.other:
                 self.other["orbitals"] = Orbitals(self)
 
@@ -1826,7 +1835,7 @@ class FileReader:
                     line = f.readline()
                     if combinations and line == "\n":
                         combinations_read = True
-                
+
                 self.other["frequency"].parse_gaussian_anharm(
                     anharm_str.splitlines()
                 )
@@ -1867,7 +1876,7 @@ class FileReader:
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot
-            
+
             # rotational constants from anharmonic frequency jobs
             if "Rotational Constants (in MHz)" in line:
                 self.skip_lines(f, 2)
@@ -1891,7 +1900,7 @@ class FileReader:
                 self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
                 self.other["ground_rotational_temperature"] = ground_rotational_temperature
                 self.other["centr_rotational_temperature"] = centr_rotational_temperature
-            
+
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
@@ -1969,8 +1978,8 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
-                self.other["Mulliken Charges"] = charges 
-            
+                self.other["Mulliken Charges"] = charges
+
             if "APT charges:" in line:
                 self.skip_lines(f, 1)
                 n += 1
@@ -1979,7 +1988,7 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
-                self.other["APT Charges"] = charges 
+                self.other["APT Charges"] = charges
 
             # capture errors
             # only keep first error, want to fix one at a time
@@ -2411,7 +2420,7 @@ class FileReader:
                 name=str(n + 1),
             )
             self.atoms.append(atom)
-        
+
         try:
             self.other["orbitals"] = Orbitals(self)
         except NotImplementedError:
@@ -2515,9 +2524,9 @@ class FileReader:
 
     def read_sqm(self, f):
         lines = f.readlines()
-        
+
         self.other["finished"] = False
-        
+
         self.atoms = []
         i = 0
         while i < len(lines):
@@ -2530,7 +2539,7 @@ class FileReader:
                     ele = info.split()[1]
                     elements.append(ele)
                 i += len(elements) + 2
-                
+
             if "Final Structure" in line:
                 k = 0
                 for info in lines[i + 4:]:
@@ -2547,15 +2556,15 @@ class FileReader:
                     if k == len(elements):
                         break
                 i += k + 4
-            
+
             if "Calculation Completed" in line:
                 self.other["finished"] = True
-    
+
             if "Total SCF energy" in line:
                 self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
 
             i += 1
-        
+
         if not self.atoms:
             # there's no atoms if there's an error
             # error is probably on the last line
@@ -2629,7 +2638,7 @@ class Frequency:
             self.intensity = intensity
             self.overtones = []
             self.combinations = dict()
-        
+
         def __lt__(self, other):
             return self.frequency < other.frequency
 
@@ -2678,7 +2687,7 @@ class Frequency:
         if hpmodes and num_head != 2:
             self.LOG.warning("Log file damaged, cannot get frequencies")
             return
-        
+
         if harmonic:
             if style == "log":
                 self.parse_gaussian_lines(lines, hpmodes)
@@ -2892,13 +2901,13 @@ class Frequency:
         reading_combinations = False
         reading_overtones = False
         reading_fundamentals = False
-        
+
         combinations = []
         overtones = []
         fundamentals = []
-        
+
         mode_re = re.compile("(\d+)\((\d+)\)")
-        
+
         for line in lines:
             if "---" in line or "Mode" in line or not line.strip():
                 continue
@@ -2949,7 +2958,7 @@ class Frequency:
                 fundamentals.append(
                     (anharm_freq, anharm_inten, harm_freq, harm_inten)
                 )
-        
+
         self.anharm_data = []
         for i, mode in enumerate(sorted(fundamentals, key=lambda pair: pair[2])):
             self.anharm_data.append(
@@ -3057,55 +3066,55 @@ class Frequency:
             while x < stop:
                 x += point_spacing
                 x_values.append(x)
-            
+
             x_values = np.array(x_values)
-        
+
         e_factor = -4 * np.log(2) / fwhm ** 2
-        
+
         if peak_type.lower() != "delta":
             # get a list of functions
             # we'll evaluate these at each x point later
             functions = []
             if not point_spacing:
                 x_values = np.linspace(0, max(frequencies) - 10 * fwhm, num=100).tolist()
-            
+
             for freq, intensity in zip(frequencies, intensities):
                 if intensity is not None:
                     if not point_spacing:
                         x_values.extend(
                             np.linspace(
-                                max(freq - (3.5 * fwhm), 0), 
-                                freq + (3.5 * fwhm), 
+                                max(freq - (3.5 * fwhm), 0),
+                                freq + (3.5 * fwhm),
                                 num=65,
                             ).tolist()
                         )
                         x_values.append(freq)
-                    
+
                     if peak_type.lower() == "gaussian":
                         functions.append(
                             lambda x, x0=freq, inten=intensity: inten * np.exp(e_factor * (x - x0) ** 2)
                         )
-        
+
                     elif peak_type.lower() == "lorentzian":
                         functions.append(
                             lambda x, x0=freq, inten=intensity: inten * 0.5 * (0.5 * fwhm / ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
                         )
-                    
+
                     elif peak_type.lower() == "pseudo-voigt":
                         functions.append(
                             lambda x, x0=freq, inten=intensity:
                                 inten * (
-                                    (1 - voigt_mixing) * 0.5 * (0.5 * fwhm / ((x - x0)**2 + (0.5 * fwhm)**2)) + 
+                                    (1 - voigt_mixing) * 0.5 * (0.5 * fwhm / ((x - x0)**2 + (0.5 * fwhm)**2)) +
                                     voigt_mixing * np.exp(e_factor * (x - x0)**2)
                                 )
                         )
-            
+
             if not point_spacing:
                 x_values = np.array(list(set(x_values)))
                 x_values.sort()
-        
+
             y_values = np.sum([f(x_values) for f in functions], axis=0)
-        
+
         else:
             x_values = []
             y_values = []
@@ -3128,7 +3137,7 @@ class Frequency:
             y_values = np.array([10 ** (2 - y) for y in y_values])
 
         return x_values, y_values
-  
+
     def plot_ir(
             self,
             figure,
@@ -3162,7 +3171,7 @@ class Frequency:
         )
         if data is None:
             return
-        
+
         x_values, y_values = data
 
         if not centers:
@@ -3181,7 +3190,7 @@ class Frequency:
                 reverse=reverse_x,
             )]
             centers = sorted(centers, reverse=reverse_x)
-            
+
             axes = figure.subplots(
                 nrows=1,
                 ncols=n_sections,
@@ -3192,14 +3201,14 @@ class Frequency:
                 # only one section was specified (e.g. zooming in on a peak)
                 # make sure axes is iterable
                 axes = [axes]
-        
+
         for i, ax in enumerate(axes):
             if i == 0:
                 if plot_type.lower() == "transmittance":
                     ax.set_ylabel("Transmittance (%)")
                 else:
                     ax.set_ylabel("Absorbance (arb.)")
-                
+
                 # need to split plot into sections
                 # put a / on the border at the top and bottom borders
                 # of the plot
@@ -3295,7 +3304,7 @@ class Frequency:
                         colors=['k' for y in y_values],
                         label="computed",
                     )
-                
+
                 else:
                     ax.vlines(
                         x_values,
@@ -3326,7 +3335,7 @@ class Frequency:
                 ax.set_xlim(high, low)
             else:
                 ax.set_xlim(low, high)
-        
+
         # b/c we're doing things in sections, we can't add an x-axis label
         # well we could, but which section would be put it one?
         # it wouldn't be centered
@@ -3357,14 +3366,12 @@ class Orbitals:
                                   ORCA files will be pz, px, py
     funcs_per_shell - list(len=n_shell), number of basis functions for
                       each shell
-    beta_functions - same as alpha_functions or None if no beta info is
-                     present
     alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
                          molecular orbitals for alpha electrons
     beta_coefficients - same as alpha_coefficients for beta electrons
     shell_coords - array(shape=(n_shells, 3)), coordinates of each shell
                    in Angstroms
-    shell_types - list(str, len=n_shell), type of each shell (e.g. s, 
+    shell_types - list(str, len=n_shell), type of each shell (e.g. s,
                   p, sp, 5d, 6d...)
     n_shell - number of shells
     n_prim_per_shell - list(len=n_shell), number of primitives per shell
@@ -3378,9 +3385,9 @@ class Orbitals:
     n_alpha - int, number of alpha electrons
     n_beta - int, number of beta electrons
     """
-    
+
     LOG = None
-    
+
     def __init__(self, filereader):
         if filereader.file_type == "fchk":
             self._load_fchk_data(filereader)
@@ -3390,10 +3397,10 @@ class Orbitals:
             raise NotImplementedError(
                 "cannot load orbital info from %s files" % filereader.file_type
             )
-    
+
     def _load_fchk_data(self, filereader):
         from scipy.special import factorial2
-        
+
         if "Coordinates of each shell" in filereader.other:
             self.shell_coords = np.reshape(
                 filereader.other["Coordinates of each shell"],
@@ -3422,9 +3429,9 @@ class Orbitals:
         p_norm = lambda a, l=1: gau_norm(a, l)
         d_norm = lambda a, l=2: gau_norm(a, l)
         f_norm = lambda a, l=3: gau_norm(a, l)
-        
+
         self.basis_functions = list()
-        
+
         self.n_mos = 0
         self.shell_types = []
         shell_i = 0
@@ -3434,7 +3441,7 @@ class Orbitals:
         ):
             exponents = self.exponents[shell_i: shell_i + n_prim]
             con_coeff = self.contraction_coeff[shell_i: shell_i + n_prim]
-            
+
             if shell == 0:
                 # s functions
                 self.shell_types.append("s")
@@ -3450,7 +3457,7 @@ class Orbitals:
                         return mo_coeffs * np.dot(con_coeff * norms, e_r2)
                     return mo_coeffs[0] * np.dot(con_coeff * norms, e_r2)
                 self.basis_functions.append(s_shell)
-        
+
             elif shell == 1:
                 # p functions
                 self.shell_types.append("p")
@@ -3475,7 +3482,7 @@ class Orbitals:
                         res += mo_coeffs[2] * z
                     return res * s_val
                 self.basis_functions.append(p_shell)
-        
+
             elif shell == -1:
                 # s=p functions
                 self.shell_types.append("sp")
@@ -3513,7 +3520,7 @@ class Orbitals:
                         p_res += mo_coeffs[3] * z
                     return s_res * sp_val_s + p_res * sp_val_p
                 self.basis_functions.append(sp_shell)
-        
+
             elif shell == 2:
                 # cartesian d functions
                 self.shell_types.append("6d")
@@ -3550,7 +3557,7 @@ class Orbitals:
                         res += mo_coeffs[5] * yz
                     return res * s_val
                 self.basis_functions.append(d_shell)
-        
+
             elif shell == -2:
                 # pure d functions
                 self.shell_types.append("5d")
@@ -3583,9 +3590,9 @@ class Orbitals:
                         xy = np.sqrt(3) * x * y
                         res += mo_coeffs[4] * xy
                     return res * s_val
-        
+
                 self.basis_functions.append(d_shell)
-        
+
             elif shell == 3:
                 # 10f functions
                 self.shell_types.append("10f")
@@ -3634,7 +3641,7 @@ class Orbitals:
                         res += mo_coeffs[9] * xyz
                     return res * s_val
                 self.basis_functions.append(f_shell)
-        
+
             elif shell == -3:
                 # pure f functions
                 self.shell_types.append("7f")
@@ -3673,17 +3680,14 @@ class Orbitals:
                         x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
                         res += mo_coeffs[6] * x2yy3
                     return res * s_val
-        
-                self.basis_functions.append([
-                    fz3zr2_func, fxz2xr2_func, fyz2yr2_func, fx2zy2z_func,
-                    fxyz_func, fx3y2x_func, fx2yy3_func,
-                ])
-        
+
+                self.basis_functions.append(f_shell)
+
             else:
                 self.LOG.warning("cannot parse shell with type %i" % shell)
-    
+
             shell_i += n_prim
-                
+
         self.alpha_coefficients = np.reshape(
             filereader.other["Alpha MO coefficients"], (self.n_mos, self.n_mos),
         )
@@ -3696,7 +3700,6 @@ class Orbitals:
             self.n_beta = filereader.other["Number of beta electrons"]
 
     def _load_orca_out_data(self, filereader):
-        from scipy.special import factorial2
         self.shell_coords = []
         self.basis_functions = []
         self.alpha_nrgs = np.array(filereader.other["mo_nrgs"])
@@ -3706,7 +3709,7 @@ class Orbitals:
         self.shell_types = []
         self.funcs_per_shell = []
         self.n_mos = 0
-        
+
         def gau_norm(a, l):
             """
             normalization for gaussian primitives that depends on
@@ -3720,11 +3723,13 @@ class Orbitals:
         p_norm = lambda a, l=1: gau_norm(a, l)
         d_norm = lambda a, l=2: gau_norm(a, l)
         f_norm = lambda a, l=3: gau_norm(a, l)
-        
+
         # ORCA order differs from FCHK in a few places:
         # pz, px, py instead of ox, py, pz
         # f(3xy^2 - x^3) instead of f(x^3 - 3xy^2)
         # f(y^3 - 3x^2y) instead of f(3x^2y - y^3)
+        # ORCA doesn't seem to print the coordinates of each
+        # shell, but they should be the same as the atom coordinates
         for atom in filereader.atoms:
             ele = atom.element
             for shell_type, n_prim, exponents, con_coeff in filereader.other["basis_set_by_ele"][ele]:
@@ -3739,7 +3744,7 @@ class Orbitals:
                     def s_shell(
                         r2, x, y, z, mo_coeff,
                         alpha=exponents,
-                        con_coeff=con_coeff[:,0],
+                        con_coeff=con_coeff,
                         norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
@@ -3755,13 +3760,16 @@ class Orbitals:
                     def p_shell(
                         r2, x, y, z, mo_coeffs,
                         alpha=exponents,
-                        con_coeff=con_coeff[:,0],
+                        con_coeff=con_coeff,
                         norms=norms,
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
 
-                        res = np.zeros(len(s_val))
+                        if isinstance(r2, float):
+                            res = 0
+                        else:
+                            res = np.zeros(len(r2))
                         if mo_coeffs[0] != 0:
                             res += mo_coeffs[0] * z
                         if mo_coeffs[1] != 0:
@@ -3779,12 +3787,15 @@ class Orbitals:
                     def d_shell(
                         r2, x, y, z, mo_coeffs,
                         alpha=exponents,
-                        con_coeff=con_coeff[:,0],
+                        con_coeff=con_coeff,
                         norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
-                        res = np.zeros(len(s_val))
+                        if isinstance(r2, float):
+                            res = 0
+                        else:
+                            res = np.zeros(len(r2))
                         if mo_coeffs[0] != 0:
                             z2r2 = 0.5 * (3 * z * z - r2)
                             res += mo_coeffs[0] * z2r2
@@ -3801,7 +3812,7 @@ class Orbitals:
                             xy = np.sqrt(3) * x * y
                             res += mo_coeffs[4] * xy
                         return res * s_val
-                
+
                     self.basis_functions.append(d_shell)
                 elif shell_type.lower() == "f":
                     self.shell_types.append("7f")
@@ -3811,12 +3822,15 @@ class Orbitals:
                     def f_shell(
                         r2, x, y, z, mo_coeffs,
                         alpha=exponents,
-                        con_coeff=con_coeff[:,0],
+                        con_coeff=con_coeff,
                         norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
-                        res = np.zeros(len(s_val))
+                        if isinstance(r2, float):
+                            res = 0
+                        else:
+                            res = np.zeros(len(r2))
                         if mo_coeffs[0] != 0:
                             z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
                             res += mo_coeffs[0] * z3zr2
@@ -3837,13 +3851,13 @@ class Orbitals:
                             res += mo_coeffs[5] * x3r2x
                         if mo_coeffs[6] != 0:
                             x2yy3 = np.sqrt(5) * y * (y ** 2 - 3 * x ** 2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[5] * x2yy3
+                            res += mo_coeffs[6] * x2yy3
                         return res * s_val
 
                     self.basis_functions.append(f_shell)
                 else:
                     self.LOG.warning("cannot handle shell of type %s" % shell_type)
-        
+
         self.shell_coords = np.array(self.shell_coords) / UNIT.A0_TO_BOHR
         if "n_alpha" not in filereader.other:
             tot_electrons = sum(ELEMENTS.index(atom.element) for atom in filereader.atoms)
@@ -3869,7 +3883,7 @@ class Orbitals:
             coeff = self.alpha_coefficients
         else:
             coeff = self.beta_coefficients
-        
+
         if isinstance(mo, int):
             coeff = coeff[mo]
         else:
@@ -3878,6 +3892,7 @@ class Orbitals:
         # calculate AO values for each shell at each point
         # multiply by the MO coefficient and add to val
         def get_value(arr):
+            """returns value for the MO coefficients in arr"""
             ao = 0
             prev_center = None
             if coords.ndim == 1:
@@ -3892,6 +3907,8 @@ class Orbitals:
                 if not np.count_nonzero(arr[ao:ao + n_func]):
                     ao += n_func
                     continue
+                # don't recalculate distances unless this shell's coordinates
+                # differ from the previous
                 if prev_center is None or np.linalg.norm(coord - prev_center) > 1e-13:
                     prev_center = coord
                     d_coord = coords - coord
@@ -3916,25 +3933,24 @@ class Orbitals:
             # this reduces the number of times we will need to
             # calculate the distance from all the coords to
             # a shell's center
-            prev_coords = None
-            arrays = [np.zeros(self.n_mos) for i in range(0, n_jobs)]
-            counts = np.zeros(n_jobs, dtype=int)
+            prev_coords = []
+            arrays = []
             ndx = 0
             add_to = 0
             for i, coord in enumerate(self.shell_coords):
-                if prev_coords is None or np.linalg.norm(coord - prev_coords) > 1e-13:
-                    prev_coords = coord
-                    add_to = np.argmin(counts)
-                    counts[add_to] += 1
+                for j, prev_coord in enumerate(prev_coords):
+                    if np.linalg.norm(coord - prev_coord) < 1e-13:
+                        add_to = j
+                        break
+                else:
+                    prev_coords.append(coord)
+                    add_to = len(arrays)
+                    arrays.append(np.zeros(self.n_mos))
                 arrays[add_to][ndx:ndx + self.funcs_per_shell[i]] = coeff[
                     ndx:ndx + self.funcs_per_shell[i]
                 ]
                 ndx += self.funcs_per_shell[i]
 
-            # prefer="threads" is used b/c numpy/numexpr leave
-            # GIL or something
-            # this is typically significantly faster than
-            # prefer="processes"
             with concurrent.futures.ThreadPoolExecutor(max_workers=n_jobs) as executor:
                 out = [executor.submit(get_value, arr) for arr in arrays]
             return sum([shells.result() for shells in out])

@@ -14,6 +14,7 @@ class TestFileReader(TestWithTimer):
     com_file1 = os.path.join(prefix, "test_files", "test-route.com")
     com_file2 = os.path.join(prefix, "test_files", "test-route-2.com")
     psi4_output_file = os.path.join(prefix, "test_files", "psi4-test.out")
+    orca_orbit_file = os.path.join(prefix, "test_files", "pople.out")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -69,6 +70,12 @@ class TestFileReader(TestWithTimer):
         ref = FileReader(os.path.join(prefix, "ref_files", "orca_geom.xyz"))
         test = FileReader(os.path.join(prefix, "test_files", "orca_geom.out"))
         self.assertTrue(self.validate_atoms(ref, test))
+
+    def test_read_orca_orbits(self):
+        # this file can be tricky b/c MO coefficients are right next
+        # to each other - no spaces between them
+        test = FileReader(self.orca_orbit_file, just_geom=False)
+        self.assertEqual(test.other["orbitals"].n_mos, 168)
 
     def test_read_psi4_dat_structure(self):
         ref = FileReader(os.path.join(prefix, "ref_files", "psi4_geom.xyz"))
