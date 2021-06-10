@@ -109,7 +109,7 @@ class TestFinder(TestWithTimer):
     def test_Aromatics(self):
         mol = Geometry(self.benzene)
 
-        out,out2,out3 = mol.find(Aromatics())
+        out= mol.find(Aromatics())
         self.assertTrue(all([atom in mol.find('C') for atom in out]))
 
     def test_OfType(self):

@@ -591,7 +591,7 @@ class OfType(Finder):
         elif self.atomtype in {'O', 'S2', 'P2'}:
             for atom in BondedElements('C').get_matching_atoms(atoms): matching_atoms.append(atom)
         elif self.atomtype in {'C', 'C2', 'Ca', 'Na', 'Nh', 'Ha', 'Hc','N'}:
-            aromatics, charge, fused = Aromatics().get_matching_atoms(atoms, geometry)
+            aromatics, charge, fused = geometry.get_aromatic_atoms(atoms, return_rings=False)
             for shape in shapes.get(self.atomtype):
                 for atom in VSEPR(shape).get_matching_atoms(atoms):
                     if self.atomtype == 'Ca' and atom in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
@@ -627,103 +627,15 @@ class OfType(Finder):
 
 class Aromatics(Finder):
     """all atoms in aromatic rings"""
-    def __init__(self, return_rings=False):
+    def __init__(self):
         super().__init__()
-
-        self.return_rings = return_rings
 
     def __repr__(self):
         return "atoms that are in aromatic rings"
 
     def get_matching_atoms(self, atoms, geometry):
-        """returns List(Atom) of atoms in aromatic rings"""
-
-        def pairs(length):
-            """makes pairs of indices in connected_atoms for shortest_path to loop over"""
-            num = int(length)
-            indices = combinations(np.arange(num), 2)
-            return np.array([index for index in indices])
-
-        def is_aromatic(num):
-            """returns true if the number follows the huckel rule of 4n + 2"""
-            return (int(num) - 2) % 4 == 0
-
-        def dict_name(string):
-            """returns the name of the dictionary that corresponds to the vsepr shape"""
-            a = "_"
-            name = a.join(string.split())
-            return name
-
-        contribution = {
-            "bent 2 planar": {'C': 1, 'S': 1, 'O': 1, 'N': 1, 'P': 1},
-            "bent 2 tetrahedral": {'S': 2, 'O': 2, 'C': 0},
-            "trigonal planar": {'C': 1, 'N': 2, 'P': 2, 'B': 0},
-            "bent 3 tetrahedral": {'N': 2},
-        }
-
-        aromatic_elements = ["B", "C", "N", "O", "P", "S"]
-
-        matching_atoms = []
-        unchecked_atoms = list(geometry.atoms)
-        fused = 0
-        charge=0
-        rings = []
-        for atom in unchecked_atoms:
-            if not any(atom.element == aromatic_element for aromatic_element in aromatic_elements):
-                continue
-            vsepr = atom.get_vsepr()[0]
-            fusedRing = False
-            if any(vsepr == ring_vsepr for ring_vsepr in ['trigonal planar', 'bent 2 planar', 'bent 2 tetrahedral']):
-                for i, a1 in enumerate(atom.connected):
-                    if not any(a1.element == aromatic_element for aromatic_element in aromatic_elements):
-                        continue
-                    for a2 in list(atom.connected)[:i]:
-                        if not any(a2.element == aromatic_element for aromatic_element in aromatic_elements):
-                            continue
-                        try:
-                            path = geometry.shortest_path(a1, a2, avoid=atom)
-                        except LookupError:
-                            continue
-
-                        ring = path
-                        huckel_num = 0
-                        try:
-                            huckel_num += contribution[vsepr][atom.element]
-                        except IndexError:
-                            continue
-                        ring.append(atom)
-                        rings.append(ring)
-                        for checked_atom in path:
-                            try:
-                                unchecked_atoms.remove(checked_atom)
-                            except ValueError:
-                                fusedRing=True
-                        for ring_atom in ring:
-                            if ring_atom is atom:
-                                continue
-                            try:
-                                huckel_num += contribution[ring_atom.get_vsepr()[0]][ring_atom.element]
-                            except LookupError:
-                                huckel_num = 0
-                                break
-                        if (huckel_num % 2) != 0:
-                            n_counter = 0
-                            for ring_atom in ring:
-                                if ring_atom.element == 'N': n_counter += 1
-                            if n_counter == 2: huckel_num -= 2
-                            else: huckel_num -= 1
-                            charge += 1
-                        if is_aromatic(huckel_num) == True:
-                            for match in ring:
-                                if match not in matching_atoms:
-                                    matching_atoms.append(match)
-            if fusedRing == True:
-                fused+=1
-        if self.return_rings == True:
-            return matching_atoms, charge, fused, rings
-        else: 
-            return matching_atoms, charge, fused
-
+        aromatics, charge, fused = geometry.get_aromatic_atoms(atoms,return_rings=False)
+        return aromatics
 
 class AmideCarbon(Finder):
     """
