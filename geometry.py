@@ -5198,7 +5198,7 @@ class Geometry:
         return conf_spec, True
 
 
-    def get_aromatic_atoms(self, atoms, return_rings=False):
+    def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
         """returns List(Atom) of atoms in aromatic rings"""
 
         def is_aromatic(num):
@@ -5243,7 +5243,7 @@ class Geometry:
                         except IndexError:
                             continue
                         ring.append(atom)
-                        rings.append(ring)
+                        #rings.append(ring)
                         for checked_atom in path:
                             try:
                                 unchecked_atoms.remove(checked_atom)
@@ -5268,6 +5268,10 @@ class Geometry:
                             for match in ring:
                                 if match not in matching_atoms:
                                     matching_atoms.append(match)
+                                if return_h == True:
+                                    for connected in match.connected:
+                                        if connected.element == 'H' and connected not in ring: ring.append(connected)
+                            rings.append(ring)
             if fusedRing == True:
                 fused+=1
         if return_rings == True:
