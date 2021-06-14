@@ -381,7 +381,9 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                fname = "{}.{}.sqmin".format(geom.name, step2str(kwargs["step"]))
+                fname = "{}.{}.sqmin".format(
+                    geom.name, step2str(kwargs["step"])
+                )
             else:
                 fname = "{}.sqmin".format(geom.name)
             with open(fname, "w") as f:
@@ -398,7 +400,6 @@ class FileWriter:
 
         if return_warnings:
             return warnings
-
 
 
 @addlogger
@@ -1349,7 +1350,7 @@ class FileReader:
                     line = f.readline()
                     if combinations and line == "\n":
                         combinations_read = True
-                
+
                 self.other["frequency"].parse_gaussian_anharm(
                     anharm_str.splitlines()
                 )
@@ -1370,7 +1371,8 @@ class FileReader:
                         ll = 5 * section
                         ul = 5 * section + min(j - ll + 1, 5)
                         x_matrix[j, ll:ul] = [
-                            float(x.replace("D", "e")) for x in line.split()[1:]
+                            float(x.replace("D", "e"))
+                            for x in line.split()[1:]
                         ]
                 x_matrix += np.tril(x_matrix, k=-1).T
                 self.other["X_matrix"] = x_matrix
@@ -1390,7 +1392,7 @@ class FileReader:
                     for r in rot
                 ]
                 self.other["rotational_temperature"] = rot
-            
+
             # rotational constants from anharmonic frequency jobs
             if "Rotational Constants (in MHz)" in line:
                 self.skip_lines(f, 2)
@@ -1408,13 +1410,25 @@ class FileReader:
                     equilibrium_rotational_temperature[i] = Be
                     ground_rotational_temperature[i] = B00
                     centr_rotational_temperature[i] = B0
-                equilibrium_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                ground_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                centr_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
-                self.other["ground_rotational_temperature"] = ground_rotational_temperature
-                self.other["centr_rotational_temperature"] = centr_rotational_temperature
-            
+                equilibrium_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                ground_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                centr_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                self.other[
+                    "equilibrium_rotational_temperature"
+                ] = equilibrium_rotational_temperature
+                self.other[
+                    "ground_rotational_temperature"
+                ] = ground_rotational_temperature
+                self.other[
+                    "centr_rotational_temperature"
+                ] = centr_rotational_temperature
+
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             if "Sum of electronic and thermal Enthalpies=" in line:
@@ -1601,8 +1615,13 @@ class FileReader:
                                     grid_name = opt.split("=")[1]
                                     grid = IntegrationGrid(grid_name)
                                 else:
-                                    if "Integral" not in other_kwargs[GAUSSIAN_ROUTE]:
-                                        other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
+                                    if (
+                                        "Integral"
+                                        not in other_kwargs[GAUSSIAN_ROUTE]
+                                    ):
+                                        other_kwargs[GAUSSIAN_ROUTE][
+                                            "Integral"
+                                        ] = []
                                     other_kwargs[GAUSSIAN_ROUTE][
                                         "Integral"
                                     ].append(opt)
@@ -1876,15 +1895,19 @@ class FileReader:
             elif "population of lowest" in line:
                 self.other["best_pop"] = float(float_num.findall(line)[0])
             elif "ensemble free energy" in line:
-                self.other["free_energy"] = float(float_num.findall(line)[0])
+                self.other["free_energy"] = (
+                    float(float_num.findall(line)[0]) / UNIT.HART_TO_KCAL
+                )
             elif "ensemble entropy" in line:
                 self.other["entropy"] = (
-                    float(float_num.findall(line)[1]) / 1000
+                    float(float_num.findall(line)[1]) / UNIT.HART_TO_KCAL
                 )
             elif "ensemble average energy" in line:
-                self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["avg_energy"] = (
+                    float(float_num.findall(line)[0]) / UNIT.HART_TO_KCAL
+                )
             elif "E lowest" in line:
-                self.other["best_energy"] = float(float_num.findall(line)[0])
+                self.other["energy"] = float(float_num.findall(line)[0])
             elif "T /K" in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
             elif (
@@ -1943,11 +1966,17 @@ class FileReader:
                     2 * float(float_num.findall(line)[0]) + 1
                 )
             if "total energy" in line:
-                self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["energy"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "zero point energy" in line:
-                self.other["ZPVE"] = float(float_num.findall(line)[0])
+                self.other["ZPVE"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "total free energy" in line:
-                self.other["free_energy"] = float(float_num.findall(line)[0])
+                self.other["free_energy"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "electronic temp." in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
         if freq_name is not None:
@@ -1956,25 +1985,25 @@ class FileReader:
 
     def read_sqm(self, f):
         lines = f.readlines()
-        
+
         self.other["finished"] = False
-        
+
         self.atoms = []
         i = 0
         while i < len(lines):
             line = lines[i]
             if "Atomic Charges for Step" in line:
                 elements = []
-                for info in lines[i + 2:]:
+                for info in lines[i + 2 :]:
                     if not info.strip() or not info.split()[0].isdigit():
                         break
                     ele = info.split()[1]
                     elements.append(ele)
                 i += len(elements) + 2
-                
+
             if "Final Structure" in line:
                 k = 0
-                for info in lines[i + 4:]:
+                for info in lines[i + 4 :]:
                     data = info.split()
                     coords = np.array([x for x in data[4:7]])
                     self.atoms.append(
@@ -1988,15 +2017,17 @@ class FileReader:
                     if k == len(elements):
                         break
                 i += k + 4
-            
+
             if "Calculation Completed" in line:
                 self.other["finished"] = True
-    
+
             if "Total SCF energy" in line:
-                self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
+                self.other["energy"] = (
+                    float(line.split()[4]) / UNIT.HART_TO_KCAL
+                )
 
             i += 1
-        
+
         if not self.atoms:
             # there's no atoms if there's an error
             # error is probably on the last line
@@ -2046,7 +2077,6 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
 
-
     class AnharmonicData:
         """
         ATTRIBUTES
@@ -2070,7 +2100,7 @@ class Frequency:
             self.intensity = intensity
             self.overtones = []
             self.combinations = dict()
-        
+
         def __lt__(self, other):
             return self.frequency < other.frequency
 
@@ -2081,7 +2111,6 @@ class Frequency:
         @property
         def harmonic_intensity(self):
             return self.harmonic.intensity
-
 
     def __init__(self, data, hpmodes=None, style="log", harmonic=True):
         """
@@ -2119,7 +2148,7 @@ class Frequency:
         if hpmodes and num_head != 2:
             self.LOG.warning("Log file damaged, cannot get frequencies")
             return
-        
+
         if harmonic:
             if style == "log":
                 self.parse_gaussian_lines(lines, hpmodes)
@@ -2333,13 +2362,13 @@ class Frequency:
         reading_combinations = False
         reading_overtones = False
         reading_fundamentals = False
-        
+
         combinations = []
         overtones = []
         fundamentals = []
-        
+
         mode_re = re.compile("(\d+)\((\d+)\)")
-        
+
         for line in lines:
             if "---" in line or "Mode" in line or not line.strip():
                 continue
@@ -2366,8 +2395,16 @@ class Frequency:
                 anharm_inten = float(info[4])
                 harm_inten = 0
                 combinations.append(
-                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq,
-                    anharm_inten, harm_freq, harm_inten)
+                    (
+                        ndx_1,
+                        ndx_2,
+                        exp_1,
+                        exp_2,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
                 )
             elif reading_overtones:
                 info = line.split()
@@ -2379,7 +2416,14 @@ class Frequency:
                 anharm_inten = float(info[3])
                 harm_inten = 0
                 overtones.append(
-                    (ndx, exp, anharm_freq, anharm_inten, harm_freq, harm_inten)
+                    (
+                        ndx,
+                        exp,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
                 )
             elif reading_fundamentals:
                 info = line.split()
@@ -2390,9 +2434,11 @@ class Frequency:
                 fundamentals.append(
                     (anharm_freq, anharm_inten, harm_freq, harm_inten)
                 )
-        
+
         self.anharm_data = []
-        for i, mode in enumerate(sorted(fundamentals, key=lambda pair: pair[2])):
+        for i, mode in enumerate(
+            sorted(fundamentals, key=lambda pair: pair[2])
+        ):
             self.anharm_data.append(
                 self.AnharmonicData(mode[0], mode[1], harmonic=self.data[i])
             )
@@ -2401,7 +2447,9 @@ class Frequency:
             data = self.anharm_data[ndx]
             harm_data = self.Data(overtone[4], intensity=overtone[5])
             data.overtones.append(
-                self.AnharmonicData(overtone[2], overtone[3], harmonic=harm_data)
+                self.AnharmonicData(
+                    overtone[2], overtone[3], harmonic=harm_data
+                )
             )
         for combo in combinations:
             ndx1 = len(fundamentals) - combo[0]
@@ -2433,18 +2481,20 @@ class Frequency:
 
     @property
     def real_anharmonic_frequencies(self):
-        return [mode.frequency for mode in self.anharm_data if mode.frequency > 0]
+        return [
+            mode.frequency for mode in self.anharm_data if mode.frequency > 0
+        ]
 
     def get_ir_data(
-            self,
-            point_spacing=None,
-            fwhm=15.0,
-            plot_type="transmittance",
-            peak_type="pseudo-voigt",
-            voigt_mixing=0.5,
-            linear_scale=0.0,
-            quadratic_scale=0.0,
-            anharmonic=False,
+        self,
+        point_spacing=None,
+        fwhm=15.0,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        voigt_mixing=0.5,
+        linear_scale=0.0,
+        quadratic_scale=0.0,
+        anharmonic=False,
     ):
         """
         returns arrays of x_values, y_values for an IR plot
@@ -2487,7 +2537,9 @@ class Frequency:
                 freq.intensity for freq in self.data if freq.frequency > 0
             ]
 
-        frequencies -= linear_scale * frequencies + quadratic_scale * frequencies ** 2
+        frequencies -= (
+            linear_scale * frequencies + quadratic_scale * frequencies ** 2
+        )
 
         if point_spacing:
             x_values = []
@@ -2498,55 +2550,71 @@ class Frequency:
             while x < stop:
                 x += point_spacing
                 x_values.append(x)
-            
+
             x_values = np.array(x_values)
-        
+
         e_factor = -4 * np.log(2) / fwhm ** 2
-        
+
         if peak_type.lower() != "delta":
             # get a list of functions
             # we'll evaluate these at each x point later
             functions = []
             if not point_spacing:
-                x_values = np.linspace(0, max(frequencies) - 10 * fwhm, num=100).tolist()
-            
+                x_values = np.linspace(
+                    0, max(frequencies) - 10 * fwhm, num=100
+                ).tolist()
+
             for freq, intensity in zip(frequencies, intensities):
                 if intensity is not None:
                     if not point_spacing:
                         x_values.extend(
                             np.linspace(
-                                max(freq - (3.5 * fwhm), 0), 
-                                freq + (3.5 * fwhm), 
+                                max(freq - (3.5 * fwhm), 0),
+                                freq + (3.5 * fwhm),
                                 num=65,
                             ).tolist()
                         )
                         x_values.append(freq)
-                    
+
                     if peak_type.lower() == "gaussian":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity: inten * np.exp(e_factor * (x - x0) ** 2)
+                            lambda x, x0=freq, inten=intensity: inten
+                            * np.exp(e_factor * (x - x0) ** 2)
                         )
-        
+
                     elif peak_type.lower() == "lorentzian":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity: inten * 0.5 * (0.5 * fwhm / ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                            lambda x, x0=freq, inten=intensity: inten
+                            * 0.5
+                            * (
+                                0.5
+                                * fwhm
+                                / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
+                            )
                         )
-                    
+
                     elif peak_type.lower() == "pseudo-voigt":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity:
-                                inten * (
-                                    (1 - voigt_mixing) * 0.5 * (0.5 * fwhm / ((x - x0)**2 + (0.5 * fwhm)**2)) + 
-                                    voigt_mixing * np.exp(e_factor * (x - x0)**2)
+                            lambda x, x0=freq, inten=intensity: inten
+                            * (
+                                (1 - voigt_mixing)
+                                * 0.5
+                                * (
+                                    0.5
+                                    * fwhm
+                                    / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
                                 )
+                                + voigt_mixing
+                                * np.exp(e_factor * (x - x0) ** 2)
+                            )
                         )
-            
+
             if not point_spacing:
                 x_values = np.array(list(set(x_values)))
                 x_values.sort()
-        
+
             y_values = np.sum([f(x_values) for f in functions], axis=0)
-        
+
         else:
             x_values = []
             y_values = []
@@ -2564,22 +2632,21 @@ class Frequency:
 
         y_values /= np.amax(y_values)
 
-
         if plot_type.lower() == "transmittance":
             y_values = np.array([10 ** (2 - y) for y in y_values])
 
         return x_values, y_values
-  
+
     def plot_ir(
-            self,
-            figure,
-            centers=None,
-            widths=None,
-            exp_data=None,
-            plot_type="transmittance",
-            peak_type="pseudo-voigt",
-            reverse_x=True,
-            **kwargs,
+        self,
+        figure,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        reverse_x=True,
+        **kwargs,
     ):
         """
         plot IR data on figure
@@ -2597,13 +2664,11 @@ class Frequency:
         """
 
         data = self.get_ir_data(
-            plot_type=plot_type,
-            peak_type=peak_type,
-            **kwargs
+            plot_type=plot_type, peak_type=peak_type, **kwargs
         )
         if data is None:
             return
-        
+
         x_values, y_values = data
 
         if not centers:
@@ -2616,31 +2681,34 @@ class Frequency:
             n_sections = len(centers)
             figure.subplots_adjust(wspace=0.05)
             # sort the sections so we don't jump around
-            widths = [x for _, x in sorted(
-                zip(centers, widths),
-                key=lambda p: p[0],
-                reverse=reverse_x,
-            )]
+            widths = [
+                x
+                for _, x in sorted(
+                    zip(centers, widths),
+                    key=lambda p: p[0],
+                    reverse=reverse_x,
+                )
+            ]
             centers = sorted(centers, reverse=reverse_x)
-            
+
             axes = figure.subplots(
                 nrows=1,
                 ncols=n_sections,
                 sharey=True,
-                gridspec_kw={'width_ratios': widths},
+                gridspec_kw={"width_ratios": widths},
             )
             if not hasattr(axes, "__iter__"):
                 # only one section was specified (e.g. zooming in on a peak)
                 # make sure axes is iterable
                 axes = [axes]
-        
+
         for i, ax in enumerate(axes):
             if i == 0:
                 if plot_type.lower() == "transmittance":
                     ax.set_ylabel("Transmittance (%)")
                 else:
                     ax.set_ylabel("Absorbance (arb.)")
-                
+
                 # need to split plot into sections
                 # put a / on the border at the top and bottom borders
                 # of the plot
@@ -2652,9 +2720,9 @@ class Frequency:
                         [0, 1],
                         marker=((-1, -1), (1, 1)),
                         markersize=5,
-                        linestyle='none',
-                        color='k',
-                        mec='k',
+                        linestyle="none",
+                        color="k",
+                        mec="k",
                         mew=1,
                         clip_on=False,
                         transform=ax.transAxes,
@@ -2669,9 +2737,9 @@ class Frequency:
                     [0, 1],
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
-                    linestyle='none',
-                    color='k',
-                    mec='k',
+                    linestyle="none",
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -2681,16 +2749,18 @@ class Frequency:
                 # middle sections need two sets of /
                 ax.spines["right"].set_visible(False)
                 ax.spines["left"].set_visible(False)
-                ax.tick_params(labelleft=False, labelright=False, left=False, right=False)
+                ax.tick_params(
+                    labelleft=False, labelright=False, left=False, right=False
+                )
                 ax.plot(
                     [0, 0],
                     [0, 1],
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
-                    linestyle='none',
+                    linestyle="none",
                     label="Silence Between Two Subplots",
-                    color='k',
-                    mec='k',
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -2701,9 +2771,9 @@ class Frequency:
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
                     label="Silence Between Two Subplots",
-                    linestyle='none',
-                    color='k',
-                    mec='k',
+                    linestyle="none",
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -2713,7 +2783,7 @@ class Frequency:
                 ax.plot(
                     x_values,
                     y_values,
-                    color='k',
+                    color="k",
                     linewidth=0.5,
                     label="computed",
                 )
@@ -2725,39 +2795,46 @@ class Frequency:
                         y_values,
                         [100 for y in y_values],
                         linewidth=0.5,
-                        colors=['k' for x in x_values],
-                        label="computed"
+                        colors=["k" for x in x_values],
+                        label="computed",
                     )
                     ax.hlines(
                         100,
                         0,
                         max(4000, *x_values),
                         linewidth=0.5,
-                        colors=['k' for y in y_values],
+                        colors=["k" for y in y_values],
                         label="computed",
                     )
-                
+
                 else:
                     ax.vlines(
                         x_values,
                         [0 for y in y_values],
                         y_values,
                         linewidth=0.5,
-                        colors=['k' for x in x_values],
-                        label="computed"
+                        colors=["k" for x in x_values],
+                        label="computed",
                     )
                     ax.hlines(
                         0,
                         0,
                         max(4000, *x_values),
                         linewidth=0.5,
-                        colors=['k' for y in y_values],
-                        label="computed"
+                        colors=["k" for y in y_values],
+                        label="computed",
                     )
 
             if exp_data:
                 for x, y, color in exp_data:
-                    ax.plot(x, y, color=color, zorder=-1, linewidth=0.5, label="observed")
+                    ax.plot(
+                        x,
+                        y,
+                        color=color,
+                        zorder=-1,
+                        linewidth=0.5,
+                        label="observed",
+                    )
 
             center = centers[i]
             width = widths[i]
@@ -2767,9 +2844,11 @@ class Frequency:
                 ax.set_xlim(high, low)
             else:
                 ax.set_xlim(low, high)
-        
+
         # b/c we're doing things in sections, we can't add an x-axis label
         # well we could, but which section would be put it one?
         # it wouldn't be centered
         # so instead the x-axis label is this
-        figure.text(0.5, 0.0, r"wavenumber (cm$^{-1}$)" , ha="center", va="bottom")
+        figure.text(
+            0.5, 0.0, r"wavenumber (cm$^{-1}$)", ha="center", va="bottom"
+        )
