@@ -166,8 +166,10 @@ class Substituent(Geometry):
     def __lt__(self, other):
         if self.end < other.end and not other.end < self.end:
             return True
+        
         if len(self.atoms) != len(other.atoms):
             return len(self.atoms) < len(other.atoms)
+        
         for a, b in zip(
             self.reorder(start=self.atoms[0])[0],
             other.reorder(start=other.atoms[0])[0],
@@ -354,7 +356,7 @@ class Substituent(Geometry):
             atoms (list): defaults to all atoms
             name (str): defaults to NAME_copy
         """
-        rv = super().copy()
+        rv = super().copy(copy_atoms=False)
         rv = Substituent(
             rv,
             end=end,
@@ -399,8 +401,12 @@ class Substituent(Geometry):
 
         # temporarily detach end from sub so the connectivity is same as
         # for the library substituent by itself
-        test_sub = self.copy()
-        test_sub.refresh_ranks()
+        atoms_bonded_to_end = [
+            atom for atom in self.atoms if self.end in atom.connected
+        ]
+        ranked = False
+        for atom in atoms_bonded_to_end:
+            atom.connected.remove(self.end)
 
         for lib in [Substituent.AARON_LIBS, Substituent.BUILTIN]:
             if not os.path.exists(lib):
@@ -413,7 +419,7 @@ class Substituent(Geometry):
                 # test number of atoms against cache
                 if (
                     name in sub_lengths
-                    and len(test_sub.atoms) != sub_lengths[name]
+                    and len(self.atoms) != sub_lengths[name]
                 ):
                     continue
 
@@ -430,12 +436,12 @@ class Substituent(Geometry):
                 cache_changed = True
 
                 # want same number of atoms
-                if len(test_sub.atoms) != len(init_ref.atoms):
+                if len(self.atoms) != len(init_ref.atoms):
                     continue
 
                 # same number of each element
                 ref_eles = [atom.element for atom in init_ref.atoms]
-                test_eles = [atom.element for atom in test_sub.atoms]
+                test_eles = [atom.element for atom in self.atoms]
                 ref_counts = {
                     ele: ref_eles.count(ele) for ele in set(ref_eles)
                 }
@@ -445,12 +451,16 @@ class Substituent(Geometry):
                 if ref_counts != test_counts:
                     continue
 
+                if not ranked:
+                    self.refresh_ranks()
+                    ranked = True
+
                 ref_sub = Substituent(init_ref, detect=False)
                 ref_sub.name = name
                 ref_sub.refresh_connected()
                 ref_sub.refresh_ranks()
 
-                for a, b in zip(sorted(test_sub.atoms), sorted(ref_sub.atoms)):
+                for a, b in zip(sorted(self.atoms), sorted(ref_sub.atoms)):
                     # want correct elements
                     if a.element != b.element:
                         break
@@ -479,6 +489,9 @@ class Substituent(Geometry):
                     found = True
                     break
 
+        for atom in atoms_bonded_to_end:
+            atom.connected.add(self.end)
+
         # update cache
         if cache_changed:
             Substituent.cache["lengths"] = sub_lengths
@@ -490,7 +503,7 @@ class Substituent(Geometry):
 
         return found
 
-    def sterimol(self, return_vector=False, radii="bondi", old_L=False):
+    def sterimol(self, return_vector=False, radii="bondi", old_L=False, **kwargs):
         """
         returns sterimol parameter values in a dictionary
         keys are B1, B2, B3, B4, B5, and L
@@ -580,6 +593,7 @@ class Substituent(Geometry):
             L_func=L_func,
             return_vector=return_vector,
             radii=radii,
+            **kwargs,
         )
 
     def align_to_bond(self, bond):

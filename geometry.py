@@ -50,6 +50,7 @@ class Geometry:
     # LOGLEVEL_OVERRIDE = {"DEBUG": "find"}
 
     Primes()
+    
 
     def __init__(
         self,
@@ -1241,6 +1242,80 @@ class Geometry:
             a._rank = r
         return
 
+    def get_invariants(self, heavy_only=False):
+        """
+        returns a list of invariants for the specified targets
+        see Atom.get_invariant for some more details
+        """
+        targets = self.atoms
+        if heavy_only:
+            targets = [a for a in targets if a.element != "H"]
+
+        coords = self.coordinates(targets)
+        dists = distance_matrix(coords, coords)
+        
+        def get_bo(atom1, atom2, dist):
+            """
+            atom1, atom2 - Atom()
+            dist - float, distance between atom1 and atom2
+            returns a bond order (float) or 1 if we don't have
+            bond info for these atoms' elements
+            """
+            try:
+                bonds = atom1._bo.bonds[atom1._bo.key(atom1, atom2)]
+                closest = 0, None
+                for order, length in bonds.items():
+                    diff = abs(length - dist)
+                    if closest[1] is None or diff < closest[1]:
+                        closest = order, diff
+                return float(closest[0])
+            except KeyError:
+                return 1
+
+        heavy_bonds = [0 for a in targets]
+        bo_sums = [0 for a in targets]
+        atom_numbers = [ELEMENTS.index(a.element) for a in targets]
+        hydrogen_bonds = [0 for a in targets]
+        for i, atom1 in enumerate(targets):
+            for j, atom2 in enumerate(targets[:i]):
+                if atom2 not in atom1.connected:
+                    continue
+                if atom2.element == "H":
+                    hydrogen_bonds[i] += 1
+                else:
+                    heavy_bonds[i] += 1
+                
+                if atom1.element == "H":
+                    hydrogen_bonds[j] += 1
+                else:
+                    heavy_bonds[j] += 1
+                
+                if atom1.element != "H" or atom2.element != "H":
+                    bond_order = get_bo(atom1, atom2, dists[i, j])
+                    if atom2.element != "H":
+                        bo_sums[i] += bond_order
+                    
+                    if atom1.element != "H":
+                        bo_sums[j] += bond_order
+
+            for atom2 in atom1.connected:
+                if atom2 in targets:
+                    continue
+                if atom2.element == "H":
+                    hydrogen_bonds[i] += 1
+                    continue
+                heavy_bonds[i] += 1
+                bond_order = atom1.bond_order(atom2)
+                bo_sums[i] += bond_order
+
+        invariants = []
+        for nconn, nB, z, nH in zip(heavy_bonds, bo_sums, atom_numbers, hydrogen_bonds):
+            invariants.append("{:01d}{:03d}{:03d}{:01d}".format(
+                int(nconn), int(nB * 10), int(z), int(nH)
+            ))
+
+        return invariants
+
     def canonical_rank(
         self, heavy_only=False, break_ties=True, update=True, invariant=True
     ):
@@ -1423,11 +1498,11 @@ class Geometry:
 
         # partition and re-rank using invariants
         partitions = {}
-        for i, a in enumerate(atoms):
-            if invariant:
-                id = a.get_invariant()
-            else:
-                id = a.get_neighbor_id()
+        if invariant:
+            invariants = self.get_invariants(heavy_only=heavy_only)
+        else:
+            invariants = [a.get_neighbor_id() for a in atoms]
+        for i, (a, id) in enumerate(zip(atoms, invariants)):
             partitions.setdefault(id, [])
             partitions[id] += [i]
         new_rank = 0
@@ -1463,6 +1538,15 @@ class Geometry:
                 )
 
         return ranks
+
+    def element_counts(self):
+        eles = dict()
+        for ele in self.elements:
+            if ele not in eles:
+                eles[ele] = 0
+            eles[ele] += 1
+        
+        return eles
 
     def reorder(
         self,
@@ -1502,8 +1586,8 @@ class Geometry:
             if this in order:
                 continue
             order += [this]
-            connected = this.connected & atoms_left
-            atoms_left -= set(connected)
+            connected = set(this.connected & atoms_left)
+            atoms_left -= connected
             stack += sorted(connected)
 
             if not stack and atoms_left:
@@ -2618,6 +2702,7 @@ class Geometry:
         L_func=None,
         return_vector=False,
         radii="bondi",
+        at_L=None,
     ):
         """
         returns sterimol parameter values in a dictionary
@@ -2630,25 +2715,34 @@ class Geometry:
         return_vector: bool/returns dict of tuple(vector start, vector end) instead
         radii: "bondi" - Bondi vdW radii
                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+               dict()  - radii are values and elements are keys
+               list()  - list of radii corresponding to targets
 
-        AaronTools' definition of the L parameter is different than the original
-        STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is
-        projected onto a plane parallel to the bond between the molecule and the substituent.
-        The L parameter is 0.40 Å plus the distance from the first substituent atom to the
-        outer van der Waals surface of the projection along the bond vector. This 0.40 Å is
-        a correction for STERIMOL using a hydrogen to represent the molecule, when a carbon
-        would be more likely. In AaronTools the substituent is projected the same, but L is
-        calculated starting from the van der Waals radius of the first substituent atom
-        instead. This means AaronTools will give the same L value even if the substituent
-        is capped with something besides a hydrogen. When comparing AaronTools' L values
-        with STERIMOL (using the same set of radii for the atoms), the values usually
-        differ by < 0.1 Å.
+        L_axis: vector defining L-axis
+        targets: atoms to include in the parameter calculation
+        L_func: function to evaluate for getting the L value and vector 
+                for each atom
+                takes positional arguments:
+                atom: Atom() - atom being checked
+                start: Atom() - start_atom
+                radius: vdw radius of atom
+                L_axis: unit vector for L-axis
+                
+                if L_func is not given, the default is the distance from
+                start_atom to the furthest vdw radius projected onto the
+                L-axis
+        return_vector - returned dictionary will have tuples of start, end
+                        for vectors to represent the parameters in 3D space
+        at_L - L value to calculate sterimol parameters at
+               Used for Sterimol2Vec 
         """
         from scipy.spatial import ConvexHull
 
         from AaronTools.finders import BondedTo
 
         CITATION = "doi:10.1002/ps.2780070410"
+        if at_L:
+            CITATION += "; doi:10.5281/zenodo.4702098"
         self.LOG.citation(CITATION)
 
         targets = self.find(targets)
@@ -2672,9 +2766,13 @@ class Geometry:
                 test_L = np.dot(test_v, L_axis) + radius
                 vec = (start.coords, start.coords + test_L * L_axis)
                 return test_L, vec
-
+        
+        radius_list = []
+        radii_dict = None
         if isinstance(radii, dict):
             radii_dict = radii
+        elif isinstance(radii, list):
+            radius_list = radii
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":
@@ -2725,26 +2823,67 @@ class Geometry:
         )
         std_ndx = np.ones(num_pts, dtype=int)
 
+        if not radius_list:
+            radius_list = []
+        coords = self.coordinates(targets)
+        L_vals = []
         for i, atom in enumerate(targets):
             test_v = start.bond(atom)
+            if radii_dict is not None:
+                radius_list.append(radii_dict[atom.element])
 
             # L
             test_L, L_vec = L_func(
-                atom, start, radii_dict[atom.element], L_axis
+                atom,
+                start,
+                radius_list[i],
+                L_axis
             )
-
+            L_vals.append(test_L)
             if L is None or test_L > L:
                 L = test_L
                 vector["L"] = L_vec
 
+        # if a specific L value was requested, only check atoms
+        # with a radius that intersects the plane at that L
+        # value
+        # do this by setting the radii of atoms that don't intersect
+        # that plane to -1 so they are skipped later
+        # adjust the radii of atoms that do intersect to be the 
+        # radius of the circle formed by the interection of the
+        # plane with the VDW sphere and adjust the coordinates
+        # so it loos like the atom is in that plane
+        if at_L is not None:
+            if not any(L >= at_L for L in L_vals):
+                at_L = max(L_vals)
+            if all(L < at_L for L in L_vals):
+                at_L = 0
+            L_vec = vector["L"][1] - vector["L"][0]
+            L_vec *= at_L / np.linalg.norm(L_vec)
+            vector["L"] = (vector["L"][0], vector["L"][0] + L_vec)
+            L = at_L
+            for i in range(0, len(coords)):
+                if L_vals[i] - 2 * radius_list[i] > at_L:
+                    radius_list[i] = -1
+                    continue
+                if L_vals[i] < at_L:
+                    radius_list[i] = -1
+                    continue
+                diff = L_vals[i] - radius_list[i] - at_L
+                radius_list[i] = np.sqrt(radius_list[i] ** 2 - diff ** 2)
+                coords[i] -= diff * L_axis
+
+        for i, (rad, coord) in enumerate(zip(radius_list, coords)):
+            if rad < 0:
+                continue
             # B1-4 stuff - we come back to this later
-            r1 = radii_dict[atom.element]
+            test_v = coord - start.coords
             new_coords = np.dot(test_v, basis)
             # in plane coordinates - z-axis is L-axis, which
             # we don't care about for B1
             ip_coords = new_coords[0:2]
             ndx.extend((i * std_ndx).tolist())
-            grid = r1 * b1_points
+            grid = rad * b1_points
             grid += ip_coords
             points.extend(grid)
 
@@ -2754,10 +2893,10 @@ class Geometry:
             # add the atom's radius to get the full B5
             b = np.dot(test_v, L_axis)
             test_B5_v = test_v - (b * L_axis)
-            test_B5 = np.linalg.norm(test_B5_v) + radii_dict[atom.element]
+            test_B5 = np.linalg.norm(test_B5_v) + rad
             if B5 is None or test_B5 > B5:
                 B5 = test_B5
-                start_x = atom.coords - test_B5_v
+                start_x = coord - test_B5_v
                 if np.linalg.norm(test_B5_v) > 3 * np.finfo(float).eps:
                     perp_vec = test_B5_v
                 else:
@@ -2803,10 +2942,10 @@ class Geometry:
             if B1 is None or test_b1 < B1:
                 B1 = test_b1
                 # figure out vector from L axis to represent B1
-                b1_atom = targets[ndx[v_ndx_0]]
-                test_v = start.bond(b1_atom)
+                b1_atom_coords = coords[ndx[v_ndx_0]]
+                test_v = b1_atom_coords - start.coords
                 test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
-                start_x = b1_atom.coords - test_B1_v
+                start_x = b1_atom_coords - test_B1_v
                 end = x_vec * perp[0] + ip_vector * perp[1]
                 end += start_x
                 vector["B1"] = (start_x, end)
@@ -2822,13 +2961,17 @@ class Geometry:
         Bpar = None
         Bperp1 = None
         Bperp2 = None
-        for atom in targets:
-            test_v = start.bond(atom)
+        perp_vec1 = None
+        perp_vec2 = None
+        for rad, coord in zip(radius_list, coords):
+            if rad < 0:
+                continue
+            test_v = coord - start.coords
             b = np.dot(test_v, L_axis)
             test_B_v = test_v - (b * L_axis)
             test_par_vec = np.dot(test_B_v, b1_norm) * b1_norm
-            test_par_vec -= radii_dict[atom.element] * b1_norm
-            start_x = atom.coords - test_B_v
+            test_par_vec -= rad * b1_norm
+            start_x = coord - test_B_v
             end = start_x + test_par_vec
 
             test_Bpar = np.linalg.norm(end - start_x)
@@ -2837,25 +2980,30 @@ class Geometry:
                 par_vec = (start_x, end)
 
             perp_vec = np.dot(test_B_v, b1_perp) * b1_perp
-            if np.dot(test_B_v, b1_perp) > 0 or np.isclose(
-                np.dot(b1_perp, test_B_v), 0
-            ):
-                test_perp_vec1 = perp_vec + radii_dict[atom.element] * b1_perp
+            if np.dot(test_B_v, b1_perp) > 0 or abs(np.dot(b1_perp, test_B_v)) < 1e-3:
+                test_perp_vec1 = perp_vec + rad * b1_perp
                 end = start_x + test_perp_vec1
                 test_Bperp1 = np.linalg.norm(end - start_x)
                 if Bperp1 is None or test_Bperp1 > Bperp1:
                     Bperp1 = test_Bperp1
                     perp_vec1 = (start_x, end)
-            if np.dot(test_B_v, b1_perp) < 0 or np.isclose(
-                np.dot(b1_perp, test_B_v), 0
-            ):
-                test_perp_vec2 = perp_vec - radii_dict[atom.element] * b1_perp
+
+            if np.dot(test_B_v, b1_perp) < 0 or abs(np.dot(b1_perp, test_B_v)) < 1e-3:
+                test_perp_vec2 = perp_vec - rad * b1_perp
                 end = start_x + test_perp_vec2
                 test_Bperp2 = np.linalg.norm(end - start_x)
                 if Bperp2 is None or test_Bperp2 > Bperp2:
                     Bperp2 = test_Bperp2
                     perp_vec2 = (start_x, end)
 
+        if perp_vec1 is None:
+            perp_vec1 = perp_vec2[0], -perp_vec2[1] 
+            Bperp1 = Bperp2
+        
+        if perp_vec2 is None:
+            perp_vec2 = perp_vec1[0], -perp_vec1[1] 
+            Bperp2 = Bperp1
+        
         # put B2-4 in order
         i = 0
         Bs = [Bpar, Bperp1, Bperp2]
@@ -2990,8 +3138,8 @@ class Geometry:
         while len(stack) > 0:
             connected = stack.popleft()
             connected = connected.connected - set(stop) - set(frag)
-            stack.extend(sorted(connected))
-            frag += sorted(connected)
+            stack.extend(connected)
+            frag += connected
 
         if as_object:
             return self.copy(atoms=frag, comment="")
@@ -3371,6 +3519,8 @@ class Geometry:
             self.detect_substituents()
 
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
+            if len(sub.atoms) < 2:
+                continue
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(

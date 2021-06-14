@@ -709,6 +709,11 @@ def glob_files(infiles):
         else:
             outfiles.append(f)
 
+    if not outfiles:
+        raise RuntimeError(
+            "no files could be found for %s" % ", ".join(infiles)
+        )
+
     return outfiles
 
 

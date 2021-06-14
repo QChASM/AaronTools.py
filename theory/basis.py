@@ -246,6 +246,11 @@ class Basis:
         if name.startswith("def2") and not name.startswith("def2-"):
             return name.replace("def2", "def2-", 1)
 
+        # pople basis sets don't have commas
+        # e.g. 6-31G(d,p) -> 6-31G(d_p)
+        if name.startswith("6-31") or name.startswith("3-21"):
+            name = name.replace(",", "_")
+
         return name
 
 
@@ -331,7 +336,10 @@ class BasisSet:
     """used to more easily get basis set info for writing input files"""
 
     ORCA_AUX = ["C", "J", "JK", "CABS", "OptRI CABS"]
-    PSI4_AUX = ["JK", "RI"]
+    PSI4_AUX = [
+        "JK", "RI", "DF SCF", "DF SAPT", "DF GUESS", "DF SAD", "DF MP2",
+        "DF CC", "DF DCT", "DF MCSCF", "DF ELST"
+    ]
 
     def __init__(self, basis=None, ecp=None):
         """
@@ -401,7 +409,7 @@ class BasisSet:
                 try:
                     aux_type = info[i + 1]
                     i += 1
-                    if aux_type.lower() == "optri":
+                    if any(aux_type.lower() == x for x in ["df", "optri"]):
                         aux_type += " %s" % info[i + 1]
                         i += 1
                 except:
@@ -421,7 +429,7 @@ class BasisSet:
                     ) or os.sep in info[i + 1]:
                         user_defined = info[i + 1]
                         i += 1
-                except Exception as e:
+                except IndexError:
                     pass
 
                 if not elements:
@@ -896,114 +904,84 @@ class BasisSet:
         sapt: bool, use df_basis_sapt instead of df_basis_scf for jk basis
         return dict for get_psi4_header
         """
-        out_str = ""
-        out_str2 = None
-        out_str3 = None
-        out_str4 = None
+        out_str = dict()
         warnings = []
-
-        first_basis = []
 
         if self.basis is not None:
             for basis in self.basis:
-                if basis.aux_type not in first_basis:
-                    first_basis.append(basis.aux_type)
-                    if basis.aux_type is None or basis.user_defined:
-                        out_str += "basis {\n"
-                        basis_name = Basis.get_psi4(basis.name)
-                        warning = basis.sanity_check_basis(basis_name, "psi4")
-                        if warning and not basis.user_defined:
-                            warnings.append(warning)
-                        out_str += "    assign    %s\n" % basis_name
+                if basis.user_defined:
+                    continue
+                aux_type = basis.aux_type
+                basis_name = basis.get_psi4(basis.name)
+                # JK and RI will try to guess what basis set is being requested
+                # specifying "DF X" as the aux type will give more control
+                # but the user will have to request -ri or -jkfit explicitly 
+                if isinstance(aux_type, str):
+                    aux_type = aux_type.upper()
+                else:
+                    aux_type = "basis"
+                if aux_type == "JK":
+                    aux_type = "df_basis_scf"
+                    basis_name += "-jkfit"
+                elif aux_type == "DF SCF":
+                    aux_type = "df_basis_scf"
+                elif aux_type == "DF SAPT":
+                    aux_type = "df_basis_sapt"
+                elif aux_type == "DF GUESS":
+                    aux_type = "df_basis_guess"
+                elif aux_type == "DF SAD":
+                    aux_type = "df_basis_sad"
+                elif aux_type == "DF MP2":
+                    aux_type = "df_basis_mp2"
+                elif aux_type == "DF DCT":
+                    aux_type = "df_basis_dct"
+                elif aux_type == "DF MCSCF":
+                    aux_type = "df_basis_mcscf"
+                elif aux_type == "DF CC":
+                    aux_type = "df_basis_cc"
+                elif aux_type == "DF ELST":
+                    aux_type = "df_basis_elst"
+                elif aux_type == "RI":
+                    aux_type = "df_basis_%s"
+                    if sapt:
+                        aux_type = "df_basis_sapt"
+                    if basis_name.lower() in ["sto-3g", "3-21g"]:
+                        basis_name += "-rifit"
+                    else:
+                        basis_name += "-ri"
 
-                    elif basis.aux_type.upper() == "JK":
-                        if sapt:
-                            out_str4 = "df_basis_sapt {\n"
-                        else:
-                            out_str4 = "df_basis_scf {\n"
+                warning = basis.sanity_check_basis(basis_name, "psi4")
+                if warning:
+                    warnings.append(warning)
 
-                        basis_name = Basis.get_psi4(basis.name) + "-jkfit"
-                        warning = basis.sanity_check_basis(basis_name, "psi4")
-                        if warning and not basis.user_defined:
-                            warnings.append(warning)
-                        out_str4 += "    assign    %s\n" % basis_name
-
-                    elif basis.aux_type.upper() == "RI":
-                        out_str2 = "df_basis_%s {\n"
-                        if (
-                            basis.name.lower() == "sto-3g"
-                            or basis.name.lower() == "3-21g"
-                        ):
-                            basis_name = Basis.get_psi4(basis.name) + "-rifit"
-                            warning = basis.sanity_check_basis(
-                                basis_name, "psi4"
-                            )
-                            if warning and not basis.user_defined:
-                                warnings.append(warning)
-
-                            out_str2 += "    assign    %s\n" % basis_name
-                        else:
-                            basis_name = Basis.get_psi4(basis.name) + "-ri"
-                            warning = basis.sanity_check_basis(
-                                basis_name, "psi4"
-                            )
-                            if warning and not basis.user_defined:
-                                warnings.append(warning)
-
-                            out_str2 += "    assign    %s\n" % basis_name
+                if aux_type not in out_str:
+                    out_str[aux_type] = "%s {\n" % aux_type
+                    out_str[aux_type] += "    assign    %s\n" % basis_name
 
                 else:
-                    if basis.aux_type is None or basis.user_defined:
-                        basis_name = Basis.get_psi4(basis.name)
-                        warning = basis.sanity_check_basis(basis_name, "psi4")
-                        if warning and not basis.user_defined:
-                            warnings.append(warning)
-                        for ele in basis.elements:
-                            out_str += "    assign %-2s %s\n" % (
-                                ele,
-                                basis_name,
-                            )
-
-                    elif basis.aux_type.upper() == "JK":
-                        basis_name = Basis.get_psi4(basis.name) + "-jkfit"
-                        warning = basis.sanity_check_basis(basis_name, "psi4")
-                        if warning and not basis.user_defined:
-                            warnings.append(warning)
-                        for ele in basis.elements:
-                            out_str4 += "    assign %-2s %s\n" % (
-                                ele,
-                                basis_name,
-                            )
-
-                    elif basis.aux_type.upper() == "RI":
-                        basis_name = Basis.get_psi4(basis.name)
-                        if (
-                            basis_name.lower() == "sto-3g"
-                            or basis_name.lower() == "3-21g"
-                        ):
-                            basis_name += "-rifit"
-                        else:
-                            basis_name += "-ri"
-                        warning = basis.sanity_check_basis(basis_name, "psi4")
-                        if warning and not basis.user_defined:
-                            warnings.append(warning)
-
-                        for ele in basis.elements:
-                            if (
-                                basis.name.lower() == "sto-3g"
-                                or basis.name.lower() == "3-21g"
-                            ):
-                                out_str2 += "    assign %-2s %s-rifit\n" % (
-                                    ele,
-                                    basis_name,
-                                )
+                    for ele in basis.elements:
+                        out_str[aux_type] += "    assign %-2s %s\n" % (
+                            ele, basis_name
+                        )
 
             if any(basis.user_defined for basis in self.basis):
-                out_str3 = ""
                 for basis in self.basis:
                     if basis.user_defined:
+                        aux_type = basis.aux_type
+                        if not aux_type:
+                            aux_type = ""
+                        aux_type = aux_type.upper()
                         if os.path.exists(basis.user_defined):
-                            out_str3 += "\n[%s]\n" % basis.name
+                            if aux_type not in out_str:
+                                if not aux_type:
+                                    out_str[aux_type] = "basis {\n"
+                                elif aux_type == "JK" and sapt:
+                                    out_str[aux_type] = "df_basis_sapt {\n"
+                                elif aux_type == "JK":
+                                    out_str[aux_type] = "df_basis_scf {\n"
+                                elif aux_type == "RI":
+                                    out_str[aux_type] = "df_basis_%s {\n"
+                            out_str[aux_type] += "\n[%s]\n" % basis.name
                             with open(basis.user_defined, "r") as f:
                                 lines = [
                                     line.rstrip()
@@ -1011,29 +989,13 @@ class BasisSet:
                                     if line.strip()
                                     and not line.startswith("!")
                                 ]
-                                out_str3 += "\n".join(lines)
-                                out_str3 += "\n\n"
+                                out_str[aux_type] += "\n".join(lines)
+                                out_str[aux_type] += "\n\n"
 
-            if out_str3 is not None:
-                out_str += out_str3
+        s = "}\n\n".join(out_str.values())
+        s += "}"
 
-            if out_str:
-                out_str += "}"
-
-            if out_str2 is not None:
-                out_str2 += "}"
-
-                out_str += "\n\n%s" % out_str2
-
-            if out_str4 is not None:
-                out_str4 += "}"
-
-                out_str += "\n\n%s" % out_str4
-
-        if out_str:
-            info = {PSI4_BEFORE_GEOM: [out_str]}
-        else:
-            info = {}
+        info = {PSI4_BEFORE_GEOM: [s]}
 
         return info, warnings
 

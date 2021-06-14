@@ -1,8 +1,7 @@
 """for constructing headers and footers for input files"""
-import itertools as it
 import re
 
-from AaronTools.const import ELEMENTS, RMSD_CUTOFF, UNIT
+from AaronTools.const import ELEMENTS, UNIT
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
     GAUSSIAN_CONSTRAINTS,

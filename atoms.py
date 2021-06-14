@@ -89,7 +89,7 @@ class Atom:
 
     LOG = None
 
-    BondOrder()
+    _bo = BondOrder()
 
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None
@@ -155,11 +155,16 @@ class Atom:
         ):
             return self._rank > other._rank
 
-        a = self.get_invariant()
-        b = other.get_invariant()
-        if a != b:
-            return a > b
+        if self._rank is None or other._rank is None:
+            # if the ranks are the same, we have little reason to
+            # believe the invariants will differ
+            # print("getting invariants during <", self._rank, other._rank)
+            a = self.get_invariant()
+            b = other.get_invariant()
+            if a != b:
+                return a > b
 
+        # print("using names")
         a = self.name.split(".")
         b = other.name.split(".")
         while len(a) < len(b):

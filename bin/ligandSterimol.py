@@ -5,12 +5,13 @@ import sys
 
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
+from AaronTools.component import Component
 from AaronTools.substituent import Substituent
 from AaronTools.utils.utils import glob_files
 
 def main(argv):
     sterimol_parser = argparse.ArgumentParser(
-        description="calculate B1-B5, and L sterimol parameters for substituents - see Verloop, A. and Tipker, J. (1976), Use of linear free energy related and other parameters in the study of fungicidal selectivity. Pestic. Sci., 7: 379-390.",
+        description="calculate B1-B5, and L sterimol parameters for ligands - see Verloop, A. and Tipker, J. (1976), Use of linear free energy related and other parameters in the study of fungicidal selectivity. Pestic. Sci., 7: 379-390.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     
@@ -32,51 +33,45 @@ def main(argv):
     )
     
     sterimol_parser.add_argument(
-        "-s", "--substituent-atom",
+        "-k", "--key-atoms",
         type=str,
         required=True,
-        dest="targets",
-        help="substituent atom\n" +
-        "1-indexed position of the starting position of the\n" +
-        "substituent of which you are calculating sterimol\nparameters"
+        dest="key",
+        help="1-indexed position of the ligand's coordinating atoms"
     )
     
     sterimol_parser.add_argument(
-        "-a", "--attached-to",
+        "-c", "--center-atom",
         type=str,
         required=True,
-        dest="avoid",
-        help="non-substituent atom\n" +
-        "1-indexed position of the starting position of the atom\n" +
-        "connected to the substituent of which you are calculating\n" +
-        "sterimol parameters"
+        dest="center",
+        help="atom the ligand is coordinated to"
     )
-    
+
     sterimol_parser.add_argument(
         "-r", "--radii",
         type=str,
         default="bondi",
         choices=["bondi", "umn"],
         dest="radii",
-        help="VDW radii to use in calculation\n" + 
-        "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n" +
-        "    (DOI: 10.1021/jp8111556)\n" + 
-        "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n" +
-        "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
-        "    (DOI: 10.1023/A:1011625728803)\n" + 
-        "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
+        help="VDW radii to use in calculation\n"
+        "umn: main group vdw radii from J. Phys. Chem. A 2009, 113, 19, 5806–5812\n"
+        "    (DOI: 10.1021/jp8111556)\n" 
+        "    transition metals are crystal radii from Batsanov, S.S. Van der Waals\n"
+        "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n"
+        "    (DOI: 10.1023/A:1011625728803)\n" 
+        "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451\n(DOI: 10.1021/j100785a001)\n"
         "Default: bondi"
     )
-    
+
     sterimol_parser.add_argument(
-        "-l", "--old-l",
+        "-bl", "--bisect-L",
         action="store_true",
         required=False,
-        dest="old_L",
-        help="approximate FORTRAN Sterimol method for determining L\n"
-        "This is 0.4 + the ideal bond length for a target-H bond\n"
-        "Default: L value is from VDW radii of target atom to outer\n"
-        "VDW radii of atoms projected onto L-axis"
+        dest="bisect_L",
+        help="L axis will bisect (or analogous for higher denticity\n"
+        "ligands) the L-M-L angle\n"
+        "Default: center to centroid of key atoms"
     )
 
     sterimol_parser.add_argument(
@@ -95,7 +90,7 @@ def main(argv):
         dest="vector",
         help="print Chimera/ChimeraX bild file for vectors instead of parameter values"
     )
-    
+
     sterimol_parser.add_argument(
         "-o", "--output",
         type=str,
@@ -106,9 +101,9 @@ def main(argv):
         help="output destination\n" +
         "Default: stdout"
     )
-    
+
     args = sterimol_parser.parse_args(args=argv)
-    
+
     s = ""
     if not args.vector:
         s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
@@ -124,20 +119,23 @@ def main(argv):
                 f = FileReader(("from stdin", args.input_format, infile))
             else:
                 f = FileReader(("from stdin", "xyz", infile))
-    
-        geom = Geometry(f)
-        target = args.targets
-        avoid = args.avoid
-        end = geom.find(avoid)[0]
-        frag = geom.get_fragment(target, stop=end)
-        sub = Substituent(frag, end=end, detect=False)
+
+        geom = Geometry(f, refresh_ranks=False)
+        comp = Component(
+            geom.get_fragment(args.key, stop=args.center),
+            to_center=geom.find(args.center),
+            key_atoms=args.key,
+            detect_backbone=False,
+        )
         for val in args.L_value:
-            data = sub.sterimol(
+            data = comp.sterimol(
+                to_center=geom.find(args.center),
                 return_vector=args.vector,
                 radii=args.radii,
-                old_L=args.old_L,
+                bisect_L=args.bisect_L,
                 at_L=val,
             )
+    
             if args.vector:
                 for key, color in zip(
                         ["B1", "B2", "B3", "B4", "B5", "L"],

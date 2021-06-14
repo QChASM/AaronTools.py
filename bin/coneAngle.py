@@ -124,7 +124,7 @@ for f in glob_files(args.infile):
 
     ligand = geom.get_fragment(args.key_atoms, stop=args.center)
 
-    comp = Component(ligand, key_atoms=args.key_atoms)
+    comp = Component(ligand, key_atoms=args.key_atoms, detect_backbone=False)
 
     angle = comp.cone_angle(
         center=geom.find(args.center),
