@@ -277,7 +277,8 @@ class FileWriter:
         mode = "a" if append else "w"
         fmt1 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f} {:2s} {:2s} {: 8.6f} {:2d}\n"
         fmt2 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f}\n"
-        fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
+        fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s}\n"
+        fmt4 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
         s = "%i\n" % len(geom.atoms)
         s += "%s\n" % geom.comment
         for atom in geom.atoms:
@@ -291,7 +292,19 @@ class FileWriter:
                 try:
                     s += fmt2.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge)
                 except AttributeError:
-                    s += fmt3.format(atom.element, *atom.coords, atom.layer)
+                    try:
+                        s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
+                    except AttributeError:
+                        try:
+                            s += fmt4.format(atom.element, *atom.coords, atom.layer)
+                        except AttributeError:
+                            atom.layer = "H"
+                            try:
+                                print(atom.layer)
+                                s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
+                            except AttributeError:
+                                print(atom.layer)
+                                s += fmt4.format(atom.element, *atom.coords, atom.layer)
 
         s = s.rstrip()
 
@@ -918,12 +931,18 @@ class FileReader:
                         self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4], atomtype=line[5], charge=line[6])]
                     except IndexError:
                         try:
-                            self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4])]
+                            self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4], atomtype=line[5])]
                         except IndexError:
-                            if oniom==True:
-                                self.atoms += [OniomAtom(element=line[0], coords=line[1:4])]
-                            else:
-                                self.atoms += [Atom(element=line[0], coords=line[1:4])]
+                            try:
+                                if line[4] in ['H', 'M', 'L']:
+                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4])]
+                                else:
+                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4], atomtype=line[4])]
+                            except IndexError:
+                                if oniom==True:
+                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4])]
+                                else:
+                                    self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
         if get_all:

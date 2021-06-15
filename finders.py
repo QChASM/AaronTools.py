@@ -508,7 +508,7 @@ class OfType(Finder):
         if self.ignore_metals == True:
             for atom in AnyTransitionMetal().get_matching_atoms(atoms):
                 geometry = geometry - atom
-            atoms = geometry.atoms
+            #atoms = geometry.atoms
 
         atoms = [atom for atom in atoms if atom.element == self.element]
 

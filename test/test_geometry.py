@@ -36,6 +36,7 @@ def is_close(a, b, tol=10 ** -8, debug=False):
 
 class TestGeometry(TestWithTimer):
     benz_NO2_Cl = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    benzene_oniom = os.path.join(prefix, "test_files", "benzene_oniom.xyz")
     benz_NO2_Cl_conn = [
         "2,6,12",
         "1,3,7",
@@ -869,6 +870,16 @@ class TestGeometry(TestWithTimer):
         # profile.disable()
         # profile.print_stats()
 
+    def test_get_gaff_geom(self):
+        ref = Geometry(TestGeometry.benzene_oniom)
+        mol = Geometry(TestGeometry.benz_NO2_Cl)
+        mol2 = mol.get_gaff_geom()
+        self.assertEqual(ref,mol2)
+
+    def test_get_aromatic_atoms(self):
+        mol = Geometry(TestGeometry.benzene)
+        out,out2,out3 = mol.get_aromatic_atoms(mol.atoms, return_rings=False,return_h=False)
+        self.assertTrue(all([atom in mol.find('C') for atom in out]))
 
 def suite():
     suite = unittest.TestSuite()

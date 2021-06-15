@@ -15,7 +15,7 @@ from AaronTools.atoms import Atom
 from AaronTools.config import Config
 from AaronTools.const import BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
 from AaronTools.fileIO import FileReader, FileWriter
-from AaronTools.finders import Finder
+from AaronTools.finders import Finder, OfType
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
 
@@ -610,6 +610,15 @@ class Geometry:
         other_counts = {ele: other_eles.count(ele) for ele in set(other_eles)}
         if self_counts != other_counts:
             return False
+
+        try:
+            self_atypes = [atom.atomtype for atom in self.atoms]
+            other_atypes = [atom.atomtype for atom in other.atoms]
+            self_atcounts = {at: self_atypes.count(at) for at in set(self_atypes)}
+            other_atcounts = {at: other_atypes.count(at) for at in set(other_atypes)}
+            if self_atcounts != other_atcounts: return False
+        except AttributeError:
+            pass
 
         rmsd = self.RMSD(other, sort=False)
         return rmsd < COORD_THRESHOLD
@@ -5278,4 +5287,35 @@ class Geometry:
             return matching_atoms, charge, fused, rings
         else: 
             return matching_atoms, charge, fused
+
+
+    def get_gaff_geom(self):
+        typelist = []
+        elementlist = []
+        atoms = self.atoms
+        for atom in atoms:
+            if atom.element not in elementlist: elementlist.append(atom.element)
+        for element in elementlist:
+            if element == 'C': typelist = typelist + ['c','c1','c2','c3','ca']
+            if element == 'O': typelist = typelist + ['o','oh','os','ow']
+            if element == 'N': typelist = typelist + ['n','n1','n2','n3','n4','na','nh','no']
+            if element == 'S': typelist = typelist + ['s2','sh','ss','s4','s6']
+            if element == 'H': typelist = typelist + ['hc','ha','hn','ho','hs','hp','hw']
+            if element == 'P': typelist = typelist + ['p2','p3','p4','p5']
+            if element in {'Br', 'Cl', 'F', 'I'}: typelist.append(element)
+        oniomatoms = []
+        untyped_atoms = list(atoms)
+        for atomtype in typelist:
+            matches = OfType(atomtype).get_matching_atoms(atoms,self)
+            for match in matches:
+                untyped_atoms.remove(match)
+                oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype)
+                oniomatoms.append(oniomatom)
+        for atom in untyped_atoms:
+            oniomatom = OniomAtom(element = atom.element, coords = atom.coords, name = atom.name, atomtype = atom.element)
+            oniomatoms.append(oniomatom)
+        import operator
+        typed_geom = Geometry(structure=sorted(oniomatoms, key=operator.attrgetter("index")), name = self.name)
+
+        return typed_geom
 
