@@ -323,11 +323,11 @@ nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
         self.assertDictEqual(
             res.other,
             {
-                "best_energy": -79.18948,
+                "avg_energy": 0.00027409943594479446,
                 "temperature": 298.15,
-                "energy": 0.172,
-                "entropy": 0.006899,
-                "free_energy": -2.057,
+                "energy": -79.18948,
+                "entropy": 0.010994255863855447,
+                "free_energy": -0.003278038021735129,
                 "best_pop": 70.368,
                 "finished": True,
                 "error": None,

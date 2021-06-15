@@ -1,8 +1,8 @@
 import collections.abc
 import os
 import re
-from math import acos
 from collections import OrderedDict
+from math import acos
 
 import AaronTools.atoms as Atoms
 import numpy as np
@@ -65,7 +65,7 @@ def proj(v_vec, u_vec):
 
 
 def quat_matrix(pt1, pt2):
-    """ build quaternion matrix from pt1 and pt2 """
+    """build quaternion matrix from pt1 and pt2"""
     pt1 = np.array(pt1, dtype=np.longdouble)
     pt2 = np.array(pt2, dtype=np.longdouble)
     for pt in [pt1, pt2]:
@@ -501,11 +501,11 @@ def rotation_matrix(theta, axis, renormalize=True):
     if renormalize:
         if np.linalg.norm(axis) == 0:
             axis = np.zeros(dim)
-            axis[0] = 1.
+            axis[0] = 1.0
         axis = axis / np.linalg.norm(axis)
     outer_prod = np.outer(axis, axis)
     cos_comp = np.cos(theta)
-    outer_prod *= (1 - cos_comp)
+    outer_prod *= 1 - cos_comp
     iden = np.identity(dim)
     cos_comp = iden * cos_comp
     sin_comp = np.sin(theta) * (np.ones((dim, dim)) - iden)
@@ -517,7 +517,7 @@ def rotation_matrix(theta, axis, renormalize=True):
                 p = -1
 
             cross_mat[i][j] = -1 * (p * axis[dim - (i + j)])
-            cross_mat[j][i] = (p * axis[dim - (i + j)])
+            cross_mat[j][i] = p * axis[dim - (i + j)]
 
     return outer_prod + cos_comp + sin_comp * cross_mat
 
@@ -665,26 +665,29 @@ def get_filename(path, include_parent_dir=True):
     return fname
 
 
-def boltzmann_coefficients(energies, temperature):
+def boltzmann_coefficients(energies, temperature, absolute=True):
     """
     returns boltzmann weights for the energies and T
     energies - numpy array of energies in kcal/mol
     temperature - T in K
+    absolute - True if the energies given are absolute, false if they are relative energies
     """
-    min_nrg = min(energies)
-    energies -= min_nrg
+    if absolute:
+        min_nrg = min(energies)
+        energies -= min_nrg
     weights = np.exp(-energies / (PHYSICAL.R * temperature))
     return weights
 
 
-def boltzmann_average(energies, values, temperature):
+def boltzmann_average(energies, values, temperature, absolute=True):
     """
     returns the AVT result for the values corresponding to the energies
     energies - np.array, energy for each state in kcal/mol
-    values - np.array, values that are weighted; the ith value corresponds to the ith energy
+    values - np.array, values for which the weighting is applied; the ith value corresponds to the ith energy
     temperature - float, temperature in K
+    absolute - True if the energies given are absolute, false if they are relative energies
     """
-    weights = boltzmann_coefficients(energies, temperature)
+    weights = boltzmann_coefficients(energies, temperature, absolute=absolute)
     avg = np.dot(weights, values) / sum(weights)
     return avg
 
@@ -695,19 +698,22 @@ def glob_files(infiles):
     used for command line scripts because Windows doesn't support globbing...
     """
     from glob import glob
+
     if isinstance(infiles, str):
         infiles = [infiles]
-    
+
     outfiles = []
     for f in infiles:
         if isinstance(f, str):
             outfiles.extend(glob(f))
         else:
             outfiles.append(f)
-    
+
     if not outfiles:
-        raise RuntimeError("no files could be found for %s" % ", ".join(infiles))
-    
+        raise RuntimeError(
+            "no files could be found for %s" % ", ".join(infiles)
+        )
+
     return outfiles
 
 
@@ -716,7 +722,7 @@ def angle_between_vectors(v1, v2, renormalize=True):
     if renormalize:
         v1 = v1 / np.linalg.norm(v1)
         v2 = v2 / np.linalg.norm(v2)
-    
+
     v12 = v2 - v1
     c2 = np.dot(v12, v12)
     t = (c2 - 2) / -2
@@ -724,6 +730,6 @@ def angle_between_vectors(v1, v2, renormalize=True):
         t = 1
     elif t < -1:
         t = -1
-    
+
     # math.acos is faster than numpy.arccos for non-arrays
     return acos(t)
