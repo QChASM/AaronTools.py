@@ -5208,7 +5208,13 @@ class Geometry:
 
 
     def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
-        """returns List(Atom) of atoms in aromatic rings"""
+        """
+        Returns:
+            List(Atom) of atoms in aromatic rings, including hydrogens if return_h is True
+            Charge (int) (also could be number of atoms in aromatic rings not participating in aromaticity) of rings
+            number of rings (int) that are fused (napthalene would be 2)
+            List of aromatic rings if return_rings is True
+        """
 
         def is_aromatic(num):
             """returns true if the number follows the huckel rule of 4n + 2"""
@@ -5290,6 +5296,7 @@ class Geometry:
 
 
     def get_gaff_geom(self):
+        """Returns a geometry comprised of OniomAtoms with GAFF atomtypes from OfType finder"""
         typelist = []
         elementlist = []
         atoms = self.atoms
