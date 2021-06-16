@@ -1,9 +1,9 @@
 """For parsing input/output files"""
+import concurrent.futures
 import os
 import re
 from copy import deepcopy
 from io import IOBase, StringIO
-import concurrent.futures
 
 import numpy as np
 from scipy.special import factorial2
@@ -12,7 +12,6 @@ from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.theory import *
-
 
 read_types = [
     "xyz",
@@ -388,7 +387,9 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
+                outfile = "{}.{}.com".format(
+                    geom.name, step2str(kwargs["step"])
+                )
             else:
                 outfile = "{}.com".format(geom.name)
         if outfile is False:
@@ -408,9 +409,18 @@ class FileWriter:
 
     @classmethod
     def write_cube(
-        cls, geom, orbitals=None, outfile=None, mo=None, ao=None,
-        padding=4., spacing=0.2, alpha=True, xyz=False, n_jobs=1,
-        **kwargs
+        cls,
+        geom,
+        orbitals=None,
+        outfile=None,
+        mo=None,
+        ao=None,
+        padding=4.0,
+        spacing=0.2,
+        alpha=True,
+        xyz=False,
+        n_jobs=1,
+        **kwargs,
     ):
         """
         write a cube file for a molecular orbital
@@ -439,12 +449,12 @@ class FileWriter:
             geom_coords = geom.coords
 
             # get range of geom's coordinates
-            x_min = np.min(geom_coords[:,0])
-            x_max = np.max(geom_coords[:,0])
-            y_min = np.min(geom_coords[:,1])
-            y_max = np.max(geom_coords[:,1])
-            z_min = np.min(geom_coords[:,2])
-            z_max = np.max(geom_coords[:,2])
+            x_min = np.min(geom_coords[:, 0])
+            x_max = np.max(geom_coords[:, 0])
+            y_min = np.min(geom_coords[:, 1])
+            y_max = np.max(geom_coords[:, 1])
+            z_min = np.min(geom_coords[:, 2])
+            z_max = np.max(geom_coords[:, 2])
 
             # add padding, figure out vectors
             r1 = 2 * padding + x_max - x_min
@@ -474,21 +484,21 @@ class FileWriter:
                 # for many structures, this only decreases the volume
                 # by like 5%
                 u, s, vh = np.linalg.svd(covar)
-                v1 = u[:,0]
-                v2 = u[:,1]
-                v3 = u[:,2]
+                v1 = u[:, 0]
+                v2 = u[:, 1]
+                v3 = u[:, 2]
                 # change basis of coordinates to the singular vectors
                 # this is how we determine the range + padding
                 new_coords = np.dot(test_coords, u)
                 x1 = np.dot(test_coords, v1)
                 x2 = np.dot(test_coords, v2)
                 x3 = np.dot(test_coords, v3)
-                xr_max = np.max(new_coords[:,0])
-                xr_min = np.min(new_coords[:,0])
-                yr_max = np.max(new_coords[:,1])
-                yr_min = np.min(new_coords[:,1])
-                zr_max = np.max(new_coords[:,2])
-                zr_min = np.min(new_coords[:,2])
+                xr_max = np.max(new_coords[:, 0])
+                xr_min = np.min(new_coords[:, 0])
+                yr_max = np.max(new_coords[:, 1])
+                yr_min = np.min(new_coords[:, 1])
+                zr_max = np.max(new_coords[:, 2])
+                zr_min = np.min(new_coords[:, 2])
                 com = np.array([xr_min, yr_min, zr_min]) - padding
                 # move the COM back to the xyz space of the original molecule
                 com = np.dot(u, com)
@@ -513,7 +523,7 @@ class FileWriter:
         # set up an array of zeros, but 1 for that AO
         if ao is not None:
             mo = np.zeros(orbitals.n_mos)
-            mo[ao] = 1.
+            mo[ao] = 1.0
 
         if isinstance(mo, str):
             if mo.lower() == "homo":
@@ -521,7 +531,7 @@ class FileWriter:
             elif mo.lower() == "lumo":
                 mo = max(orbitals.n_alpha, orbitals.n_beta)
             else:
-                raise TypeError("mo should be an integer, \"homo\", or \"lumo\"")
+                raise TypeError('mo should be an integer, "homo", or "lumo"')
             if mo < 0:
                 mo = 0
         s = ""
@@ -546,10 +556,8 @@ class FileWriter:
         v_list = []
         n_list = []
         for n, v in sorted(
-            zip(
-                [n_pts1, n_pts2, n_pts3], [v1, v2, v3]
-            ),
-            key=lambda p: np.linalg.norm(p[1])
+            zip([n_pts1, n_pts2, n_pts3], [v1, v2, v3]),
+            key=lambda p: np.linalg.norm(p[1]),
         ):
             bohr_v = v / UNIT.A0_TO_BOHR
             s += " %5i %13.5f %13.5f %13.5f\n" % (
@@ -559,9 +567,11 @@ class FileWriter:
             v_list.append(v)
             n_list.append(n)
         # contruct an array of points for the grid
-        ndx = np.vstack(
-            np.mgrid[0:n_list[0], 0:n_list[1], 0:n_list[2]]
-        ).reshape(3, np.prod(n_list)).T
+        ndx = (
+            np.vstack(np.mgrid[0 : n_list[0], 0 : n_list[1], 0 : n_list[2]])
+            .reshape(3, np.prod(n_list))
+            .T
+        )
         coords = np.matmul(ndx, v_list)
         del ndx
         coords += com
@@ -569,7 +579,8 @@ class FileWriter:
         # write the structure in bohr
         for atom in geom.atoms:
             s += " %5i %13.5f %13.5f %13.5f %13.5f\n" % (
-                ELEMENTS.index(atom.element), ELEMENTS.index(atom.element),
+                ELEMENTS.index(atom.element),
+                ELEMENTS.index(atom.element),
                 atom.coords[0] / UNIT.A0_TO_BOHR,
                 atom.coords[1] / UNIT.A0_TO_BOHR,
                 atom.coords[2] / UNIT.A0_TO_BOHR,
@@ -588,7 +599,7 @@ class FileWriter:
         for n1 in range(0, n_list[0]):
             for n2 in range(0, n_list[1]):
                 val_ndx = n1 * n_list[2] * n_list[1] + n2 * n_list[2]
-                val_subset = mo_val[val_ndx:val_ndx + n_list[2]]
+                val_subset = mo_val[val_ndx : val_ndx + n_list[2]]
                 for i, val in enumerate(val_subset):
                     if abs(val) < 1e-30:
                         val = 0
@@ -1464,7 +1475,9 @@ class FileReader:
                                 self.other[nrg_name].extend(orbit_nrgs)
                                 self.other[occ_name].extend(occupancy)
                                 if mo_coefficients:
-                                    self.other[coeff_name].extend(mo_coefficients)
+                                    self.other[coeff_name].extend(
+                                        mo_coefficients
+                                    )
                                 mo_coefficients = [[] for x in orbit_nrgs]
                                 orbit_nrgs = []
                             line = f.readline()
@@ -1473,7 +1486,9 @@ class FileReader:
                         line = f.readline()
 
                 elif line.startswith("N(Alpha)  "):
-                    self.other["n_alpha"] = int(np.rint(float(line.split()[2])))
+                    self.other["n_alpha"] = int(
+                        np.rint(float(line.split()[2]))
+                    )
 
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
@@ -1496,7 +1511,10 @@ class FileReader:
             if "finished" not in self.other:
                 self.other["finished"] = False
 
-            if "alpha_coefficients" in self.other and "basis_set_by_ele" in self.other:
+            if (
+                "alpha_coefficients" in self.other
+                and "basis_set_by_ele" in self.other
+            ):
                 self.other["orbitals"] = Orbitals(self)
 
     def read_log(self, f, get_all=False, just_geom=True):
@@ -1723,7 +1741,8 @@ class FileReader:
                         ll = 5 * section
                         ul = 5 * section + min(j - ll + 1, 5)
                         x_matrix[j, ll:ul] = [
-                            float(x.replace("D", "e")) for x in line.split()[1:]
+                            float(x.replace("D", "e"))
+                            for x in line.split()[1:]
                         ]
                 x_matrix += np.tril(x_matrix, k=-1).T
                 self.other["X_matrix"] = x_matrix
@@ -1761,12 +1780,24 @@ class FileReader:
                     equilibrium_rotational_temperature[i] = Be
                     ground_rotational_temperature[i] = B00
                     centr_rotational_temperature[i] = B0
-                equilibrium_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                ground_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                centr_rotational_temperature *= PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                self.other["equilibrium_rotational_temperature"] = equilibrium_rotational_temperature
-                self.other["ground_rotational_temperature"] = ground_rotational_temperature
-                self.other["centr_rotational_temperature"] = centr_rotational_temperature
+                equilibrium_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                ground_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                centr_rotational_temperature *= (
+                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                )
+                self.other[
+                    "equilibrium_rotational_temperature"
+                ] = equilibrium_rotational_temperature
+                self.other[
+                    "ground_rotational_temperature"
+                ] = ground_rotational_temperature
+                self.other[
+                    "centr_rotational_temperature"
+                ] = centr_rotational_temperature
 
             if "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
@@ -1975,8 +2006,13 @@ class FileReader:
                                     grid_name = opt.split("=")[1]
                                     grid = IntegrationGrid(grid_name)
                                 else:
-                                    if "Integral" not in other_kwargs[GAUSSIAN_ROUTE]:
-                                        other_kwargs[GAUSSIAN_ROUTE]["Integral"] = []
+                                    if (
+                                        "Integral"
+                                        not in other_kwargs[GAUSSIAN_ROUTE]
+                                    ):
+                                        other_kwargs[GAUSSIAN_ROUTE][
+                                            "Integral"
+                                        ] = []
                                     other_kwargs[GAUSSIAN_ROUTE][
                                         "Integral"
                                     ].append(opt)
@@ -2270,15 +2306,19 @@ class FileReader:
             elif "population of lowest" in line:
                 self.other["best_pop"] = float(float_num.findall(line)[0])
             elif "ensemble free energy" in line:
-                self.other["free_energy"] = float(float_num.findall(line)[0])
+                self.other["free_energy"] = (
+                    float(float_num.findall(line)[0]) / UNIT.HART_TO_KCAL
+                )
             elif "ensemble entropy" in line:
                 self.other["entropy"] = (
-                    float(float_num.findall(line)[1]) / 1000
+                    float(float_num.findall(line)[1]) / UNIT.HART_TO_KCAL
                 )
             elif "ensemble average energy" in line:
-                self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["avg_energy"] = (
+                    float(float_num.findall(line)[0]) / UNIT.HART_TO_KCAL
+                )
             elif "E lowest" in line:
-                self.other["best_energy"] = float(float_num.findall(line)[0])
+                self.other["energy"] = float(float_num.findall(line)[0])
             elif "T /K" in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
             elif (
@@ -2337,11 +2377,17 @@ class FileReader:
                     2 * float(float_num.findall(line)[0]) + 1
                 )
             if "total energy" in line:
-                self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["energy"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "zero point energy" in line:
-                self.other["ZPVE"] = float(float_num.findall(line)[0])
+                self.other["ZPVE"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "total free energy" in line:
-                self.other["free_energy"] = float(float_num.findall(line)[0])
+                self.other["free_energy"] = (
+                    float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
+                )
             if "electronic temp." in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
         if freq_name is not None:
@@ -2359,7 +2405,7 @@ class FileReader:
             line = lines[i]
             if "Atomic Charges for Step" in line:
                 elements = []
-                for info in lines[i + 2:]:
+                for info in lines[i + 2 :]:
                     if not info.strip() or not info.split()[0].isdigit():
                         break
                     ele = info.split()[1]
@@ -2368,7 +2414,7 @@ class FileReader:
 
             if "Final Structure" in line:
                 k = 0
-                for info in lines[i + 4:]:
+                for info in lines[i + 4 :]:
                     data = info.split()
                     coords = np.array([x for x in data[4:7]])
                     self.atoms.append(
@@ -2387,7 +2433,9 @@ class FileReader:
                 self.other["finished"] = True
 
             if "Total SCF energy" in line:
-                self.other["energy"] = float(line.split()[4]) / UNIT.HART_TO_KCAL
+                self.other["energy"] = (
+                    float(line.split()[4]) / UNIT.HART_TO_KCAL
+                )
 
             i += 1
 
@@ -2440,7 +2488,6 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
 
-
     class AnharmonicData:
         """
         ATTRIBUTES
@@ -2475,7 +2522,6 @@ class Frequency:
         @property
         def harmonic_intensity(self):
             return self.harmonic.intensity
-
 
     def __init__(self, data, hpmodes=None, style="log", harmonic=True):
         """
@@ -2760,8 +2806,16 @@ class Frequency:
                 anharm_inten = float(info[4])
                 harm_inten = 0
                 combinations.append(
-                    (ndx_1, ndx_2, exp_1, exp_2, anharm_freq,
-                    anharm_inten, harm_freq, harm_inten)
+                    (
+                        ndx_1,
+                        ndx_2,
+                        exp_1,
+                        exp_2,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
                 )
             elif reading_overtones:
                 info = line.split()
@@ -2773,7 +2827,14 @@ class Frequency:
                 anharm_inten = float(info[3])
                 harm_inten = 0
                 overtones.append(
-                    (ndx, exp, anharm_freq, anharm_inten, harm_freq, harm_inten)
+                    (
+                        ndx,
+                        exp,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
                 )
             elif reading_fundamentals:
                 info = line.split()
@@ -2786,7 +2847,9 @@ class Frequency:
                 )
 
         self.anharm_data = []
-        for i, mode in enumerate(sorted(fundamentals, key=lambda pair: pair[2])):
+        for i, mode in enumerate(
+            sorted(fundamentals, key=lambda pair: pair[2])
+        ):
             self.anharm_data.append(
                 self.AnharmonicData(mode[0], mode[1], harmonic=self.data[i])
             )
@@ -2795,7 +2858,9 @@ class Frequency:
             data = self.anharm_data[ndx]
             harm_data = self.Data(overtone[4], intensity=overtone[5])
             data.overtones.append(
-                self.AnharmonicData(overtone[2], overtone[3], harmonic=harm_data)
+                self.AnharmonicData(
+                    overtone[2], overtone[3], harmonic=harm_data
+                )
             )
         for combo in combinations:
             ndx1 = len(fundamentals) - combo[0]
@@ -2827,18 +2892,20 @@ class Frequency:
 
     @property
     def real_anharmonic_frequencies(self):
-        return [mode.frequency for mode in self.anharm_data if mode.frequency > 0]
+        return [
+            mode.frequency for mode in self.anharm_data if mode.frequency > 0
+        ]
 
     def get_ir_data(
-            self,
-            point_spacing=None,
-            fwhm=15.0,
-            plot_type="transmittance",
-            peak_type="pseudo-voigt",
-            voigt_mixing=0.5,
-            linear_scale=0.0,
-            quadratic_scale=0.0,
-            anharmonic=False,
+        self,
+        point_spacing=None,
+        fwhm=15.0,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        voigt_mixing=0.5,
+        linear_scale=0.0,
+        quadratic_scale=0.0,
+        anharmonic=False,
     ):
         """
         returns arrays of x_values, y_values for an IR plot
@@ -2881,7 +2948,9 @@ class Frequency:
                 freq.intensity for freq in self.data if freq.frequency > 0
             ]
 
-        frequencies -= linear_scale * frequencies + quadratic_scale * frequencies ** 2
+        frequencies -= (
+            linear_scale * frequencies + quadratic_scale * frequencies ** 2
+        )
 
         if point_spacing:
             x_values = []
@@ -2902,7 +2971,9 @@ class Frequency:
             # we'll evaluate these at each x point later
             functions = []
             if not point_spacing:
-                x_values = np.linspace(0, max(frequencies) - 10 * fwhm, num=100).tolist()
+                x_values = np.linspace(
+                    0, max(frequencies) - 10 * fwhm, num=100
+                ).tolist()
 
             for freq, intensity in zip(frequencies, intensities):
                 if intensity is not None:
@@ -2918,21 +2989,35 @@ class Frequency:
 
                     if peak_type.lower() == "gaussian":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity: inten * np.exp(e_factor * (x - x0) ** 2)
+                            lambda x, x0=freq, inten=intensity: inten
+                            * np.exp(e_factor * (x - x0) ** 2)
                         )
 
                     elif peak_type.lower() == "lorentzian":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity: inten * 0.5 * (0.5 * fwhm / ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                            lambda x, x0=freq, inten=intensity: inten
+                            * 0.5
+                            * (
+                                0.5
+                                * fwhm
+                                / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
+                            )
                         )
 
                     elif peak_type.lower() == "pseudo-voigt":
                         functions.append(
-                            lambda x, x0=freq, inten=intensity:
-                                inten * (
-                                    (1 - voigt_mixing) * 0.5 * (0.5 * fwhm / ((x - x0)**2 + (0.5 * fwhm)**2)) +
-                                    voigt_mixing * np.exp(e_factor * (x - x0)**2)
+                            lambda x, x0=freq, inten=intensity: inten
+                            * (
+                                (1 - voigt_mixing)
+                                * 0.5
+                                * (
+                                    0.5
+                                    * fwhm
+                                    / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
                                 )
+                                + voigt_mixing
+                                * np.exp(e_factor * (x - x0) ** 2)
+                            )
                         )
 
             if not point_spacing:
@@ -2958,22 +3043,21 @@ class Frequency:
 
         y_values /= np.amax(y_values)
 
-
         if plot_type.lower() == "transmittance":
             y_values = np.array([10 ** (2 - y) for y in y_values])
 
         return x_values, y_values
 
     def plot_ir(
-            self,
-            figure,
-            centers=None,
-            widths=None,
-            exp_data=None,
-            plot_type="transmittance",
-            peak_type="pseudo-voigt",
-            reverse_x=True,
-            **kwargs,
+        self,
+        figure,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        reverse_x=True,
+        **kwargs,
     ):
         """
         plot IR data on figure
@@ -2991,9 +3075,7 @@ class Frequency:
         """
 
         data = self.get_ir_data(
-            plot_type=plot_type,
-            peak_type=peak_type,
-            **kwargs
+            plot_type=plot_type, peak_type=peak_type, **kwargs
         )
         if data is None:
             return
@@ -3010,18 +3092,21 @@ class Frequency:
             n_sections = len(centers)
             figure.subplots_adjust(wspace=0.05)
             # sort the sections so we don't jump around
-            widths = [x for _, x in sorted(
-                zip(centers, widths),
-                key=lambda p: p[0],
-                reverse=reverse_x,
-            )]
+            widths = [
+                x
+                for _, x in sorted(
+                    zip(centers, widths),
+                    key=lambda p: p[0],
+                    reverse=reverse_x,
+                )
+            ]
             centers = sorted(centers, reverse=reverse_x)
 
             axes = figure.subplots(
                 nrows=1,
                 ncols=n_sections,
                 sharey=True,
-                gridspec_kw={'width_ratios': widths},
+                gridspec_kw={"width_ratios": widths},
             )
             if not hasattr(axes, "__iter__"):
                 # only one section was specified (e.g. zooming in on a peak)
@@ -3046,9 +3131,9 @@ class Frequency:
                         [0, 1],
                         marker=((-1, -1), (1, 1)),
                         markersize=5,
-                        linestyle='none',
-                        color='k',
-                        mec='k',
+                        linestyle="none",
+                        color="k",
+                        mec="k",
                         mew=1,
                         clip_on=False,
                         transform=ax.transAxes,
@@ -3063,9 +3148,9 @@ class Frequency:
                     [0, 1],
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
-                    linestyle='none',
-                    color='k',
-                    mec='k',
+                    linestyle="none",
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -3075,16 +3160,18 @@ class Frequency:
                 # middle sections need two sets of /
                 ax.spines["right"].set_visible(False)
                 ax.spines["left"].set_visible(False)
-                ax.tick_params(labelleft=False, labelright=False, left=False, right=False)
+                ax.tick_params(
+                    labelleft=False, labelright=False, left=False, right=False
+                )
                 ax.plot(
                     [0, 0],
                     [0, 1],
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
-                    linestyle='none',
+                    linestyle="none",
                     label="Silence Between Two Subplots",
-                    color='k',
-                    mec='k',
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -3095,9 +3182,9 @@ class Frequency:
                     marker=((-1, -1), (1, 1)),
                     markersize=5,
                     label="Silence Between Two Subplots",
-                    linestyle='none',
-                    color='k',
-                    mec='k',
+                    linestyle="none",
+                    color="k",
+                    mec="k",
                     mew=1,
                     clip_on=False,
                     transform=ax.transAxes,
@@ -3107,7 +3194,7 @@ class Frequency:
                 ax.plot(
                     x_values,
                     y_values,
-                    color='k',
+                    color="k",
                     linewidth=0.5,
                     label="computed",
                 )
@@ -3119,15 +3206,15 @@ class Frequency:
                         y_values,
                         [100 for y in y_values],
                         linewidth=0.5,
-                        colors=['k' for x in x_values],
-                        label="computed"
+                        colors=["k" for x in x_values],
+                        label="computed",
                     )
                     ax.hlines(
                         100,
                         0,
                         max(4000, *x_values),
                         linewidth=0.5,
-                        colors=['k' for y in y_values],
+                        colors=["k" for y in y_values],
                         label="computed",
                     )
 
@@ -3137,21 +3224,28 @@ class Frequency:
                         [0 for y in y_values],
                         y_values,
                         linewidth=0.5,
-                        colors=['k' for x in x_values],
-                        label="computed"
+                        colors=["k" for x in x_values],
+                        label="computed",
                     )
                     ax.hlines(
                         0,
                         0,
                         max(4000, *x_values),
                         linewidth=0.5,
-                        colors=['k' for y in y_values],
-                        label="computed"
+                        colors=["k" for y in y_values],
+                        label="computed",
                     )
 
             if exp_data:
                 for x, y, color in exp_data:
-                    ax.plot(x, y, color=color, zorder=-1, linewidth=0.5, label="observed")
+                    ax.plot(
+                        x,
+                        y,
+                        color=color,
+                        zorder=-1,
+                        linewidth=0.5,
+                        label="observed",
+                    )
 
             center = centers[i]
             width = widths[i]
@@ -3166,7 +3260,9 @@ class Frequency:
         # well we could, but which section would be put it one?
         # it wouldn't be centered
         # so instead the x-axis label is this
-        figure.text(0.5, 0.0, r"wavenumber (cm$^{-1}$)" , ha="center", va="bottom")
+        figure.text(
+            0.5, 0.0, r"wavenumber (cm$^{-1}$)", ha="center", va="bottom"
+        )
 
 
 @addlogger
@@ -3230,7 +3326,7 @@ class Orbitals:
         if "Coordinates of each shell" in filereader.other:
             self.shell_coords = np.reshape(
                 filereader.other["Coordinates of each shell"],
-                (len(filereader.other["Shell types"]), 3)
+                (len(filereader.other["Shell types"]), 3),
             )
         else:
             center_coords = []
@@ -3253,9 +3349,10 @@ class Orbitals:
             normalization for gaussian primitives that depends on
             the exponential (a) and the total angular momentum (l)
             """
-            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3. / 4))
+            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3.0 / 4))
             t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
             return t1 * t2
+
         # get functions for norm of s, p, 5d, and 7f
         s_norm = lambda a, l=0: gau_norm(a, l)
         p_norm = lambda a, l=1: gau_norm(a, l)
@@ -3271,8 +3368,8 @@ class Orbitals:
             self.n_prim_per_shell,
             filereader.other["Shell types"],
         ):
-            exponents = self.exponents[shell_i: shell_i + n_prim]
-            con_coeff = self.contraction_coeff[shell_i: shell_i + n_prim]
+            exponents = self.exponents[shell_i : shell_i + n_prim]
+            con_coeff = self.contraction_coeff[shell_i : shell_i + n_prim]
 
             if shell == 0:
                 # s functions
@@ -3514,9 +3611,16 @@ class Orbitals:
                 self.n_mos += 10
                 self.funcs_per_shell.append(10)
                 norms = f_norm(exponents)
+
                 def f_shell(
-                    r2, x, y, z, mo_coeffs,
-                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                    r2,
+                    x,
+                    y,
+                    z,
+                    mo_coeffs,
+                    alpha=exponents,
+                    con_coeff=con_coeff,
+                    norms=norms,
                 ):
                     e_r2 = np.exp(np.outer(-alpha, r2))
                     s_val = np.dot(con_coeff * norms, e_r2)
@@ -3553,6 +3657,7 @@ class Orbitals:
                         xyz = np.sqrt(15) * x * y * z
                         res += mo_coeffs[9] * xyz
                     return res * s_val
+
                 self.basis_functions.append(f_shell)
 
             elif shell == -3:
@@ -3630,11 +3735,13 @@ class Orbitals:
             shell_i += n_prim
 
         self.alpha_coefficients = np.reshape(
-            filereader.other["Alpha MO coefficients"], (self.n_mos, self.n_mos),
+            filereader.other["Alpha MO coefficients"],
+            (self.n_mos, self.n_mos),
         )
         if "Beta MO coefficients" in filereader.other:
             self.beta_coefficients = np.reshape(
-                filereader.other["Beta MO coefficients"], (self.n_mos, self.n_mos),
+                filereader.other["Beta MO coefficients"],
+                (self.n_mos, self.n_mos),
             )
         self.n_alpha = filereader.other["Number of alpha electrons"]
         if "Number of beta electrons" in filereader.other:
@@ -3661,9 +3768,10 @@ class Orbitals:
             normalization for gaussian primitives that depends on
             the exponential (a) and the total angular momentum (l)
             """
-            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3. / 4))
+            t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3.0 / 4))
             t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
             return t1 * t2
+
         # get functions for norm of s, p, 5d, and 7f
         s_norm = lambda a, l=0: gau_norm(a, l)
         p_norm = lambda a, l=1: gau_norm(a, l)
@@ -3678,7 +3786,9 @@ class Orbitals:
         # shell, but they should be the same as the atom coordinates
         for atom in filereader.atoms:
             ele = atom.element
-            for shell_type, n_prim, exponents, con_coeff in filereader.other["basis_set_by_ele"][ele]:
+            for shell_type, n_prim, exponents, con_coeff in filereader.other[
+                "basis_set_by_ele"
+            ][ele]:
                 self.shell_coords.append(atom.coords)
                 exponents = np.array(exponents)
                 con_coeff = np.array(con_coeff)
@@ -3711,8 +3821,13 @@ class Orbitals:
                     self.funcs_per_shell.append(3)
                     self.n_aos += 3
                     norms = p_norm(exponents)
+
                     def p_shell(
-                        r2, x, y, z, mo_coeffs,
+                        r2,
+                        x,
+                        y,
+                        z,
+                        mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff,
                         norms=norms,
@@ -3732,17 +3847,23 @@ class Orbitals:
                             res += mo_coeffs[2] * y
 
                         return res * s_val
+
                     self.basis_functions.append(p_shell)
                 elif shell_type.lower() == "d":
                     self.shell_types.append("5d")
                     self.funcs_per_shell.append(5)
                     self.n_aos += 5
                     norms = d_norm(exponents)
+
                     def d_shell(
-                        r2, x, y, z, mo_coeffs,
+                        r2,
+                        x,
+                        y,
+                        z,
+                        mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff,
-                        norms=norms
+                        norms=norms,
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
@@ -3773,11 +3894,16 @@ class Orbitals:
                     self.funcs_per_shell.append(7)
                     self.n_aos += 7
                     norms = f_norm(exponents)
+
                     def f_shell(
-                        r2, x, y, z, mo_coeffs,
+                        r2,
+                        x,
+                        y,
+                        z,
+                        mo_coeffs,
                         alpha=exponents,
                         con_coeff=con_coeff,
-                        norms=norms
+                        norms=norms,
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
                         s_val = np.dot(con_coeff * norms, e_r2)
@@ -3789,10 +3915,20 @@ class Orbitals:
                             z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
                             res += mo_coeffs[0] * z3zr2
                         if mo_coeffs[1] != 0:
-                            xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                            xz2xr2 = (
+                                np.sqrt(3)
+                                * x
+                                * (5 * z ** 2 - r2)
+                                / (2 * np.sqrt(2))
+                            )
                             res += mo_coeffs[1] * xz2xr2
                         if mo_coeffs[2] != 0:
-                            yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                            yz2yr2 = (
+                                np.sqrt(3)
+                                * y
+                                * (5 * z ** 2 - r2)
+                                / (2 * np.sqrt(2))
+                            )
                             res += mo_coeffs[2] * yz2yr2
                         if mo_coeffs[3] != 0:
                             x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
@@ -3801,21 +3937,35 @@ class Orbitals:
                             xyz = np.sqrt(15) * x * y * z
                             res += mo_coeffs[4] * xyz
                         if mo_coeffs[5] != 0:
-                            x3r2x = np.sqrt(5) * x * (3 * y ** 2 - x ** 2) / (2 * np.sqrt(2))
+                            x3r2x = (
+                                np.sqrt(5)
+                                * x
+                                * (3 * y ** 2 - x ** 2)
+                                / (2 * np.sqrt(2))
+                            )
                             res += mo_coeffs[5] * x3r2x
                         if mo_coeffs[6] != 0:
-                            x2yy3 = np.sqrt(5) * y * (y ** 2 - 3 * x ** 2) / (2 * np.sqrt(2))
+                            x2yy3 = (
+                                np.sqrt(5)
+                                * y
+                                * (y ** 2 - 3 * x ** 2)
+                                / (2 * np.sqrt(2))
+                            )
                             res += mo_coeffs[6] * x2yy3
                         return res * s_val
 
                     self.basis_functions.append(f_shell)
                 else:
-                    self.LOG.warning("cannot handle shell of type %s" % shell_type)
+                    self.LOG.warning(
+                        "cannot handle shell of type %s" % shell_type
+                    )
 
         self.n_mos = len(self.alpha_coefficients)
 
         if "n_alpha" not in filereader.other:
-            tot_electrons = sum(ELEMENTS.index(atom.element) for atom in filereader.atoms)
+            tot_electrons = sum(
+                ELEMENTS.index(atom.element) for atom in filereader.atoms
+            )
             self.n_beta = tot_electrons // 2
             self.n_alpha = tot_electrons - self.n_beta
         else:
@@ -3855,16 +4005,21 @@ class Orbitals:
             else:
                 val = np.zeros(len(coords))
             for coord, shell, n_func in zip(
-                self.shell_coords, self.basis_functions, self.funcs_per_shell,
+                self.shell_coords,
+                self.basis_functions,
+                self.funcs_per_shell,
             ):
                 # don't calculate distances until we find an AO
                 # in this shell that has a non-zero MO coefficient
-                if not np.count_nonzero(arr[ao:ao + n_func]):
+                if not np.count_nonzero(arr[ao : ao + n_func]):
                     ao += n_func
                     continue
                 # don't recalculate distances unless this shell's coordinates
                 # differ from the previous
-                if prev_center is None or np.linalg.norm(coord - prev_center) > 1e-13:
+                if (
+                    prev_center is None
+                    or np.linalg.norm(coord - prev_center) > 1e-13
+                ):
                     prev_center = coord
                     d_coord = (coords - coord) / UNIT.A0_TO_BOHR
                     if coords.ndim == 1:
@@ -3873,11 +4028,19 @@ class Orbitals:
                         r2 = np.sum(d_coord * d_coord, axis=1)
                 if coords.ndim == 1:
                     res = shell(
-                        r2, d_coord[0], d_coord[1], d_coord[2], arr[ao:ao + n_func]
+                        r2,
+                        d_coord[0],
+                        d_coord[1],
+                        d_coord[2],
+                        arr[ao : ao + n_func],
                     )
                 else:
                     res = shell(
-                        r2, d_coord[:,0], d_coord[:,1], d_coord[:,2], arr[ao:ao + n_func]
+                        r2,
+                        d_coord[:, 0],
+                        d_coord[:, 1],
+                        d_coord[:, 2],
+                        arr[ao : ao + n_func],
                     )
                 val += res
                 ao += n_func
@@ -3901,12 +4064,14 @@ class Orbitals:
                     prev_coords.append(coord)
                     add_to = len(arrays)
                     arrays.append(np.zeros(self.n_mos))
-                arrays[add_to][ndx:ndx + self.funcs_per_shell[i]] = coeff[
-                    ndx:ndx + self.funcs_per_shell[i]
+                arrays[add_to][ndx : ndx + self.funcs_per_shell[i]] = coeff[
+                    ndx : ndx + self.funcs_per_shell[i]
                 ]
                 ndx += self.funcs_per_shell[i]
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=n_jobs) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
                 out = [executor.submit(get_value, arr) for arr in arrays]
             return sum([shells.result() for shells in out])
         val = get_value(coeff)

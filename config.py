@@ -900,7 +900,7 @@ class Config(configparser.ConfigParser):
         self._changed_list = changed
         return structure
 
-    def _parse_includes(self):
+    def _parse_includes(self, section=None):
         """
         Moves option values from subsections into parent section
         Eg:
@@ -918,9 +918,17 @@ class Config(configparser.ConfigParser):
             ppn = 12
             queue = wheeler_q
         """
-        for section in ["DEFAULT"] + self.sections():
+        if section is None:
+            section_list = self.sections()
+        elif isinstance(section, str):
+            section_list = [section]
+        else:
+            section_list = section
+        for section in section_list:
             # add requested subsections to parent section
             if self.has_option(section, "include"):
+                if section == "Job" and self[section]["include"] == "detect":
+                    continue
                 include_section = self[section]["include"].split(".")
                 if include_section[0] in self.sections():
                     # include specifies full section name, eg:
@@ -1006,7 +1014,7 @@ class Config(configparser.ConfigParser):
                     self.add_section(section)
                 self[section][key] = spec[attr]
 
-    def for_step(self, step=None):
+    def for_step(self, step=None, parse_functions=True):
         """
         Generates a config copy with only options for the given step
         """
@@ -1038,5 +1046,6 @@ class Config(configparser.ConfigParser):
                 config.add_section("HPC")
             config["HPC"]["work_dir"] = config["DEFAULT"].get("top_dir")
         # parse user-supplied functions in config file
-        config.parse_functions()
+        if parse_functions:
+            config.parse_functions()
         return config
