@@ -80,6 +80,7 @@ def main(argv):
         dest="L_value",
         type=lambda x: [float(v) for v in x.split(",")],
         help="get widths at specific L values (comma-separated)\n"
+        "can be used for Sterimol2Vec parameters\n"
         "Default: use the entire ligand",
     )
 
