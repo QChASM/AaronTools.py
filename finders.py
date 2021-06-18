@@ -503,6 +503,9 @@ class OfType(Finder):
             self.element = self.split_type[0]
         self.ignore_metals = ignore_metals
 
+    def __repr__(self):
+        return "atoms of the gaff atomtype '%s'" % self.atomtype
+
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are of the given atom type"""
         if self.ignore_metals == True:
@@ -636,6 +639,31 @@ class Aromatics(Finder):
     def get_matching_atoms(self, atoms, geometry):
         aromatics, charge, fused = geometry.get_aromatic_atoms(atoms,return_rings=False)
         return aromatics
+
+class ONIOMLayer(Finder):
+    """all atoms in a given ONIOM layer or list of ONIOM layers"""
+    def __init__(self, layers):
+        super().__init__()
+
+        if isinstance(layers, str):
+            layers = list(layers)
+        self.layers = layers
+        for layer in self.layers: 
+            if self.layer.capitalize() not in ['H', 'M', 'L']:
+                raise ValueError("layer must be H, M, or L")
+
+    def __repr__(self):
+        return "atoms in the ONIOM layer '%s'" % self.layer
+
+    def get_matching_atoms(self, atoms, geometry=None):
+        matching_atoms = []
+        for atom in atoms:
+            try:
+                for layer in self.layers:
+                    if atom.layer == layer.capitalize(): matching_atoms.append(atom)
+            except AttributeError:
+                print("ONIOMlayer only accepts OniomAtom type atoms")
+        return matching_atoms
 
 class AmideCarbon(Finder):
     """
