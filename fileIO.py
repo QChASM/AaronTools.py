@@ -831,8 +831,8 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(
-                get_all, just_geom,
-                freq_name=freq_name, conf_name=conf_name, nbo_name=nbo_name, oniom
+                get_all, just_geom, oniom=oniom,
+                freq_name=freq_name, conf_name=conf_name, nbo_name=nbo_name, 
             )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
