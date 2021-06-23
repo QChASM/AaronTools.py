@@ -10,6 +10,7 @@ from AaronTools.finders import (
     AnyNonTransitionMetal,
     AnyTransitionMetal,
     NotAny,
+    ONIOMLayer
 )
 from AaronTools.theory import (
     GAUSSIAN_GEN_BASIS,
@@ -32,11 +33,17 @@ class Basis:
                     Basis.refresh_elements is called when writing an input file
     ele_selection - list of finders used to determine which elements this basis applies to
     not_anys      - list of finders used to determine which elements this basis does not apply to
+    ONIOM-only attributes:
+    oniom_layer   - same as initialization keyword
+    atom_selection - list of finders used to determine which atoms this basis applies to
+    atoms         - list of atoms this basis applies to
+                    updated with Bases.refresh_atoms
+    default_notany_atoms - finder for atoms that are not in the given layer
     """
 
     default_elements = [AnyTransitionMetal(), AnyNonTransitionMetal()]
 
-    def __init__(self, name, elements=None, aux_type=None, user_defined=False):
+    def __init__(self, name, elements=None, aux_type=None, user_defined=False, oniom_layer=None, atoms=None):
         """
         name         -   basis set base name (e.g. 6-31G)
         elements     -   list of element symbols or finders to determine the basis set applies to
@@ -47,13 +54,62 @@ class Basis:
         aux_type     -   str - ORCA: one of BasisSet.ORCA_AUX; Psi4: one of BasisSet.PSI4_AUX
         user_defined -   path to file containing basis info from basissetexchange.org or similar
                          False for builtin basis sets
+        ONIOM-only:
+        oniom_layer  -   str - must be 'H', 'M', or 'L' if not None
+        atoms        -   list of finders or 'tm' to determine what atoms the basis set applies to
         """
         self.name = name
+        if oniom_layer is not None:
+            self.oniom_layer = oniom_layer.capitalize()
+            self.not_anys = [ONIOMLayer(list('H','M','L').remove(oniom_layer))]
 
-        if elements is None:
+        if elements is None and oniom_layer is None:
             self.elements = []
             self.ele_selection = self.default_elements
             self.not_anys = []
+
+        elif elements is None and oniom_layer is not None and atoms is None:
+            if self.oniom_layer not in ['H','M','L']:
+                raise ValueError("oniom_layer must be either H, M, or L")
+            self.atom_selection = ONIOMLayer(self.oniom_layer)
+
+        elif elements is None and oniom_layer is not None and atoms is not None:
+#            if not hasattr(atoms, "__iter__") or isinstance(atoms, str):
+#                atoms = [atoms]
+            self.atoms = atoms
+            atom_selection = []
+            for atom in atoms:
+                not_any = False
+                if isinstance(atom, str) and atom.startswith("!"):
+                    atom = atom.lstrip("!")
+                    not_any = True
+                if atom.lower() == "all":
+                    if not_any:
+                        self.not_anys.append(AnyTransitionMetal())
+                        self.not_anys.append(AnyNonTransitionMetal())
+                    else:
+                        atom_selection.append(AnyTransitionMetal())
+                        atom_selection.append(AnyNonTransitionMetal())
+                elif atom.lower() == "tm":
+                    if not_any:
+                        atom_selection.append(AnyNonTransitionMetal())
+                        self.not_anys.append(AnyTransitionMetal())
+                    else:
+                        atom_selection.append(AnyTransitionMetal())
+                        self.not_anys.append(AnyNonTransitionMetal())
+                elif isinstance(atom, str) and atom.element in ELEMENTS:
+                    if not_any:
+                        self.not_anys.append(atom)
+                    else:
+                        atom_selection.append(atom)
+                else:
+                    warn("atom not known: %s" % repr(atom))
+ 
+            self.atom_selection = atom_selection
+
+        elif elements is not None and oniom_layer is not None:
+            raise ValueError("use atoms keyword to describe the basis set")
+
         else:
             # a list of elements or other identifiers was given
             # if it's an element with a ! in front, add that element to not_anys
@@ -147,6 +203,16 @@ class Basis:
         atoms = geometry.find(self.ele_selection, NotAny(*self.not_anys))
         elements = set([atom.element for atom in atoms])
         self.elements = sorted(elements)
+
+    def refresh_atoms(self, geometry):
+        """sets self's atoms for the geometry"""
+        exclude = []
+        atoms = geometry.find(self.atom_selection, NotAny(*self.not_anys)) 
+        for atom_exclude in NotAny(ONIOMLayer(self.oniom_layer)):
+            for atom in atoms:
+                if atom == atom_exclude: excluded.append(atom)
+        atoms = [atom for atom in atoms if atom not in excluded]
+        self.atoms = atoms
 
     @staticmethod
     def sanity_check_basis(name, program):
@@ -378,6 +444,14 @@ class BasisSet:
 
         return elements
 
+    @property
+    def atoms_in_basis(self):
+        """returns a list of atoms in self's basis"""
+        atoms = []
+        if self.atoms is not None:
+            for basis in self.basis:
+                atoms.extend(basis.atoms)
+
     @staticmethod
     def parse_basis_str(basis_str, cls=Basis):
         """
@@ -391,6 +465,9 @@ class BasisSet:
             - basis set name
             - path to basis set file right after basis set name if the basis is not builtin
                 - path cannot contain spaces
+        ONIOM only:
+            - high, middle, or low to describe the ONIOM layer before the list of atoms
+            - a list of atoms that can be all, tm, or ! to exclude those. automatically excludes atoms outside of layer
         Example:
             "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
         """
@@ -398,13 +475,19 @@ class BasisSet:
         i = 0
         basis_sets = []
         elements = []
+        atoms = []
         aux_type = None
+        oniom_layer = None
         user_defined = False
         while i < len(info):
             if info[i].lstrip("!") in ELEMENTS or any(
                 info[i].lower().lower().lstrip("!") == x for x in ["all", "tm"]
             ):
-                elements.append(info[i])
+                if oniom_layer is not None:
+                    atoms.append(info[i])
+                    elements = []
+                else:
+                    elements.append(info[i])
             elif info[i].lower().startswith("aux"):
                 try:
                     aux_type = info[i + 1]
@@ -417,6 +500,8 @@ class BasisSet:
                         'error while parsing basis set string: %s\nfound "aux"'
                         + ", but no auxilliary type followed" % basis_str
                     )
+            elif info[i].lower() in {"high", "middle", "low"}:
+                oniom_layer = list(info[i])[0].capitalize()
             else:
                 basis_name = info[i]
                 try:
@@ -426,6 +511,7 @@ class BasisSet:
                         # I don't see it, but basis file names cannot start with 'aux'
                         os.path.exists(info[i + 1])
                         and not info[i + 1].lower().startswith("aux")
+                        and not info[i + 1].lower() in {"high", "middle", "low"}
                     ) or os.sep in info[i + 1]:
                         user_defined = info[i + 1]
                         i += 1
@@ -435,15 +521,22 @@ class BasisSet:
                 if not elements:
                     elements = None
 
+                if not atoms:
+                    atoms = None
+
                 basis_sets.append(
                     cls(
                         basis_name,
                         elements=elements,
+                        atoms=atoms,
+                        oniom_layer=oniom_layer,
                         aux_type=aux_type,
                         user_defined=user_defined,
                     )
                 )
                 elements = []
+                atoms = []
+                oniom_layer = None
                 aux_type = None
                 user_defined = False
             i += 1
@@ -500,6 +593,12 @@ class BasisSet:
         if self.ecp is not None:
             for ecp in self.ecp:
                 ecp.refresh_elements(geometry)
+
+    def refresh_atoms(self,geometry):
+        """evaluate atom specification for each basis to make them compatible with the specified  geometry"""
+        if self.basis is not None:
+            for basis in self.basis:
+                basis.refresh_atoms(geometry)
 
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""

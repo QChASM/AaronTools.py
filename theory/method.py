@@ -28,21 +28,38 @@ class Method:
     used to ensure the proper keyword is used
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
-    def __init__(self, name, is_semiempirical=False):
+    def __init__(self, name, is_semiempirical=False, is_oniom=False, oniom_layer=None, is_mm=False):
         """
         name: str, functional name
         is_semiempirical: bool, basis set is not required
+        is_oniom: bool, oniom_layer must be in kwargs, is_mm must be in kwargs
+        oniom_layer: str, oniom layer method describes, must be "H", "M", or "L"
+        is_mm: bool, basis set is not required
         """
         self.name = name
         self.is_semiempirical = is_semiempirical
+        self.is_oniom = is_oniom
+        self.oniom_layer = oniom_layer
+        self.is_mm = is_mm
+        if self.is_oniom == True and any(self.oniom_layer is None, self.is_mm == False):
+            raise ValueError("ONIOM method must include both oniom_layer and is_mm in kwargs")
 
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        return (
-            self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
-            self.is_semiempirical == other.is_semiempirical
-        )
+        if self.is_oniom == False:
+            return (
+                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+                self.is_semiempirical == other.is_semiempirical
+            )
+        else:
+            return (
+                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+                self.is_semiempirical == other.is_semiempirical and
+                self.is_oniom == other.is_oniom and
+                self.oniom_layer == other.oniom_layer and
+                self.is_mm == other.is_mm
+            )
 
     @staticmethod
     def sanity_check_method(name, program):
