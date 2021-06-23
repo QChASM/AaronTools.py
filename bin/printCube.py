@@ -87,6 +87,15 @@ cube_parser.add_argument(
     "Default: 1"
 )
 
+cube_parser.add_argument(
+    "-nbo", "--nbo-file",
+    type=str,
+    default=None,
+    dest="nbo_name",
+    help="file containing coefficients for NBO's (e.g. *.37 file)"
+    "ignored unless input file is a *.47 file"
+)
+
 
 args = cube_parser.parse_args()
 
@@ -95,9 +104,13 @@ if args.mo_ndx and args.mo_ndx.isnumeric():
 
 for f in glob_files(args.infile):
     if isinstance(f, str):
-        infile = FileReader(f, just_geom=False)
+        infile = FileReader(f, just_geom=False, nbo_name=args.nbo_name)
     elif len(sys.argv) >= 1:
-         infile = FileReader(("from stdin", "fchk", f), just_geom=False)
+        infile = FileReader(
+            ("from stdin", "fchk", f),
+            just_geom=False,
+            nbo_name=args.nbo_name
+        )
 
     geom = Geometry(infile, refresh_connected=False, refresh_ranks=False)
 
