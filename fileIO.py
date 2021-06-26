@@ -256,6 +256,18 @@ class FileWriter:
     def write_com(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write Gaussian input file for given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         # get file content string
         header, header_warnings = theory.make_header(
             geom, return_warnings=True, **kwargs
@@ -296,6 +308,18 @@ class FileWriter:
     def write_inp(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write ORCA input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         s, warnings = theory.make_header(
             geom, style="orca", return_warnings=True, **kwargs
@@ -328,19 +352,17 @@ class FileWriter:
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
         """
-        can accept "monomers" as a kwarg
-        this should be a list of lists of atoms corresponding to the
-        separate monomers in a sapt calculation
-        this will only be used if theory.method.sapt is True
-        if a sapt method is used but no monoers are given,
-        geom's components attribute will be used intead
+        write Psi4 input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
         """
-        if "monomers" in kwargs:
-            monomers = kwargs["monomers"]
-            del kwargs["monomers"]
-        else:
-            monomers = None
-
         header, header_warnings = theory.make_header(
             geom, style="psi4", return_warnings=True, **kwargs
         )
@@ -357,9 +379,9 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
+                outfile = "{}.{}.in".format(geom.name, step2str(kwargs["step"]))
             else:
-                outfile = "{}.com".format(geom.name)
+                outfile = "{}.in".format(geom.name)
         if outfile is False:
             if return_warnings:
                 return s, warnings
@@ -376,6 +398,18 @@ class FileWriter:
     def write_sqm(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write SQM input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         header, header_warnings = theory.make_header(
             geom, style="sqm", return_warnings=True, **kwargs
         )
@@ -1697,10 +1731,41 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
+            # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
                 idx = tmp.index("=")
                 self.other["energy"] = float(tmp[idx + 1])
+                self.other["scf_energy"] = float(tmp[idx + 1])
+
+            else:
+                nrg_match = re.search("\s+(E\(\S+\))\s*=\s*(\S+)", line)
+                # ^ matches many methods
+                # will also match the SCF line (hence the else here)
+                # the match in the SCF line could be confusing b/c
+                # the SCF line could be
+                # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
+                # and later on, there will be a line...
+                #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
+                # this will give:
+                # * E(RB2PLYPD3) = -76.2887108570 
+                # * E(B2PLYPD3) = -76.353361915801
+                # very similar names for very different energies...
+                if nrg_match:
+                    self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
+                    self.other[nrg_match.group(1)] = self.other["energy"]
+            
+            # CC energy
+            if line.startswith(" CCSD(T)= "):
+                self.other["energy"] = float(line.split()[-1].replace("D", "E"))
+                self.other["E(CCSD(T))"] = self.other["energy"]
+            
+            # MP energies
+            mp_match = re.search("([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)", line)
+            if mp_match:
+                self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
+
             if "Molecular mass:" in line:
                 self.other["mass"] = float(float_num.search(line).group(0))
                 self.other["mass"] *= UNIT.AMU_TO_KG
@@ -1884,7 +1949,8 @@ class FileReader:
                 self.other["forces"] = gradient
 
             # atomic charges
-            if "Mulliken charges:" in line:
+            charge_match = re.search("(\S+) charges:\s*$", line)
+            if charge_match:
                 self.skip_lines(f, 1)
                 n += 1
                 charges = []
@@ -1892,17 +1958,7 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
-                self.other["Mulliken Charges"] = charges
-
-            if "APT charges:" in line:
-                self.skip_lines(f, 1)
-                n += 1
-                charges = []
-                for i in range(0, len(self.atoms)):
-                    line = f.readline()
-                    n += 1
-                    charges.append(float(line.split()[2]))
-                self.other["APT Charges"] = charges
+                self.other[charge_match.group(1) + " Charges"] = charges
 
             # capture errors
             # only keep first error, want to fix one at a time
@@ -2592,9 +2648,14 @@ class FileReader:
                         k += 1
                         while len(self.other["orbit_kinds"]) < n_orbits:
                             self.other["orbit_kinds"].extend([
-                                desc_lines[k][i: i + 10] for i in range(1, len(desc_lines[k]) - 1, 10)
+                                desc_lines[k][i: i + 10]
+                                for i in range(1, len(desc_lines[k]) - 1, 10)
                             ])
                             k += 1
+        else:
+            self.LOG.warning(
+                "no .46 file found - orbital descriptions will be unavialable"
+            )
                 
         j = 3
         self.other["alpha_coefficients"] = []
@@ -3621,6 +3682,8 @@ class Orbitals:
         d_norm = lambda a, l=2: gau_norm(a, l)
         f_norm = lambda a, l=3: gau_norm(a, l)
         g_norm = lambda a, l=4: gau_norm(a, l)
+        h_norm = lambda a, l=5: gau_norm(a, l)
+        i_norm = lambda a, l=6: gau_norm(a, l)
 
         self.basis_functions = list()
 
@@ -4068,6 +4131,112 @@ class Orbitals:
                     return res * s_val
                 self.basis_functions.append(g_shell)
 
+            elif shell == -5:
+                self.shell_types.append("11h")
+                self.n_mos += 11
+                self.funcs_per_shell.append(11)
+                norms = h_norm(exponents)
+                def h_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    z2 = z ** 2
+                    if mo_coeffs[0] != 0:
+                        z5z3r2zr4 = z * (63 * z2 ** 2 - 70 * z2 * r2 + 15 * r2 ** 2) / 8
+                        res += mo_coeffs[0] * z5z3r2zr4
+                    if mo_coeffs[1] != 0:
+                        xz4xz2r2xr4 = np.sqrt(15) * x * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                        res += mo_coeffs[1] * xz4xz2r2xr4
+                    if mo_coeffs[2] != 0:
+                        yz4yz2r2yr4 = np.sqrt(15) * y * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                        res += mo_coeffs[2] * yz4yz2r2yr4
+                    if mo_coeffs[3] != 0:
+                        x2y3z3zr2 = np.sqrt(105) * (x ** 2 - y ** 2) * (3 * z2 - r2) * z / 4
+                        res += mo_coeffs[3] * x2y3z3zr2
+                    if mo_coeffs[4] != 0:
+                        xyz3zr2 = np.sqrt(105) * x * y * z * (3 * z2 - r2) / 2
+                        res += mo_coeffs[4] * xyz3zr2
+                    if mo_coeffs[5] != 0:
+                        xx2y2z2r2 = 35 * x * (x ** 2 - 3 * y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                        res += mo_coeffs[5] * xx2y2z2r2
+                    if mo_coeffs[6] != 0:
+                        yx2y2z2r2 = 35 * y * (3 * x ** 2 - y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                        res += mo_coeffs[6] * yx2y2z2r2
+                    if mo_coeffs[7] != 0:
+                        zx4x2y2y4 = 105 * z * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(35))
+                        res += mo_coeffs[7] * zx4x2y2y4
+                    if mo_coeffs[8] != 0:
+                        zx3yxy3 = 105 * x * y * z * (4 * x ** 2 - 4 * y ** 2) / (8 * np.sqrt(35))
+                        res += mo_coeffs[8] * zx3yxy3
+                    if mo_coeffs[9] != 0:
+                        xx4y2x2y4 = 21 * x * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(14))
+                        res += mo_coeffs[9] * xx4y2x2y4
+                    if mo_coeffs[10] != 0:
+                        yx4y2x2y4 = 21 * y * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(14))
+                        res += mo_coeffs[10] * yx4y2x2y4
+
+                    return res * s_val
+                self.basis_functions.append(h_shell)
+
+            elif shell == -6:
+                self.shell_types.append("13i")
+                self.n_mos += 13
+                self.funcs_per_shell.append(13)
+                norms = i_norm(exponents)
+                def i_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    z2 = z ** 2
+                    if mo_coeffs[0] != 0:
+                        z6z4r2z2r4r6 = (231 * z2 * z2 ** 2 - 315 * z2 ** 2 * r2 + 105 * z2 * r2 ** 2 - 5 * r2 * r2 ** 2) / 16
+                        res += mo_coeffs[0] * z6z4r2z2r4r6
+                    if mo_coeffs[1] != 0:
+                        xz5z3r2zr4 = np.sqrt(21) * x * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                        res += mo_coeffs[1] * xz5z3r2zr4
+                    if mo_coeffs[2] != 0:
+                        yz5z3r2zr4 = np.sqrt(21) * y * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                        res += mo_coeffs[2] * yz5z3r2zr4
+                    if mo_coeffs[3] != 0:
+                        x2y2z4z2r2r3 = 105 * (x ** 2 - y ** 2) * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (16 * np.sqrt(210))
+                        res += mo_coeffs[3] * x2y2z4z2r2r3
+                    if mo_coeffs[4] != 0:
+                        xyz4z2r2r4 = 105 * x * y * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[4] * xyz4z2r2r4
+                    if mo_coeffs[5] != 0:
+                        xx2y2z3zr2 = 105 * x * z * (x ** 2 - 3 * y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[5] * xx2y2z3zr2
+                    if mo_coeffs[6] != 0:
+                        yx2y2z3zr2 = 105 * y * z * (3 * x ** 2 - y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[6] * yx2y2z3zr2
+                    if mo_coeffs[7] != 0:
+                        x4x2y2y4z2r2 = np.sqrt(63) * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) * (11 * z2 - r2) / 16
+                        res += mo_coeffs[7] * x4x2y2y4z2r2
+                    if mo_coeffs[8] != 0:
+                        xyx2y2z2r2 = np.sqrt(63) * x * y * (x ** 2 - y ** 2) * (11 * z2 - r2) / 4
+                        res += mo_coeffs[8] * xyx2y2z2r2
+                    if mo_coeffs[9] != 0:
+                        xzx4x2y2y4 = 231 * x * z * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(154))
+                        res += mo_coeffs[9] * xzx4x2y2y4
+                    if mo_coeffs[10] != 0:
+                        yzx4x2y2y4 = 231 * y * z * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(154))
+                        res += mo_coeffs[10] * yzx4x2y2y4
+                    if mo_coeffs[11] != 0:
+                        x6x4y2x2y4y6 = 231 * ((x * x ** 2) ** 2 - 15 * (x ** 2 * y) ** 2 + 15 * (x * y ** 2) ** 2 - (y * y ** 2) ** 2) / (16 * np.sqrt(462))
+                        res += mo_coeffs[11] * x6x4y2x2y4y6
+                    if mo_coeffs[12] != 0:
+                        yx5x3y3xy5 = 231 * x * y * (6 * (x ** 2) ** 2 - 20 * (x * y) ** 2 + 6 * (y ** 2) ** 2) / (16 * np.sqrt(462))
+                        res += mo_coeffs[12] * yx5x3y3xy5
+
+                    return res * s_val
+                self.basis_functions.append(i_shell)
+
             else:
                 self.LOG.warning("cannot parse shell with type %i" % shell)
 
@@ -4486,7 +4655,10 @@ class Orbitals:
                 elif shell < 500:
                     # I can't tell what NBO does with g orbitals
                     # I don't have any reference to compare to
-                    self.LOG.warning("g shell results have not been verified for NBO")
+                    self.LOG.warning(
+                        "g shell results have not been verified for NBO\n"
+                        "any LCAO's may be invalid"
+                    )
                     con_coeff = filereader.other["g_coeff"][shell_i: shell_i + n_prim]
                     if shell == 401:
                         self.shell_types.append("gxxxx")
@@ -5027,6 +5199,7 @@ class Orbitals:
                 if not np.count_nonzero(arr[ao : ao + n_func]):
                     ao += n_func
                     continue
+                # print(shell_type, arr[ao : ao + n_func])
                 # don't recalculate distances unless this shell's coordinates
                 # differ from the previous
                 if (
