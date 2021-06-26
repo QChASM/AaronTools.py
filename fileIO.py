@@ -4912,7 +4912,7 @@ class Orbitals:
                             s_val = np.dot(con_coeff, e_r2)
                             x2 = x ** 2
                             y2 = y ** 2
-                            res = mo_coeff * np.sqrt(35) * x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2) / 8
+                            res = mo_coeff * np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
                             return res * s_val
                         self.basis_functions.append(gx4y4_shell)
                     if shell == 459:
