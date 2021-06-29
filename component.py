@@ -4,7 +4,13 @@ import re
 
 import numpy as np
 
-from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII, ELEMENTS
+from AaronTools.const import (
+    AARONLIB,
+    AARONTOOLS,
+    BONDI_RADII,
+    ELEMENTS,
+    VDW_RADII,
+)
 from AaronTools.fileIO import read_types
 from AaronTools.finders import BondedTo, CloserTo, NotAny
 from AaronTools.geometry import Geometry
@@ -26,7 +32,8 @@ class Component(Geometry):
 
     AARON_LIBS = os.path.join(AARONLIB, "Ligands")
     BUILTIN = os.path.join(AARONTOOLS, "Ligands")
-    
+    FROM_SUBSTITUENTS = set([])
+
     def __init__(
         self,
         structure,
@@ -70,9 +77,15 @@ class Component(Geometry):
                 if flig:
                     break
             else:
-                raise FileNotFoundError(
-                    "Cannot find ligand in library:", structure
-                )
+                try:
+                    structure = Substituent(structure)
+                    Component.FROM_SUBSTITUENTS.add(structure.name)
+                    self.__init__(structure, comment="K:1")
+                    return
+                except Exception:
+                    raise FileNotFoundError(
+                        "Cannot find ligand in library:", structure
+                    )
             structure = flig
         super().__init__(structure, name, comment)
 
@@ -164,7 +177,7 @@ class Component(Geometry):
                     else:
                         names.append(name)
 
-        return names
+        return names + sorted(cls.FROM_SUBSTITUENTS)
 
     def c2_symmetric(self, to_center=None, tolerance=0.1):
         """determine if center-key atom axis is a C2 axis"""
@@ -180,17 +193,20 @@ class Component(Geometry):
             center = np.zeros(3)
         else:
             center = self.COM(to_center)
-        
+
         v = self.COM(self.key_atoms) - center
         v /= np.linalg.norm(v)
-        
+
         for atom, rank in zip(self.atoms, ranks):
             dist_along_v = np.dot(atom.coords - center, v)
-            if abs(np.linalg.norm(atom.coords - center) - dist_along_v) < tolerance:
+            if (
+                abs(np.linalg.norm(atom.coords - center) - dist_along_v)
+                < tolerance
+            ):
                 continue
-            
+
             ranks_off_c2_axis.append(rank)
-        
+
         return all([ranks.count(x) % 2 == 0 for x in set(ranks_off_c2_axis)])
 
     def sterimol(self, to_center=None, bisect_L=False, **kwargs):
@@ -208,14 +224,14 @@ class Component(Geometry):
             center = self.find(
                 [BondedTo(atom) for atom in self.key_atoms], NotAny(self.atoms)
             )
-        
+
         if len(center) != 1:
             raise TypeError(
                 "wrong number of center atoms specified;\n"
                 "expected 1, got %i" % len(center)
             )
         center = center[0]
-        
+
         if bisect_L:
             L_axis = np.zeros(3)
             for atom in self.key_atoms:
@@ -226,7 +242,7 @@ class Component(Geometry):
         else:
             L_axis = self.COM(self.key_atoms) - center.coords
             L_axis /= np.linalg.norm(L_axis)
-        
+
         return super().sterimol(L_axis, center, self.atoms, **kwargs)
 
     def copy(self, atoms=None, name=None, comment=None):
@@ -266,14 +282,9 @@ class Component(Geometry):
 
                 frag_a = self.get_fragment(a, b)
                 frag_b = self.get_fragment(b, a)
-                if (
-                        len(frag_a) == len(frag_b) and 
-                        sorted(
-                            frag_a, key=lambda x: ELEMENTS.index(x.element)
-                        ) == sorted(
-                            frag_b, key=lambda x: ELEMENTS.index(x.element)
-                        )
-                ):
+                if len(frag_a) == len(frag_b) and sorted(
+                    frag_a, key=lambda x: ELEMENTS.index(x.element)
+                ) == sorted(frag_b, key=lambda x: ELEMENTS.index(x.element)):
                     continue
 
                 if len(frag_a) == 1 and frag_a[0].element == "H":
@@ -438,13 +449,13 @@ class Component(Geometry):
         center - Atom() that this component is coordinating
                  used as the apex of the cone
         method (str) can be:
-            'Tolman' - Tolman cone angle for asymmetric ligands 
+            'Tolman' - Tolman cone angle for asymmetric ligands
                        See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
                        NOTE: this does not make assumptions about the geometry
                        NOTE: only works with monodentate and bidentate ligands
-            'exact' - cone angle from Allen et. al. 
-                      See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D. 
-                      (2013), Exact ligand cone angles. J. Comput. Chem., 34: 
+            'exact' - cone angle from Allen et. al.
+                      See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.
+                      (2013), Exact ligand cone angles. J. Comput. Chem., 34:
                       1189-1197. (DOI: 10.1002/jcc.23217)
         return_cones - return cone apex, center of base, and base radius list
                        the sides of the cones will be 5 angstroms long
@@ -728,7 +739,7 @@ class Component(Geometry):
             c = 0
             for i, atom1 in enumerate(atom_list):
                 for j, atom2 in enumerate(atom_list[:i]):
-                    for k, atom3 in enumerate(atom_list[i + 1:]):
+                    for k, atom3 in enumerate(atom_list[i + 1 :]):
                         c += 1
                         ndx_i = self.atoms.index(atom1)
                         ndx_j = self.atoms.index(atom2)

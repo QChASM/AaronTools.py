@@ -237,7 +237,7 @@ class Config(configparser.ConfigParser):
         for section in ["Substitution", "Mapping"]:
             if section not in self:
                 continue
-            if self[section].getboolean("reopt", fallback=False):
+            if self[section].getboolean("reopt", fallback=True):
                 self._changes[""] = ({}, None)
             for key, val in self[section].items():
                 if key in self["DEFAULT"]:
@@ -752,6 +752,7 @@ class Config(configparser.ConfigParser):
                     suffix = ".".join(key.split(".")[1:])
                     structure_dict[suffix] = self["Geometry"][key]
         # create Geometry objects
+        pop_sd = set([])
         for suffix, structure in structure_dict.items():
             if structure is not None and os.path.isdir(structure):
                 # if structure is a directory
@@ -769,21 +770,48 @@ class Config(configparser.ConfigParser):
                         os.path.join(self["DEFAULT"]["top_dir"], structure)
                     )
                 except (IndexError, NotImplementedError):
-                    # if structure is a smiles string
-                    structure = AaronTools.geometry.Geometry.from_string(
-                        structure
-                    )
-                    self._changes[""] = ({}, None)
+                    if "coordination_complex" in structure.lower():
+                        shape = None
+                        center = None
+                        ligands = None
+                        for line in structure.split("\n"):
+                            line = line.strip()
+                            if "coordination_complex" in line.lower():
+                                shape = re.split("[:=]", line)[1].strip()
+                            if "center" in line.lower():
+                                center = re.split("[:=]", line)[1].strip()
+                            if "ligands" in line.lower():
+                                ligands = (
+                                    re.split("[:=]", line)[1].strip().split()
+                                )
+                        for (
+                            geom
+                        ) in AaronTools.geometry.Geometry.get_coordination_complexes(
+                            center=center, ligands=ligands, shape=shape
+                        )[
+                            0
+                        ]:
+                            if suffix:
+                                geom.name += "." + suffix
+                            structure_list += [(geom, None)]
+                        structure = None
+                        pop_sd.add(suffix)
+                    else:
+                        # if structure is a smiles string
+                        structure = AaronTools.geometry.Geometry.from_string(
+                            structure
+                        )
                 # adjust structure attributes
-                if "name" in self["Job"]:
-                    structure.name = self["Job"]["name"]
-                if "Geometry" in self and "comment" in self["Geometry"]:
-                    structure.comment = self["Geometry"]["comment"]
-                    structure.parse_comment()
-                if suffix:
-                    structure.name += ".{}".format(suffix)
-                structure_dict[suffix] = structure
-                kind_dict[suffix] = None
+                if structure is not None:
+                    if "name" in self["Job"]:
+                        structure.name = self["Job"]["name"]
+                    if "Geometry" in self and "comment" in self["Geometry"]:
+                        structure.comment = self["Geometry"]["comment"]
+                        structure.parse_comment()
+                    structure_dict[suffix] = structure
+                    kind_dict[suffix] = None
+        for s in pop_sd:
+            del structure_dict[s]
 
         # for loop for structure modification/creation
         # structure.suffix = geom.xyz
@@ -821,8 +849,23 @@ class Config(configparser.ConfigParser):
                             eval(line, eval_dict)
 
         # add structure_dict to structure list
+        try:
+            padding = max(
+                [
+                    len(suffix)
+                    for suffix in structure_dict.keys()
+                    if suffix.isnumeric()
+                ]
+            )
+        except ValueError:
+            padding = 0
         for suffix in structure_dict:
-            structure_list += [(structure_dict[suffix], kind_dict[suffix])]
+            geom = structure_dict[suffix]
+            if suffix:
+                geom.name = "{}.{}".format(
+                    self["Job"]["name"], suffix.zfill(padding)
+                )
+            structure_list += [(geom, kind_dict[suffix])]
 
         # apply functions found in [Geometry] section
         if "Geometry" in self and "&call" in self["Geometry"]:
@@ -883,7 +926,9 @@ class Config(configparser.ConfigParser):
                             changed += [atom.name]
         try:
             con_list = list(
-                eval(self["Geometry"].get("constraints", "[]"), {})
+                eval(
+                    "[{}]".format(self["Geometry"].get("constraints", "")), {}
+                )
             )
         except KeyError:
             structure.parse_comment()
@@ -996,9 +1041,9 @@ class Config(configparser.ConfigParser):
                         and self["DEFAULT"][option] == self[section][option]
                     ):
                         continue
-                    spec["{}/{}".format(section, option)] = self[section][
-                        option
-                    ]
+                    spec[
+                        "{}/{}".format(section, option.replace(".", "_"))
+                    ] = self[section][option]
         return spec
 
     def read_spec(self, spec):
@@ -1026,7 +1071,10 @@ class Config(configparser.ConfigParser):
                 key = key.strip().split()
                 if len(key) == 1:
                     continue
-                key_step = float(key[0])
+                try:
+                    key_step = float(key[0])
+                except ValueError:
+                    continue
                 key = " ".join(key[1:])
                 # screen based on step
                 if key_step == float(step):

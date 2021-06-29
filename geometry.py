@@ -50,7 +50,6 @@ class Geometry:
     # LOGLEVEL_OVERRIDE = {"DEBUG": "find"}
 
     Primes()
-    
 
     def __init__(
         self,
@@ -1253,7 +1252,7 @@ class Geometry:
 
         coords = self.coordinates(targets)
         dists = distance_matrix(coords, coords)
-        
+
         def get_bo(atom1, atom2, dist):
             """
             atom1, atom2 - Atom()
@@ -1284,17 +1283,17 @@ class Geometry:
                     hydrogen_bonds[i] += 1
                 else:
                     heavy_bonds[i] += 1
-                
+
                 if atom1.element == "H":
                     hydrogen_bonds[j] += 1
                 else:
                     heavy_bonds[j] += 1
-                
+
                 if atom1.element != "H" or atom2.element != "H":
                     bond_order = get_bo(atom1, atom2, dists[i, j])
                     if atom2.element != "H":
                         bo_sums[i] += bond_order
-                    
+
                     if atom1.element != "H":
                         bo_sums[j] += bond_order
 
@@ -1309,10 +1308,14 @@ class Geometry:
                 bo_sums[i] += bond_order
 
         invariants = []
-        for nconn, nB, z, nH in zip(heavy_bonds, bo_sums, atom_numbers, hydrogen_bonds):
-            invariants.append("{:01d}{:03d}{:03d}{:01d}".format(
-                int(nconn), int(nB * 10), int(z), int(nH)
-            ))
+        for nconn, nB, z, nH in zip(
+            heavy_bonds, bo_sums, atom_numbers, hydrogen_bonds
+        ):
+            invariants.append(
+                "{:01d}{:03d}{:03d}{:01d}".format(
+                    int(nconn), int(nB * 10), int(z), int(nH)
+                )
+            )
 
         return invariants
 
@@ -1545,7 +1548,7 @@ class Geometry:
             if ele not in eles:
                 eles[ele] = 0
             eles[ele] += 1
-        
+
         return eles
 
     def reorder(
@@ -2720,21 +2723,21 @@ class Geometry:
 
         L_axis: vector defining L-axis
         targets: atoms to include in the parameter calculation
-        L_func: function to evaluate for getting the L value and vector 
+        L_func: function to evaluate for getting the L value and vector
                 for each atom
                 takes positional arguments:
                 atom: Atom() - atom being checked
                 start: Atom() - start_atom
                 radius: vdw radius of atom
                 L_axis: unit vector for L-axis
-                
+
                 if L_func is not given, the default is the distance from
                 start_atom to the furthest vdw radius projected onto the
                 L-axis
         return_vector - returned dictionary will have tuples of start, end
                         for vectors to represent the parameters in 3D space
         at_L - L value to calculate sterimol parameters at
-               Used for Sterimol2Vec 
+               Used for Sterimol2Vec
         """
         from scipy.spatial import ConvexHull
 
@@ -2766,7 +2769,7 @@ class Geometry:
                 test_L = np.dot(test_v, L_axis) + radius
                 vec = (start.coords, start.coords + test_L * L_axis)
                 return test_L, vec
-        
+
         radius_list = []
         radii_dict = None
         if isinstance(radii, dict):
@@ -2833,12 +2836,7 @@ class Geometry:
                 radius_list.append(radii_dict[atom.element])
 
             # L
-            test_L, L_vec = L_func(
-                atom,
-                start,
-                radius_list[i],
-                L_axis
-            )
+            test_L, L_vec = L_func(atom, start, radius_list[i], L_axis)
             L_vals.append(test_L)
             if L is None or test_L > L:
                 L = test_L
@@ -2849,7 +2847,7 @@ class Geometry:
         # value
         # do this by setting the radii of atoms that don't intersect
         # that plane to -1 so they are skipped later
-        # adjust the radii of atoms that do intersect to be the 
+        # adjust the radii of atoms that do intersect to be the
         # radius of the circle formed by the interection of the
         # plane with the VDW sphere and adjust the coordinates
         # so it loos like the atom is in that plane
@@ -2980,7 +2978,10 @@ class Geometry:
                 par_vec = (start_x, end)
 
             perp_vec = np.dot(test_B_v, b1_perp) * b1_perp
-            if np.dot(test_B_v, b1_perp) > 0 or abs(np.dot(b1_perp, test_B_v)) < 1e-3:
+            if (
+                np.dot(test_B_v, b1_perp) > 0
+                or abs(np.dot(b1_perp, test_B_v)) < 1e-3
+            ):
                 test_perp_vec1 = perp_vec + rad * b1_perp
                 end = start_x + test_perp_vec1
                 test_Bperp1 = np.linalg.norm(end - start_x)
@@ -2988,7 +2989,10 @@ class Geometry:
                     Bperp1 = test_Bperp1
                     perp_vec1 = (start_x, end)
 
-            if np.dot(test_B_v, b1_perp) < 0 or abs(np.dot(b1_perp, test_B_v)) < 1e-3:
+            if (
+                np.dot(test_B_v, b1_perp) < 0
+                or abs(np.dot(b1_perp, test_B_v)) < 1e-3
+            ):
                 test_perp_vec2 = perp_vec - rad * b1_perp
                 end = start_x + test_perp_vec2
                 test_Bperp2 = np.linalg.norm(end - start_x)
@@ -2997,13 +3001,13 @@ class Geometry:
                     perp_vec2 = (start_x, end)
 
         if perp_vec1 is None:
-            perp_vec1 = perp_vec2[0], -perp_vec2[1] 
+            perp_vec1 = perp_vec2[0], -perp_vec2[1]
             Bperp1 = Bperp2
-        
+
         if perp_vec2 is None:
-            perp_vec2 = perp_vec1[0], -perp_vec1[1] 
+            perp_vec2 = perp_vec1[0], -perp_vec1[1]
             Bperp2 = Bperp1
-        
+
         # put B2-4 in order
         i = 0
         Bs = [Bpar, Bperp1, Bperp2]
@@ -4576,7 +4580,8 @@ class Geometry:
             else:
                 old_axis = self.COM(targets=targets) - old_key.coords
             w, angle = get_rotation(old_axis, new_axis)
-            ligand.rotate(w, angle, center=new_key)
+            if np.linalg.norm(w) > 1e-4:
+                ligand.rotate(w, angle, center=new_key)
             return ligand
 
         def map_2_key(old_ligand, ligand, old_keys, new_keys, rev_ang=False):
