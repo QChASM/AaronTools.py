@@ -15,6 +15,11 @@ class TestFileReader(TestWithTimer):
     com_file2 = os.path.join(prefix, "test_files", "test-route-2.com")
     psi4_output_file = os.path.join(prefix, "test_files", "psi4-test.out")
     orca_orbit_file = os.path.join(prefix, "test_files", "pople.out")
+    gaussian_mp2_file = os.path.join(prefix, "test_files", "mp2.log")
+    gaussian_mp4_file = os.path.join(prefix, "test_files", "mp4.log")
+    gaussian_ccsd_file = os.path.join(prefix, "test_files", "ccsd.log")
+    gaussian_ccsd_t_file = os.path.join(prefix, "test_files", "ccsd_t.log")
+    gaussian_dhdft_file = os.path.join(prefix, "test_files", "b2plypd3.log")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -98,6 +103,28 @@ class TestFileReader(TestWithTimer):
         ref = FileReader(os.path.join(prefix, "ref_files", "file_io_died.xyz"))
         test = FileReader(os.path.join(prefix, "test_files", "died.log"))
         self.assertTrue(self.validate_atoms(ref, test))
+
+    def test_read_log_energies(self):
+        """reading the correct energy from Gaussian output"""
+        # mp2
+        fr = FileReader(self.gaussian_mp2_file, just_geom=False)
+        self.assertEqual(fr.other["energy"], -76.228479251471)
+        
+        # mp4
+        fr = FileReader(self.gaussian_mp4_file, just_geom=False)
+        self.assertEqual(fr.other["energy"], -76.240714654)
+        
+        # ccsd
+        fr = FileReader(self.gaussian_ccsd_file, just_geom=False)
+        self.assertEqual(fr.other["energy"], -76.238041859)
+        
+        # ccsd(t)
+        fr = FileReader(self.gaussian_ccsd_t_file, just_geom=False)
+        self.assertEqual(fr.other["energy"], -76.241082564)
+        
+        # double hybrid dft
+        fr = FileReader(self.gaussian_dhdft_file, just_geom=False)
+        self.assertEqual(fr.other["energy"], -76.353361915801)
 
     def test_read_com_info(self):
         """testing if we can read route info"""

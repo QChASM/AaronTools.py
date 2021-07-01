@@ -2,7 +2,7 @@ import collections.abc
 import os
 import re
 from collections import OrderedDict
-from math import acos
+from math import acos, sin, cos
 
 import AaronTools.atoms as Atoms
 import numpy as np
@@ -504,11 +504,11 @@ def rotation_matrix(theta, axis, renormalize=True):
             axis[0] = 1.0
         axis = axis / np.linalg.norm(axis)
     outer_prod = np.outer(axis, axis)
-    cos_comp = np.cos(theta)
+    cos_comp = cos(theta)
     outer_prod *= 1 - cos_comp
     iden = np.identity(dim)
     cos_comp = iden * cos_comp
-    sin_comp = np.sin(theta) * (np.ones((dim, dim)) - iden)
+    sin_comp = sin(theta) * (np.ones((dim, dim)) - iden)
     cross_mat = np.zeros((dim, dim))
     for i in range(0, dim):
         for j in range(0, i):

@@ -30,6 +30,7 @@ read_types = [
     "xtb",
     "sqmout",
     "47",
+    "31",
 ]
 write_types = ["xyz", "com", "inp", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
@@ -327,6 +328,18 @@ class FileWriter:
     def write_com(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write Gaussian input file for given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         # get file content string
         header, header_warnings = theory.make_header(
             geom, return_warnings=True, **kwargs
@@ -443,6 +456,18 @@ class FileWriter:
     def write_inp(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write ORCA input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         s, warnings = theory.make_header(
             geom, style="orca", return_warnings=True, **kwargs
@@ -475,19 +500,17 @@ class FileWriter:
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
         """
-        can accept "monomers" as a kwarg
-        this should be a list of lists of atoms corresponding to the
-        separate monomers in a sapt calculation
-        this will only be used if theory.method.sapt is True
-        if a sapt method is used but no monoers are given,
-        geom's components attribute will be used intead
+        write Psi4 input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
         """
-        if "monomers" in kwargs:
-            monomers = kwargs["monomers"]
-            del kwargs["monomers"]
-        else:
-            monomers = None
-
         header, header_warnings = theory.make_header(
             geom, style="psi4", return_warnings=True, **kwargs
         )
@@ -504,9 +527,9 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
+                outfile = "{}.{}.in".format(geom.name, step2str(kwargs["step"]))
             else:
-                outfile = "{}.com".format(geom.name)
+                outfile = "{}.in".format(geom.name)
         if outfile is False:
             if return_warnings:
                 return s, warnings
@@ -523,6 +546,18 @@ class FileWriter:
     def write_sqm(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
+        """
+        write SQM input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".com" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
         header, header_warnings = theory.make_header(
             geom, style="sqm", return_warnings=True, **kwargs
         )
@@ -755,7 +790,8 @@ class FileWriter:
                     s += "%13.5e" % val
                     if (i + 1) % 6 == 0:
                         s += "\n"
-                s += "\n"
+                if (i + 1) % 6 != 0:
+                    s += "\n"
 
         if outfile is None:
             # if no output file is specified, use the name of the geometry
@@ -864,6 +900,8 @@ class FileReader:
                 self.read_sqm(f)
             elif self.file_type == "47":
                 self.read_nbo_47(f, nbo_name=nbo_name)
+            elif self.file_type == "31":
+                self.read_nbo_31(f, nbo_name=nbo_name)
 
     def read_file(
         self, get_all=False, just_geom=True,
@@ -913,6 +951,8 @@ class FileReader:
             self.read_sqm(f)
         elif self.file_type == "47":
             self.read_nbo_47(f, nbo_name=nbo_name)
+        elif self.file_type == "31":
+            self.read_nbo_31(f, nbo_name=nbo_name)
 
         f.close()
         return
@@ -1858,10 +1898,41 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
+            # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
                 idx = tmp.index("=")
                 self.other["energy"] = float(tmp[idx + 1])
+                self.other["scf_energy"] = float(tmp[idx + 1])
+
+            else:
+                nrg_match = re.search("\s+(E\(\S+\))\s*=\s*(\S+)", line)
+                # ^ matches many methods
+                # will also match the SCF line (hence the else here)
+                # the match in the SCF line could be confusing b/c
+                # the SCF line could be
+                # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
+                # and later on, there will be a line...
+                #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
+                # this will give:
+                # * E(RB2PLYPD3) = -76.2887108570 
+                # * E(B2PLYPD3) = -76.353361915801
+                # very similar names for very different energies...
+                if nrg_match:
+                    self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
+                    self.other[nrg_match.group(1)] = self.other["energy"]
+            
+            # CC energy
+            if line.startswith(" CCSD(T)= "):
+                self.other["energy"] = float(line.split()[-1].replace("D", "E"))
+                self.other["E(CCSD(T))"] = self.other["energy"]
+            
+            # MP energies
+            mp_match = re.search("([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)", line)
+            if mp_match:
+                self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
+
             if "Molecular mass:" in line:
                 self.other["mass"] = float(float_num.search(line).group(0))
                 self.other["mass"] *= UNIT.AMU_TO_KG
@@ -2045,7 +2116,8 @@ class FileReader:
                 self.other["forces"] = gradient
 
             # atomic charges
-            if "Mulliken charges:" in line:
+            charge_match = re.search("(\S+) charges:\s*$", line)
+            if charge_match:
                 self.skip_lines(f, 1)
                 n += 1
                 charges = []
@@ -2053,17 +2125,7 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
-                self.other["Mulliken Charges"] = charges
-
-            if "APT charges:" in line:
-                self.skip_lines(f, 1)
-                n += 1
-                charges = []
-                for i in range(0, len(self.atoms)):
-                    line = f.readline()
-                    n += 1
-                    charges.append(float(line.split()[2]))
-                self.other["APT Charges"] = charges
+                self.other[charge_match.group(1) + " Charges"] = charges
 
             # capture errors
             # only keep first error, want to fix one at a time
@@ -2721,6 +2783,7 @@ class FileReader:
                     int_sections = {
                         "NCOMP": "funcs_per_shell",
                         "NPRIM": "n_prim_per_shell",
+                        "NPTR": "start_ndx",
                     }
                     float_sections = {
                         "EXP": "exponents",
@@ -2772,17 +2835,144 @@ class FileReader:
             i += 1
         
         if nbo_name is not None:
-            with open(nbo_name, "r") as f2:
-                lines = f2.readlines()
-            j = 3
-            self.other["alpha_coefficients"] = []
-            while len(self.other["alpha_coefficients"]) < n_funcs:
-                mo_coeff = []
-                while len(mo_coeff) < n_funcs:
-                    mo_coeff.extend([float(x) for x in lines[j].split()])
-                    j += 1
-                self.other["alpha_coefficients"].append(mo_coeff)
-            self.other["orbitals"] = Orbitals(self)
+            self._read_nbo_coeffs(nbo_name)
+    
+    def _read_nbo_coeffs(self, nbo_name):
+        """
+        read coefficients in AO basis for NBO's/NLHO's/NAO's/etc.
+        called by methods that read NBO input (.47) or output files (.31)
+        """
+        with open(nbo_name, "r") as f2:
+            lines = f2.readlines()
+        kind = re.search("P?(\S+)s", lines[1]).group(1)
+        desc_file = os.path.splitext(nbo_name)[0] + ".46"
+        if os.path.exists(desc_file):
+            with open(desc_file, "r") as f3:
+                desc_lines = f3.readlines()
+                for k, line in enumerate(desc_lines):
+                    if kind in line:
+                        self.other["orbit_kinds"] = []
+                        n_orbits = int(line.split()[1])
+                        k += 1
+                        while len(self.other["orbit_kinds"]) < n_orbits:
+                            self.other["orbit_kinds"].extend([
+                                desc_lines[k][i: i + 10]
+                                for i in range(1, len(desc_lines[k]) - 1, 10)
+                            ])
+                            k += 1
+        else:
+            self.LOG.warning(
+                "no .46 file found - orbital descriptions will be unavialable"
+            )
+                
+        j = 3
+        self.other["alpha_coefficients"] = []
+        while len(self.other["alpha_coefficients"]) < sum(self.other["funcs_per_shell"]):
+            mo_coeff = []
+            while len(mo_coeff) < sum(self.other["funcs_per_shell"]):
+                mo_coeff.extend([float(x) for x in lines[j].split()])
+                j += 1
+            self.other["alpha_coefficients"].append(mo_coeff)
+        self.other["orbitals"] = Orbitals(self)
+
+    def read_nbo_31(self, f, nbo_name=None):
+        lines = f.readlines()
+        comment = lines[0].strip()
+        info = lines[3].split()
+        n_atoms = int(info[0])
+        self.atoms = []
+        for i in range(5, 5 + n_atoms):
+            atom_info = lines[i].split()
+            ele = ELEMENTS[int(atom_info[0])]
+            coords = np.array([float(x) for x in atom_info[1:4]])
+            self.atoms.append(
+                Atom(
+                    element=ele,
+                    coords=coords,
+                    name=str(i-4),
+                )
+            )
+        
+        i = n_atoms + 6
+        line = lines[i]
+        self.other["shell_to_atom"] = []
+        self.other["momentum_label"] = []
+        self.other["funcs_per_shell"] = []
+        self.other["start_ndx"] = []
+        self.other["n_prim_per_shell"] = []
+        while "---" not in line:
+            info = line.split()
+            ndx = int(info[0])
+            funcs = int(info[1])
+            start_ndx = int(info[2])
+            n_prim = int(info[3])
+            self.other["shell_to_atom"].extend([ndx for j in range(0, funcs)])
+            self.other["funcs_per_shell"].append(funcs)
+            self.other["start_ndx"].append(start_ndx)
+            self.other["n_prim_per_shell"].append(n_prim)
+            i += 1
+            line = lines[i]
+            momentum_labels = [int(x) for x in line.split()]
+            self.other["momentum_label"].extend(momentum_labels)
+            i += 1
+            line = lines[i]
+        
+        i += 1
+        self.other["exponents"] = []
+        line = lines[i]
+        while line.strip() != "":
+            exponents = [float(x) for x in line.split()]
+            self.other["exponents"].extend(exponents)
+            i += 1
+            line = lines[i]
+
+        i += 1
+        self.other["s_coeff"] = []
+        line = lines[i]
+        while line.strip() != "":
+            coeff = [float(x) for x in line.split()]
+            self.other["s_coeff"].extend(coeff)
+            i += 1
+            line = lines[i]
+        
+        i += 1
+        self.other["p_coeff"] = []
+        line = lines[i]
+        while line.strip() != "":
+            coeff = [float(x) for x in line.split()]
+            self.other["p_coeff"].extend(coeff)
+            i += 1
+            line = lines[i]
+
+        i += 1
+        self.other["d_coeff"] = []
+        line = lines[i]
+        while line.strip() != "":
+            coeff = [float(x) for x in line.split()]
+            self.other["d_coeff"].extend(coeff)
+            i += 1
+            line = lines[i]
+
+        i += 1
+        self.other["f_coeff"] = []
+        line = lines[i]
+        while line.strip() != "":
+            coeff = [float(x) for x in line.split()]
+            self.other["f_coeff"].extend(coeff)
+            i += 1
+            line = lines[i]
+
+        i += 1
+        self.other["g_coeff"] = []
+        line = lines[i]
+        while line.strip() != "":
+            coeff = [float(x) for x in line.split()]
+            self.other["g_coeff"].extend(coeff)
+            i += 1
+            line = lines[i]
+
+        if nbo_name is not None:
+            self._read_nbo_coeffs(nbo_name)
 
 
 @addlogger
@@ -3654,7 +3844,7 @@ class Orbitals:
             self._load_fchk_data(filereader)
         elif filereader.file_type == "out":
             self._load_orca_out_data(filereader)
-        elif filereader.file_type == "47":
+        elif filereader.file_type == "47" or filereader.file_type == "31":
             self._load_nbo_data(filereader)
         else:
             raise NotImplementedError(
@@ -3699,6 +3889,9 @@ class Orbitals:
         p_norm = lambda a, l=1: gau_norm(a, l)
         d_norm = lambda a, l=2: gau_norm(a, l)
         f_norm = lambda a, l=3: gau_norm(a, l)
+        g_norm = lambda a, l=4: gau_norm(a, l)
+        h_norm = lambda a, l=5: gau_norm(a, l)
+        i_norm = lambda a, l=6: gau_norm(a, l)
 
         self.basis_functions = list()
 
@@ -4007,68 +4200,250 @@ class Orbitals:
                 self.n_mos += 7
                 self.funcs_per_shell.append(7)
                 norms = f_norm(exponents)
-                if n_prim > 1:
-                    def f_shell(
-                        r2, x, y, z, mo_coeffs,
-                        alpha=exponents, con_coeff=con_coeff, norms=norms
-                    ):
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
-                        res = np.zeros(len(r2))
-                        if mo_coeffs[0] != 0:
-                            z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
-                            res += mo_coeffs[0] * z3zr2
-                        if mo_coeffs[1] != 0:
-                            xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[1] * xz2xr2
-                        if mo_coeffs[2] != 0:
-                            yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[2] * yz2yr2
-                        if mo_coeffs[3] != 0:
-                            x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
-                            res += mo_coeffs[3] * x2zr2z
-                        if mo_coeffs[4] != 0:
-                            xyz = np.sqrt(15) * x * y * z
-                            res += mo_coeffs[4] * xyz
-                        if mo_coeffs[5] != 0:
-                            x3r2x = np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[5] * x3r2x
-                        if mo_coeffs[6] != 0:
-                            x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[6] * x2yy3
-                        return res * s_val
-                else:
-                    def f_shell(
-                        r2, x, y, z, mo_coeffs,
-                        alpha=exponents, con_coeff=con_coeff, norms=norms
-                    ):
-                        e_r2 = np.exp(-alpha, r2)
-                        s_val = con_coeff * norms * e_r2
-                        res = np.zeros(len(r2))
-                        if mo_coeffs[0] != 0:
-                            z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
-                            res += mo_coeffs[0] * z3zr2
-                        if mo_coeffs[1] != 0:
-                            xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[1] * xz2xr2
-                        if mo_coeffs[2] != 0:
-                            yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[2] * yz2yr2
-                        if mo_coeffs[3] != 0:
-                            x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
-                            res += mo_coeffs[3] * x2zr2z
-                        if mo_coeffs[4] != 0:
-                            xyz = np.sqrt(15) * x * y * z
-                            res += mo_coeffs[4] * xyz
-                        if mo_coeffs[5] != 0:
-                            x3r2x = np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[5] * x3r2x
-                        if mo_coeffs[6] != 0:
-                            x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
-                            res += mo_coeffs[6] * x2yy3
-                        return res * s_val
-
+                def f_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeff=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        z3zr2 = z * (5 * z ** 2 - 3 * r2) / 2
+                        res += mo_coeffs[0] * z3zr2
+                    if mo_coeffs[1] != 0:
+                        xz2xr2 = np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        res += mo_coeffs[1] * xz2xr2
+                    if mo_coeffs[2] != 0:
+                        yz2yr2 = np.sqrt(3) * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        res += mo_coeffs[2] * yz2yr2
+                    if mo_coeffs[3] != 0:
+                        x2zr2z = np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
+                        res += mo_coeffs[3] * x2zr2z
+                    if mo_coeffs[4] != 0:
+                        xyz = np.sqrt(15) * x * y * z
+                        res += mo_coeffs[4] * xyz
+                    if mo_coeffs[5] != 0:
+                        x3r2x = np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
+                        res += mo_coeffs[5] * x3r2x
+                    if mo_coeffs[6] != 0:
+                        x2yy3 = np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
+                        res += mo_coeffs[6] * x2yy3
+                    return res * s_val
                 self.basis_functions.append(f_shell)
+                
+            # elif shell == 4:
+            elif False:
+                # TODO: validate these - order might be wrong
+                self.shell_types.append("15g")
+                self.n_mos += 15
+                self.funcs_per_shell.append(15)
+                norms = g_norm(exponents)
+                def g_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        x4 = (x ** 2) ** 2
+                        res += mo_coeffs[0] * x4
+                    if mo_coeffs[1] != 0:
+                        x3y = (x ** 3) * x * y
+                        res += mo_coeffs[1] * x3y
+                    if mo_coeffs[2] != 0:
+                        x3z = (x ** 3) * x * z
+                        res += mo_coeffs[2] * x3z
+                    if mo_coeffs[3] != 0:
+                        x2y2 = (x ** 2) * (y ** 2)
+                        res += mo_coeffs[3] * x2y2
+                    if mo_coeffs[4] != 0:
+                        x2yz = (x ** 2) * y * z
+                        res += mo_coeffs[4] * x2yz
+                    if mo_coeffs[5] != 0:
+                        x2z2 = (x ** 2) * (z ** 2)
+                        res += mo_coeffs[5] * x2z2
+                    if mo_coeffs[6] != 0:
+                        xy3 = x * y * y ** 2
+                        res += mo_coeffs[6] * xy3
+                    if mo_coeffs[7] != 0:
+                        xy2z = x * z * y ** 2
+                        res += mo_coeffs[7] * xy2z
+                    if mo_coeffs[8] != 0:
+                        xyz2 = x * y * z ** 2
+                        res += mo_coeffs[8] * xyz2
+                    if mo_coeffs[9] != 0:
+                        xz3 = x * z * z ** 2
+                        res += mo_coeffs[9] * xz3
+                    if mo_coeffs[10] != 0:
+                        y4 = (y ** 2) ** 2
+                        res += mo_coeffs[10] * y4
+                    if mo_coeffs[11] != 0:
+                        y3z = (y ** 2) * y * z
+                        res += mo_coeffs[11] * y3z
+                    if mo_coeffs[12] != 0:
+                        y2z2 = (y * z) ** 2
+                        res += mo_coeffs[12] * y2z2
+                    if mo_coeffs[13] != 0:
+                        yz3 = y * z * z ** 2
+                        res += mo_coeffs[13] * yz3
+                    if mo_coeffs[14] != 0:
+                        z4 = (z ** 2) ** 2
+                        res += mo_coeffs[14] * z4
+
+                    return res * s_val
+                self.basis_functions.append(g_shell)
+
+            elif shell == -4:
+                self.shell_types.append("9g")
+                self.n_mos += 9
+                self.funcs_per_shell.append(9)
+                norms = g_norm(exponents)
+                def g_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    if mo_coeffs[0] != 0:
+                        z4 = (35 * (z ** 4) - 30 * (r2 * z ** 2) + 3 * r2 ** 2) / 8
+                        res += mo_coeffs[0] * z4
+                    if mo_coeffs[1] != 0:
+                        z3x = np.sqrt(10) * (x * z * (7 * z ** 2 - 3 * r2)) / 4
+                        res += mo_coeffs[1] * z3x
+                    if mo_coeffs[2] != 0:
+                        z3y = np.sqrt(10) * (y * z * (7 * z ** 2 - 3 * r2)) / 4
+                        res += mo_coeffs[2] * z3y
+                    if mo_coeffs[3] != 0:
+                        z2x2y2 = np.sqrt(5) * (x ** 2 - y ** 2) * (7 * z ** 2 - r2) / 4
+                        res += mo_coeffs[3] * z2x2y2
+                    if mo_coeffs[4] != 0:
+                        z2xy = np.sqrt(5) * x * y * (7 * z ** 2 - r2) / 2
+                        res += mo_coeffs[4] * z2xy
+                    if mo_coeffs[5] != 0:
+                        zx3 = np.sqrt(70) * x * z * (x ** 2 - 3 * y ** 2) / 4
+                        res += mo_coeffs[5] * zx3
+                    if mo_coeffs[6] != 0:
+                        zy3 = np.sqrt(70) * z * y * (3 * x ** 2 - y ** 2) / 4
+                        res += mo_coeffs[6] * zy3
+                    if mo_coeffs[7] != 0:
+                        x2 = x ** 2
+                        y2 = y ** 2
+                        x4y4 = np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
+                        res += mo_coeffs[7] * x4y4
+                    if mo_coeffs[8] != 0:
+                        xyx2y2 = np.sqrt(35) * x * y * (x ** 2 - y ** 2) / 2
+                        res += mo_coeffs[8] * xyx2y2
+
+                    return res * s_val
+                self.basis_functions.append(g_shell)
+
+            elif shell == -5:
+                self.shell_types.append("11h")
+                self.n_mos += 11
+                self.funcs_per_shell.append(11)
+                norms = h_norm(exponents)
+                def h_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    z2 = z ** 2
+                    if mo_coeffs[0] != 0:
+                        z5z3r2zr4 = z * (63 * z2 ** 2 - 70 * z2 * r2 + 15 * r2 ** 2) / 8
+                        res += mo_coeffs[0] * z5z3r2zr4
+                    if mo_coeffs[1] != 0:
+                        xz4xz2r2xr4 = np.sqrt(15) * x * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                        res += mo_coeffs[1] * xz4xz2r2xr4
+                    if mo_coeffs[2] != 0:
+                        yz4yz2r2yr4 = np.sqrt(15) * y * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                        res += mo_coeffs[2] * yz4yz2r2yr4
+                    if mo_coeffs[3] != 0:
+                        x2y3z3zr2 = np.sqrt(105) * (x ** 2 - y ** 2) * (3 * z2 - r2) * z / 4
+                        res += mo_coeffs[3] * x2y3z3zr2
+                    if mo_coeffs[4] != 0:
+                        xyz3zr2 = np.sqrt(105) * x * y * z * (3 * z2 - r2) / 2
+                        res += mo_coeffs[4] * xyz3zr2
+                    if mo_coeffs[5] != 0:
+                        xx2y2z2r2 = 35 * x * (x ** 2 - 3 * y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                        res += mo_coeffs[5] * xx2y2z2r2
+                    if mo_coeffs[6] != 0:
+                        yx2y2z2r2 = 35 * y * (3 * x ** 2 - y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                        res += mo_coeffs[6] * yx2y2z2r2
+                    if mo_coeffs[7] != 0:
+                        zx4x2y2y4 = 105 * z * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(35))
+                        res += mo_coeffs[7] * zx4x2y2y4
+                    if mo_coeffs[8] != 0:
+                        zx3yxy3 = 105 * x * y * z * (4 * x ** 2 - 4 * y ** 2) / (8 * np.sqrt(35))
+                        res += mo_coeffs[8] * zx3yxy3
+                    if mo_coeffs[9] != 0:
+                        xx4y2x2y4 = 21 * x * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(14))
+                        res += mo_coeffs[9] * xx4y2x2y4
+                    if mo_coeffs[10] != 0:
+                        yx4y2x2y4 = 21 * y * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(14))
+                        res += mo_coeffs[10] * yx4y2x2y4
+
+                    return res * s_val
+                self.basis_functions.append(h_shell)
+
+            elif shell == -6:
+                self.shell_types.append("13i")
+                self.n_mos += 13
+                self.funcs_per_shell.append(13)
+                norms = i_norm(exponents)
+                def i_shell(
+                    r2, x, y, z, mo_coeffs,
+                    alpha=exponents, con_coeffs=con_coeff, norms=norms
+                ):
+                    e_r2 = np.exp(np.outer(-alpha, r2))
+                    s_val = np.dot(con_coeff * norms, e_r2)
+                    res = np.zeros(len(r2))
+                    z2 = z ** 2
+                    if mo_coeffs[0] != 0:
+                        z6z4r2z2r4r6 = (231 * z2 * z2 ** 2 - 315 * z2 ** 2 * r2 + 105 * z2 * r2 ** 2 - 5 * r2 * r2 ** 2) / 16
+                        res += mo_coeffs[0] * z6z4r2z2r4r6
+                    if mo_coeffs[1] != 0:
+                        xz5z3r2zr4 = np.sqrt(21) * x * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                        res += mo_coeffs[1] * xz5z3r2zr4
+                    if mo_coeffs[2] != 0:
+                        yz5z3r2zr4 = np.sqrt(21) * y * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                        res += mo_coeffs[2] * yz5z3r2zr4
+                    if mo_coeffs[3] != 0:
+                        x2y2z4z2r2r3 = 105 * (x ** 2 - y ** 2) * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (16 * np.sqrt(210))
+                        res += mo_coeffs[3] * x2y2z4z2r2r3
+                    if mo_coeffs[4] != 0:
+                        xyz4z2r2r4 = 105 * x * y * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[4] * xyz4z2r2r4
+                    if mo_coeffs[5] != 0:
+                        xx2y2z3zr2 = 105 * x * z * (x ** 2 - 3 * y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[5] * xx2y2z3zr2
+                    if mo_coeffs[6] != 0:
+                        yx2y2z3zr2 = 105 * y * z * (3 * x ** 2 - y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                        res += mo_coeffs[6] * yx2y2z3zr2
+                    if mo_coeffs[7] != 0:
+                        x4x2y2y4z2r2 = np.sqrt(63) * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) * (11 * z2 - r2) / 16
+                        res += mo_coeffs[7] * x4x2y2y4z2r2
+                    if mo_coeffs[8] != 0:
+                        xyx2y2z2r2 = np.sqrt(63) * x * y * (x ** 2 - y ** 2) * (11 * z2 - r2) / 4
+                        res += mo_coeffs[8] * xyx2y2z2r2
+                    if mo_coeffs[9] != 0:
+                        xzx4x2y2y4 = 231 * x * z * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(154))
+                        res += mo_coeffs[9] * xzx4x2y2y4
+                    if mo_coeffs[10] != 0:
+                        yzx4x2y2y4 = 231 * y * z * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(154))
+                        res += mo_coeffs[10] * yzx4x2y2y4
+                    if mo_coeffs[11] != 0:
+                        x6x4y2x2y4y6 = 231 * ((x * x ** 2) ** 2 - 15 * (x ** 2 * y) ** 2 + 15 * (x * y ** 2) ** 2 - (y * y ** 2) ** 2) / (16 * np.sqrt(462))
+                        res += mo_coeffs[11] * x6x4y2x2y4y6
+                    if mo_coeffs[12] != 0:
+                        yx5x3y3xy5 = 231 * x * y * (6 * (x ** 2) ** 2 - 20 * (x * y) ** 2 + 6 * (y ** 2) ** 2) / (16 * np.sqrt(462))
+                        res += mo_coeffs[12] * yx5x3y3xy5
+
+                    return res * s_val
+                self.basis_functions.append(i_shell)
 
             else:
                 self.LOG.warning("cannot parse shell with type %i" % shell)
@@ -4095,6 +4470,7 @@ class Orbitals:
         self.beta_coefficients = None
         self.shell_coords = []
         self.funcs_per_shell = []
+        self.shell_types = []
         self.n_shell = len(filereader.other["n_prim_per_shell"])
         self.alpha_nrgs = [0 for x in self.alpha_coefficients]
         self.n_mos = len(self.alpha_coefficients)
@@ -4102,14 +4478,16 @@ class Orbitals:
         self.n_beta = 0
         self.beta_nrgs = None
 
-        shell_i = 0
         label_i = 0
         # NBO includes normalization constant with the contraction coefficient
         # so we don't have a gau_norm function like gaussian or orca
-        for n_prim, n_funcs in zip(
+        for n_prim, n_funcs, shell_i in zip(
             filereader.other["n_prim_per_shell"],
             filereader.other["funcs_per_shell"],
+            filereader.other["start_ndx"],
+            
         ):
+            shell_i -= 1
             exponents = self.exponents[shell_i: shell_i + n_prim]
             for i in range(0, n_funcs):
                 shell = filereader.other["momentum_label"][label_i]
@@ -4118,7 +4496,13 @@ class Orbitals:
                 )
                 label_i += 1
                 self.funcs_per_shell.append(1)
+                # XXX: each function is treated as a different
+                # shell because NBO allows them to be in any order
+                # I think that technically means the functions in
+                # the d shell for example don't need to be next
+                # to each other
                 if shell < 100:
+                    self.shell_types.append("s")
                     # s - shell can be 1 or 51
                     con_coeff = filereader.other["s_coeff"][shell_i: shell_i + n_prim]
                     def s_shell(
@@ -4132,6 +4516,7 @@ class Orbitals:
                     # p - shell can be 101, 102, 103, 151, 152, 153
                     con_coeff = filereader.other["p_coeff"][shell_i: shell_i + n_prim]
                     if shell == 101 or shell == 151:
+                        self.shell_types.append("px")
                         def px_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4142,6 +4527,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(px_shell)
                     elif shell == 102 or shell == 152:
+                        self.shell_types.append("py")
                         def py_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4152,6 +4538,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(py_shell)
                     elif shell == 103 or shell == 153:
+                        self.shell_types.append("pz")
                         def pz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4164,6 +4551,7 @@ class Orbitals:
                 elif shell < 300:
                     con_coeff = filereader.other["d_coeff"][shell_i: shell_i + n_prim]
                     if shell == 201:
+                        self.shell_types.append("dxx")
                         def dxx_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4174,6 +4562,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dxx_shell)
                     elif shell == 202:
+                        self.shell_types.append("dxy")
                         def dxy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4184,6 +4573,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dxy_shell)
                     elif shell == 203:
+                        self.shell_types.append("dxz")
                         def dxz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4194,6 +4584,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dxz_shell)
                     elif shell == 204:
+                        self.shell_types.append("dyy")
                         def dyy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4204,6 +4595,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dyy_shell)
                     elif shell == 205:
+                        self.shell_types.append("dyz")
                         def dyz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4214,6 +4606,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dyz_shell)
                     elif shell == 206:
+                        self.shell_types.append("dzz")
                         def dzz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4224,6 +4617,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dzz_shell)
                     elif shell == 251:
+                        self.shell_types.append("5dxy")
                         def dxy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4234,6 +4628,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dxy_shell)
                     elif shell == 252:
+                        self.shell_types.append("5dxz")
                         def dxz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4244,6 +4639,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dxz_shell)
                     elif shell == 253:
+                        self.shell_types.append("5dyz")
                         def dyz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4254,6 +4650,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dyz_shell)
                     elif shell == 254:
+                        self.shell_types.append("5dx2-y2")
                         def dx2y2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4264,6 +4661,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(dx2y2_shell)
                     elif shell == 255:
+                        self.shell_types.append("5dz2")
                         def dz2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4273,13 +4671,10 @@ class Orbitals:
                             res = (3 * z ** 2 - r2) * mo_coeff / 2
                             return res * s_val
                         self.basis_functions.append(dz2_shell)
-                    else:
-                        self.LOG.warning("cannot handle shells with label %i" % shell)
                 elif shell < 400:
-                    # I have not tested F shells
-                    # they were not in the files I found on The Internet
                     con_coeff = filereader.other["f_coeff"][shell_i: shell_i + n_prim]
                     if shell == 301:
+                        self.shell_types.append("fx3")
                         def fxxx_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4290,6 +4685,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxxx_shell)
                     if shell == 302:
+                        self.shell_types.append("fxxy")
                         def fxxy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4300,6 +4696,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxxy_shell)
                     if shell == 303:
+                        self.shell_types.append("fxxz")
                         def fxxz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4310,6 +4707,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxxz_shell)
                     if shell == 304:
+                        self.shell_types.append("fxyy")
                         def fxyy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4320,6 +4718,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxyy_shell)
                     if shell == 305:
+                        self.shell_types.append("fxyz")
                         def fxyz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4330,6 +4729,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxyz_shell)
                     if shell == 306:
+                        self.shell_types.append("fxzz")
                         def fxzz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4340,6 +4740,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxzz_shell)
                     if shell == 307:
+                        self.shell_types.append("fyyy")
                         def fyyy_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4350,6 +4751,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fyyy_shell)
                     if shell == 308:
+                        self.shell_types.append("fyyz")
                         def fyyz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4360,6 +4762,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fyyz_shell)
                     if shell == 309:
+                        self.shell_types.append("fyzz")
                         def fyzz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4370,6 +4773,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fyzz_shell)
                     if shell == 310:
+                        self.shell_types.append("fzzz")
                         def fzzz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4380,6 +4784,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fzzz_shell)
                     if shell == 351:
+                        self.shell_types.append("7fz3-zr2")
                         def fz3zr2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4390,6 +4795,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fz3zr2_shell)
                     if shell == 352:
+                        self.shell_types.append("7fxz2-xr2")
                         def fxz2xr2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4400,6 +4806,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxz2xr2_shell)
                     if shell == 353:
+                        self.shell_types.append("7fyz2-yr2")
                         def fyz2yr2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4410,6 +4817,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fyz2yr2_shell)
                     if shell == 354:
+                        self.shell_types.append("7fzx2-zy2")
                         def fzx2zy2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4420,6 +4828,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fzx2zy2_shell)
                     if shell == 355:
+                        self.shell_types.append("7fxyz")
                         def fxyz_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4430,6 +4839,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fxyz_shell)
                     if shell == 356:
+                        self.shell_types.append("7fx3-xy2")
                         def fx3xy2_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4440,6 +4850,7 @@ class Orbitals:
                             return res * s_val
                         self.basis_functions.append(fx3xy2_shell)
                     if shell == 357:
+                        self.shell_types.append("7fyx2-y3")
                         def fyx2y3_shell(
                             r2, x, y, z, mo_coeff,
                             alpha=exponents, con_coeff=con_coeff
@@ -4449,8 +4860,282 @@ class Orbitals:
                             res = mo_coeff * np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
                             return res * s_val
                         self.basis_functions.append(fyx2y3_shell)
-
-            shell_i += n_prim
+                elif shell < 500:
+                    # I can't tell what NBO does with g orbitals
+                    # I don't have any reference to compare to
+                    self.LOG.warning(
+                        "g shell results have not been verified for NBO\n"
+                        "any LCAO's may be invalid"
+                    )
+                    con_coeff = filereader.other["g_coeff"][shell_i: shell_i + n_prim]
+                    if shell == 401:
+                        self.shell_types.append("gxxxx")
+                        def gxxxx_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * x * x
+                            return res * s_val
+                        self.basis_functions.append(gxxxx_shell)
+                    if shell == 402:
+                        self.shell_types.append("gxxxy")
+                        def gxxxy_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * x * y
+                            return res * s_val
+                        self.basis_functions.append(gxxxy_shell)
+                    if shell == 403:
+                        self.shell_types.append("gxxxz")
+                        def gxxxz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * x * z
+                            return res * s_val
+                        self.basis_functions.append(gxxxz_shell)
+                    if shell == 404:
+                        self.shell_types.append("gxxyy")
+                        def gxxyy_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * y * y
+                            return res * s_val
+                        self.basis_functions.append(gxxyy_shell)
+                    if shell == 405:
+                        self.shell_types.append("gxxyz")
+                        def gxxyz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * y * z
+                            return res * s_val
+                        self.basis_functions.append(gxxyz_shell)
+                    if shell == 406:
+                        self.shell_types.append("gxxzz")
+                        def gxxzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * x * z * z
+                            return res * s_val
+                        self.basis_functions.append(gxxzz_shell)
+                    if shell == 407:
+                        self.shell_types.append("gxyyy")
+                        def gxyyy_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * y * y * y
+                            return res * s_val
+                        self.basis_functions.append(gxyyy_shell)
+                    if shell == 408:
+                        self.shell_types.append("gxyyz")
+                        def gxyyz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * y * y * z
+                            return res * s_val
+                        self.basis_functions.append(gxyyz_shell)
+                    if shell == 409:
+                        self.shell_types.append("gxyzz")
+                        def gxyzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * y * z * z
+                            return res * s_val
+                        self.basis_functions.append(gxyzz_shell)
+                    if shell == 410:
+                        self.shell_types.append("gxzzz")
+                        def gxzzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * x * z * z * z
+                            return res * s_val
+                        self.basis_functions.append(gxzzz_shell)
+                    if shell == 411:
+                        self.shell_types.append("gyyyy")
+                        def gyyyy_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * y * y * y * y
+                            return res * s_val
+                        self.basis_functions.append(gyyyy_shell)
+                    if shell == 412:
+                        self.shell_types.append("gyyyz")
+                        def gyyyz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * y * y * y * z
+                            return res * s_val
+                        self.basis_functions.append(gyyyz_shell)
+                    if shell == 413:
+                        self.shell_types.append("gyyzz")
+                        def gyyzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * y * y * z * z
+                            return res * s_val
+                        self.basis_functions.append(gyyzz_shell)
+                    if shell == 414:
+                        self.shell_types.append("gyzzz")
+                        def gyzzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * y * z * z * z
+                            return res * s_val
+                        self.basis_functions.append(gyzzz_shell)
+                    if shell == 415:
+                        self.shell_types.append("gzzzz")
+                        def gzzzz_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * z * z * z * z
+                            return res * s_val
+                        self.basis_functions.append(gzzzz_shell)
+                    if shell == 451:
+                        self.shell_types.append("9gz4")
+                        def gz4_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * (35 * (z ** 2) ** 2 - 30 * z ** 2 * r2 + 3 * r2 ** 2) / 8
+                            return res * s_val
+                        self.basis_functions.append(gz4_shell)
+                    if shell == 452:
+                        self.shell_types.append("9gz3x")
+                        def gz3x_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(10) * (x * z * (7 * z ** 2 - 3 * r2)) / 4
+                            return res * s_val
+                        self.basis_functions.append(gz3x_shell)
+                    if shell == 453:
+                        self.shell_types.append("9gz3y")
+                        def gz3y_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(10) * (y * z * (7 * z ** 2 - 3 * r2)) / 4
+                            return res * s_val
+                        self.basis_functions.append(gz3y_shell)
+                    if shell == 454:
+                        self.shell_types.append("9gz2x2-z2y2")
+                        def gz2x2y2_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(5) * (x ** 2 - y ** 2) * (7 * z ** 2 - r2) / 4
+                            return res * s_val
+                        self.basis_functions.append(gz2x2y2_shell)
+                    if shell == 455:
+                        self.shell_types.append("9gz2xy")
+                        def gz2xy_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(5) * x * y * (7 * z ** 2 - r2) / 2
+                            return res * s_val
+                        self.basis_functions.append(gz2xy_shell)
+                    if shell == 456:
+                        self.shell_types.append("9gzx3")
+                        def gzx3_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(70) * x * z * (x ** 2 - 3 * y ** 2) / 4
+                            return res * s_val
+                        self.basis_functions.append(gzx3_shell)
+                    if shell == 457:
+                        self.shell_types.append("9gzy3")
+                        def gzy3_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(70) * x * y * (3 * x ** 2 - y ** 2) / 4
+                            return res * s_val
+                        self.basis_functions.append(gzy3_shell)
+                    if shell == 458:
+                        self.shell_types.append("9gx4y4")
+                        def gx4y4_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            x2 = x ** 2
+                            y2 = y ** 2
+                            res = mo_coeff * np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
+                            return res * s_val
+                        self.basis_functions.append(gx4y4_shell)
+                    if shell == 459:
+                        self.shell_types.append("9gxyx2y2")
+                        def gxyx2y2_shell(
+                            r2, x, y, z, mo_coeff,
+                            alpha=exponents, con_coeff=con_coeff
+                        ):
+                            e_r2 = np.exp(np.outer(-alpha, r2))
+                            s_val = np.dot(con_coeff, e_r2)
+                            res = mo_coeff * np.sqrt(35) * x * y * (x ** 2 - y ** 2) / 2
+                            return res * s_val
+                        self.basis_functions.append(gxyx2y2_shell)
+                else:
+                    self.LOG.warning("cannot handle shells with momentum label %i" % shell)
         
         self.shell_coords = np.array(self.shell_coords)
 
@@ -4711,16 +5396,18 @@ class Orbitals:
                 val = 0
             else:
                 val = np.zeros(len(coords))
-            for coord, shell, n_func in zip(
+            for coord, shell, n_func, shell_type in zip(
                 self.shell_coords,
                 self.basis_functions,
                 self.funcs_per_shell,
+                self.shell_types,
             ):
                 # don't calculate distances until we find an AO
                 # in this shell that has a non-zero MO coefficient
                 if not np.count_nonzero(arr[ao : ao + n_func]):
                     ao += n_func
                     continue
+                # print(shell_type, arr[ao : ao + n_func])
                 # don't recalculate distances unless this shell's coordinates
                 # differ from the previous
                 if (
