@@ -1770,7 +1770,7 @@ class Theory:
                 continue
             s += "   %s=" % key
             option = other_kw_dict[SQM_QMMM][key][0]
-            if option.isdigit():
+            if re.match("-?\d+", option):
                 s += "%s,\n" % option
             elif any(option.lower() == b for b in [".true.", ".false."]):
                 s += "%s,\n" % option

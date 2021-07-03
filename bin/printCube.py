@@ -17,7 +17,7 @@ cube_parser.add_argument(
     type=str,
     nargs="*",
     default=[sys.stdin],
-    help="an FCHK file or ORCA output with MO's"
+    help="an FCHK file, ORCA output with MO's, or NBO files"
 )
 
 cube_parser.add_argument(
