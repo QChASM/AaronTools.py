@@ -4543,6 +4543,9 @@ class Geometry:
 
         def get_rotation(old_axis, new_axis):
             w = np.cross(old_axis, new_axis)
+            # if old and new axes are colinear, use perp_vector
+            if np.linalg.norm(w) <= 1e-4:
+                w = utils.perp_vector(old_axis)
             angle = np.dot(old_axis, new_axis)
             angle /= np.linalg.norm(old_axis)
             angle /= np.linalg.norm(new_axis)

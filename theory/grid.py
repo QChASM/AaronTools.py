@@ -203,7 +203,7 @@ class IntegrationGrid:
             return (out_dict, None)
 
         raise RuntimeError(
-            "could not determine acceptable Psi4 grid settings for %s" % self.name
+            "could not determine acceptable ORCA grid settings for %s" % self.name
         )
 
     def get_psi4(self):
