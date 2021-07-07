@@ -167,7 +167,7 @@ if args.csv:
         print(header)
 
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=rmsd_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

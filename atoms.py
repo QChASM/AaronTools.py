@@ -1,6 +1,7 @@
 """For parsing and storing atom information"""
 import json
 import os
+import re
 
 import numpy as np
 
@@ -99,19 +100,20 @@ class Atom:
             coords = []
         if tags is None:
             tags = []
-        element = str(element).strip().capitalize()
+        # for BqO to have a ghost atom with oxygen basis functions
+        ele = str(element).strip()
+        element = ele.capitalize()
+        if "-" in ele:
+            element = "-".join(e.capitalize() for e in ele.split("-"))
         if element == "":
             self.element = element
             self._radii = None
             self._connectivity = None
-        elif element in ELEMENTS:
-            self.element = element
-            self._set_radii()
-            self._set_vdw()
-            self._set_connectivity()
-            self._set_saturation()
+        elif element not in ELEMENTS and not element.endswith("Bq"):
+            raise ValueError("Unknown element detected: %s" % element)
         else:
-            raise ValueError("Unknown element detected:", element)
+            self.element = element
+            self.reset()
 
         self.coords = np.array(coords, dtype=float)
         self.flag = bool(flag)
@@ -256,10 +258,16 @@ class Atom:
         return
 
     def reset(self):
-        self._set_radii()
-        self._set_vdw()
-        self._set_connectivity()
-        self._set_saturation()
+        if re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element):
+            self._vdw = 0
+            self._connectivity = 1000
+            self._saturation = 0
+            self._radii = 0
+        else:
+            self._set_radii()
+            self._set_vdw()
+            self._set_connectivity()
+            self._set_saturation()
 
     def add_tag(self, *args):
         for a in args:

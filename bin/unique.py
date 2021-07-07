@@ -81,7 +81,7 @@ mirror_mat[0][0] *= -1
 # dictionary of structures, which will be ordered by number of atoms, elements, etc.
 structures = {}
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=unique_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None), just_geom=False)

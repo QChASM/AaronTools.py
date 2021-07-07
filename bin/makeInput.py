@@ -525,7 +525,7 @@ if args.comments:
 
 
 # Theory() is made for each file because we might be using things from the input file
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=theory_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None), just_geom=False, get_all=True)
