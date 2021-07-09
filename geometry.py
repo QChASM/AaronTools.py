@@ -4184,6 +4184,8 @@ class Geometry:
         elif isinstance(adjust_hydrogens, tuple):
             # tuple of (change in hydrogens, vsepr shape) was given
             change_hydrogens, new_shape = adjust_hydrogens
+            if callable(change_hydrogens):
+                change_hydrogens = change_hydrogens(target)
 
         else:
             # no change was requested, only the element will change
@@ -4479,9 +4481,7 @@ class Geometry:
         target.element = new_element
 
         # these methods are normally called when an atom is instantiated
-        target._set_radii()
-        target._set_connectivity()
-        target._set_saturation()
+        target.reset()
 
         # fix bond lengths if requested
         # try to guess the bond order based on saturation
