@@ -111,7 +111,7 @@ element_parser.add_argument(
     "-c", "--change-hydrogens",
     nargs="?",
     required=False,
-    default=None,
+    default=False,
     type=int,
     dest="change_hs",
     metavar="N",
