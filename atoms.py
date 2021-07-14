@@ -385,7 +385,7 @@ class Atom:
         v2 = self.bond(a3)
         dot = np.dot(v1, v2)
         # numpy is still unhappy with this sometimes
-        # every know and again, the changeElement cls test will "fail" b/c
+        # every now and again, the changeElement cls test will "fail" b/c
         # numpy throws a warning here
         if abs(dot / (self.dist(a1) * self.dist(a3))) >= 1:
             return 0

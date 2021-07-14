@@ -172,24 +172,16 @@ for f in glob_files(args.infile, parser=vbur_parser):
 
     geom = Geometry(infile)
 
-    if args.targets is not None:
-        targets = geom.find(args.targets)
-    else:
-        geom.detect_components()
-        if geom.center is not None:
-            targets = geom.find(NotAny(geom.center))
-        else:
-            warn("center not determined for %s" % f)
-            continue
-    
     targets = None
     if args.exclude_atoms and not args.targets:
         targets = (NotAny(args.exclude_atoms))
     elif args.exclude_atoms and args.targets:
         targets = (NotAny(args.exclude_atoms), args.targets)
+    elif not args.exclude_atoms and args.targets:
+        targets = geom.find(args.targets)
     else:
         targets = NotAny(args.center)
-    
+
     radius = args.radius
     for i in range(0, int(args.scan[1])):
         try:

@@ -483,6 +483,12 @@ class TestGeometry(TestWithTimer):
         uses Monte Carlo integration, so it this fails, run it again
         still figuring out how reliable it is
         """
+
+        # import cProfile
+        # 
+        # profile = cProfile.Profile()
+        # profile.enable()
+
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         vbur = geom.percent_buried_volume(method="MC")
         if not np.isclose(vbur, 86.0, atol=0.35):
@@ -505,6 +511,9 @@ class TestGeometry(TestWithTimer):
         if not np.isclose(vbur, 100.0 / 64, atol=0.2):
             print("V_bur =", vbur, "expected:", 100.0 / 64)
         self.assertTrue(np.isclose(vbur, 100.0 / 64, atol=0.2))
+
+        # profile.disable()
+        # profile.print_stats()
 
     def test_vbur_lebedev(self):
         """
@@ -872,7 +881,7 @@ class TestGeometry(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestGeometry("test_map_ligand"))
+    suite.addTest(TestGeometry("test_vbur_lebedev"))
     # suite.addTest(TestGeometry("test_examine_constraints"))
     # suite.addTest(TestGeometry("test_detect_components"))
     # suite.addTest(TestGeometry("test_fix_comment"))
