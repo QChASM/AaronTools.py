@@ -201,6 +201,10 @@ class ImplicitSolvent:
         "ISODENSITY",
         "IEFPCM",
         "SCIPCM",
+        "ONIOMPCM=A",
+        "ONIOMPCM=B",
+        "ONIOMPCM=C",
+        "ONIOMPCM=X",
     ]
 
     KNOWN_ORCA_CPCM_SOLVENTS = [
@@ -450,6 +454,10 @@ class ImplicitSolvent:
                             "ISODENSITY",
                             "IEFPCM",
                             "SCIPCM",
+                            "ONIOMPCM=A",
+                            "ONIOMPCM=B",
+                            "ONIOMPCM=C",
+                            "ONIOMPCM=X",
                         ]
                     ),
                 )

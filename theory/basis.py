@@ -61,7 +61,7 @@ class Basis:
         self.name = name
         if oniom_layer is not None:
             self.oniom_layer = oniom_layer.capitalize()
-            self.not_anys = [ONIOMLayer(list('H','M','L').remove(oniom_layer))]
+            self.not_anys = [ONIOMLayer(layers=['H','M','L'].remove(self.oniom_layer))]
 
         if elements is None and oniom_layer is None:
             self.elements = []
@@ -71,7 +71,8 @@ class Basis:
         elif elements is None and oniom_layer is not None and atoms is None:
             if self.oniom_layer not in ['H','M','L']:
                 raise ValueError("oniom_layer must be either H, M, or L")
-            self.atom_selection = ONIOMLayer(self.oniom_layer)
+            self.atom_selection = ONIOMLayer(layers=self.oniom_layer)
+            self.ele_selection = []
 
         elif elements is None and oniom_layer is not None and atoms is not None:
 #            if not hasattr(atoms, "__iter__") or isinstance(atoms, str):
@@ -106,6 +107,7 @@ class Basis:
                     warn("atom not known: %s" % repr(atom))
  
             self.atom_selection = atom_selection
+            self.ele_selection = []
 
         elif elements is not None and oniom_layer is not None:
             raise ValueError("use atoms keyword to describe the basis set")
@@ -162,7 +164,10 @@ class Basis:
         self.user_defined = user_defined
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, " ".join(self.elements))
+        try:
+            return "%s(%s)" % (self.name, " ".join(self.elements))
+        except AttributeError:
+            return "%s(%s)" % (self.name, " ".join(self.oniom_layer))
 
     def __lt__(self, other):
         if self.name < other.name:
@@ -208,7 +213,7 @@ class Basis:
         """sets self's atoms for the geometry"""
         exclude = []
         atoms = geometry.find(self.atom_selection, NotAny(*self.not_anys)) 
-        for atom_exclude in NotAny(ONIOMLayer(self.oniom_layer)):
+        for atom_exclude in NotAny(ONIOMLayer(layers=self.oniom_layer)):
             for atom in atoms:
                 if atom == atom_exclude: excluded.append(atom)
         atoms = [atom for atom in atoms if atom not in excluded]
@@ -466,7 +471,7 @@ class BasisSet:
             - path to basis set file right after basis set name if the basis is not builtin
                 - path cannot contain spaces
         ONIOM only:
-            - high, middle, or low to describe the ONIOM layer before the list of atoms
+            - high, medium, or low to describe the ONIOM layer before the list of atoms
             - a list of atoms that can be all, tm, or ! to exclude those. automatically excludes atoms outside of layer
         Example:
             "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
@@ -500,7 +505,7 @@ class BasisSet:
                         'error while parsing basis set string: %s\nfound "aux"'
                         + ", but no auxilliary type followed" % basis_str
                     )
-            elif info[i].lower() in {"high", "middle", "low"}:
+            elif info[i].lower() in {"high", "medium", "low"}:
                 oniom_layer = list(info[i])[0].capitalize()
             else:
                 basis_name = info[i]
@@ -511,7 +516,7 @@ class BasisSet:
                         # I don't see it, but basis file names cannot start with 'aux'
                         os.path.exists(info[i + 1])
                         and not info[i + 1].lower().startswith("aux")
-                        and not info[i + 1].lower() in {"high", "middle", "low"}
+                        and not info[i + 1].lower() in {"high", "medium", "low"}
                     ) or os.sep in info[i + 1]:
                         user_defined = info[i + 1]
                         i += 1

@@ -642,27 +642,32 @@ class Aromatics(Finder):
 
 class ONIOMLayer(Finder):
     """all atoms in a given ONIOM layer or list of ONIOM layers"""
-    def __init__(self, layers):
+    def __init__(self, layers=""):
         super().__init__()
 
-        if isinstance(layers, str):
-            layers = list(layers)
         self.layers = layers
-        for layer in self.layers: 
-            if self.layer.capitalize() not in ['H', 'M', 'L']:
-                raise ValueError("layer must be H, M, or L")
+        if isinstance(layers, list):
+            for layer in self.layers: 
+                if layer.capitalize() not in ['H', 'M', 'L']:
+                    raise ValueError("layer must be H, M, or L")
 
     def __repr__(self):
-        return "atoms in the ONIOM layer '%s'" % self.layer
+        return "atoms in the ONIOM layer '%s'" % self.layers
 
     def get_matching_atoms(self, atoms, geometry=None):
         matching_atoms = []
         for atom in atoms:
-            try:
-                for layer in self.layers:
-                    if atom.layer == layer.capitalize(): matching_atoms.append(atom)
-            except AttributeError:
-                print("ONIOMlayer only accepts OniomAtom type atoms")
+            if isinstance(self.layers, list):
+                try:
+                    for layer in self.layers:
+                        if atom.layer.capitalize() == layer.capitalize(): matching_atoms.append(atom)
+                except AttributeError:
+                    print("ONIOMlayer only accepts OniomAtom type atoms")
+            else:
+                try:
+                    if atom.layer.capitalize() == self.layer.capitalize(): matching_atoms.append(atom)
+                except AttributeError:
+                    print("ONIOMlayer only accepts OniomAtom type atoms")
         return matching_atoms
 
 class AmideCarbon(Finder):

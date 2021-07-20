@@ -23,6 +23,8 @@ KNOWN_SEMI_EMPIRICAL = [
     "PM6-DH+",
 ]
 
+KNOWN_MM = ["AMBER","UFF","DREIDING","GAFF"]
+
 class Method:
     """functional object
     used to ensure the proper keyword is used
@@ -41,8 +43,8 @@ class Method:
         self.is_oniom = is_oniom
         self.oniom_layer = oniom_layer
         self.is_mm = is_mm
-        if self.is_oniom == True and any(self.oniom_layer is None, self.is_mm == False):
-            raise ValueError("ONIOM method must include both oniom_layer and is_mm in kwargs")
+        if self.is_oniom == True and self.oniom_layer is None:
+            raise ValueError("ONIOM method must include oniom_layer in kwargs")
 
     def __eq__(self, other):
         if self.__class__ is not other.__class__:

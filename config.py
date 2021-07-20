@@ -16,6 +16,8 @@ from AaronTools.theory import (
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_ONIOM,
+    GAUSSIAN_MM,
     ORCA_BLOCKS,
     ORCA_COMMENT,
     ORCA_COORDINATES,
@@ -445,7 +447,7 @@ class Config(configparser.ConfigParser):
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
         """
         # these need to be dicts
-        two_layer = [GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, ORCA_BLOCKS, PSI4_JOB]
+        two_layer = [GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, GAUSSIAN_MM, ORCA_BLOCKS, PSI4_JOB]
 
         # these need to be dicts, but can only have one value
         two_layer_single_value = [
@@ -459,6 +461,7 @@ class Config(configparser.ConfigParser):
             GAUSSIAN_COMMENT,
             GAUSSIAN_CONSTRAINTS,
             GAUSSIAN_POST,
+            GAUSSIAN_ONIOM,
             ORCA_COMMENT,
             ORCA_ROUTE,
             PSI4_AFTER_JOB,
@@ -469,10 +472,16 @@ class Config(configparser.ConfigParser):
 
         theory_kwargs = [
             "method",
+            "high_method",
+            "medium_method",
+            "low_method",
             "charge",
             "multiplicity",
             "type",
             "basis",
+            "high_basis",
+            "medium_basis",
+            "low_basis",
             "ecp",
         ]
 

@@ -8,6 +8,8 @@ from AaronTools.theory import (
     GAUSSIAN_COORDINATES,
     GAUSSIAN_GEN_BASIS,
     GAUSSIAN_GEN_ECP,
+    GAUSSIAN_MM,
+    GAUSSIAN_ONIOM,
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
@@ -29,11 +31,11 @@ from AaronTools.theory import (
 )
 from AaronTools.utils.utils import combine_dicts
 
-from .basis import ECP, BasisSet
+from .basis import ECP, Basis, BasisSet
 from .emp_dispersion import EmpiricalDispersion
 from .grid import IntegrationGrid
 from .job_types import JobType, SinglePointJob
-from .method import KNOWN_SEMI_EMPIRICAL, Method, SAPTMethod
+from .method import KNOWN_SEMI_EMPIRICAL, KNOWN_MM, Method, SAPTMethod
 
 
 class Theory:
@@ -50,7 +52,7 @@ class Theory:
     multiplicity            -   electronic multiplicity
     job_type                -   JobType or list(JobType)
 
-    method                  -   Method object (or str - Method instance will be created)
+    method                  -   Method object (or str - Method instance will be created) or list(Method) for ONIOM
     basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(keyword)))
     ecp                     -   str parsable by BasisSet.parse_basis_str
     empirical_dispersion    -   EmpiricalDispersion object (or str)
@@ -71,6 +73,12 @@ class Theory:
         "empirical_dispersion",
         "basis",
         "method",
+        "high_method",
+        "medium_method",
+        "low_method",
+        "high_basis",
+        "medium_basis",
+        "low_basis",
     ]
 
     # if there's a setting that should be an array and Psi4 errors out
@@ -108,14 +116,20 @@ class Theory:
         ecp=None,
         empirical_dispersion=None,
         grid=None,
+        high_method=None,
+        medium_method=None,
+        low_method=None,
+        high_basis=None,
+        medium_basis=None,
+        low_basis=None,
         **kwargs,
     ):
-        if not isinstance(charge, list):
+        if len(str(charge).split()) == 1:
             self.charge = int(charge)
         else:
             self.charge = charge
 
-        if not isinstance(multiplicity, list):
+        if len(str(multiplicity).split()) == 1:
             self.multiplicity = int(multiplicity)
         else:
             self.multiplicity = multiplicity
@@ -129,6 +143,12 @@ class Theory:
         self.processors = None
         self.memory = None
         self.geometry = None
+        self.high_method = None
+        self.medium_method = None
+        self.low_method = None
+        self.high_basis = None
+        self.medium_basis = None
+        self.low_basis = None
         self.kwargs = {}
 
         for key in self.ACCEPTED_INIT_KW:
@@ -159,6 +179,66 @@ class Theory:
             else:
                 self.method = method
 
+        if high_method is not None:
+            if not isinstance(high_method, Method):
+                if high_method in KNOWN_SEMI_EMPIRICAL:
+                    self.high_method = Method(
+                        high_method, is_semiempirical=True, is_oniom=True, oniom_layer = "H", is_mm=False
+                    )
+                else:
+                    self.high_method = Method(
+                        high_method, is_oniom=True, oniom_layer = "H", is_mm=False
+                    )
+            elif isinstance(high_method, Method) and any((high_method.is_oniom == False, high_method.oniom_layer is None, high_method.oniom_layer in ['M', 'L'])):
+                high_method.is_oniom = True
+                high_method.oniom_layer = "H"
+                self.high_method = high_method
+            #print(self.high_method.get_gaussian())
+            #else:
+            #    self.high_method = high_method
+
+        if medium_method is not None:
+            if not isinstance(medium_method, Method):
+                if medium_method.upper() in KNOWN_MM:
+                    self.medium_method = Method(
+                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=True
+                    )
+                elif medium_method.upper() in KNOWN_SEMI_EMPIRICAL:
+                    self.medium_method = Method(
+                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=False, is_semiempirical=True
+                    )
+                else:
+                    self.medium_method = Method(
+                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=False
+                    )
+            elif isinstance(medium_method,Method) and any((medium_method.is_oniom == False, medium_method.oniom_layer is None, medium_method.oniom_layer.upper() in ['H','L'])):
+                medium_method.is_oniom = True
+                medium_method.oniom_layer = "M"
+                self.medium_method = medium_method
+            #else:
+            #    self.medium_method = medium_method
+
+        if low_method is not None:
+            if not isinstance(low_method, Method):
+                if low_method.upper() in KNOWN_MM:
+                    self.low_method = Method(
+                        low_method, is_oniom=True, oniom_layer = "L", is_mm=True
+                    )
+                elif low_method.upper() in KNOWN_SEMI_EMPIRICAL:
+                    self.low_method = Method(
+                        low_method, is_oniom=True, oniom_layer = "L", is_mm=False, is_semiempirical=True
+                    )
+                else:
+                    self.low_method = Method(
+                        low_method, is_oniom=True, oniom_layer = "L", is_mm=False
+                    )
+            elif isinstance(low_method,Method) and any((low_method.is_oniom == False, low_method.oniom_layer is None, low_method.oniom_layer.upper() in ['H', 'M'])):
+                low_method.is_oniom = True
+                low_method.oniom_layer = "L"
+                self.low_method = low_method
+            #else:
+            #    self.low_method = low_method
+
         if grid is not None:
             if not isinstance(grid, IntegrationGrid):
                 self.grid = IntegrationGrid(grid)
@@ -167,6 +247,63 @@ class Theory:
 
         if basis is not None:
             self.basis = BasisSet(basis=basis)
+
+        if high_basis is not None:
+            if isinstance(high_basis, Basis):
+                if any((high_basis.oniom_layer is None, high_basis.oniom_layer.upper() in ["M", "L"])):
+                    high_basis.oniom_layer = "H"
+                self.high_basis = high_basis
+            elif isinstance (high_basis, str):
+                parsed_basis = BasisSet(basis=high_basis) 
+                if len(parsed_basis.basis) == 1:
+                    for basis in parsed_basis.basis:
+                        new_high_basis = Basis(basis.name, user_defined = basis.user_defined, oniom_layer = "H") #, atoms = basis.elements)
+                    self.high_basis = new_high_basis
+                else: raise ValueError("high_basis was defined incorrectly, see example at (need example)")
+            else:
+                self.high_basis = high_basis
+
+        if medium_basis is not None:
+            if isinstance(medium_basis, Basis):
+                if any((medium_basis.oniom_layer is None, medium_basis.oniom_layer.upper() in ["H","L"])):
+                    medium_basis.oniom_layer = "M"
+                self.medium_basis = medium_basis
+            elif isinstance (medium_basis, str):
+                parsed_basis = BasisSet(basis=medium_basis) 
+                if len(parsed_basis.basis) == 1:
+                    for basis in parsed_basis.basis:
+                        new_medium_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "H", atoms = basis.atoms)
+                    self.medium_basis = new_medium_basis
+                else: raise ValueError("medium_basis was defined incorrectly, see example at (need example)")
+            else:
+                self.medium_basis = medium_basis
+
+        if low_basis is not None:
+            if isinstance(low_basis, Basis):
+                if any((low_basis.oniom_layer is None, low_basis.oniom_layer.upper() in ["H", "M"])):
+                    low_basis.oniom_layer = "L"
+                self.low_basis = low_basis
+            elif isinstance (low_basis, str):
+                parsed_basis = BasisSet(basis=low_basis) 
+                if len(parsed_basis.basis) == 1:
+                    for basis in parsed_basis.basis:
+                        new_low_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "L", atoms = basis.atoms)
+                    self.low_basis = new_low_basis
+                else: raise ValueError("low_basis was defined incorrectly, see example at (need example)")
+            else:
+                self.low_basis = low_basis
+
+        if self.basis is None and any((self.high_basis is not None, self.medium_basis is not None, self.low_basis is not None)):
+            if self.high_basis is not None and self.medium_basis is not None and self.low_basis is not None:
+                self.basis = BasisSet(basis = (self.high_basis, self.medium_basis, self.low_basis))
+            elif self.high_basis is not None and self.medium_basis is None and self.low_basis is not None:
+                self.basis = BasisSet(basis = (self.high_basis, self.low_basis))
+            elif self.high_basis is not None and self.medium_basis is None and self.low_basis is None:
+                if self.low_method.is_mm == True:
+                    self.basis = BasisSet(basis = self.high_basis)
+                else: 
+                    raise ValueError("low_method requires low_basis if not an MM method")
+        #print("basis is " + str(self.basis))
 
         if ecp is not None:
             if self.basis is None:
@@ -198,7 +335,19 @@ class Theory:
         if isinstance(val, str):
             if attr == "method":
                 super().__setattr__(attr, Method(val))
+            if attr == "high_method":
+                super().__setattr__(attr, Method(val))
+            if attr == "medium_method":
+                super().__setattr__(attr, Method(val))
+            if attr == "low_method":
+                super().__setattr__(attr, Method(val))
             elif attr == "basis":
+                super().__setattr__(attr, BasisSet(val))
+            elif attr == "high_basis":
+                super().__setattr__(attr, BasisSet(val))
+            elif attr == "medium_basis":
+                super().__setattr__(attr, BasisSet(val))
+            elif attr == "low_basis":
                 super().__setattr__(attr, BasisSet(val))
             elif attr == "empirical_dispersion":
                 super().__setattr__(attr, EmpiricalDispersion(val))
@@ -258,7 +407,7 @@ class Theory:
     ):
         """
         geom: Geometry
-        style: str, gaussian, orca, psi4, or sqm
+        style: str, gaussian, orca, psi4, oniom, or sqm
         conditional_kwargs: dict - keys are ORCA_*, PSI4_*, or GAUSSIAN_*
             items in conditional_kwargs will only be added
             to the input if they would otherwise be preset
@@ -282,6 +431,7 @@ class Theory:
             self.geometry = geom
         if self.basis is not None:
             self.basis.refresh_elements(self.geometry)
+            #self.basis.refresh_atoms(self.geometry)
 
         kwargs = combine_dicts(self.kwargs, kwargs)
 
@@ -299,8 +449,26 @@ class Theory:
                 if keyword == "method":
                     self.method = Method(kwargs[keyword])
 
+                elif keyword == "high_method":
+                    self.high_method = Method(kwargs[keyword])
+
+                elif keyword == "medium_method":
+                    self.medium_method = Method(kwargs[keyword])
+
+                elif keyword == "low_method":
+                    self.low_method = Method(kwargs[keyword])
+
                 elif keyword == "basis":
                     self.basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "high_basis":
+                    self.high_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "medium_basis":
+                    self.medium_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "low_basis":
+                    self.low_basis = BasisSet(kwargs[keyword])
 
                 elif keyword == "grid":
                     self.grid = IntegrationGrid(kwargs[keyword])
@@ -363,6 +531,7 @@ class Theory:
 
         if self.basis is not None:
             self.basis.refresh_elements(geom)
+            #self.basis.refresh_atoms(geom)
 
         kwargs = combine_dicts(self.kwargs, kwargs)
 
@@ -380,8 +549,26 @@ class Theory:
                 if keyword == "method":
                     self.method = Method(kwargs[keyword])
 
+                elif keyword == "high_method":
+                    self.high_method = Method(kwargs[keyword])
+
+                elif keyword == "medium_method":
+                    self.medium_method = Method(kwargs[keyword])
+
+                elif keyword == "low_method":
+                    self.low_method = Method(kwargs[keyword])
+
                 elif keyword == "basis":
                     self.basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "high_basis":
+                    self.high_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "medium_basis":
+                    self.medium_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "low_basis":
+                    self.low_basis = BasisSet(kwargs[keyword])
 
                 elif keyword == "grid":
                     self.grid = IntegrationGrid(kwargs[keyword])
@@ -459,7 +646,25 @@ class Theory:
                 if keyword == "method":
                     self.method = Method(kwargs[keyword])
 
+                elif keyword == "high_method":
+                    self.high_method = Method(kwargs[keyword])
+
+                elif keyword == "medium_method":
+                    self.medium_method = Method(kwargs[keyword])
+
+                elif keyword == "low_method":
+                    self.low_method = Method(kwargs[keyword])
+
                 elif keyword == "basis":
+                    self.basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "high_basis":
+                    self.high_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "medium_basis":
+                    self.medium_basis = BasisSet(kwargs[keyword])
+
+                elif keyword == "low_basis":
                     self.basis = BasisSet(kwargs[keyword])
 
                 elif keyword == "grid":
@@ -601,6 +806,101 @@ class Theory:
 
             out_str += " "
 
+        layered_charge_mult = False
+
+        if self.method is None and any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
+            layered_charge_mult = True
+            if self.high_method is not None and self.medium_method is not None and self.low_method is not None:
+                methods = list((self.high_method, self.medium_method, self.low_method))
+            elif self.high_method is not None and self.medium_method is None and self.low_method is not None:
+                methods = list((self.high_method, self.low_method))
+            elif self.high_method is None and any((self.medium_method is None, self.low_methdo is None)):
+                raise ValueError("must have more than one method defined for ONIOM")
+            n_layers = len(methods)
+            #layers_written = 0
+            out_str += "oniom("
+            for i, method in enumerate(methods, start=1):
+                #print(type(method))
+                func, warning = method.get_gaussian()
+                if warning is not None:
+                    warnings.append(warning)
+                warning = method.sanity_check_method(func, "gaussian")
+                if warning:
+                    warnings.append(warning)
+                out_str += "%s" % func
+                if not method.is_semiempirical and not method.is_mm:
+                    if self.basis is None:
+                        raise AttributeError("need to include a basis set for %s" % method.name)
+                    for basis in self.basis.basis:
+                        if basis.oniom_layer.upper() == method.oniom_layer.upper():
+                            basis = BasisSet(basis=basis)
+                            (
+                                basis_info,
+                                basis_warnings,
+                            ) = basis.get_gaussian_basis_info()
+                            warnings.extend(basis_warnings)
+                            # check basis elements to make sure no element is
+                            # in two basis sets or left out of any
+                            #if self.geometry is not None:
+                            #    basis_warning = basis.check_for_elements(
+                            #        self.geometry
+                            #    )
+                            #    if basis_warning is not None:
+                            #        warnings.append(basis_warning)
+
+                            if GAUSSIAN_ROUTE in basis_info:
+                                out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+
+                    if isinstance(self.basis, Basis):
+                        if basis.oniom_layer.upper() == method.oniom_layer.upper():
+                            basis = BasisSet(basis=basis)
+                            (
+                                basis_info,
+                                basis_warnings,
+                            ) = basis.get_gaussian_basis_info()
+                            warnings.extend(basis_warnings)
+                            # check basis elements to make sure no element is
+                            # in two basis sets or left out of any
+                            if self.geometry is not None:
+                                basis_warning = basis.check_for_elements(
+                                    self.geometry
+                                )
+                                if basis_warning is not None:
+                                    warnings.append(basis_warning)
+
+                            if GAUSSIAN_ROUTE in basis_info:
+                                out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+
+                elif method.is_mm == True:
+                    if GAUSSIAN_MM in other_kw_dict.keys():
+                        for option in other_kw_dict[GAUSSIAN_MM].keys():
+                            known_opts = []
+                            if option.upper() == method.name.upper():
+                                out_str += "=("
+                                for x in other_kw_dict[GAUSSIAN_MM][option]:
+                                    if x not in known_opts:
+                                        if known_opts:
+                                            out_str += ", "
+                                        known_opts.append(x)
+                                        out_str += x
+                                out_str += ")"
+                #layers_written+=1
+                if i < n_layers:
+                    out_str += ":"
+                elif i == n_layers:
+                    out_str += ")"
+
+            if GAUSSIAN_ONIOM in other_kw_dict.keys():
+                known_opts = []
+                out_str += "="
+                for x in other_kw_dict[GAUSSIAN_ONIOM]:
+                    if x not in known_opts:
+                        if known_opts:
+                            out_str += ", "
+                        known_opts.append(x)
+                        out_str += x
+            out_str += " "
+
         # add other route options
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
@@ -670,7 +970,23 @@ class Theory:
         out_str += "\n"
 
         # charge mult
-        out_str += "%i %i\n" % (int(self.charge), int(self.multiplicity))
+        if layered_charge_mult == True:
+            charge_list = str(self.charge).split()
+            mult_list = str(self.multiplicity).split()
+            if len(charge_list) > 1 and len(charge_list) != len(mult_list):
+                raise ValueError("Charge and multiplicty must match in length. see gaussian.com/oniom/")
+            elif len(charge_list) > 1 and len(charge_list) == len(mult_list):
+                for i in range(len(charge_list)):
+                    out_str += "%i %i" % (int(charge_list[i]), int(mult_list[i]))
+                    if i < (len(charge_list) - 1):
+                        out_str += " "
+                    else:
+                        out_str += "\n"
+            elif len(charge_list) == 1 and len(charge_list) == len(mult_list):
+                out_str += "%i %i %i %i %i %i \n" % (int(self.charge), int(self.multiplicity), int(self.charge), int(self.multiplicity), int(self.charge), int(self.multiplicity))
+
+        elif layered_charge_mult == False:
+            out_str += "%i %i\n" % (int(self.charge), int(self.multiplicity))
 
         if return_warnings:
             return out_str, warnings
