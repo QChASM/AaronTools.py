@@ -29,7 +29,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        "Lists the substitutions and mappings parsed from an AaronJr configuration file"
+        description="Lists the substitutions and mappings parsed from an AaronJr configuration file"
     )
     parser.add_argument("config", help="The AaronJr configuration file")
     args = parser.parse_args()

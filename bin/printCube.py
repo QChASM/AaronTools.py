@@ -17,7 +17,7 @@ cube_parser.add_argument(
     type=str,
     nargs="*",
     default=[sys.stdin],
-    help="an FCHK file or ORCA output with MO's"
+    help="an FCHK file, ORCA output with MO's, or NBO files"
 )
 
 cube_parser.add_argument(
@@ -102,7 +102,7 @@ args = cube_parser.parse_args()
 if args.mo_ndx and args.mo_ndx.isnumeric():
     args.mo_ndx = int(args.mo_ndx)
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=cube_parser):
     if isinstance(f, str):
         infile = FileReader(f, just_geom=False, nbo_name=args.nbo_name)
     elif len(sys.argv) >= 1:

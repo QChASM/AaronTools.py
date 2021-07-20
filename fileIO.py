@@ -674,9 +674,6 @@ class FileWriter:
                 # change basis of coordinates to the singular vectors
                 # this is how we determine the range + padding
                 new_coords = np.dot(test_coords, u)
-                x1 = np.dot(test_coords, v1)
-                x2 = np.dot(test_coords, v2)
-                x3 = np.dot(test_coords, v3)
                 xr_max = np.max(new_coords[:, 0])
                 xr_min = np.min(new_coords[:, 0])
                 yr_max = np.max(new_coords[:, 1])
@@ -1437,6 +1434,11 @@ class FileReader:
                 elif "CORRELATION ENERGY" in line and "Eh" in line:
                     item = line.split()[-6] + " correlation energy"
                     self.other[item] = float(line.split()[-2])
+                
+                elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
+                    nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
+                    self.other["energy"] = float(nrg.group(2))
+                    self.other[nrg.group(1)] = float(nrg.group(2))
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
@@ -2091,6 +2093,22 @@ class FileReader:
                     line = f.readline()
                     n += 1
                 self.other["gradient"] = grad
+
+            # electronic properties
+            if "Electrostatic Properties (Atomic Units)" in line:
+                self.skip_lines(f, 5)
+                n += 5
+                self.other["electric_potential"] = []
+                self.other["electric_field"] = []
+                line = f.readline()
+                while "--" not in line:
+                    info = line.split()
+                    self.other["electric_potential"].append(float(info[2]))
+                    self.other["electric_field"].append([float(x) for x in info[3:]])
+                    line = f.readline()
+                    n += 1
+                self.other["electric_potential"] = np.array(self.other["electric_potential"])
+                self.other["electric_field"] = np.array(self.other["electric_field"])
 
             # symmetry
             if "Full point group" in line:
@@ -3212,16 +3230,25 @@ class Frequency:
 
         for k, line in enumerate(lines):
             if line.strip() == "IR SPECTRUM":
+                order = lines[k + 1].split()
+                if "Int" in order:
+                    ndx = order.index("Int")
+                else:
+                    ndx = order.index("T**2") - 1
                 intensity_start = k + 2
 
         # IR intensities are only printed for vibrational
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        for t, line in enumerate(lines[intensity_start:-1]):
+        t = 0
+        for line in lines[intensity_start:]:
+            if not re.match("\s*\d+:", line):
+                continue
             ir_info = line.split()
-            inten = float(ir_info[2])
+            inten = float(ir_info[ndx])
             self.data[t].intensity = inten
+            t += 1
 
     def parse_gaussian_lines(self, lines, hpmodes):
         num_head = 0
@@ -4489,377 +4516,258 @@ class Orbitals:
         ):
             shell_i -= 1
             exponents = self.exponents[shell_i: shell_i + n_prim]
+            shell_funcs = []
+            con_coeffs = []
+            shell_type = []
+            self.funcs_per_shell.append(n_funcs)
+            self.shell_coords.append(
+                filereader.atoms[filereader.other["shell_to_atom"][label_i] - 1].coords
+            )
             for i in range(0, n_funcs):
                 shell = filereader.other["momentum_label"][label_i]
-                self.shell_coords.append(
-                    filereader.atoms[filereader.other["shell_to_atom"][label_i] - 1].coords
-                )
                 label_i += 1
-                self.funcs_per_shell.append(1)
                 # XXX: each function is treated as a different
                 # shell because NBO allows them to be in any order
                 # I think that technically means the functions in
                 # the d shell for example don't need to be next
                 # to each other
                 if shell < 100:
-                    self.shell_types.append("s")
+                    shell_type.append("s")
                     # s - shell can be 1 or 51
                     con_coeff = filereader.other["s_coeff"][shell_i: shell_i + n_prim]
+                    con_coeffs.append(con_coeff)
                     def s_shell(
-                        r2, x, y, z, mo_coeffs,
-                        alpha=exponents, con_coeff=con_coeff
+                        r2, x, y, z, s_val
                     ):
-                        e_r2 = np.exp(np.outer(-alpha, r2))
-                        return mo_coeffs[0] * np.dot(con_coeff, e_r2)
-                    self.basis_functions.append(s_shell)
+                        return s_val
+                    shell_funcs.append(s_shell)
                 elif shell < 200:
                     # p - shell can be 101, 102, 103, 151, 152, 153
                     con_coeff = filereader.other["p_coeff"][shell_i: shell_i + n_prim]
+                    con_coeffs.append(con_coeff)
                     if shell == 101 or shell == 151:
-                        self.shell_types.append("px")
+                        shell_type.append("px")
                         def px_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x
-                            return res * s_val
-                        self.basis_functions.append(px_shell)
+                            return s_val * x
+                        shell_funcs.append(px_shell)
                     elif shell == 102 or shell == 152:
-                        self.shell_types.append("py")
+                        shell_type.append("py")
                         def py_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y
-                            return res * s_val
-                        self.basis_functions.append(py_shell)
+                            return s_val * y
+                        shell_funcs.append(py_shell)
                     elif shell == 103 or shell == 153:
-                        self.shell_types.append("pz")
+                        shell_type.append("pz")
                         def pz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * z
-                            return res * s_val
-                        self.basis_functions.append(pz_shell)
+                            return s_val * z
+                        shell_funcs.append(pz_shell)
                 elif shell < 300:
                     con_coeff = filereader.other["d_coeff"][shell_i: shell_i + n_prim]
+                    con_coeffs.append(con_coeff)
                     if shell == 201:
-                        self.shell_types.append("dxx")
+                        shell_type.append("dxx")
                         def dxx_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x
-                            return res * s_val
-                        self.basis_functions.append(dxx_shell)
+                            return s_val * x * x
+                        shell_funcs.append(dxx_shell)
                     elif shell == 202:
-                        self.shell_types.append("dxy")
+                        shell_type.append("dxy")
                         def dxy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y
-                            return res * s_val
-                        self.basis_functions.append(dxy_shell)
+                            return s_val * x * y
+                        shell_funcs.append(dxy_shell)
                     elif shell == 203:
-                        self.shell_types.append("dxz")
+                        shell_type.append("dxz")
                         def dxz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * z
-                            return res * s_val
-                        self.basis_functions.append(dxz_shell)
+                            return s_val * x * z
+                        shell_funcs.append(dxz_shell)
                     elif shell == 204:
-                        self.shell_types.append("dyy")
+                        shell_type.append("dyy")
                         def dyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y
-                            return res * s_val
-                        self.basis_functions.append(dyy_shell)
+                            return s_val * y * y
+                        shell_funcs.append(dyy_shell)
                     elif shell == 205:
-                        self.shell_types.append("dyz")
+                        shell_type.append("dyz")
                         def dyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * z
-                            return res * s_val
-                        self.basis_functions.append(dyz_shell)
+                            return s_val * y * z
+                        shell_funcs.append(dyz_shell)
                     elif shell == 206:
-                        self.shell_types.append("dzz")
+                        shell_type.append("dzz")
                         def dzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * z * z
-                            return res * s_val
-                        self.basis_functions.append(dzz_shell)
+                            return s_val * z * z
+                        shell_funcs.append(dzz_shell)
                     elif shell == 251:
-                        self.shell_types.append("5dxy")
+                        shell_type.append("5dxy")
                         def dxy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = np.sqrt(3) * mo_coeff * x * y
-                            return res * s_val
-                        self.basis_functions.append(dxy_shell)
+                            return np.sqrt(3) * s_val * x * y
+                        shell_funcs.append(dxy_shell)
                     elif shell == 252:
-                        self.shell_types.append("5dxz")
+                        shell_type.append("5dxz")
                         def dxz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = np.sqrt(3) * mo_coeff * x * z
-                            return res * s_val
-                        self.basis_functions.append(dxz_shell)
+                            return np.sqrt(3) * s_val * x * z
+                        shell_funcs.append(dxz_shell)
                     elif shell == 253:
-                        self.shell_types.append("5dyz")
+                        shell_type.append("5dyz")
                         def dyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = np.sqrt(3) * mo_coeff * y * z
-                            return res * s_val
-                        self.basis_functions.append(dyz_shell)
+                            return np.sqrt(3) * s_val * y * z
+                        shell_funcs.append(dyz_shell)
                     elif shell == 254:
-                        self.shell_types.append("5dx2-y2")
+                        shell_type.append("5dx2-y2")
                         def dx2y2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = np.sqrt(3) * (x ** 2 - y ** 2) * mo_coeff / 2
-                            return res * s_val
-                        self.basis_functions.append(dx2y2_shell)
+                            return np.sqrt(3) * s_val * (x ** 2 - y ** 2) / 2
+                        shell_funcs.append(dx2y2_shell)
                     elif shell == 255:
-                        self.shell_types.append("5dz2")
+                        shell_type.append("5dz2")
                         def dz2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = (3 * z ** 2 - r2) * mo_coeff / 2
-                            return res * s_val
-                        self.basis_functions.append(dz2_shell)
+                            return (3 * z ** 2 - r2) * s_val / 2
+                        shell_funcs.append(dz2_shell)
                 elif shell < 400:
                     con_coeff = filereader.other["f_coeff"][shell_i: shell_i + n_prim]
+                    con_coeffs.append(con_coeff)
                     if shell == 301:
-                        self.shell_types.append("fx3")
+                        shell_type.append("fxxx")
                         def fxxx_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * x
-                            return res * s_val
-                        self.basis_functions.append(fxxx_shell)
+                            return s_val * x * x * x
+                        shell_funcs.append(fxxx_shell)
                     if shell == 302:
-                        self.shell_types.append("fxxy")
+                        shell_type.append("fxxy")
                         def fxxy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * y
-                            return res * s_val
-                        self.basis_functions.append(fxxy_shell)
+                            return s_val * x * x * y
+                        shell_funcs.append(fxxy_shell)
                     if shell == 303:
-                        self.shell_types.append("fxxz")
+                        shell_type.append("fxxz")
                         def fxxz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * z
-                            return res * s_val
-                        self.basis_functions.append(fxxz_shell)
+                            return s_val * x * x * z
+                        shell_funcs.append(fxxz_shell)
                     if shell == 304:
-                        self.shell_types.append("fxyy")
+                        shell_type.append("fxyy")
                         def fxyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y * y
-                            return res * s_val
-                        self.basis_functions.append(fxyy_shell)
+                            return s_val * x * y * y
+                        shell_funcs.append(fxyy_shell)
                     if shell == 305:
-                        self.shell_types.append("fxyz")
+                        shell_type.append("fxyz")
                         def fxyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y * z
-                            return res * s_val
-                        self.basis_functions.append(fxyz_shell)
+                            return s_val * x * y * z
+                        shell_funcs.append(fxyz_shell)
                     if shell == 306:
-                        self.shell_types.append("fxzz")
+                        shell_type.append("fxzz")
                         def fxzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * z * z
-                            return res * s_val
-                        self.basis_functions.append(fxzz_shell)
+                            return s_val * x * z * z
+                        shell_funcs.append(fxzz_shell)
                     if shell == 307:
-                        self.shell_types.append("fyyy")
+                        shell_type.append("fyyy")
                         def fyyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y * y
-                            return res * s_val
-                        self.basis_functions.append(fyyy_shell)
+                            return s_val * y * y * y
+                        shell_funcs.append(fyyy_shell)
                     if shell == 308:
-                        self.shell_types.append("fyyz")
+                        shell_type.append("fyyz")
                         def fyyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y * z
-                            return res * s_val
-                        self.basis_functions.append(fyyz_shell)
+                            return s_val * y * y * z
+                        shell_funcs.append(fyyz_shell)
                     if shell == 309:
-                        self.shell_types.append("fyzz")
+                        shell_type.append("fyzz")
                         def fyzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * z * z
-                            return res * s_val
-                        self.basis_functions.append(fyzz_shell)
+                            return s_val * y * z * z
+                        shell_funcs.append(fyzz_shell)
                     if shell == 310:
-                        self.shell_types.append("fzzz")
+                        shell_type.append("fzzz")
                         def fzzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * z * z * z
-                            return res * s_val
-                        self.basis_functions.append(fzzz_shell)
+                            return s_val * z * z * z
+                        shell_funcs.append(fzzz_shell)
                     if shell == 351:
-                        self.shell_types.append("7fz3-zr2")
+                        shell_type.append("7fz3-zr2")
                         def fz3zr2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * z * (5 * z ** 2 - 3 * r2) / 2
-                            return res * s_val
-                        self.basis_functions.append(fz3zr2_shell)
+                            return s_val * z * (5 * z ** 2 - 3 * r2) / 2
+                        shell_funcs.append(fz3zr2_shell)
                     if shell == 352:
-                        self.shell_types.append("7fxz2-xr2")
+                        shell_type.append("7fxz2-xr2")
                         def fxz2xr2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(3) * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            return res * s_val
-                        self.basis_functions.append(fxz2xr2_shell)
+                            return np.sqrt(3) * s_val * x * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        shell_funcs.append(fxz2xr2_shell)
                     if shell == 353:
-                        self.shell_types.append("7fyz2-yr2")
+                        shell_type.append("7fyz2-yr2")
                         def fyz2yr2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
-                            return res * s_val
-                        self.basis_functions.append(fyz2yr2_shell)
+                            return s_val * y * (5 * z ** 2 - r2) / (2 * np.sqrt(2))
+                        shell_funcs.append(fyz2yr2_shell)
                     if shell == 354:
-                        self.shell_types.append("7fzx2-zy2")
+                        shell_type.append("7fzx2-zy2")
                         def fzx2zy2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(15) * z * (x ** 2 - y ** 2) / 2
-                            return res * s_val
-                        self.basis_functions.append(fzx2zy2_shell)
+                            return np.sqrt(15) * s_val * z * (x ** 2 - y ** 2) / 2
+                        shell_funcs.append(fzx2zy2_shell)
                     if shell == 355:
-                        self.shell_types.append("7fxyz")
+                        shell_type.append("7fxyz")
                         def fxyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(15) * x * y * z
-                            return res * s_val
-                        self.basis_functions.append(fxyz_shell)
+                            return np.sqrt(15) * s_val * x * y * z
+                        shell_funcs.append(fxyz_shell)
                     if shell == 356:
-                        self.shell_types.append("7fx3-xy2")
+                        shell_type.append("7fx3-xy2")
                         def fx3xy2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(5) * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
-                            return res * s_val
-                        self.basis_functions.append(fx3xy2_shell)
+                            return np.sqrt(5) * s_val * x * (x ** 2 - 3 * y ** 2) / (2 * np.sqrt(2))
+                        shell_funcs.append(fx3xy2_shell)
                     if shell == 357:
-                        self.shell_types.append("7fyx2-y3")
+                        shell_type.append("7fyx2-y3")
                         def fyx2y3_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(5) * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
-                            return res * s_val
-                        self.basis_functions.append(fyx2y3_shell)
+                            return np.sqrt(5) * s_val * y * (3 * x ** 2 - y ** 2) / (2 * np.sqrt(2))
+                        shell_funcs.append(fyx2y3_shell)
                 elif shell < 500:
                     # I can't tell what NBO does with g orbitals
                     # I don't have any reference to compare to
@@ -4868,274 +4776,201 @@ class Orbitals:
                         "any LCAO's may be invalid"
                     )
                     con_coeff = filereader.other["g_coeff"][shell_i: shell_i + n_prim]
+                    con_coeffs.append(con_coeff)
                     if shell == 401:
-                        self.shell_types.append("gxxxx")
+                        shell_type.append("gxxxx")
                         def gxxxx_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * x * x
-                            return res * s_val
-                        self.basis_functions.append(gxxxx_shell)
+                            return s_val * x * x * x * x
+                        shell_funcs.append(gxxxx_shell)
                     if shell == 402:
-                        self.shell_types.append("gxxxy")
+                        shell_type.append("gxxxy")
                         def gxxxy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * x * y
-                            return res * s_val
-                        self.basis_functions.append(gxxxy_shell)
+                            return s_val * x * x * x * y
+                        shell_funcs.append(gxxxy_shell)
                     if shell == 403:
-                        self.shell_types.append("gxxxz")
+                        shell_type.append("gxxxz")
                         def gxxxz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * x * z
-                            return res * s_val
-                        self.basis_functions.append(gxxxz_shell)
+                            return s_val * x * x * x * z
+                        shell_funcs.append(gxxxz_shell)
                     if shell == 404:
-                        self.shell_types.append("gxxyy")
+                        shell_type.append("gxxyy")
                         def gxxyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * y * y
-                            return res * s_val
-                        self.basis_functions.append(gxxyy_shell)
+                            return s_val * x * x * y * y
+                        shell_funcs.append(gxxyy_shell)
                     if shell == 405:
-                        self.shell_types.append("gxxyz")
+                        shell_type.append("gxxyz")
                         def gxxyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * y * z
-                            return res * s_val
-                        self.basis_functions.append(gxxyz_shell)
+                            return s_val * x * x * y * z
+                        shell_funcs.append(gxxyz_shell)
                     if shell == 406:
-                        self.shell_types.append("gxxzz")
+                        shell_type.append("gxxzz")
                         def gxxzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * x * z * z
-                            return res * s_val
-                        self.basis_functions.append(gxxzz_shell)
+                            return s_val * x * x * z * z
+                        shell_funcs.append(gxxzz_shell)
                     if shell == 407:
-                        self.shell_types.append("gxyyy")
+                        shell_type.append("gxyyy")
                         def gxyyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y * y * y
-                            return res * s_val
-                        self.basis_functions.append(gxyyy_shell)
+                            return s_val * x * y * y * y
+                        shell_funcs.append(gxyyy_shell)
                     if shell == 408:
-                        self.shell_types.append("gxyyz")
+                        shell_type.append("gxyyz")
                         def gxyyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y * y * z
-                            return res * s_val
-                        self.basis_functions.append(gxyyz_shell)
+                            return s_val * x * y * y * z
+                        shell_funcs.append(gxyyz_shell)
                     if shell == 409:
-                        self.shell_types.append("gxyzz")
+                        shell_type.append("gxyzz")
                         def gxyzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * y * z * z
-                            return res * s_val
-                        self.basis_functions.append(gxyzz_shell)
+                            return s_val * x * y * z * z
+                        shell_funcs.append(gxyzz_shell)
                     if shell == 410:
-                        self.shell_types.append("gxzzz")
+                        shell_type.append("gxzzz")
                         def gxzzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * x * z * z * z
-                            return res * s_val
-                        self.basis_functions.append(gxzzz_shell)
+                            return s_val * x * z * z * z
+                        shell_funcs.append(gxzzz_shell)
                     if shell == 411:
-                        self.shell_types.append("gyyyy")
+                        shell_type.append("gyyyy")
                         def gyyyy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y * y * y
-                            return res * s_val
-                        self.basis_functions.append(gyyyy_shell)
+                            return s_val * y * y * y * y
+                        shell_funcs.append(gyyyy_shell)
                     if shell == 412:
-                        self.shell_types.append("gyyyz")
+                        shell_type.append("gyyyz")
                         def gyyyz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y * y * z
-                            return res * s_val
-                        self.basis_functions.append(gyyyz_shell)
+                            return s_val * y * y * y * z
+                        shell_funcs.append(gyyyz_shell)
                     if shell == 413:
-                        self.shell_types.append("gyyzz")
+                        shell_type.append("gyyzz")
                         def gyyzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * y * z * z
-                            return res * s_val
-                        self.basis_functions.append(gyyzz_shell)
+                            return s_val * y * y * z * z
+                        shell_funcs.append(gyyzz_shell)
                     if shell == 414:
-                        self.shell_types.append("gyzzz")
+                        shell_type.append("gyzzz")
                         def gyzzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * y * z * z * z
-                            return res * s_val
-                        self.basis_functions.append(gyzzz_shell)
+                            return s_val * y * z * z * z
+                        shell_funcs.append(gyzzz_shell)
                     if shell == 415:
-                        self.shell_types.append("gzzzz")
+                        shell_type.append("gzzzz")
                         def gzzzz_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * z * z * z * z
-                            return res * s_val
-                        self.basis_functions.append(gzzzz_shell)
+                            return s_val * z * z * z * z
+                        shell_funcs.append(gzzzz_shell)
                     if shell == 451:
-                        self.shell_types.append("9gz4")
+                        shell_type.append("9gz4")
                         def gz4_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * (35 * (z ** 2) ** 2 - 30 * z ** 2 * r2 + 3 * r2 ** 2) / 8
-                            return res * s_val
-                        self.basis_functions.append(gz4_shell)
+                            return s_val * (35 * (z ** 2) ** 2 - 30 * z ** 2 * r2 + 3 * r2 ** 2) / 8
+                        shell_funcs.append(gz4_shell)
                     if shell == 452:
-                        self.shell_types.append("9gz3x")
+                        shell_type.append("9gz3x")
                         def gz3x_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(10) * (x * z * (7 * z ** 2 - 3 * r2)) / 4
-                            return res * s_val
-                        self.basis_functions.append(gz3x_shell)
+                            return s_val * np.sqrt(10) * (x * z * (7 * z ** 2 - 3 * r2)) / 4
+                        shell_funcs.append(gz3x_shell)
                     if shell == 453:
-                        self.shell_types.append("9gz3y")
+                        shell_type.append("9gz3y")
                         def gz3y_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(10) * (y * z * (7 * z ** 2 - 3 * r2)) / 4
-                            return res * s_val
-                        self.basis_functions.append(gz3y_shell)
+                            return s_val * np.sqrt(10) * (y * z * (7 * z ** 2 - 3 * r2)) / 4
+                        shell_funcs.append(gz3y_shell)
                     if shell == 454:
-                        self.shell_types.append("9gz2x2-z2y2")
+                        shell_type.append("9gz2x2-z2y2")
                         def gz2x2y2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(5) * (x ** 2 - y ** 2) * (7 * z ** 2 - r2) / 4
-                            return res * s_val
-                        self.basis_functions.append(gz2x2y2_shell)
+                            return s_val * np.sqrt(5) * (x ** 2 - y ** 2) * (7 * z ** 2 - r2) / 4
+                        shell_funcs.append(gz2x2y2_shell)
                     if shell == 455:
-                        self.shell_types.append("9gz2xy")
+                        shell_type.append("9gz2xy")
                         def gz2xy_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(5) * x * y * (7 * z ** 2 - r2) / 2
-                            return res * s_val
-                        self.basis_functions.append(gz2xy_shell)
+                            return s_val * np.sqrt(5) * x * y * (7 * z ** 2 - r2) / 2
+                        shell_funcs.append(gz2xy_shell)
                     if shell == 456:
-                        self.shell_types.append("9gzx3")
+                        shell_type.append("9gzx3")
                         def gzx3_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(70) * x * z * (x ** 2 - 3 * y ** 2) / 4
-                            return res * s_val
-                        self.basis_functions.append(gzx3_shell)
+                            return s_val * np.sqrt(70) * x * z * (x ** 2 - 3 * y ** 2) / 4
+                        shell_funcs.append(gzx3_shell)
                     if shell == 457:
-                        self.shell_types.append("9gzy3")
+                        shell_type.append("9gzy3")
                         def gzy3_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(70) * x * y * (3 * x ** 2 - y ** 2) / 4
-                            return res * s_val
-                        self.basis_functions.append(gzy3_shell)
+                            return s_val * np.sqrt(70) * z * y * (3 * x ** 2 - y ** 2) / 4
+                        shell_funcs.append(gzy3_shell)
                     if shell == 458:
-                        self.shell_types.append("9gx4y4")
+                        shell_type.append("9gx4y4")
                         def gx4y4_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
                             x2 = x ** 2
                             y2 = y ** 2
-                            res = mo_coeff * np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
-                            return res * s_val
-                        self.basis_functions.append(gx4y4_shell)
+                            return s_val * np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
+                        shell_funcs.append(gx4y4_shell)
                     if shell == 459:
-                        self.shell_types.append("9gxyx2y2")
+                        shell_type.append("9gxyx2y2")
                         def gxyx2y2_shell(
-                            r2, x, y, z, mo_coeff,
-                            alpha=exponents, con_coeff=con_coeff
+                            r2, x, y, z, s_val
                         ):
-                            e_r2 = np.exp(np.outer(-alpha, r2))
-                            s_val = np.dot(con_coeff, e_r2)
-                            res = mo_coeff * np.sqrt(35) * x * y * (x ** 2 - y ** 2) / 2
-                            return res * s_val
-                        self.basis_functions.append(gxyx2y2_shell)
+                            return s_val * np.sqrt(35) * x * y * (x ** 2 - y ** 2) / 2
+                        shell_funcs.append(gxyx2y2_shell)
                 else:
                     self.LOG.warning("cannot handle shells with momentum label %i" % shell)
+        
+            def eval_shells(
+                r2, x, y, z, mo_coeffs,
+                alpha=exponents,
+                con_coeffs=con_coeffs,
+                shell_funcs=shell_funcs
+            ):
+                e_r2 =  np.exp(np.outer(-alpha, r2))
+                res = np.zeros(len(r2))
+                last_con_coeff = None
+                for mo_coeff, con_coeff, func in zip(mo_coeffs, con_coeffs, shell_funcs):
+                    if mo_coeff == 0:
+                        continue
+                    if last_con_coeff is None or any(
+                        x - y != 0 for x, y in zip(last_con_coeff, con_coeff)
+                    ):
+                        s_val = np.dot(con_coeff, e_r2)
+                    last_con_coeff = con_coeff
+                    res += mo_coeff * func(r2, x, y, z, s_val)
+                return res
+            self.basis_functions.append(eval_shells)
+            self.shell_types.append(", ".join(shell_type))
         
         self.shell_coords = np.array(self.shell_coords)
 

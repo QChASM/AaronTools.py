@@ -374,3 +374,15 @@ cc-pCVQZ-F12-MP2fit
 cc-pVDZ-PP-F12-MP2fit
 cc-pVTZ-PP-F12-MP2fit
 cc-pVQZ-PP-F12-MP2fit
+apr-cc-pV(Q+d)Z
+may-cc-pV(T+d)Z
+may-cc-pV(Q+d)Z
+jun-cc-pv(D+d)Z
+jun-cc-pv(T+d)Z
+jun-cc-pv(Q+d)Z
+jul-cc-pv(D+d)Z
+jul-cc-pv(T+d)Z
+jul-cc-pv(Q+d)Z
+maug-cc-pv(D+d)Z
+maug-cc-pv(T+d)Z
+maug-cc-pv(Q+d)Z

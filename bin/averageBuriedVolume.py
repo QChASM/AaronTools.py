@@ -205,7 +205,7 @@ def main(argv):
         energies["G(Quasi-RRHO)"] = []
         energies["G(Quasi-Harmonic)"] = []
     
-    for infile in glob_files(args.infiles):
+    for infile in glob_files(args.infiles, parser=vbur_parser):
         if args.input_format is not None:
             fr = FileReader((infile, args.input_format, infile), just_geom=False)
         else:

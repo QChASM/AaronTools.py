@@ -194,7 +194,7 @@ elif args.num is not None and args.angle is not None:
 if not args.radians:
     args.angle = np.deg2rad(args.angle)
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=rotate_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

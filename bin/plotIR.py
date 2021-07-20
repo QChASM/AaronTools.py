@@ -172,7 +172,7 @@ if args.exp_data:
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
-for f in glob_files(args.infiles):
+for f in glob_files(args.infiles, parser=ir_parser):
     fr = FileReader(f, just_geom=False)
 
     freq = fr.other["frequency"]

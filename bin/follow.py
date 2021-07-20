@@ -139,6 +139,9 @@ if args.mode is None:
 else:
     modes = parse_mode_str(args.mode[0], int)
 
+if not modes:
+    raise RuntimeError("no vibrational mode specified and no imaginary modes found")
+
 # copy the list of output files or set all output files to False (print all to stdout)
 if args.outfile is not False:
     outfiles = [f for f in args.outfile]

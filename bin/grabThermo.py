@@ -136,7 +136,7 @@ header = None
 output = ""
 
 if args.pattern is None:
-    infiles = glob_files(args.infile)
+    infiles = glob_files(args.infile, parser=thermo_parser)
 else:
     infiles = []
     if args.infile == [sys.stdin]:

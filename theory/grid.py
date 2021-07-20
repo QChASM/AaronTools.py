@@ -166,7 +166,17 @@ class IntegrationGrid:
                 "could not set SuperFineGrid equivalent - using largest ORCA grid keyword",
             )
 
-        elif "grid" in self.name.lower():
+        elif re.match("defgrid\d", self.name.lower()):
+            warnings = None
+            grid_n = re.match("defgrid(\d)", self.name.lower()).group(1)
+            if int(grid_n) < 1 or int(grid_n) > 3:
+                warnings = "grid may not be available"
+            out_dict = {
+                ORCA_ROUTE: [self.name]
+            }
+            return (out_dict, warnings)
+
+        elif self.name.lower().startswith("grid"):
             # orca grid keyword
             out_dict = {
                 ORCA_ROUTE: [
@@ -193,7 +203,7 @@ class IntegrationGrid:
             return (out_dict, None)
 
         raise RuntimeError(
-            "could not determine acceptable Psi4 grid settings for %s" % self.name
+            "could not determine acceptable ORCA grid settings for %s" % self.name
         )
 
     def get_psi4(self):

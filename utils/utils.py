@@ -692,12 +692,13 @@ def boltzmann_average(energies, values, temperature, absolute=True):
     return avg
 
 
-def glob_files(infiles):
+def glob_files(infiles, parser=None):
     """
     globs input files
     used for command line scripts because Windows doesn't support globbing...
     """
     from glob import glob
+    import sys
 
     if isinstance(infiles, str):
         infiles = [infiles]
@@ -706,13 +707,16 @@ def glob_files(infiles):
     for f in infiles:
         if isinstance(f, str):
             outfiles.extend(glob(f))
-        else:
+        elif len(sys.argv) > 1:
             outfiles.append(f)
 
-    if not outfiles:
+    if not outfiles and all(isinstance(f, str) for f in infiles):
         raise RuntimeError(
             "no files could be found for %s" % ", ".join(infiles)
         )
+    elif not outfiles and parser is not None:
+        parser.print_help()
+        sys.exit(0)
 
     return outfiles
 
