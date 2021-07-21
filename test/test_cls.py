@@ -951,7 +951,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         out, err = proc.communicate()
 
         ref = """B1      B2      B3      B4      B5      L       file
-        3.99    5.35    5.63    6.28    6.31    9.65    test_files\catalysts\tm_single-lig.xyz
+        3.98    5.34    5.63    6.28    6.31    9.65    test_files\catalysts\tm_single-lig.xyz
         
         """
 
@@ -992,6 +992,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
+    suite.addTest(TestCLS("test_substituentSterimol"))
     suite.addTest(TestCLS("test_ligandSterimol"))
     return suite
 

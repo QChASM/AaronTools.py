@@ -2706,6 +2706,7 @@ class Geometry:
         return_vector=False,
         radii="bondi",
         at_L=None,
+        max_error=None,
     ):
         """
         returns sterimol parameter values in a dictionary
@@ -2813,14 +2814,6 @@ class Geometry:
         x_vec /= np.linalg.norm(x_vec)
         basis = np.array([x_vec, ip_vector, L_axis]).T
 
-        num_pts = 360
-        v = np.linspace(0, 2 * np.pi, num=num_pts)
-        b1_points = np.stack(
-            (np.cos(v), np.sin(v)), axis=1
-        )
-
-        std_ndx = np.ones(num_pts, dtype=int)
-
         if not radius_list:
             radius_list = []
         coords = self.coordinates(targets)
@@ -2836,6 +2829,17 @@ class Geometry:
             if L is None or test_L > L:
                 L = test_L
                 vector["L"] = L_vec
+        
+        num_pts = 360
+        if max_error is not None:
+            num_pts = int(2 / np.arccos(
+                1 - max_error / sum(np.argsort(radius_list)[:-2][::-1])
+            ))
+        v = np.linspace(0, 2 * np.pi, num=num_pts)
+        b1_points = np.stack(
+            (np.cos(v), np.sin(v)), axis=1
+        )
+        std_ndx = np.ones(num_pts, dtype=int)
 
         # if a specific L value was requested, only check atoms
         # with a radius that intersects the plane at that L
@@ -2918,30 +2922,28 @@ class Geometry:
         # go through each edge, find a vector perpendicular to the one
         # defined by the edge that passes through the origin
         # the length of the shortest of these vectors is B1
-        for i in range(0, len(hull.vertices) - 1):
-            # the vertices of the hull are organized in a counterclockwise
-            # direction, so neighboring indices define an edge
-            v_ndx_0, v_ndx_1 = hull.vertices[i : i + 2]
-            # find 'tangent' of the edge
-            v = points[v_ndx_1] - points[v_ndx_0]
-            v /= np.linalg.norm(v)
-            # find normal to this edge by projecting a vector from the
-            # L axis to one of the points on the edge
-            b = points[v_ndx_0]
-            t = np.dot(b, v)
-            perp = b - t * v
-            # plt.plot(perp[0], perp[1], 'g*')
-            test_b1 = np.linalg.norm(perp)
-            if B1 is None or test_b1 < B1:
-                B1 = test_b1
-                # figure out vector from L axis to represent B1
-                b1_atom_coords = coords[ndx[v_ndx_0]]
-                test_v = b1_atom_coords - start.coords
-                test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
-                start_x = b1_atom_coords - test_B1_v
-                end = x_vec * perp[0] + ip_vector * perp[1]
-                end += start_x
-                vector["B1"] = (start_x, end)
+        tangents = points[hull.vertices[1:]] - points[hull.vertices[:-1]]
+        tangents = np.append(
+            tangents,
+            [points[hull.vertices[-1]] - points[hull.vertices[0]]],
+            axis=0,
+        )
+
+        tangents = tangents / np.linalg.norm(tangents, axis=1)[:, None]
+        paras = np.sum(
+            tangents * points[hull.vertices], axis=1
+        )
+        norms = points[hull.vertices] - paras[:, None] * tangents
+        norm_mags = np.linalg.norm(norms, axis=1)
+        B1_ndx = np.argmin(norm_mags)
+        B1 = norm_mags[B1_ndx]
+        b1_atom_coords = coords[ndx[B1_ndx]]
+        test_v = b1_atom_coords - start.coords
+        test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
+        start_x = b1_atom_coords - test_B1_v
+        end = x_vec * norms[B1_ndx][0] + ip_vector * norms[B1_ndx][1]
+        end += start_x
+        vector["B1"] = (start_x, end)
 
         # figure out B2-4
         # these need to be sorted in increasing order
