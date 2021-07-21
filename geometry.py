@@ -2706,7 +2706,7 @@ class Geometry:
         return_vector=False,
         radii="bondi",
         at_L=None,
-        max_error=None,
+        max_error=0.005,
     ):
         """
         returns sterimol parameter values in a dictionary
@@ -2739,10 +2739,13 @@ class Geometry:
                         for vectors to represent the parameters in 3D space
         at_L - L value to calculate sterimol parameters at
                Used for Sterimol2Vec
+        max_error - max. error in angstroms for B1
+                    higher error can sometimes make the calculation
+                    go slightly faster
+                    max_error=None will have an error for B1 of at most
+                    (sum of radii tangent to B1 face) * (1 - cos(0.5 degrees))
         """
         from scipy.spatial import ConvexHull
-
-        from AaronTools.finders import BondedTo
 
         CITATION = "doi:10.1002/ps.2780070410"
         if at_L:
@@ -2805,8 +2808,8 @@ class Geometry:
         # are on the outside (vertices)
         # we then just need to find the bounding box with the minimum distance
         # from L-axis to one side of the box
-        points = []
-        ndx = []
+        points = np.empty((0,2))
+        ndx = np.empty(0, dtype=int)
         # just grab a random vector perpendicular to the L-axis
         # it doesn't matter really
         ip_vector = utils.perp_vector(L_axis)
@@ -2832,9 +2835,20 @@ class Geometry:
         
         num_pts = 360
         if max_error is not None:
-            num_pts = int(2 / np.arccos(
-                1 - max_error / sum(np.argsort(radius_list)[:-2][::-1])
-            ))
+            # max error estimate is:
+            # (sum of atom radii that are tangent to B1 face) *
+            # (1 - cos(360 degrees / (2 * number of points)))
+            # we don't know B1 until after we pick num_pts, so
+            # we don't know which atoms determine the B1 face here
+            # but it is either one or two atoms and we guess
+            # it's the two largest atoms
+            num_pts = int(
+                2 / np.arccos(
+                    1 - max_error / sum(
+                        np.argsort(radius_list)[:-2][::-1]
+                    )
+                )
+            )
         v = np.linspace(0, 2 * np.pi, num=num_pts)
         b1_points = np.stack(
             (np.cos(v), np.sin(v)), axis=1
@@ -2879,11 +2893,10 @@ class Geometry:
             # in plane coordinates - z-axis is L-axis, which
             # we don't care about for B1
             ip_coords = new_coords[0:2]
-            ndx.extend((i * std_ndx).tolist())
+            ndx = np.append(ndx, (i * std_ndx))
             grid = rad * b1_points
             grid += ip_coords
-            points.extend(grid)
-
+            points = np.append(points, grid, axis=0)
             # B5
             # find distance along L-axis, then subtract this from vector from
             # vector from molecule to this atom to get the B5 vector
@@ -2906,8 +2919,6 @@ class Geometry:
                 end = start_x + test_B5 * (perp_vec / np.linalg.norm(perp_vec))
 
                 vector["B5"] = (start_x, end)
-
-        points = np.array(points)
 
         hull = ConvexHull(points)
 
