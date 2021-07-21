@@ -2814,16 +2814,11 @@ class Geometry:
         basis = np.array([x_vec, ip_vector, L_axis]).T
 
         num_pts = 360
-        b1_points = np.array(
-            [
-                [np.cos(x), np.sin(x)]
-                for x in np.linspace(
-                    0,
-                    2 * np.pi,
-                    num=num_pts,
-                )
-            ]
+        v = np.linspace(0, 2 * np.pi, num=num_pts)
+        b1_points = np.stack(
+            (np.cos(v), np.sin(v)), axis=1
         )
+
         std_ndx = np.ones(num_pts, dtype=int)
 
         if not radius_list:

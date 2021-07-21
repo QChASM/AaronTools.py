@@ -449,7 +449,7 @@ class Component(Geometry):
         center - Atom() that this component is coordinating
                  used as the apex of the cone
         method (str) can be:
-            'Tolman' - Tolman cone angle for asymmetric ligands
+            'Tolman' - Tolman cone angle for unsymmetric ligands
                        See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
                        NOTE: this does not make assumptions about the geometry
                        NOTE: only works with monodentate and bidentate ligands
