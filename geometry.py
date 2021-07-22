@@ -2706,11 +2706,13 @@ class Geometry:
         return_vector=False,
         radii="bondi",
         at_L=None,
-        max_error=0.005,
+        max_error=None,
     ):
         """
         returns sterimol parameter values in a dictionary
         keys are B1, B2, B3, B4, B5, and L
+        B1 is determined numerically; B2-B4 depend on B1
+        B5 and L are analytical (unless L_func is not analytical)
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
         selectivity. Pestic. Sci., 7: 379-390.
@@ -2923,12 +2925,26 @@ class Geometry:
         hull = ConvexHull(points)
 
         # import matplotlib.pyplot as plt
-        # plt.plot(points[:, 0], points[:, 1], 'o')
+        # for i, pt in enumerate(points):
+        #     color = "blue"
+        #     if self.atoms[ndx[i]].element == "H":
+        #         color = "white"
+        #     if self.atoms[ndx[i]].element == "C":
+        #         color = "#5c5c5c"
+        #     plt.plot(*pt, 'o', markersize=0.5, color=color)
+        # plt.plot(points[:, 0], points[:, 1], 'o', markersize=0.1)
         # plt.plot(0, 0, 'kx')
-        # plt.plot(points[hull.vertices,0], points[hull.vertices,1], 'ro')
+        # plt.plot(
+        #     points[hull.vertices,0],
+        #     points[hull.vertices,1],
+        #     'ro-',
+        #     markersize=3,
+        #     
+        # )
 
         # ax = plt.gca()
         # ax.set_aspect('equal')
+        # ax.set_facecolor("#dddddd")
 
         # go through each edge, find a vector perpendicular to the one
         # defined by the edge that passes through the origin
@@ -3046,8 +3062,11 @@ class Geometry:
             "L": L,
         }
 
-        # plt.plot(points[min_ndx,0], points[min_ndx,1], 'g*')
-
+        # plt.plot(
+        #     [0, norms[B1_ndx,0]],
+        #     [0, norms[B1_ndx,1]],
+        #     'g-', markersize=10,
+        # )
         # plt.show()
 
         if return_vector:
