@@ -4,6 +4,7 @@ import sys
 import argparse
 from warnings import warn
 
+from AaronTools.atoms import Atom
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename, glob_files
@@ -110,10 +111,10 @@ element_parser.add_argument(
     "-c", "--change-hydrogens",
     nargs="?",
     required=False,
-    default=[None],
+    default=False,
     type=int,
     dest="change_hs",
-    metavar=("N",),
+    metavar="N",
     help="change the number of hydrogens by the specified amount\n" +
     "Specify nothing to automatically determine how many hydrogens\n" +
     "to add or remove. If nothing is specified, the new geometry will\n" +
@@ -123,7 +124,7 @@ element_parser.add_argument(
 element_parser.add_argument(
     "-g", "--geometry",
     type=str,
-    default=None,
+    default=False,
     dest="geometry",
     choices=vsepr_choices,
     required=False,
@@ -136,27 +137,30 @@ args = element_parser.parse_args()
 
 fix_bonds = args.fix_bonds
 
-if args.change_hs is None:
-    adjust_structure = True
-    if args.geometry is not None:
-        warn(
-            "a geometry was specified, but geometry is determined automatically\n" +
-            "with the supplied arguments"
-        )
+if isinstance(args.change_hs, int):
+    adjust_hs = args.change_hs
+elif args.change_hs is None:
+    adjust_hs = True
 else:
-    if isinstance(args.change_hs, int):
-        adjust_hs = args.change_hs
-    else:
-        adjust_hs = 0
+    adjust_hs = 0
 
+new_vsepr = None
+if args.geometry:
     new_vsepr = args.geometry.replace("_", " ")
 
-    if adjust_hs == 0 and new_vsepr is None:
-        adjust_structure = False
-    else:
-        adjust_structure = (adjust_hs, new_vsepr)
+if adjust_hs == 0 and new_vsepr is None:
+    adjust_structure = False
+elif adjust_hs == 0 and new_vsepr:
+    goal = len(Atom.get_shape(new_vsepr)) - 1
+    def goal_func(atom, goal=goal):
+        return goal - len(atom.connected)
+    adjust_structure = (goal_func, new_vsepr)
+elif adjust_hs is True:
+    adjust_structure = True
+else:
+    adjust_structure = (adjust_hs, new_vsepr)
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=element_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

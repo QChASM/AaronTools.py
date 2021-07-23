@@ -76,7 +76,7 @@ remove_frag_parser.add_argument(
 
 args = remove_frag_parser.parse_args()
 
-for infile in glob_files(args.infile):
+for infile in glob_files(args.infile, parser=remove_frag_parser):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format[0], infile))

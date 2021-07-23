@@ -224,7 +224,7 @@ if args.ip_vector is not None:
 if args.vbur is None:
     args.vbur = "Lebedev"
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=steric_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None))

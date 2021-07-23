@@ -100,7 +100,7 @@ args = changechiral_parser.parse_args()
 
 s = ""
 
-for infile in glob_files(args.infile):
+for infile in glob_files(args.infile, parser=changechiral_parser):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format[0], infile))

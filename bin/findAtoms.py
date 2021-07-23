@@ -279,7 +279,7 @@ elif args.delim == "semicolon":
 
 s = ""
 
-for f in glob_files(args.infile):
+for f in glob_files(args.infile, parser=find_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))

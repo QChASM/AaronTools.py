@@ -96,7 +96,7 @@ if args.list_avail:
     print(s.strip())
     sys.exit(0)
 
-for infile in glob_files(args.infile):
+for infile in glob_files(args.infile, parser=substitute_parser):
     if isinstance(infile, str):
         if args.input_format is not None:
             f = FileReader((infile, args.input_format, infile))

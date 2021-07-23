@@ -113,7 +113,7 @@ def main(argv):
     if not args.vector:
         s += "B1\tB2\tB3\tB4\tB5\tL\tfile\n"
     
-    for infile in glob_files(args.infile):
+    for infile in glob_files(args.infile, parser=sterimol_parser):
         if isinstance(infile, str):
             if args.input_format is not None:
                 f = FileReader((infile, args.input_format, infile))

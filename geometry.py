@@ -4,6 +4,7 @@ import re
 import ssl
 from collections import deque
 from copy import deepcopy
+import concurrent.futures
 
 import numpy as np
 from scipy.spatial import distance_matrix
@@ -2257,6 +2258,7 @@ class Geometry:
         apoints=1454,
         min_iter=25,
         basis=None,
+        n_threads=1,
     ):
         """
         calculates % buried volume (%V_bur) using Monte-Carlo or Gauss-Legendre/Lebedev integration
@@ -2280,6 +2282,8 @@ class Geometry:
                    iterations will continue beyond min_iter if the volume has not converged
         basis - change of basis matrix
                 will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
+        n_threads - number of threads to use for MC integration
+                    using multiple threads doesn't benefit performance very much
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
         #        split up the shells for the Lebedev integration, but...
@@ -2363,30 +2367,22 @@ class Geometry:
         for atom in atoms_within_radius:
             radius_list.append(scale * radii_dict[atom.element])
 
+        radius_list = np.array(radius_list)
         coords = self.coordinates(atoms_within_radius)
 
         # Monte-Carlo integration
         if method.lower() == "mc":
-            if basis is None:
-                prev_vol = cur_vol = 0
-                buried_points = 0
-
-            else:
-                prev_vol = np.zeros(4)
-                cur_vol = np.zeros(4)
-                buried_points = np.zeros(4)
-                tot_points = np.zeros(4)
-
             n_samples = 3000
-            dV = []
-            i = 0
-            # determine %V_bur
-            # do at least 75000 total points, but keep going until
-            # the last 5 changes are all less than 1e-4
-            while i < min_iter or not (
-                all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4
-            ):
-                i += 1
+            def get_iter_vol(n_samples=n_samples):
+                """get the buried points and total points for one MC batch"""
+                if basis is None:
+                    buried_points = 0
+                    tot_points = 0
+    
+                else:
+                    buried_points = np.zeros(4)
+                    tot_points = np.zeros(4)
+
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
                 # things converge faster
@@ -2420,31 +2416,73 @@ class Geometry:
                 # see if the point is inside of any atom's
                 # scaled VDW radius
                 D = distance_matrix(xyz, coords)
-                for k, d_row in enumerate(D):
-                    for j, (d, r) in enumerate(zip(d_row, radius_list)):
-                        if d < r:
-                            if basis is None:
-                                buried_points += 1
-                            else:
-                                # determine what quadrant the point is in
-                                if map_xyz[k, 0] > 0 and map_xyz[k, 1] > 0:
-                                    buried_points[0] += 1
-                                elif map_xyz[k, 0] <= 0 and map_xyz[k, 1] > 0:
-                                    buried_points[1] += 1
-                                elif map_xyz[k, 0] <= 0 and map_xyz[k, 1] <= 0:
-                                    buried_points[2] += 1
-                                else:
-                                    buried_points[3] += 1
-                            break
-
+                diff_mat = D - radius_list
                 if basis is None:
-                    cur_vol = float(buried_points) / (float(i * n_samples))
-                    dV.append(abs(cur_vol - prev_vol))
-                    prev_vol = cur_vol
+                    buried_points += np.sum(np.any(diff_mat <= 0, axis=1))
                 else:
-                    cur_vol = np.divide(buried_points, tot_points) / 4
-                    dV.append(abs(sum(cur_vol) - sum(prev_vol)))
-                    prev_vol = cur_vol
+                    mask = np.any(diff_mat <= 0, axis=1)
+                    buried_coords = map_xyz[mask]
+                    for bc in buried_coords:
+                        if bc[0] > 0 and bc[1] > 0:
+                            buried_points[0] += 1
+                        elif bc[0] <= 0 and bc[1] > 0:
+                            buried_points[1] += 1
+                        elif bc[0] <= 0 and bc[1] <= 0:
+                            buried_points[2] += 1
+                        else:
+                            buried_points[3] += 1
+                return buried_points, tot_points
+
+
+            dV = []
+            i = 0
+            if basis is None:
+                prev_vol = cur_vol = 0
+                buried_points = 0
+                tot_points = 0
+
+            else:
+                prev_vol = np.zeros(4)
+                cur_vol = np.zeros(4)
+                buried_points = np.zeros(4)
+                tot_points = np.zeros(4)
+            # determine %V_bur
+            # do at least 75000 total points, but keep going until
+            # the last 5 changes are all less than 1e-4
+            while i < min_iter or not (
+                all(dv < 2e-4 for dv in dV[-5:]) and np.mean(dV[-5:]) < 1e-4
+            ):
+                if n_threads == 1:
+                    iter_buried, iter_tot = get_iter_vol()
+                    buried_points += iter_buried
+                    tot_points += iter_tot
+                    if basis is None:
+                        cur_vol = float(buried_points) / (float((i + 1) * n_samples))
+                        dV.append(abs(cur_vol - prev_vol))
+                        prev_vol = cur_vol
+                    else:
+                        cur_vol = np.divide(buried_points, tot_points) / 4
+                        dV.append(abs(sum(cur_vol) - sum(prev_vol)))
+                        prev_vol = cur_vol
+
+                else:
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=n_threads
+                    ) as executor:
+                        out = [executor.submit(get_iter_vol) for k in range(0, n_threads)]
+                    results = [data.result() for data in out]
+                    for k in range(0, n_threads):
+                        buried_points += results[k][0]
+                        if basis is None:
+                            cur_vol = float(buried_points) / (float((i + k + 1) * n_samples))
+                            dV.append(abs(cur_vol - prev_vol))
+                            prev_vol = cur_vol
+                        else:
+                            tot_points += results[k][1]
+                            cur_vol = np.divide(buried_points, tot_points) / 4
+                            dV.append(abs(sum(cur_vol) - sum(prev_vol)))
+                            prev_vol = cur_vol
+                i += n_threads
 
             between_v = cur_vol * (maxr ** 3 - minr ** 3)
             tot_v = radius ** 3
@@ -2470,51 +2508,28 @@ class Geometry:
 
             for i, rvalue in enumerate(rgrid):
                 # collect non-zero weights in inside_weights, then sum after looping over shell
-                if basis is not None:
-                    inside_weights = np.zeros((4, apoints))
-                else:
-                    inside_weights = np.zeros(apoints)
                 # scale grid point to radius and shift to center
                 agrid_r = agrid * rvalue
                 if basis is not None:
                     map_agrid_r = np.dot(agrid_r, basis)
                 agrid_r += center_coords
                 D = distance_matrix(agrid_r, coords)
-                for j, (d_row, aweight) in enumerate(zip(D, aweights)):
-                    # add weight if the point is inside of any atom's
-                    # scaled VDW radius
-                    for d, r in zip(d_row, radius_list):
-                        if d < r:
-                            if basis is not None:
-                                # determine what quadrant the point is in for steric map stuff
-                                if (
-                                    map_agrid_r[j, 0] > 0
-                                    and map_agrid_r[j, 1] > 0
-                                ):
-                                    inside_weights[0][j] = aweight
-                                elif (
-                                    map_agrid_r[j, 0] < 0
-                                    and map_agrid_r[j, 1] > 0
-                                ):
-                                    inside_weights[1][j] = aweight
-                                elif (
-                                    map_agrid_r[j, 0] < 0
-                                    and map_agrid_r[j, 1] < 0
-                                ):
-                                    inside_weights[2][j] = aweight
-                                else:
-                                    inside_weights[3][j] = aweight
-                            else:
-                                inside_weights[j] = aweight
-
-                            break
-
-                    # save integral over current shell (without 4 pi r^2)
-                    if basis is not None:
-                        for k in range(0, 4):
-                            shell_values[k][i] = np.sum(inside_weights[k])
-                    else:
-                        shell_values[i] = np.sum(inside_weights)
+                diff_mat = D - radius_list
+                mask = np.any(diff_mat <= 0, axis=1)
+                if basis is None:
+                    shell_values[i] = sum(aweights[mask])
+                else:
+                    mask = np.any(diff_mat <= 0, axis=1)
+                    buried_coords = map_agrid_r[mask]
+                    for bc, aweight in zip(buried_coords, aweights[mask]):
+                        if bc[0] > 0 and bc[1] > 0:
+                            shell_values[0][i] += aweight
+                        elif bc[0] <= 0 and bc[1] > 0:
+                            shell_values[1][i] += aweight
+                        elif bc[0] <= 0 and bc[1] <= 0:
+                            shell_values[2][i] += aweight
+                        else:
+                            shell_values[3][i] += aweight
 
             if basis is not None:
                 # return a list of buried volume in each quadrant
@@ -4211,6 +4226,8 @@ class Geometry:
         elif isinstance(adjust_hydrogens, tuple):
             # tuple of (change in hydrogens, vsepr shape) was given
             change_hydrogens, new_shape = adjust_hydrogens
+            if callable(change_hydrogens):
+                change_hydrogens = change_hydrogens(target)
 
         else:
             # no change was requested, only the element will change
@@ -4506,9 +4523,7 @@ class Geometry:
         target.element = new_element
 
         # these methods are normally called when an atom is instantiated
-        target._set_radii()
-        target._set_connectivity()
-        target._set_saturation()
+        target.reset()
 
         # fix bond lengths if requested
         # try to guess the bond order based on saturation

@@ -1927,6 +1927,22 @@ class FileReader:
                     n += 1
                 self.other["gradient"] = grad
 
+            # electronic properties
+            if "Electrostatic Properties (Atomic Units)" in line:
+                self.skip_lines(f, 5)
+                n += 5
+                self.other["electric_potential"] = []
+                self.other["electric_field"] = []
+                line = f.readline()
+                while "--" not in line:
+                    info = line.split()
+                    self.other["electric_potential"].append(float(info[2]))
+                    self.other["electric_field"].append([float(x) for x in info[3:]])
+                    line = f.readline()
+                    n += 1
+                self.other["electric_potential"] = np.array(self.other["electric_potential"])
+                self.other["electric_field"] = np.array(self.other["electric_field"])
+
             # symmetry
             if "Full point group" in line:
                 self.other["full_point_group"] = line.split()[-3]
