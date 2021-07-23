@@ -2979,7 +2979,7 @@ class Geometry:
         norm_mags = np.linalg.norm(norms, axis=1)
         B1_ndx = np.argmin(norm_mags)
         B1 = norm_mags[B1_ndx]
-        b1_atom_coords = coords[ndx[B1_ndx]]
+        b1_atom_coords = coords[ndx[hull.vertices[B1_ndx]]]
         test_v = b1_atom_coords - start.coords
         test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
         start_x = b1_atom_coords - test_B1_v
