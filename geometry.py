@@ -2946,15 +2946,14 @@ class Geometry:
         #         color = "white"
         #     if self.atoms[ndx[i]].element == "C":
         #         color = "#5c5c5c"
-        #     plt.plot(*pt, 'o', markersize=0.5, color=color)
-        # plt.plot(points[:, 0], points[:, 1], 'o', markersize=0.1)
+        #     plt.plot(*pt, 'o', markersize=1, color=color)
+        # # plt.plot(points[:, 0], points[:, 1], 'o', markersize=0.1)
         # plt.plot(0, 0, 'kx')
         # plt.plot(
-        #     points[hull.vertices,0],
-        #     points[hull.vertices,1],
+        #     [*points[hull.vertices, 0], points[hull.vertices[0], 0]],
+        #     [*points[hull.vertices, 1], points[hull.vertices[0], 1]],
         #     'ro-',
-        #     markersize=3,
-        #     
+        #     markersize=3,    
         # )
 
         # ax = plt.gca()
