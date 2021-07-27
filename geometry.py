@@ -2946,6 +2946,10 @@ class Geometry:
         #         color = "white"
         #     if self.atoms[ndx[i]].element == "C":
         #         color = "#5c5c5c"
+        #     if self.atoms[ndx[i]].element == "F":
+        #         color = "#90e050"
+        #     if self.atoms[ndx[i]].element == "O":
+        #         color = "#ff0000"
         #     plt.plot(*pt, 'o', markersize=1, color=color)
         # # plt.plot(points[:, 0], points[:, 1], 'o', markersize=0.1)
         # plt.plot(0, 0, 'kx')
@@ -2955,7 +2959,7 @@ class Geometry:
         #     'ro-',
         #     markersize=3,    
         # )
-
+        # 
         # ax = plt.gca()
         # ax.set_aspect('equal')
         # ax.set_facecolor("#dddddd")
