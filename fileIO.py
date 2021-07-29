@@ -3414,7 +3414,7 @@ class Frequency:
             self.LOG.warning("nothing to plot")
             return None
 
-        y_values /= max(y_values.max(), y_values.min(), key=abs)
+        y_values /= abs(max(y_values.max(), y_values.min(), key=abs))
 
         if plot_type.lower() == "transmittance" and not vcd:
             y_values = np.array([10 ** (2 - y) for y in y_values])
