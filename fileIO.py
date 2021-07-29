@@ -3616,7 +3616,7 @@ class Frequency:
                     ax.vlines(
                         x_values,
                         [0 for y in y_values],
-                        [y/abs(y) for y in y_values],
+                        [y for y in y_values],
                         linewidth=0.5,
                         colors=["k" for x in x_values],
                         label="computed",
