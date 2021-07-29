@@ -3082,7 +3082,7 @@ class Frequency:
                     self.data[i].forcek = float(force_constants[i])
                 continue
 
-            if ("Force constants" in line and "---" in line and hpmodes) or (
+            if ("Rot. strength" in line and "---" in line and hpmodes) or (
                 "Rot. str." in line and "--" in line and not hpmodes
             ):
                 roational_strength = float_num.findall(line)
