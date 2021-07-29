@@ -1943,6 +1943,12 @@ class FileReader:
                 self.other["electric_potential"] = np.array(self.other["electric_potential"])
                 self.other["electric_field"] = np.array(self.other["electric_field"])
 
+            # optical features
+            if "[Alpha]" in line:
+                alpha_match = re.search("\[Alpha\].*\(\s*(.*\s?.*)\)\s*=\s*(-?\d+\.\d+)", line)
+                self.other["optical_rotation_(%s)" % alpha_match.group(1)] = \
+                float(alpha_match.group(2))
+
             # symmetry
             if "Full point group" in line:
                 self.other["full_point_group"] = line.split()[-3]
@@ -2033,6 +2039,8 @@ class FileReader:
                                     from AaronTools.finders import FlaggedAtoms
 
                                     constraints = {"atoms": FlaggedAtoms}
+                                    if not any(atom.flag for atom in self.atoms):
+                                        constraints = None
                                 job_type.append(
                                     OptimizationJob(constraints=constraints)
                                 )
@@ -2817,6 +2825,7 @@ class Frequency:
             vector=None,
             forcek=None,
             symmetry=None,
+            rotation=None
         ):
             if vector is None:
                 vector = []
@@ -2826,6 +2835,7 @@ class Frequency:
             self.symmetry = symmetry
             self.vector = np.array(vector)
             self.forcek = forcek
+            self.rotation = rotation
 
     class AnharmonicData:
         """
@@ -3072,6 +3082,14 @@ class Frequency:
                     self.data[i].forcek = float(force_constants[i])
                 continue
 
+            if ("Force constants" in line and "---" in line and hpmodes) or (
+                "Rot. str." in line and "--" in line and not hpmodes
+            ):
+                roational_strength = float_num.findall(line)
+                for i in range(-len(roational_strength), 0, 1):
+                    self.data[i].rotation = float(roational_strength[i])
+                continue
+
             if "IR Inten" in line and (
                 (hpmodes and "---" in line) or (not hpmodes and "--" in line)
             ):
@@ -3254,6 +3272,7 @@ class Frequency:
         linear_scale=0.0,
         quadratic_scale=0.0,
         anharmonic=False,
+        vcd=False,
     ):
         """
         returns arrays of x_values, y_values for an IR plot
@@ -3266,6 +3285,7 @@ class Frequency:
         voigt_mixing - fraction of pseudo-voigt that is gaussian
         linear_scale - subtract linear_scale * frequency off each mode
         quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
+        vcd - plot VCD instead of an IR absorbance or transmittance spectrum
         """
         # scale frequencies
         if anharmonic and self.anharm_data:
@@ -3292,9 +3312,14 @@ class Frequency:
             frequencies = np.array(
                 [freq.frequency for freq in self.data if freq.frequency > 0]
             )
+            
             intensities = [
                 freq.intensity for freq in self.data if freq.frequency > 0
             ]
+            if vcd:
+                intensities = [
+                    freq.rotation for freq in self.data if freq.frequency > 0
+                ]
 
         frequencies -= (
             linear_scale * frequencies + quadratic_scale * frequencies ** 2
@@ -3389,9 +3414,9 @@ class Frequency:
             self.LOG.warning("nothing to plot")
             return None
 
-        y_values /= np.amax(y_values)
+        y_values /= max(y_values.max(), y_values.min(), key=abs)
 
-        if plot_type.lower() == "transmittance":
+        if plot_type.lower() == "transmittance" and not vcd:
             y_values = np.array([10 ** (2 - y) for y in y_values])
 
         return x_values, y_values
@@ -3467,6 +3492,8 @@ class Frequency:
                     ax.set_ylabel("Transmittance (%)")
                 else:
                     ax.set_ylabel("Absorbance (arb.)")
+                if "vcd" in kwargs and kwargs["vcd"]:
+                    ax.set_ylabel("Intensity (arb.)")
 
                 # need to split plot into sections
                 # put a / on the border at the top and bottom borders
@@ -3548,7 +3575,7 @@ class Frequency:
                 )
 
             else:
-                if plot_type.lower() == "transmittance":
+                if plot_type.lower() == "transmittance" and not ("vcd" in kwargs and kwargs["vcd"]):
                     ax.vlines(
                         x_values,
                         y_values,
@@ -3566,11 +3593,30 @@ class Frequency:
                         label="computed",
                     )
 
-                else:
+                elif not ("vcd" in kwargs and kwargs["vcd"]):
                     ax.vlines(
                         x_values,
                         [0 for y in y_values],
                         y_values,
+                        linewidth=0.5,
+                        colors=["k" for x in x_values],
+                        label="computed",
+                    )
+                    ax.hlines(
+                        0,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=["k" for y in y_values],
+                        label="computed",
+                    )
+
+                else:
+                    # plot VCD
+                    ax.vlines(
+                        x_values,
+                        [0 for y in y_values],
+                        [y/abs(y) for y in y_values],
                         linewidth=0.5,
                         colors=["k" for x in x_values],
                         label="computed",

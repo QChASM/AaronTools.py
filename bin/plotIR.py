@@ -54,6 +54,15 @@ ir_parser.add_argument(
     help="force to use harmonic frequencies when anharmonic data is in the file",
 )
 
+ir_parser.add_argument(
+    "-no-vcd", "--no-vibrational-circular-dichroism",
+    action="store_false",
+    default=True,
+    dest="vcd",
+    help="do not plot VCD spectrum instead of standard IR abs. or trans. spectrum\n"
+    "plotting VCD spectra is default if VCD data is parsed from the file",
+)
+
 
 peak_options = ir_parser.add_argument_group("peak options")
 peak_options.add_argument(
@@ -194,6 +203,7 @@ for f in glob_files(args.infiles, parser=ir_parser):
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
         anharmonic=freq.anharm_data and args.anharmonic,
+        vcd=freq.data[0].rotation and args.vcd,
     )
 
     if args.fig_width:
