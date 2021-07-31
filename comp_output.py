@@ -47,6 +47,9 @@ class CompOutput:
         gradient, E_ZPVE, ZPVE
     """
 
+    ELECTRONIC_ENERGY = "NRG"
+    ZEROPOINT_ENERGY = "ZPE"
+    RRHO_ENTHALPY = "ENTHALPY"
     QUASI_HARMONIC = "QHARM"
     QUASI_RRHO = "QRRHO"
     RRHO = "RRHO"
@@ -144,6 +147,86 @@ class CompOutput:
             # might be slightly different
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
+
+    @staticmethod
+    def mix_spectra(
+        comp_outputs,
+        fractions=None,
+        v0=100,
+        temperature=298.15,
+        weighting=QUASI_RRHO,
+        plot_type="transmittance",
+        **kwargs,
+    ):
+        """
+        get functions for a spectrum that is a mixture
+        of compounds
+        
+        comp_outputs: either a list of comp_outputs or a 
+            list of lists of comp_outputs
+            for a list of comp_outputs, boltzmann weighting
+            will be used to produce the spectrum
+            if a list of lists is given, each list of
+            comp_outputs will be boltzmann weighted
+            and multiplied by the corresponding fraction
+            to produce the spectrum
+        fractions: array of floats if comp_outputs
+            is a list of lists
+            ignored otherwise
+        weighting: what energy type to use for boltzmann
+        kwargs: keywords for Frequency.get_spectrum_functions
+        """
+        if "intensity_attr" not in kwargs:
+            intensity_attr = "intensity"
+            if plot_type.lower() == "vcd":
+                intensity_attr = "rotation"
+            kwargs["intensity_attr"] = intensity_attr
+        
+        functions = []
+        frequencies = []
+        intensities = []
+        
+        if not hasattr(comp_outputs[0], "__iter__"):
+            comp_outputs = [comp_outputs]
+            fractions = [1]
+        
+        for group, frac in zip(comp_outputs, fractions):
+            min_nrg = None
+            nrgs = []
+            for compout in group:
+                if weighting == CompOutput.ELECTRONIC_ENERGY:
+                    nrg = compout.energy
+                elif weighting == CompOutput.ZEROPOINT_ENERGY:
+                    nrg = compout.E_ZPVE
+                elif weighting == CompOutput.RRHO_ENTHALPY:
+                    _, Hcorr, _ = compout.therm_corr(
+                        temperature=temperature, v0=v0
+                    )
+                    nrg = compout.energy + Hcorr
+                else:
+                    Gcorr = compout.calc_G_corr(
+                        method=weighting, temperature=temperature, v0=v0
+                    )
+                    nrg = compout.energy + Gcorr
+                
+                if min_nrg is None or nrg < min_nrg:
+                    min_nrg = nrg
+                nrgs.append(nrg)
+            
+            for compout, nrg in zip(group, nrgs):
+                base_funcs, base_freqs, base_inten = compout.frequency.get_spectrum_functions(**kwargs)
+                scale = frac * np.exp(
+                    -(nrg - min_nrg) * UNIT.HART_TO_KCAL / (PHYSICAL.R * temperature)
+                )
+                for func, x in zip(base_funcs, base_freqs):
+                    functions.append(
+                        lambda x, s=scale, fun=func: s * fun(x)
+                    )
+
+                frequencies.extend(base_freqs)
+                intensities.extend(base_inten)
+
+        return functions, frequencies, intensities
 
     def to_dict(self, skip_attrs=None):
         return obj_to_dict(self, skip_attrs=skip_attrs)

@@ -2931,6 +2931,294 @@ class Frequency:
         self.sort_frequencies()
         return
 
+    @staticmethod
+    def plot_spectrum(
+        figure,
+        x_values,
+        y_values,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        reverse_x=None,
+        y_label=None,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+    ):
+        """
+        plot the x_data and y_data on figure (matplotlib figure)
+        this is intended for IR spectra
+        
+        centers - array-like of float, plot is split into sections centered
+                  on the frequency specified by centers
+                  default is to not split into sections
+        widths - array-like of float, defines the width of each section
+        exp_data - other data to plot
+                   should be a list of (x_data, y_data, color)
+        reverse_x - if True, 0 cm^-1 will be on the right
+        """
+        
+        if not centers:
+            # if no centers were specified, pretend they were so we
+            # can do everything the same way
+            axes = [figure.subplots(nrows=1, ncols=1)]
+            widths = [max(x_values)]
+            centers = [max(x_values) / 2]
+        else:
+            n_sections = len(centers)
+            figure.subplots_adjust(wspace=0.05)
+            # sort the sections so we don't jump around
+            widths = [
+                x
+                for _, x in sorted(
+                    zip(centers, widths),
+                    key=lambda p: p[0],
+                    reverse=reverse_x,
+                )
+            ]
+            centers = sorted(centers, reverse=reverse_x)
+
+            axes = figure.subplots(
+                nrows=1,
+                ncols=n_sections,
+                sharey=True,
+                gridspec_kw={"width_ratios": widths},
+            )
+            if not hasattr(axes, "__iter__"):
+                # only one section was specified (e.g. zooming in on a peak)
+                # make sure axes is iterable
+                axes = [axes]
+
+        for i, ax in enumerate(axes):
+            if i == 0:
+                ax.set_ylabel(y_label)
+
+                # need to split plot into sections
+                # put a / on the border at the top and bottom borders
+                # of the plot
+                if len(axes) > 1:
+                    ax.spines["right"].set_visible(False)
+                    ax.tick_params(labelright=False, right=False)
+                    ax.plot(
+                        [1, 1],
+                        [0, 1],
+                        marker=((-1, -1), (1, 1)),
+                        markersize=5,
+                        linestyle="none",
+                        color="k",
+                        mec="k",
+                        mew=1,
+                        clip_on=False,
+                        transform=ax.transAxes,
+                    )
+
+            elif i == len(axes) - 1 and len(axes) > 1:
+                # last section needs a set of / too, but on the left side
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(labelleft=False, left=False)
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle="none",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            elif len(axes) > 1:
+                # middle sections need two sets of /
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(
+                    labelleft=False, labelright=False, left=False, right=False
+                )
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle="none",
+                    label="Silence Between Two Subplots",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+                ax.plot(
+                    [1, 1],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    label="Silence Between Two Subplots",
+                    linestyle="none",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            if peak_type.lower() != "delta":
+                ax.plot(
+                    x_values,
+                    y_values,
+                    color="k",
+                    linewidth=0.5,
+                    label="computed",
+                )
+
+            else:
+                if plot_type.lower() == "transmittance":
+                    ax.vlines(
+                        x_values,
+                        y_values,
+                        [100 for y in y_values],
+                        linewidth=0.5,
+                        colors=["k" for x in x_values],
+                        label="computed",
+                    )
+                    ax.hlines(
+                        100,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=["k" for y in y_values],
+                        label="computed",
+                    )
+
+                else:
+                    ax.vlines(
+                        x_values,
+                        [0 for y in y_values],
+                        y_values,
+                        linewidth=0.5,
+                        colors=["k" for x in x_values],
+                        label="computed",
+                    )
+                    ax.hlines(
+                        0,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=["k" for y in y_values],
+                        label="computed",
+                    )
+
+            if exp_data:
+                for x, y, color in exp_data:
+                    ax.plot(
+                        x,
+                        y,
+                        color=color,
+                        zorder=-1,
+                        linewidth=0.5,
+                        label="observed",
+                    )
+
+            center = centers[i]
+            width = widths[i]
+            high = center + width / 2
+            low = center - width / 2
+            if reverse_x:
+                ax.set_xlim(high, low)
+            else:
+                ax.set_xlim(low, high)
+
+        # b/c we're doing things in sections, we can't add an x-axis label
+        # well we could, but which section would be put it one?
+        # it wouldn't be centered
+        # so instead the x-axis label is this
+        figure.text(
+            0.5, 0.0, r"wavenumber (cm$^{-1}$)", ha="center", va="bottom"
+        )
+
+    @staticmethod
+    def get_ir_data(
+        functions,
+        frequencies,
+        intensities,
+        point_spacing=None,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        normalize=True,
+        fwhm=15.0,
+    ):
+        """
+        returns arrays of x_values, y_values for an IR plot
+        point_spacing - spacing between points, default is higher resolution around
+                        each peak (i.e. not uniform)
+                        this is pointless if peak_type == delta
+        fwhm - full width at half max in 1/cm
+        plot_type - transmittance, absorbance, or VCD
+        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
+        voigt_mixing - fraction of pseudo-voigt that is gaussian
+        linear_scale - subtract linear_scale * frequency off each mode
+        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
+        """
+
+        if point_spacing and peak_type.lower() != "delta":
+            x_values = []
+            x = -point_spacing
+            stop = max(frequencies)
+            if peak_type.lower() != "delta":
+                stop += 5 * fwhm
+            while x < stop:
+                x += point_spacing
+                x_values.append(x)
+
+            x_values = np.array(x_values)
+
+        elif peak_type.lower() != "delta":
+            x_values = np.linspace(
+                0,
+                max(frequencies) - 10 * fwhm,
+                num=100
+            ).tolist()
+
+            for freq, intensity in zip(frequencies, intensities):
+                if intensity is not None:
+                    x_values.extend(
+                        np.linspace(
+                            max(freq - (3.5 * fwhm), 0),
+                            freq + (3.5 * fwhm),
+                            num=65,
+                        ).tolist()
+                    )
+                    x_values.append(freq)
+
+            if not point_spacing:
+                x_values = np.array(list(set(x_values)))
+                x_values.sort()
+
+            y_values = np.sum([f(x_values) for f in functions], axis=0)
+
+        else:
+            x_values = []
+            y_values = []
+
+            for freq, intensity in zip(frequencies, intensities):
+                if intensity is not None:
+                    y_values.append(intensity)
+                    x_values.append(freq)
+
+            y_values = np.array(y_values)
+
+        if len(y_values) == 0:
+            Frequency.LOG.warning("nothing to plot")
+            return None
+
+        if normalize:
+            y_values /= abs(max(y_values.max(), y_values.min(), key=abs))
+        
+        if plot_type.lower() == "transmittance":
+            y_values = np.array([10 ** (2 - y) for y in y_values])
+        
+        return x_values, y_values
+
     def parse_psi4_lines(self, lines, hpmodes):
         """parse lines of psi4 output related to frequencies
         hpmodes is not used"""
@@ -3262,45 +3550,30 @@ class Frequency:
             mode.frequency for mode in self.anharm_data if mode.frequency > 0
         ]
 
-    def get_ir_data(
+    def get_spectrum_functions(
         self,
-        point_spacing=None,
         fwhm=15.0,
-        plot_type="transmittance",
         peak_type="pseudo-voigt",
         voigt_mixing=0.5,
         linear_scale=0.0,
         quadratic_scale=0.0,
         anharmonic=False,
-        vcd=False,
+        intensity_attr="intensity",
     ):
-        """
-        returns arrays of x_values, y_values for an IR plot
-        point_spacing - spacing between points, default is higher resolution around
-                        each peak (i.e. not uniform)
-                        this is pointless if peak_type == delta
-        fwhm - full width at half max in 1/cm
-        plot_type - transmittance or absorbance
-        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
-        voigt_mixing - fraction of pseudo-voigt that is gaussian
-        linear_scale - subtract linear_scale * frequency off each mode
-        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
-        vcd - plot VCD instead of an IR absorbance or transmittance spectrum
-        """
         # scale frequencies
         if anharmonic and self.anharm_data:
             frequencies = []
             intensities = []
             for data in self.anharm_data:
                 frequencies.append(data.frequency)
-                intensities.append(data.intensity)
+                intensities.append(getattr(data, intensity_attr))
                 for overtone in data.overtones:
                     frequencies.append(overtone.frequency)
-                    intensities.append(overtone.intensity)
+                    intensities.append(getattr(overtone, intensity_attr))
                 for key in data.combinations:
                     for combo in data.combinations[key]:
                         frequencies.append(combo.frequency)
-                        intensities.append(combo.intensity)
+                        intensities.append(getattr(combo, intensity_attr))
             frequencies = np.array(frequencies)
             intensities = np.array(intensities)
         else:
@@ -3314,112 +3587,59 @@ class Frequency:
             )
             
             intensities = [
-                freq.intensity for freq in self.data if freq.frequency > 0
+                getattr(freq, intensity_attr) for freq in self.data if freq.frequency > 0
             ]
-            if vcd:
-                intensities = [
-                    freq.rotation for freq in self.data if freq.frequency > 0
-                ]
 
         frequencies -= (
             linear_scale * frequencies + quadratic_scale * frequencies ** 2
         )
 
-        if point_spacing:
-            x_values = []
-            x = -point_spacing
-            stop = max(frequencies)
-            if peak_type.lower() != "delta":
-                stop += 5 * fwhm
-            while x < stop:
-                x += point_spacing
-                x_values.append(x)
-
-            x_values = np.array(x_values)
-
         e_factor = -4 * np.log(2) / fwhm ** 2
 
-        if peak_type.lower() != "delta":
-            # get a list of functions
-            # we'll evaluate these at each x point later
-            functions = []
-            if not point_spacing:
-                x_values = np.linspace(
-                    0, max(frequencies) - 10 * fwhm, num=100
-                ).tolist()
+        functions = []
 
-            for freq, intensity in zip(frequencies, intensities):
-                if intensity is not None:
-                    if not point_spacing:
-                        x_values.extend(
-                            np.linspace(
-                                max(freq - (3.5 * fwhm), 0),
-                                freq + (3.5 * fwhm),
-                                num=65,
-                            ).tolist()
+        for freq, intensity in zip(frequencies, intensities):
+            if intensity is not None:
+                if peak_type.lower() == "gaussian":
+                    functions.append(
+                        lambda x, x0=freq, inten=intensity: inten
+                        * np.exp(e_factor * (x - x0) ** 2)
+                    )
+
+                elif peak_type.lower() == "lorentzian":
+                    functions.append(
+                        lambda x, x0=freq, inten=intensity: inten
+                        * 0.5
+                        * (
+                            0.5
+                            * fwhm ** 2
+                            / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
                         )
-                        x_values.append(freq)
+                    )
 
-                    if peak_type.lower() == "gaussian":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
-                            * np.exp(e_factor * (x - x0) ** 2)
-                        )
-
-                    elif peak_type.lower() == "lorentzian":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
+                elif peak_type.lower() == "pseudo-voigt":
+                    functions.append(
+                        lambda x, x0=freq, inten=intensity: inten
+                        * (
+                            (1 - voigt_mixing)
                             * 0.5
                             * (
                                 0.5
-                                * fwhm
+                                * fwhm ** 2
                                 / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
                             )
+                            + voigt_mixing
+                            * np.exp(e_factor * (x - x0) ** 2)
                         )
-
-                    elif peak_type.lower() == "pseudo-voigt":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
-                            * (
-                                (1 - voigt_mixing)
-                                * 0.5
-                                * (
-                                    0.5
-                                    * fwhm
-                                    / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
-                                )
-                                + voigt_mixing
-                                * np.exp(e_factor * (x - x0) ** 2)
-                            )
-                        )
-
-            if not point_spacing:
-                x_values = np.array(list(set(x_values)))
-                x_values.sort()
-
-            y_values = np.sum([f(x_values) for f in functions], axis=0)
-
-        else:
-            x_values = []
-            y_values = []
-
-            for freq, intensity in zip(frequencies, intensities):
-                if intensity is not None:
-                    y_values.append(intensity)
-                    x_values.append(freq)
-
-            y_values = np.array(y_values)
-
-        if len(y_values) == 0:
-            self.LOG.warning("nothing to plot")
-            return None
-
-        y_values /= abs(max(y_values.max(), y_values.min(), key=abs))
-
-        if plot_type.lower() == "transmittance" and not vcd:
-            y_values = np.array([10 ** (2 - y) for y in y_values])
-
-        return x_values, y_values
+                    )
+                    
+                elif peak_type.lower() == "delta":
+                    functions.append(
+                        lambda x, x0=freq, inten=intensity: inten 
+                        * np.heaviside(x - x0)
+                    )
+        
+        return functions, frequencies, intensities
 
     def plot_ir(
         self,
@@ -3430,6 +3650,10 @@ class Frequency:
         plot_type="transmittance",
         peak_type="pseudo-voigt",
         reverse_x=True,
+        y_label=None,
+        point_spacing=None,
+        normalize=True,
+        fwhm=15.0,
         **kwargs,
     ):
         """
@@ -3444,218 +3668,54 @@ class Frequency:
         reverse_x - if True, 0 cm^-1 will be on the right
         plot_type - see Frequency.get_ir_data
         peak_type - any value allowed by Frequency.get_ir_data
-        kwargs - keywords for Frequency.get_ir_data
+        kwargs - keywords for Frequency.get_spectrum_functions
         """
 
+        if "intensity_attr" not in kwargs:
+            intensity_attr = "intensity"
+            if plot_type.lower() == "vcd":
+                intensity_attr = "rotation"
+            kwargs["intensity_attr"] = intensity_attr
+        
+        functions, frequencies, intensities = self.get_spectrum_functions(
+            peak_type=peak_type,
+            fwhm=fwhm,
+            **kwargs,
+        )
+
         data = self.get_ir_data(
-            plot_type=plot_type, peak_type=peak_type, **kwargs
+            functions,
+            frequencies,
+            intensities,
+            fwhm=fwhm,
+            plot_type=plot_type,
+            peak_type=peak_type,
+            point_spacing=point_spacing,
+            normalize=normalize,
         )
         if data is None:
             return
 
         x_values, y_values = data
 
-        if not centers:
-            # if no centers were specified, pretend they were so we
-            # can do everything the same way
-            axes = [figure.subplots(nrows=1, ncols=1)]
-            widths = [max(x_values)]
-            centers = [max(x_values) / 2]
-        else:
-            n_sections = len(centers)
-            figure.subplots_adjust(wspace=0.05)
-            # sort the sections so we don't jump around
-            widths = [
-                x
-                for _, x in sorted(
-                    zip(centers, widths),
-                    key=lambda p: p[0],
-                    reverse=reverse_x,
-                )
-            ]
-            centers = sorted(centers, reverse=reverse_x)
+        if y_label is None and plot_type.lower() == "transmittance":
+            y_label = "Transmittance (%)"
+        elif y_label is None and plot_type.lower() == "absorbance":
+            y_label = "Absorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "vcd":
+            y_label = "ΔAbsorbance (arb.)"
 
-            axes = figure.subplots(
-                nrows=1,
-                ncols=n_sections,
-                sharey=True,
-                gridspec_kw={"width_ratios": widths},
-            )
-            if not hasattr(axes, "__iter__"):
-                # only one section was specified (e.g. zooming in on a peak)
-                # make sure axes is iterable
-                axes = [axes]
-
-        for i, ax in enumerate(axes):
-            if i == 0:
-                if plot_type.lower() == "transmittance":
-                    ax.set_ylabel("Transmittance (%)")
-                else:
-                    ax.set_ylabel("Absorbance (arb.)")
-                if "vcd" in kwargs and kwargs["vcd"]:
-                    ax.set_ylabel("Intensity (arb.)")
-
-                # need to split plot into sections
-                # put a / on the border at the top and bottom borders
-                # of the plot
-                if len(axes) > 1:
-                    ax.spines["right"].set_visible(False)
-                    ax.tick_params(labelright=False, right=False)
-                    ax.plot(
-                        [1, 1],
-                        [0, 1],
-                        marker=((-1, -1), (1, 1)),
-                        markersize=5,
-                        linestyle="none",
-                        color="k",
-                        mec="k",
-                        mew=1,
-                        clip_on=False,
-                        transform=ax.transAxes,
-                    )
-
-            elif i == len(axes) - 1 and len(axes) > 1:
-                # last section needs a set of / too, but on the left side
-                ax.spines["left"].set_visible(False)
-                ax.tick_params(labelleft=False, left=False)
-                ax.plot(
-                    [0, 0],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    linestyle="none",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-
-            elif len(axes) > 1:
-                # middle sections need two sets of /
-                ax.spines["right"].set_visible(False)
-                ax.spines["left"].set_visible(False)
-                ax.tick_params(
-                    labelleft=False, labelright=False, left=False, right=False
-                )
-                ax.plot(
-                    [0, 0],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    linestyle="none",
-                    label="Silence Between Two Subplots",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-                ax.plot(
-                    [1, 1],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    label="Silence Between Two Subplots",
-                    linestyle="none",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-
-            if peak_type.lower() != "delta":
-                ax.plot(
-                    x_values,
-                    y_values,
-                    color="k",
-                    linewidth=0.5,
-                    label="computed",
-                )
-
-            else:
-                if plot_type.lower() == "transmittance" and not ("vcd" in kwargs and kwargs["vcd"]):
-                    ax.vlines(
-                        x_values,
-                        y_values,
-                        [100 for y in y_values],
-                        linewidth=0.5,
-                        colors=["k" for x in x_values],
-                        label="computed",
-                    )
-                    ax.hlines(
-                        100,
-                        0,
-                        max(4000, *x_values),
-                        linewidth=0.5,
-                        colors=["k" for y in y_values],
-                        label="computed",
-                    )
-
-                elif not ("vcd" in kwargs and kwargs["vcd"]):
-                    ax.vlines(
-                        x_values,
-                        [0 for y in y_values],
-                        y_values,
-                        linewidth=0.5,
-                        colors=["k" for x in x_values],
-                        label="computed",
-                    )
-                    ax.hlines(
-                        0,
-                        0,
-                        max(4000, *x_values),
-                        linewidth=0.5,
-                        colors=["k" for y in y_values],
-                        label="computed",
-                    )
-
-                else:
-                    # plot VCD
-                    ax.vlines(
-                        x_values,
-                        [0 for y in y_values],
-                        [y for y in y_values],
-                        linewidth=0.5,
-                        colors=["k" for x in x_values],
-                        label="computed",
-                    )
-                    ax.hlines(
-                        0,
-                        0,
-                        max(4000, *x_values),
-                        linewidth=0.5,
-                        colors=["k" for y in y_values],
-                        label="computed",
-                    )
-
-            if exp_data:
-                for x, y, color in exp_data:
-                    ax.plot(
-                        x,
-                        y,
-                        color=color,
-                        zorder=-1,
-                        linewidth=0.5,
-                        label="observed",
-                    )
-
-            center = centers[i]
-            width = widths[i]
-            high = center + width / 2
-            low = center - width / 2
-            if reverse_x:
-                ax.set_xlim(high, low)
-            else:
-                ax.set_xlim(low, high)
-
-        # b/c we're doing things in sections, we can't add an x-axis label
-        # well we could, but which section would be put it one?
-        # it wouldn't be centered
-        # so instead the x-axis label is this
-        figure.text(
-            0.5, 0.0, r"wavenumber (cm$^{-1}$)", ha="center", va="bottom"
+        self.plot_spectrum(
+            figure,
+            x_values,
+            y_values,
+            centers=centers,
+            widths=widths,
+            exp_data=exp_data,
+            reverse_x=reverse_x,
+            peak_type=peak_type,
+            plot_type=plot_type,
+            y_label=y_label,
         )
 
 
