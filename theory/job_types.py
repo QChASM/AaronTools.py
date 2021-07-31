@@ -1,4 +1,5 @@
 """various job types for Theory() instances"""
+from AaronTools import addlogger
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,
@@ -45,8 +46,11 @@ class JobType:
         """overwrite to return a dict with SQM_* keys"""
         pass
 
+@addlogger
 class OptimizationJob(JobType):
     """optimization job"""
+
+    LOG = None
 
     def __init__(
         self,
@@ -227,7 +231,11 @@ class OptimizationJob(JobType):
                     out[GAUSSIAN_ROUTE]["Opt"].append("Z-Matrix")
 
             if "atoms" in self.constraints and self.constraints["atoms"]:
-                atoms = self.geometry.find(self.constraints["atoms"])
+                try:
+                    atoms = self.geometry.find(self.constraints["atoms"])
+                except LookupError as e:
+                    self.LOG.warning(e)
+                    atoms = []
                 for atom in atoms:
                     ndx = self.geometry.atoms.index(atom) + 1
                     if not use_zmat:
