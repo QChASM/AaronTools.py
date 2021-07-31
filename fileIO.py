@@ -3160,49 +3160,50 @@ class Frequency:
         quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
         """
 
-        if point_spacing and peak_type.lower() != "delta":
-            x_values = []
-            x = -point_spacing
-            stop = max(frequencies)
-            if peak_type.lower() != "delta":
-                stop += 5 * fwhm
-            while x < stop:
-                x += point_spacing
-                x_values.append(x)
-
-            x_values = np.array(x_values)
-
-        elif peak_type.lower() != "delta":
-            x_values = np.linspace(
-                0,
-                max(frequencies) - 10 * fwhm,
-                num=100
-            ).tolist()
-
-            for freq, intensity in zip(frequencies, intensities):
-                if intensity is not None:
-                    x_values.extend(
-                        np.linspace(
-                            max(freq - (3.5 * fwhm), 0),
-                            freq + (3.5 * fwhm),
-                            num=65,
-                        ).tolist()
-                    )
-                    x_values.append(freq)
-
-            if not point_spacing:
-                x_values = np.array(list(set(x_values)))
-                x_values.sort()
-
+        if peak_type.lower() != "delta":
+            if point_spacing and peak_type.lower():
+                x_values = []
+                x = -point_spacing
+                stop = max(frequencies)
+                if peak_type.lower() != "delta":
+                    stop += 5 * fwhm
+                while x < stop:
+                    x += point_spacing
+                    x_values.append(x)
+            
+                x_values = np.array(x_values)
+            
+            else:
+                x_values = np.linspace(
+                    0,
+                    max(frequencies) - 10 * fwhm,
+                    num=100
+                ).tolist()
+            
+                for freq, intensity in zip(frequencies, intensities):
+                    if intensity is not None:
+                        x_values.extend(
+                            np.linspace(
+                                max(freq - (3.5 * fwhm), 0),
+                                freq + (3.5 * fwhm),
+                                num=65,
+                            ).tolist()
+                        )
+                        x_values.append(freq)
+            
+                if not point_spacing:
+                    x_values = np.array(list(set(x_values)))
+                    x_values.sort()
+            
             y_values = np.sum([f(x_values) for f in functions], axis=0)
 
         else:
             x_values = []
             y_values = []
 
-            for freq, intensity in zip(frequencies, intensities):
+            for freq, intensity, func in zip(frequencies, intensities, functions):
                 if intensity is not None:
-                    y_values.append(intensity)
+                    y_values.append(func(freq))
                     x_values.append(freq)
 
             y_values = np.array(y_values)
@@ -3595,6 +3596,7 @@ class Frequency:
         )
 
         e_factor = -4 * np.log(2) / fwhm ** 2
+        sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
 
         functions = []
 
@@ -3604,16 +3606,15 @@ class Frequency:
                     functions.append(
                         lambda x, x0=freq, inten=intensity: inten
                         * np.exp(e_factor * (x - x0) ** 2)
+                        * fwhm / (2 * np.sqrt(2 * np.log(2)))
                     )
 
                 elif peak_type.lower() == "lorentzian":
                     functions.append(
                         lambda x, x0=freq, inten=intensity: inten
-                        * 0.5
                         * (
-                            0.5
-                            * fwhm ** 2
-                            / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
+                            0.5 * fwhm
+                            / (np.pi * ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
                         )
                     )
 
@@ -3622,21 +3623,19 @@ class Frequency:
                         lambda x, x0=freq, inten=intensity: inten
                         * (
                             (1 - voigt_mixing)
-                            * 0.5
                             * (
-                                0.5
-                                * fwhm ** 2
-                                / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
+                                (0.5 * fwhm) ** 2
+                                / (((x - x0) ** 2 + (0.5 * fwhm) ** 2))
                             )
                             + voigt_mixing
-                            * np.exp(e_factor * (x - x0) ** 2)
+                            * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
                         )
                     )
-                    
+
                 elif peak_type.lower() == "delta":
                     functions.append(
                         lambda x, x0=freq, inten=intensity: inten 
-                        * np.heaviside(x - x0)
+                        * int(x == x0)
                     )
         
         return functions, frequencies, intensities

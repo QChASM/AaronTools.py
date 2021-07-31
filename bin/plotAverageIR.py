@@ -315,7 +315,7 @@ if args.outfile:
             s = ",".join(["frequency (cm^-1)", y_label])
             s += "\n"
             for x, y in zip(x_values, y_values):
-                s += ",".join(["%.2f" % z for z in [x, y]])
+                s += ",".join(["%.4f" % z for z in [x, y]])
                 s += "\n"
             f.write(s)
     else:
