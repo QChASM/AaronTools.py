@@ -157,6 +157,11 @@ class Pathway:
         Q = self.coord_func(t)
         return self.q_to_xyz(Q)
 
+    def dcoords_dt_func(self, t):
+        """returns derivative of Cartesian coordinates for the geometry at point t"""
+        Q = self.dcoord_func_dt(t)
+        return self.q_to_xyz(Q)
+
     def get_coord_func(self, coord, region_length):
         """
         returns function for Cartesian displacement coordinate as a function of t (t [0, 1])

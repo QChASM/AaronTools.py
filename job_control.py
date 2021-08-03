@@ -216,6 +216,9 @@ class SubmitProcess:
 
         tm = self.template.render(**opts)
 
+        if not os.path.isdir(self.directory):
+            os.mkdirs(self.directory)
+        
         with open(job_file, "w") as f:
             f.write(tm)
 

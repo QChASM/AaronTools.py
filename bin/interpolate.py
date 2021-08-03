@@ -11,7 +11,7 @@ from AaronTools.pathway import Pathway
 
 
 def width(n):
-    """use to determine 0-padding based on number of files we"re printing"""
+    """use to determine 0-padding based on number of files we're printing"""
     return np.ceil(np.log10(n))
 
 instruction_args = ["-n", "-e", "-min", "-max", "-t"]

@@ -2,6 +2,7 @@
 import concurrent.futures
 import os
 import re
+import sys
 from copy import deepcopy
 from io import IOBase, StringIO
 
@@ -141,6 +142,42 @@ def str2step(step_str):
         return float(step_str.replace("-", "."))
     else:
         return float(step_str)
+
+def expected_inp_ext(exec_type):
+    """
+    extension expected for an input file for exec_type
+    Gaussian - .com (.gjf on windows)
+    ORCA - .inp
+    Psi4 - .in
+    SQM - .mdin
+    """
+    if exec_type.lower() == "gaussian":
+        if sys.platform.startswith("win"):
+            return ".gjf"
+        return ".com"
+    if exec_type.lower() == "orca":
+        return ".inp"
+    if exec_type.lower() == "psi4":
+        return ".in"
+    if exec_type.lower() == "sqm":
+        return ".mdin"
+
+def expected_out_ext(exec_type):
+    """
+    extension expected for an input file for exec_type
+    Gaussian - .log
+    ORCA - .out
+    Psi4 - .out
+    SQM - .mdout
+    """
+    if exec_type.lower() == "gaussian":
+        return ".log"
+    if exec_type.lower() == "orca":
+        return ".out"
+    if exec_type.lower() == "psi4":
+        return ".out"
+    if exec_type.lower() == "sqm":
+        return ".mdout"
 
 
 class FileWriter:

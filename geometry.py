@@ -1811,7 +1811,7 @@ class Geometry:
         ref,
         align=False,
         heavy_only=False,
-        sort=False,
+        sort=True,
         targets=None,
         ref_targets=None,
         debug=False,
@@ -1984,7 +1984,7 @@ class Geometry:
         # return rmsd
         if not align:
             if debug:
-                return this, ref, rmsd
+                return this, ref, rmsd, vec
             else:
                 return rmsd
         # or update geometry and return rmsd
@@ -1994,7 +1994,7 @@ class Geometry:
         self.coord_shift(ref_com)
         if debug:
             this.rotate(vec)
-            return this, ref, rmsd
+            return this, ref, rmsd, vec
         else:
             return rmsd
 
