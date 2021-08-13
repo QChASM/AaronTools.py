@@ -47,6 +47,13 @@ info.add_argument(
     type=int,
     help="index of atomic orbital to print (0-indexed)"
 )
+info.add_argument(
+    "-ed", "--electron-density",
+    dest="density",
+    default=False,
+    action="store_true",
+    help="print electron density"
+)
 
 cube_parser.add_argument(
     "-s", "--spacing",
@@ -120,6 +127,7 @@ for f in glob_files(args.infile, parser=cube_parser):
         padding=args.padding,
         mo=args.mo_ndx,
         ao=args.ao_ndx,
+        density=args.density,
         spacing=args.spacing,
         style="cube",
         xyz=args.xyz,

@@ -16,7 +16,7 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = ["transmittance", "absorbance", "vcd"]
+plot_types = ["transmittance", "absorbance", "vcd", "raman"]
 weight_types = ["electronic", "zero-point", "enthalpy", "free", "quasi-rrho", "quasi-harmonic"]
 
 def peak_type(x):
@@ -73,7 +73,7 @@ ir_parser.add_argument(
 ir_parser.add_argument(
     "-t", "--plot-type",
     type=plot_type,
-    choices=["transmittance", "absorbance", "vcd"],
+    choices=plot_types,
     default="transmittance",
     dest="plot_type",
     help="type of plot\nDefault: transmittance",
@@ -95,7 +95,7 @@ peak_options = ir_parser.add_argument_group("peak options")
 peak_options.add_argument(
     "-p", "--peak-type",
     type=peak_type,
-    choices=["pseudo-voigt", "gaussian", "lorentzian", "delta"],
+    choices=peak_types,
     default="pseudo-voigt",
     dest="peak_type",
     help="function for peaks\nDefault: pseudo-voigt",

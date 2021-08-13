@@ -5,10 +5,9 @@ import os
 
 from sys import stdin
 from warnings import warn
-from numpy import prod, pi
 
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.finders import BondedTo, ChiralCenters
+from AaronTools.finders import ChiralCenters, Bridgehead, SpiroCenters, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.utils.utils import glob_files
@@ -28,7 +27,7 @@ changechiral_parser.add_argument(
 )
 
 changechiral_parser.add_argument(
-    "-i", "--info",
+    "-ls", "--list-chiral",
     action="store_const",
     const=True,
     default=False,
@@ -73,7 +72,7 @@ changechiral_parser.add_argument(
     "Detected chiral centers are atoms that:\n" +
     "    - have > 2 bonds\n" +
     "    - have a non-planar VSEPR shape\n" +
-    "    - each connected fragment is distinct\n" +
+    "    - each connected fragment is distinct or is a spiro center\n" +
     "Default: change chirality of any detected chiral centers"
 )
 
@@ -117,7 +116,10 @@ for infile in glob_files(args.infile, parser=changechiral_parser):
     target_list = []
     if args.targets is None:
         try:
-            target_list = geom.find(ChiralCenters())
+            chiral_centers = geom.find(ChiralCenters())
+            spiro_centers = geom.find(SpiroCenters(), chiral_centers)
+            bridge_centers = geom.find(chiral_centers, Bridgehead(), NotAny(spiro_centers))
+            target_list = [t for t in chiral_centers if t not in bridge_centers]
         except LookupError as e:
             warn(str(e))
     else:
@@ -140,159 +142,30 @@ for infile in glob_files(args.infile, parser=changechiral_parser):
         # for getting all diastereomers, as each chiral center can only
         # have 2 options instead of the random number of rotamers
         # a substituent can have
-        diastereomers = []
-        for targ in target_list:
-            diastereomers.append(2)
-
-        mod_array = []
-        for i in range(0, len(diastereomers)):
-            mod_array.append(1)
-            for j in range(i + 1, len(diastereomers)):
-                mod_array[i] *= diastereomers[j]
-
-        prev_diastereomer = 0
-        for diastereomer in range(0, int(prod(diastereomers))):
-            for i, targ in enumerate(target_list):
-                rot = int(diastereomer / mod_array[i]) % diastereomers[i]
-                rot -= int(prev_diastereomer / mod_array[i]) % diastereomers[i]
-                angle = rot * pi
-                if angle != 0:
-                    qualifying_fragments = []
-                    for atom in targ.connected:
-                        frag = geom.get_fragment(atom, targ)
-                        if sum([int(targ in frag_atom.connected) for frag_atom in frag]) == 1:
-                            qualifying_fragments.append(frag)
-
-                    if len(qualifying_fragments) < 2:
-                        qualifying_fragments = []
-                        for atom in targ.connected:
-                            frag = geom.get_fragment(atom, targ)
-                            if sum([int(targ in frag_atom.connected) for frag_atom in frag]) == 2:
-                                qualifying_fragments.append(frag)
-
-                        if not qualifying_fragments:
-                            warn(
-                                "cannot change chirality of atom %s\n" % targ.name +
-                                "must have at least two groups not in a ring"
-                            )
-
-                        else:
-                            frag = qualifying_fragments[0]
-                            atom1, atom2 = geom.find(BondedTo(targ), frag)
-                            v1 = targ.bond(atom1) / targ.dist(atom1)
-                            v2 = targ.bond(atom2) / targ.dist(atom2)
-                            rv = v1 + v2
-                            geom.rotate(rv, angle=pi, targets=frag, center=targ)
-
-                            if args.minimize:
-                                warn(
-                                    "cannot minimize steric clashing for cyclic fragment on atom %s" % targ.name
-                                )
-
-                    else:
-                        while len(qualifying_fragments) > 2:
-                            for frag in qualifying_fragments:
-                                if len(frag) == max([len(f) for f in qualifying_fragments]):
-                                    qualifying_fragments.remove(frag)
-                                    break
-
-                        frag1, frag2 = qualifying_fragments
-                        atom1 = geom.find(frag1, BondedTo(targ))[0]
-                        atom2 = geom.find(frag2, BondedTo(targ))[0]
-                        v1 = targ.bond(atom1) / targ.dist(atom1)
-                        v2 = targ.bond(atom2) / targ.dist(atom2)
-                        rv = v1 + v2
-
-                        geom.rotate(rv, angle=pi, targets=frag1+frag2, center=targ)
-
-                        for frag in [frag1, frag2]:
-                            for sub in geom.substituents:
-                                if (
-                                        all(atom in sub.atoms for atom in frag) and
-                                        all(atom in frag for atom in sub.atoms)
-                                ):
-                                    break
-                            else:
-                                geom.substituents.append(Substituent(frag, end=targ))
-
-            prev_diastereomer = diastereomer
-
-            if args.minimize:
-                geom.minimize_sub_torsion(increment=5)
-
+        diastereomers = Geometry.get_diastereomers(geom, minimize=args.minimize)
+        
+        for i, diastereomer in enumerate(diastereomers):
             if args.outfile is None:
-                s += geom.write(outfile=False)
+                s += diastereomer.write(outfile=False)
                 s += "\n"
             else:
                 if os.path.isdir(os.path.expanduser(args.outfile)):
                     outfile = os.path.join(
                         os.path.expanduser(args.outfile),
-                        "diastereomer-%i.xyz" % (diastereomer + 1)
+                        "diastereomer-%i.xyz" % (i + 1)
                     )
-
+    
                 else:
-                    outfile = args.outfile.replace("$i", str(diastereomer + 1))
-
-                geom.write(outfile=outfile, append="$i" not in args.outfile)
+                    outfile = args.outfile.replace("$i", str(i + 1))
+    
+                diastereomer.write(outfile=outfile, append="$i" not in args.outfile)
 
     else:
-        substituents = []
         for targ in target_list:
-            qualifying_fragments = []
-            for atom in targ.connected:
-                frag = geom.get_fragment(atom, targ)
-                if sum([int(targ in frag_atom.connected) for frag_atom in frag]) == 1:
-                    qualifying_fragments.append(frag)
-
-            if len(qualifying_fragments) < 2:
-                qualifying_fragments = []
-                for atom in targ.connected:
-                    frag = geom.get_fragment(atom, targ)
-                    if sum([int(targ in frag_atom.connected) for frag_atom in frag]) == 2:
-                        qualifying_fragments.append(frag)
-
-                if not qualifying_fragments:
-                    warn(
-                        "cannot change chirality of atom %s\n" % targ.name +
-                        "must have at least two groups not in a ring"
-                    )
-
-                else:
-                    frag = qualifying_fragments[0]
-                    atom1, atom2 = geom.find(BondedTo(targ), frag)
-                    v1 = targ.bond(atom1) / targ.dist(atom1)
-                    v2 = targ.bond(atom2) / targ.dist(atom2)
-                    rv = v1 + v2
-                    geom.rotate(rv, angle=pi, targets=frag, center=targ)
-
-                    if args.minimize:
-                        warn(
-                            "cannot minimize steric clashing for cyclic fragment on atom %s" % targ.name
-                        )
-
-            else:
-                while len(qualifying_fragments) > 2:
-                    for frag in qualifying_fragments:
-                        if len(frag) == max([len(f) for f in qualifying_fragments]):
-                            qualifying_fragments.remove(frag)
-                            break
-
-                frag1, frag2 = qualifying_fragments
-                atom1 = geom.find(frag1, BondedTo(targ))[0]
-                atom2 = geom.find(frag2, BondedTo(targ))[0]
-                v1 = targ.bond(atom1) / targ.dist(atom1)
-                v2 = targ.bond(atom2) / targ.dist(atom2)
-                rv = v1 + v2
-
-                geom.rotate(rv, angle=pi, targets=frag1 + frag2, center=targ)
-
-                if len(frag1) > 1:
-                    geom.substituents.append(Substituent(frag1, end=targ))
-                if len(frag2) > 1:
-                    geom.substituents.append(Substituent(frag2, end=targ))
+            geom.change_chirality(targ)
 
         if args.minimize:
-            geom.minimize_sub_torsion(increment=5)
+            geom.minimize_sub_torsion(increment=15)
 
         if args.outfile is None:
             s += geom.write(outfile=False)

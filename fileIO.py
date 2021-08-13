@@ -488,6 +488,7 @@ class FileWriter:
         outfile=None,
         mo=None,
         ao=None,
+        density=False,
         padding=4.0,
         spacing=0.2,
         alpha=True,
@@ -586,12 +587,12 @@ class FileWriter:
                 n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
 
         # default to HOMO
-        if mo is None and ao is None:
+        if mo is None and ao is None and not density:
             mo = "homo"
 
         # an atomic orbital was requested
         # set up an array of zeros, but 1 for that AO
-        if ao is not None:
+        if ao is not None and not density:
             mo = np.zeros(orbitals.n_mos)
             mo[ao] = 1.0
 
@@ -606,15 +607,21 @@ class FileWriter:
                 mo = 0
         s = ""
         s += " %s\n" % geom.comment
-        if ao is None:
+        if ao is None and not density:
             s += " mo index: %i\n" % mo
-        else:
+        elif not density:
             s += " ao inedx: %i\n" % ao
+        elif density:
+            s += " electron density\n"
         # the '-' in front of the number of atoms indicates that this is
         # MO info so there's an extra data entry between the molecule
         # and the function values
         bohr_com = com / UNIT.A0_TO_BOHR
-        s += " -%i %13.5f %13.5f %13.5f 1\n" % (
+        if mo or ao:
+            s += " -"
+        else:
+            s += "  "
+        s += "%i %13.5f %13.5f %13.5f 1\n" % (
             len(geom.atoms), *bohr_com,
         )
 
@@ -657,23 +664,27 @@ class FileWriter:
             )
 
         # extra section - only for MO data
-        if ao is None:
+        if ao is None and not density:
             s += " %5i %5i\n" % (1, mo + 1)
-        else:
+        elif not density:
             s += " %5i %5i\n" % (1, ao + 1)
 
         # get values for this MO
-        mo_val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
+        if density:
+            val = orbitals.density_value(coords, n_jobs=n_jobs)
+            # val = orbitals.low_mem_density_value(coords, n_jobs=n_jobs)
+        else:
+            val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
 
         # write to a file
         for n1 in range(0, n_list[0]):
             for n2 in range(0, n_list[1]):
                 val_ndx = n1 * n_list[2] * n_list[1] + n2 * n_list[2]
-                val_subset = mo_val[val_ndx : val_ndx + n_list[2]]
-                for i, val in enumerate(val_subset):
-                    if abs(val) < 1e-30:
-                        val = 0
-                    s += "%13.5e" % val
+                val_subset = val[val_ndx : val_ndx + n_list[2]]
+                for i, v in enumerate(val_subset):
+                    if abs(v) < 1e-30:
+                        v = 0
+                    s += "%13.5e" % v
                     if (i + 1) % 6 == 0:
                         s += "\n"
                 if (i + 1) % 6 != 0:
@@ -1332,7 +1343,7 @@ class FileReader:
                     self.skip_lines(f, 4)
                     n += 5
                     line = f.readline()
-                    while not (stage == "IR" and line == "\n") and line:
+                    while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":
                             freq_str += line
 
@@ -1341,10 +1352,18 @@ class FileReader:
                             self.skip_lines(f, 6)
                             n += 6
 
+                        if "RAMAN SPECTRUM" in line:
+                            stage = "RAMAN"
+                            self.skip_lines(f, 2)
+                            n += 2
+
                         if "IR SPECTRUM" in line:
                             stage = "IR"
                             self.skip_lines(f, 2)
                             n += 2
+
+                        if "THERMOCHEMISTRY" in line:
+                            stage = "THERMO"
 
                         n += 1
                         line = f.readline()
@@ -2862,7 +2881,8 @@ class Frequency:
             vector=None,
             forcek=None,
             symmetry=None,
-            rotation=None
+            rotation=None,
+            raman_activity=None,
         ):
             if vector is None:
                 vector = []
@@ -2873,6 +2893,7 @@ class Frequency:
             self.vector = np.array(vector)
             self.forcek = forcek
             self.rotation = rotation
+            self.raman_activity = None
 
     class AnharmonicData:
         """
@@ -3377,6 +3398,21 @@ class Frequency:
             inten = float(ir_info[ndx])
             self.data[t].intensity = inten
             t += 1
+            if t >= len(self.data):
+                break
+
+        for k, line in enumerate(lines):
+            if line.strip() == "RAMAN SPECTRUM":
+                t = 0
+                for line in lines[k + 1:]:
+                    if not re.match("\s*\d+:", line):
+                        continue
+                    ir_info = line.split()
+                    inten = float(ir_info[2])
+                    self.data[t].raman_activity = inten
+                    t += 1
+                    if t >= len(self.data):
+                        break
 
     def parse_gaussian_lines(self, lines, hpmodes):
         num_head = 0
@@ -3414,6 +3450,14 @@ class Frequency:
                 roational_strength = float_num.findall(line)
                 for i in range(-len(roational_strength), 0, 1):
                     self.data[i].rotation = float(roational_strength[i])
+                continue
+
+            if ("Raman Activities" in line and "---" in line and hpmodes) or (
+                "Raman Activ" in line and "--" in line and not hpmodes
+            ):
+                roational_strength = float_num.findall(line)
+                for i in range(-len(roational_strength), 0, 1):
+                    self.data[i].raman_activity = float(roational_strength[i])
                 continue
 
             if "IR Inten" in line and (
@@ -3711,6 +3755,8 @@ class Frequency:
             intensity_attr = "intensity"
             if plot_type.lower() == "vcd":
                 intensity_attr = "rotation"
+            if plot_type.lower() == "raman":
+                intensity_attr = "raman_activity"
             kwargs["intensity_attr"] = intensity_attr
         
         functions, frequencies, intensities = self.get_spectrum_functions(
@@ -3740,6 +3786,8 @@ class Frequency:
             y_label = "Absorbance (arb.)"
         elif y_label is None and plot_type.lower() == "vcd":
             y_label = "ΔAbsorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "raman":
+            y_label = "Activity (arb.)"
 
         self.plot_spectrum(
             figure,
@@ -4420,6 +4468,8 @@ class Orbitals:
                 filereader.other["Beta MO coefficients"],
                 (self.n_mos, self.n_mos),
             )
+        else:
+            self.beta_coefficients = None
         self.n_alpha = filereader.other["Number of alpha electrons"]
         if "Number of beta electrons" in filereader.other:
             self.n_beta = filereader.other["Number of beta electrons"]
@@ -5133,6 +5183,58 @@ class Orbitals:
             self.n_alpha = filereader.other["n_alpha"]
             self.n_beta = filereader.other["n_beta"]
 
+    def _get_value(self, coords, arr):
+        """returns value for the MO coefficients in arr"""
+        ao = 0
+        prev_center = None
+        if coords.ndim == 1:
+            val = 0
+        else:
+            val = np.zeros(len(coords))
+        for coord, shell, n_func, shell_type in zip(
+            self.shell_coords,
+            self.basis_functions,
+            self.funcs_per_shell,
+            self.shell_types,
+        ):
+            # don't calculate distances until we find an AO
+            # in this shell that has a non-zero MO coefficient
+            if not np.count_nonzero(arr[ao : ao + n_func]):
+                ao += n_func
+                continue
+            # print(shell_type, arr[ao : ao + n_func])
+            # don't recalculate distances unless this shell's coordinates
+            # differ from the previous
+            if (
+                prev_center is None
+                or np.linalg.norm(coord - prev_center) > 1e-13
+            ):
+                prev_center = coord
+                d_coord = (coords - coord) / UNIT.A0_TO_BOHR
+                if coords.ndim == 1:
+                    r2 = np.dot(d_coord, d_coord)
+                else:
+                    r2 = np.sum(d_coord * d_coord, axis=1)
+            if coords.ndim == 1:
+                res = shell(
+                    r2,
+                    d_coord[0],
+                    d_coord[1],
+                    d_coord[2],
+                    arr[ao : ao + n_func],
+                )
+            else:
+                res = shell(
+                    r2,
+                    d_coord[:, 0],
+                    d_coord[:, 1],
+                    d_coord[:, 2],
+                    arr[ao : ao + n_func],
+                )
+            val += res
+            ao += n_func
+        return val
+
     def mo_value(self, mo, coords, alpha=True, n_jobs=1):
         """
         get the MO evaluated at the specified coords
@@ -5157,58 +5259,6 @@ class Orbitals:
 
         # calculate AO values for each shell at each point
         # multiply by the MO coefficient and add to val
-        def get_value(arr):
-            """returns value for the MO coefficients in arr"""
-            ao = 0
-            prev_center = None
-            if coords.ndim == 1:
-                val = 0
-            else:
-                val = np.zeros(len(coords))
-            for coord, shell, n_func, shell_type in zip(
-                self.shell_coords,
-                self.basis_functions,
-                self.funcs_per_shell,
-                self.shell_types,
-            ):
-                # don't calculate distances until we find an AO
-                # in this shell that has a non-zero MO coefficient
-                if not np.count_nonzero(arr[ao : ao + n_func]):
-                    ao += n_func
-                    continue
-                # print(shell_type, arr[ao : ao + n_func])
-                # don't recalculate distances unless this shell's coordinates
-                # differ from the previous
-                if (
-                    prev_center is None
-                    or np.linalg.norm(coord - prev_center) > 1e-13
-                ):
-                    prev_center = coord
-                    d_coord = (coords - coord) / UNIT.A0_TO_BOHR
-                    if coords.ndim == 1:
-                        r2 = np.dot(d_coord, d_coord)
-                    else:
-                        r2 = np.sum(d_coord * d_coord, axis=1)
-                if coords.ndim == 1:
-                    res = shell(
-                        r2,
-                        d_coord[0],
-                        d_coord[1],
-                        d_coord[2],
-                        arr[ao : ao + n_func],
-                    )
-                else:
-                    res = shell(
-                        r2,
-                        d_coord[:, 0],
-                        d_coord[:, 1],
-                        d_coord[:, 2],
-                        arr[ao : ao + n_func],
-                    )
-                val += res
-                ao += n_func
-            return val
-
         if n_jobs > 1:
             # get all shells grouped by coordinates
             # this reduces the number of times we will need to
@@ -5235,7 +5285,133 @@ class Orbitals:
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=n_jobs
             ) as executor:
-                out = [executor.submit(get_value, arr) for arr in arrays]
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
             return sum([shells.result() for shells in out])
-        val = get_value(coeff)
+        val = self._get_value(coords, coeff)
+        return val
+
+    def density_value(self, coords, n_jobs=1, alpha_occ=None, beta_occ=None):
+        """
+        returns the eletron density
+        coords - coordinates to calculate e density at
+        n_jobs - number of concurrent threads to use in calculation
+        alpha_occ - array of alpha occupancies
+                    if not specified, defaults to lowest self.n_alpha
+                    orbitals
+        beta_occ - same at alpha_occ, but for beta electrons
+        """
+        # set default occupancy
+        if alpha_occ is None:
+            if not self.n_alpha:
+                self.LOG.warning("number of alpha electrons was not read")
+            alpha_occ = np.zeros(self.n_mos, dtype=int)
+            alpha_occ[0:self.n_alpha] = 1
+        if beta_occ is None:
+            beta_occ = np.zeros(self.n_mos, dtype=int)
+            beta_occ[0:self.n_beta] = 1
+        
+        # val is output data
+        # func_vals is the value of each basis function
+        # at all coordinates
+        if coords.ndim == 1:
+            val = 0
+            func_vals = np.zeros(
+                sum(len(f) for f in self.basis_functions), dtype="float32"
+            )
+        else:
+            val = np.zeros(len(coords))
+            func_vals = np.zeros(
+                (self.n_mos, *coords.shape,)
+            )
+
+        # get values of basis functions at all points
+        arrays = np.eye(self.n_mos)
+        if n_jobs > 1:
+            # get all shells grouped by coordinates
+            # this reduces the number of times we will need to
+            # calculate the distance from all the coords to
+            # a shell's center
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
+            data = np.array([shells.result() for shells in out])
+
+        else:
+            data = np.array([
+                self._get_value(coords, arr) for arr in arrays
+            ])
+        
+        # multiply values by orbital coefficients and square
+        for i, occ in enumerate(alpha_occ):
+            if occ == 0:
+                continue
+            val += occ * np.dot(data.T, self.alpha_coefficients[i]) ** 2
+        
+        if self.beta_coefficients is not None:
+            for i, occ in enumerate(beta_occ):
+                if occ == 0:
+                    continue
+                val += occ * np.dot(data.T, self.beta_coefficients[i]) ** 2
+        else:
+            val *= 2
+
+        return val
+
+    def low_mem_density_value(self, coords, n_jobs=1, alpha_occ=None, beta_occ=None):
+        """
+        returns the eletron density
+        same at self.density_value, but uses less memory at
+        the cost of performance
+        """
+        # set initial occupancies
+        if alpha_occ is None:
+            if not self.n_alpha:
+                self.LOG.warning("number of alpha electrons was not read")
+            alpha_occ = np.zeros(self.n_mos, dtype=int)
+            alpha_occ[0:self.n_alpha] = 1
+        if beta_occ is None:
+            beta_occ = np.zeros(self.n_mos, dtype=int)
+            beta_occ[0:self.n_beta] = 1
+
+        # val is output array
+        if coords.ndim == 1:
+            val = 0
+        else:
+            val = np.zeros(len(coords), dtype="float32")
+
+        # calculate each occupied orbital
+        # square it can add to output
+        if n_jobs > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
+                out = [
+                    executor.submit(self.mo_value, i, coords, n_jobs=1)
+                    for i, occ in enumerate(alpha_occ) if occ != 0
+                ]
+            val += sum([occ * orbit.result() ** 2 for orbit, occ in zip(out, alpha_occ)])
+            
+            if self.beta_coefficients is not None:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=n_jobs
+                ) as executor:
+                    out = [
+                        executor.submit(self.mo_value, i, coords, alpha=False, n_jobs=1)
+                        for i, occ in enumerate(beta_occ) if occ != 0
+                    ]
+                val += sum([occ * orbit.result() ** 2 for orbit, occ in zip(out, beta_occ)])
+            else:
+                val *= 2
+        
+        else:
+            for i in range(0, self.n_alpha):
+                val += self.mo_value(i, coords) ** 2
+            
+            if self.beta_coefficients is not None:
+                for i in range(0, self.n_beta):
+                    val += self.mo_value(i, coords, alpha=False) ** 2
+            else:
+                val *= 2
+
         return val

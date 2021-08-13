@@ -510,6 +510,56 @@ class Geometry:
 
         return geoms, cc_type
 
+    @classmethod
+    def get_diastereomers(cls, geometry, minimize=True):
+        from AaronTools.finders import ChiralCenters, Bridgehead, NotAny, SpiroCenters
+        from AaronTools.ring import Ring
+        from AaronTools.substituent import Substituent
+        
+        if not isinstance(geometry, Geometry):
+            geometry = Geometry(geometry)
+        
+        updating_diastereomer = geometry.copy()
+        if not getattr(updating_diastereomer, "substituents", False):
+            updating_diastereomer.substituents = []
+
+        chiral_centers = updating_diastereomer.find(ChiralCenters())
+        spiro_chiral = updating_diastereomer.find(SpiroCenters(), chiral_centers)
+        ring_centers = updating_diastereomer.find(
+            chiral_centers, Bridgehead(), NotAny(spiro_chiral)
+        )
+        chiral_centers = [c for c in chiral_centers if c not in ring_centers]
+
+        diastereomer_count = [2 for c in chiral_centers]
+        mod_array = []
+        for i in range(0, len(diastereomer_count)):
+            mod_array.append(1)
+            for j in range(i + 1, len(diastereomer_count)):
+                mod_array[i] *= diastereomer_count[j]
+        
+        diastereomers = [updating_diastereomer.copy()]
+
+        previous_diastereomer = 0
+        for d in range(1, int(np.prod(diastereomer_count))):
+            for i, center in enumerate(chiral_centers):
+                flip = int(d / mod_array[i]) % diastereomer_count[i]
+                flip -= int(previous_diastereomer / mod_array[i]) % diastereomer_count[i]
+                
+                if flip == 0:
+                    continue
+            
+                updating_diastereomer.change_chirality(center)
+
+            diastereomers.append(updating_diastereomer.copy())
+            
+            previous_diastereomer = d
+
+        if minimize:
+            for diastereomer in diastereomers:
+                diastereomer.minimize_sub_torsion(increment=15)
+
+        return diastereomers
+
     @staticmethod
     def weighted_percent_buried_volume(
         geometries, energies, temperature, *args, **kwargs
@@ -3392,6 +3442,32 @@ class Geometry:
         if center is not None:
             self.coord_shift(center)
 
+    def mirror(self, plane="xy"):
+        """
+        mirror self across a plane
+        plane can be xy, xz, yz or an array for a vector orthogonal to a plane
+        """
+        eye = np.identity(3)
+        if isinstance(plane, str):
+            if plane.lower() == "xy":
+                eye[0, 0] *= -1
+            if plane.lower() == "xz":
+                eye[1, 1] *= -1
+            if plane.lower() == "yz":
+                eye[2, 2] *= -1
+
+        else:
+            eye = utils.mirror_matrix(plane)
+
+        self.update_geometry(np.dot(self.coords, eye))
+
+    def invert(self, plane="xy"):
+        """
+        invert self's coordinates 
+        """
+        op = -np.identity(3)
+        self.update_geometry(np.dot(self.coords, op))
+
     def change_angle(
         self,
         a1,
@@ -3556,20 +3632,48 @@ class Geometry:
                 "`fix` must be 0, 1, or 4 (supplied: {})".format(fix)
             )
 
-    def minimize_sub_torsion(self, geom=None, all_frags=False, increment=30):
+    def minimize_sub_torsion(
+        self, geom=None, all_frags=False, increment=30, allow_planar=False
+    ):
         """rotate substituents to try to minimize LJ potential
         geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
         all_frags: minimize rotatable bonds on substituents
+        allow_planar: allow substituents that start and end with atoms
+                      with planar VSEPR geometries that are nearly
+                      planar to be rotated
         """
         # minimize torsion for each substituent
 
         if not hasattr(self, "substituents") or self.substituents is None:
             self.detect_substituents()
 
+        # we don't want to rotate any substituents that
+        # shouldn't be rotate-able
+        # filter out any substituents that start on a planar atom
+        # and end on a planar atom
+        if not allow_planar:
+            vsepr = [atom.get_vsepr()[0] for atom in self.atoms]
+
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
             if len(sub.atoms) < 2:
                 continue
+            
+            if not allow_planar:
+                # don't rotate substituents that might be E/Z
+                vsepr_1 = vsepr[self.atoms.index(sub.end)]
+                vsepr_2 = vsepr[self.atoms.index(sub.atoms[0])]
+                if (
+                    vsepr_1 and vsepr_2 and
+                    "planar" in vsepr_1 and "planar" in vsepr_2
+                ):
+                    a1 = [a for a in sub.end.connected if a is not sub.atoms[0]][0]
+                    a2 = [a for a in sub.atoms[0].connected if a is not sub.end][0]
+                    angle = self.dihedral(a1, sub.end, sub.atoms[0], a2)
+                    # ~5 degree tolerance for being planar
+                    if any(np.isclose(angle, ref, atol=0.09) for ref in [np.pi, 0, -np.pi]):
+                        continue
+            
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(
@@ -5138,3 +5242,62 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
+
+    def change_chirality(self, target):
+        """
+        change chirality of the target atom
+        target should be a chiral center that is not a bridgehead
+        of a fused ring, though spiro centers are allowed
+        """
+        # find two fragments
+        # rotate those about the vector that bisects the angle between them
+        # this effectively changes the chirality
+        target = self.find_exact(target)[0]
+        fragments = []
+        for a in target.connected:
+            frag = self.get_fragment(
+                a, target,
+            )
+            if sum(int(target in frag_atom.connected) for frag_atom in frag) == 1:
+                fragments.append([atom.copy() for atom in frag])
+            if len(fragments) == 2:
+                break
+        
+        # if there are not two fragments not in a ring,
+        # this is a spiro center
+        # find a spiro ring and rotate that
+        if len(fragments) < 2:
+            for a1 in target.connected:
+                targets = self.get_fragment(
+                    a1, stop=target,
+                )
+                a2 = [a for a in targets if a in target.connected and a is not a1]
+                if a2:
+                    a2 = a2[0]
+                    break
+            v1 = target.bond(a1)
+            v1 /= np.linalg.norm(v1)
+            v2 = target.bond(a2)
+            v2 /= np.linalg.norm(v2)
+            rv = v1 + v2
+        
+            self.rotate(
+                rv, angle=np.pi, center=target,
+                targets=targets,
+            )
+        else:
+            v1 = target.bond(fragments[0][0])
+            v1 /= np.linalg.norm(v1)
+            v2 = target.bond(fragments[1][0])
+            v2 /= np.linalg.norm(v2)
+            rv = v1 + v2
+        
+            targets = [atom.name for atom in fragments[0]]
+            targets.extend([atom.name for atom in fragments[1]])
+        
+            self.rotate(
+                rv, angle=np.pi, center=target,
+                targets=targets,
+            )
+        return targets
+

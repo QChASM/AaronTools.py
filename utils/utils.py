@@ -2,7 +2,7 @@ import collections.abc
 import os
 import re
 from collections import OrderedDict
-from math import acos, sin, cos
+from math import acos, sin, cos, sqrt
 
 import AaronTools.atoms as Atoms
 import numpy as np
@@ -539,19 +539,14 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), num=500):
     """
     # generate a grid of points on the unit sphere
     grid = np.zeros((num, 3))
-    d_theta = np.pi * (3.0 - np.sqrt(5.0))
-    dy = 2.0 / (num - 1)
-
-    for i in range(0, num):
-        y = 1 - i * dy
-        r = np.sqrt(1 - y ** 2)
-
-        theta = i * d_theta
-
-        x = np.cos(theta) * r
-        z = np.sin(theta) * r
-
-        grid[i] = np.array([x, y, z])
+    
+    i = np.arange(0, num) + 0.5
+    phi = np.arccos(1 - 2 * i / num)
+    ratio = (1 + sqrt(5.)) / 2
+    theta = 2 * np.pi * i / ratio
+    grid[:, 0] = np.cos(theta) * np.sin(phi)
+    grid[:, 1] = np.sin(theta) * np.sin(phi)
+    grid[:, 2] = np.cos(phi)
 
     # scale the points to the specified radius and move the center
     grid *= radius

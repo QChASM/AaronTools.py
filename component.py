@@ -413,7 +413,7 @@ class Component(Geometry):
         else:
             return subs
 
-    def minimize_sub_torsion(self, geom=None, all_frags=False):
+    def minimize_sub_torsion(self, geom=None, **kwargs):
         """
         rotates substituents to minimize LJ potential
         geom: calculate LJ potential between self and another geometry-like
@@ -425,7 +425,7 @@ class Component(Geometry):
         if self.substituents is None:
             self.detect_backbone()
 
-        return super().minimize_sub_torsion(geom, all_frags)
+        return super().minimize_sub_torsion(geom, **kwargs)
 
     def sub_rotate(self, start, angle=None):
         start = self.find_exact(start)[0]
