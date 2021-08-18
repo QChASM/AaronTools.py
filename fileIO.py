@@ -486,14 +486,13 @@ class FileWriter:
         geom,
         orbitals=None,
         outfile=None,
-        mo=None,
-        ao=None,
-        density=False,
+        kind="homo",
         padding=4.0,
         spacing=0.2,
         alpha=True,
         xyz=False,
         n_jobs=1,
+        delta=0.1,
         **kwargs,
     ):
         """
@@ -512,6 +511,7 @@ class FileWriter:
                  this is on top of NumPy's multithreading, so
                  if NumPy uses 8 threads and n_jobs=2, you can
                  expect to see 16 threads in use
+        delta - see Orbitals.fukui_donor_value or fukui_acceptor_value
         """
         if orbitals is None:
             raise RuntimeError(
@@ -586,38 +586,26 @@ class FileWriter:
             except np.linalg.LinAlgError:
                 n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
 
-        # default to HOMO
-        if mo is None and ao is None and not density:
-            mo = "homo"
-
-        # an atomic orbital was requested
-        # set up an array of zeros, but 1 for that AO
-        if ao is not None and not density:
+        mo = None
+        if kind.lower() == "homo":
+            mo = max(orbitals.n_alpha, orbitals.n_beta) - 1
+        elif kind.lower() == "lumo":
+            mo = max(orbitals.n_alpha, orbitals.n_beta)
+        elif kind.lower().startswith("mo"):
+            mo = int(kind.split()[-1])
+        elif kind.lower().startswith("ao"):
             mo = np.zeros(orbitals.n_mos)
-            mo[ao] = 1.0
-
-        if isinstance(mo, str):
-            if mo.lower() == "homo":
-                mo = max(orbitals.n_alpha, orbitals.n_beta) - 1
-            elif mo.lower() == "lumo":
-                mo = max(orbitals.n_alpha, orbitals.n_beta)
-            else:
-                raise TypeError('mo should be an integer, "homo", or "lumo"')
-            if mo < 0:
-                mo = 0
+            mo = mo[int(kind.split()[-1])] = 1
+        
         s = ""
         s += " %s\n" % geom.comment
-        if ao is None and not density:
-            s += " mo index: %i\n" % mo
-        elif not density:
-            s += " ao inedx: %i\n" % ao
-        elif density:
-            s += " electron density\n"
+        s += " %s\n" % kind
+
         # the '-' in front of the number of atoms indicates that this is
         # MO info so there's an extra data entry between the molecule
         # and the function values
         bohr_com = com / UNIT.A0_TO_BOHR
-        if mo or ao:
+        if mo:
             s += " -"
         else:
             s += "  "
@@ -664,15 +652,21 @@ class FileWriter:
             )
 
         # extra section - only for MO data
-        if ao is None and not density:
-            s += " %5i %5i\n" % (1, mo + 1)
-        elif not density:
-            s += " %5i %5i\n" % (1, ao + 1)
+        if mo is not None:
+            s += " %5i %5i\n" % (1, int(kind.split()[-1]))
 
         # get values for this MO
-        if density:
+        if kind.lower() == "density":
             val = orbitals.density_value(coords, n_jobs=n_jobs)
             # val = orbitals.low_mem_density_value(coords, n_jobs=n_jobs)
+        elif kind.lower() == "fukui donor":
+            val = orbitals.fukui_donor_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
+        elif kind.lower() == "fukui acceptor":
+            val = orbitals.fukui_acceptor_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
         else:
             val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
 
@@ -1572,7 +1566,7 @@ class FileReader:
                                 coeffs = []
                                 # there might not always be a space between the coefficients
                                 # so we can't just split(), but they are formatted(-ish)
-                                for coeff in re.findall("-?\d+\.\d+", line[16:]):
+                                for coeff in re.findall("-?\d+\.\d\d\d\d\d\d", line[16:]):
                                     coeffs.append(float(coeff))
                                 for coeff, mo in zip(coeffs, mo_coefficients):
                                     mo.append(coeff)
@@ -1586,6 +1580,14 @@ class FileReader:
                                     self.other[coeff_name].extend(
                                         mo_coefficients
                                     )
+                                    if not all(
+                                        len(coeff) == len(mo_coefficients[0])
+                                        for coeff in mo_coefficients
+                                    ):
+                                        self.LOG.warning(
+                                            "orbital coefficients may not "
+                                            "have been parsed correctly"
+                                        )
                                 mo_coefficients = [[] for x in orbit_nrgs]
                                 orbit_nrgs = []
                             line = f.readline()
@@ -5290,7 +5292,14 @@ class Orbitals:
         val = self._get_value(coords, coeff)
         return val
 
-    def density_value(self, coords, n_jobs=1, alpha_occ=None, beta_occ=None):
+    def density_value(
+        self,
+        coords,
+        n_jobs=1,
+        alpha_occ=None,
+        beta_occ=None,
+        low_mem=False,
+    ):
         """
         returns the eletron density
         coords - coordinates to calculate e density at
@@ -5300,6 +5309,14 @@ class Orbitals:
                     orbitals
         beta_occ - same at alpha_occ, but for beta electrons
         """
+        if low_mem:
+            return self.low_mem_density_value(
+                coords,
+                n_jobs=n_jobs,
+                alpha_occ=alpha_occ,
+                beta_occ=beta_occ,
+            )
+        
         # set default occupancy
         if alpha_occ is None:
             if not self.n_alpha:
@@ -5341,7 +5358,7 @@ class Orbitals:
             data = np.array([
                 self._get_value(coords, arr) for arr in arrays
             ])
-        
+
         # multiply values by orbital coefficients and square
         for i, occ in enumerate(alpha_occ):
             if occ == 0:
@@ -5358,7 +5375,13 @@ class Orbitals:
 
         return val
 
-    def low_mem_density_value(self, coords, n_jobs=1, alpha_occ=None, beta_occ=None):
+    def _low_mem_density_value(
+        self,
+        coords,
+        n_jobs=1,
+        alpha_occ=None,
+        beta_occ=None
+    ):
         """
         returns the eletron density
         same at self.density_value, but uses less memory at
@@ -5415,3 +5438,125 @@ class Orbitals:
                 val *= 2
 
         return val
+
+    def fukui_donor_value(self, coords, delta=0.1, **kwargs):
+        """
+        orbital-weighted fukui donor function
+        electron density change for removing an electron
+        orbital weighting from DOI 10.1002/jcc.24699 accounts
+        for nearly degenerate orbitals
+        coords - coordinate to evaluate function at
+        delta - parameter for weighting
+        kwargs - passed to density_value
+        """
+        CITATION = "doi:10.1002/jcc.24699"
+        self.LOG.citation(CITATION)
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            minus_e = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                minus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            minus_e /= sum(minus_e)
+            minus_density = self.density_value(
+                coords, alpha_occ=minus_e, beta_occ=None, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = beta_occ = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(0, self.n_beta):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ /= sum(alpha_occ)
+            beta_occ /= sum(beta_occ)
+            minus_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return minus_density
+    
+    def fukui_acceptor_value(self, coords, delta=0.1, **kwargs):
+        """
+        orbital-weighted fukui acceptor function
+        electron density change for removing an electron
+        orbital weighting from DOI 10.1021/acs.jpca.9b07516 accounts
+        for nearly degenerate orbitals
+        coords - coordinate to evaluate function at
+        delta - parameter for weighting
+        kwargs - passed to density_value
+        """
+        CITATION = "doi:10.1021/acs.jpca.9b07516"
+        self.LOG.citation(CITATION)
+        
+        alpha_occ = np.zeros(self.n_mos)
+        alpha_occ[self.n_alpha - 1] = 1
+        beta_occ = None
+        if self.beta_coefficients is not None:
+            beta_occ = np.zeros(self.n_mos)
+            beta_occ[self.n_beta - 1] = 1
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            plus_e = np.zeros(self.n_mos)
+            for i in range(self.n_alpha, self.n_mos):
+                plus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            plus_e /= sum(plus_e)
+            plus_density = self.density_value(
+                coords, alpha_occ=plus_e, beta_occ=beta_occ, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = np.zeros(self.n_mos)
+            beta_occ = np.zeros(self.n_mos)
+            for i in range(self.n_alpha, self.n_mos):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(self.n_beta, self.n_mos):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ /= sum(alpha_occ)
+            beta_occ /= sum(beta_occ)
+            plus_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return plus_density
