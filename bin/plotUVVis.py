@@ -100,7 +100,7 @@ peak_options.add_argument(
     type=float,
     default=0.1,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 0.1 units",
+    help="full width at half max. of peaks\nDefault: 0.1 eV",
 )
 
 uvvis_parser.add_argument(
@@ -113,7 +113,7 @@ uvvis_parser.add_argument(
 )
 
 
-scale_options = uvvis_parser.add_argument_group("scale energies")
+scale_options = uvvis_parser.add_argument_group("scale energies (in eV)")
 scale_options.add_argument(
     "-ss", "--scalar-shift",
     type=float,

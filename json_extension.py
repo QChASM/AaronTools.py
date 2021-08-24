@@ -7,7 +7,7 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
-from AaronTools.fileIO import Frequency
+from AaronTools.spectra import Frequency, HarmonicVibration
 from AaronTools.finders import AnyNonTransitionMetal, AnyTransitionMetal, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
@@ -290,8 +290,10 @@ class ATDecoder(json.JSONDecoder):
     def _decode_frequency(self, obj):
         data = []
         for d in obj["data"]:
+            kw = {k:v for k, v in d.items()}
+            freq = kw.pop("frequency")
             data += [
-                Frequency.Data(d["frequency"], d["intensity"], d["vector"])
+                HarmonicVibration(freq, **kw)
             ]
         return Frequency(data)
 

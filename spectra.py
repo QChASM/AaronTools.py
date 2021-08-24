@@ -95,7 +95,6 @@ class Signals:
         quadratic_scale=0.0,
         intensity_attr="intensity",
         data_attr="data",
-        change_x_unit_func=None,
     ):
         """
         returns a list of functions that can be evaluated to
@@ -110,7 +109,6 @@ class Signals:
         intensity_attr - attribute of Signal used for the intensity
             of that signal
         data_attr - attribute of self for the list of Signal()
-        change_x_unit_func - function to change units of x axis
         """
         data = getattr(self, data_attr)
         x_attr = data[0].x_attr
@@ -156,8 +154,6 @@ class Signals:
                 
             x_positions = np.array(x_positions)
 
-        if change_x_unit_func:
-            x_positions = change_x_unit_func(x_positions)
         x_positions -= (
             linear_scale * x_positions + quadratic_scale * x_positions ** 2
         )
@@ -217,6 +213,7 @@ class Signals:
         peak_type="pseudo-voigt",
         normalize=True,
         fwhm=15.0,
+        change_x_unit_func=None,
     ):
         """
         returns arrays of x_values, y_values for a spectrum
@@ -287,6 +284,11 @@ class Signals:
         if transmittance:
             y_values = np.array([10 ** (2 - y) for y in y_values])
 
+
+        if change_x_unit_func:
+            x_values, ndx = change_x_unit_func(x_values)
+            y_values = y_values[ndx]
+
         return x_values, y_values
 
     @classmethod
@@ -321,8 +323,9 @@ class Signals:
             # if no centers were specified, pretend they were so we
             # can do everything the same way
             axes = [figure.subplots(nrows=1, ncols=1)]
-            widths = [max(x_values)]
-            centers = [max(x_values) / 2]
+            y_nonzero = np.nonzero(y_values)
+            widths = [max(x_values[y_nonzero])]
+            centers = [max(x_values[y_nonzero]) / 2]
         else:
             n_sections = len(centers)
             figure.subplots_adjust(wspace=0.05)
@@ -1077,7 +1080,7 @@ class Frequency(Signals):
 
 
 class ValenceExcitation(Signal):
-    x_attr = "excitation_wavelength"
+    x_attr = "excitation_energy"
     required_attrs = (
         "rotatory_str_len", "rotatory_str_vel", "dipole_str",
         "dipole_vel", "symmetry", "multiplicity",
@@ -1139,10 +1142,9 @@ class ValenceExcitations(Signals):
             nrgs, rotatory_str_len, rotatory_str_vel, dipole_str,
             dipole_vel, symmetry, multiplicity,
         ):
-            nm = PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / nrg
             self.data.append(
                 ValenceExcitation(
-                    nm, rotatory_str_len=rot_len,
+                    nrg, rotatory_str_len=rot_len,
                     rotatory_str_vel=rot_vel, dipole_str=dip_len,
                     dipole_vel=dip_vel, symmetry=sym,
                     multiplicity=mult,
@@ -1152,7 +1154,14 @@ class ValenceExcitations(Signals):
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
-        return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x
+        ndx = np.nonzero(x)
+        return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
+
+    @staticmethod
+    def ev_to_nm(x):
+        """convert x eV to nm"""
+        ndx = np.nonzero(x)
+        return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
 
     def plot_uv_vis(
         self,
@@ -1185,6 +1194,10 @@ class ValenceExcitations(Signals):
         kwargs - keywords for Frequency.get_spectrum_functions
         """
 
+        if not centers and units == "nm":
+            centers = [225]
+            widths = [350]
+
         if "intensity_attr" not in kwargs:
             intensity_attr = "dipole_str"
             if plot_type.lower() == "uv-vis-veloctiy":
@@ -1197,14 +1210,14 @@ class ValenceExcitations(Signals):
 
         change_x_unit_func = None
         x_label = "wavelength (nm)"
+        change_x_unit_func = self.ev_to_nm
         if units == "eV":
-            change_x_unit_func = self.nm_to_ev
+            change_x_unit_func = None
             x_label = r"$h\nu$ (eV)"
 
         functions, frequencies, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
             fwhm=fwhm,
-            change_x_unit_func=change_x_unit_func,
             **kwargs,
         )
 
@@ -1215,6 +1228,7 @@ class ValenceExcitations(Signals):
             transmittance=plot_type.lower() == "transmittance",
             peak_type=peak_type,
             point_spacing=point_spacing,
+            change_x_unit_func=change_x_unit_func,
             normalize=normalize,
         )
         if data is None:
@@ -1232,9 +1246,7 @@ class ValenceExcitations(Signals):
             y_label = "ΔAbsorbance (arb.)"
         elif y_label is None and plot_type.lower() == "ecd-velocity":
             y_label = "ΔAbsorbance (arb.)"
-        
-        print(plot_type)
-        
+
         self.plot_spectrum(
             figure,
             x_values,
