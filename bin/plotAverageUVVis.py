@@ -102,9 +102,9 @@ peak_options.add_argument(
     "-p", "--peak-type",
     type=peak_type,
     choices=peak_types,
-    default="pseudo-voigt",
+    default="gaussian",
     dest="peak_type",
-    help="function for peaks\nDefault: pseudo-voigt",
+    help="function for peaks\nDefault: gaussian",
 )
 
 peak_options.add_argument(
