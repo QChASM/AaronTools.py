@@ -520,7 +520,6 @@ class Signals:
         data_attr - attribute of Signals() for data
         **kwargs - passed to cls.__init__, along with a new list of data
         """
-        
         if not hasattr(signal_groups[0], "__iter__"):
             signal_groups = [signal_groups]
         
@@ -1155,13 +1154,15 @@ class ValenceExcitations(Signals):
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
-        ndx = np.nonzero(x)
+        x = np.array(x)
+        ndx = np.nonzero(x)[0]
         return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
 
     @staticmethod
     def ev_to_nm(x):
         """convert x eV to nm"""
-        ndx = np.nonzero(x)
+        x = np.array(x)
+        ndx = np.nonzero(x)[0]
         return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
 
     def plot_uv_vis(

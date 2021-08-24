@@ -1894,6 +1894,13 @@ class FileReader:
                         read_states = True
                     if re.search("Excited State\s*%i:" % highest_state, line):
                         done = True
+                    if line.strip().startswith("Total Energy, E"):
+                        nrg = re.search(
+                            r"Total Energy, E\((\S+)\)\s*=\s*(-?\d+\.\d+)", line
+                        )
+                        self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
+                        self.other["energy"] = float(nrg.group(2))
+
                     line = f.readline()
                 self.other["uv_vis"] = ValenceExcitations(
                     uv_vis, style="gaussian"

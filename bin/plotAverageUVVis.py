@@ -276,6 +276,7 @@ if (args.weighting == "electronic" or "frequency" in fr.other) and not compouts:
 
 weights = CompOutput.boltzmann_weights(
     compouts,
+    nrg_cos=[CompOutput(fr) for fr in filereaders],
     temperature=args.temperature,
     weighting=weighting,
     v0=args.w0,
