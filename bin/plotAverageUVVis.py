@@ -5,7 +5,7 @@ import sys
 
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
-from AaronTools.spectra import Frequency
+from AaronTools.spectra import ValenceExcitations
 from AaronTools.utils.utils import get_filename, glob_files
 
 from matplotlib import rcParams
@@ -17,7 +17,7 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = ["transmittance", "absorbance", "vcd", "raman"]
+plot_types = ["transmittance", "uv-vis", "uv-vis-velocity", "ecd", "ecd-velocity"]
 weight_types = ["electronic", "zero-point", "enthalpy", "free", "quasi-rrho", "quasi-harmonic"]
 
 def peak_type(x):
@@ -51,19 +51,19 @@ def weight_type(x):
     )
 
 
-ir_parser = argparse.ArgumentParser(
-    description="plot IR spectrum",
+uvvis_parser = argparse.ArgumentParser(
+    description="plot conformationally-averaged UV/vis spectrum",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "infiles", metavar="files",
     type=str,
     nargs="+",
     help="frequency job output file(s)"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-o", "--output",
     type=str,
     default=None,
@@ -71,28 +71,33 @@ ir_parser.add_argument(
     help="output destination\nDefault: show plot",
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
+    "-freq", "--frequency-files",
+    type=str,
+    nargs="+",
+    default=None,
+    dest="freq_files",
+    help="frequency jobs to use for thermochem"
+)
+
+uvvis_parser.add_argument(
     "-t", "--plot-type",
     type=plot_type,
     choices=plot_types,
-    default="transmittance",
+    default="uv-vis-velocity",
     dest="plot_type",
-    help="type of plot\nDefault: transmittance",
+    help="type of plot\nDefault: uv-vis-velocity",
 )
 
-
-# TODO: figure out more anharmonic options
-# anharmonic_options = ir_parser.add_argument_group("anharmonic options")
-ir_parser.add_argument(
-    "-na", "--harmonic",
-    action="store_false",
-    default=True,
-    dest="anharmonic",
-    help="force to use harmonic frequencies when anharmonic data is in the file",
+uvvis_parser.add_argument(
+    "-ev", "--electron-volt",
+    action="store_true",
+    default=False,
+    dest="ev_unit",
+    help="use eV on x axis instead of nm",
 )
 
-
-peak_options = ir_parser.add_argument_group("peak options")
+peak_options = uvvis_parser.add_argument_group("peak options")
 peak_options.add_argument(
     "-p", "--peak-type",
     type=peak_type,
@@ -113,12 +118,12 @@ peak_options.add_argument(
 peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
-    default=15.0,
+    default=0.1,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 15 cm^1",
+    help="full width at half max. of peaks\nDefault: 0.1 units",
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-s", "--point-spacing",
     default=None,
     type=float,
@@ -128,7 +133,16 @@ ir_parser.add_argument(
 )
 
 
-scale_options = ir_parser.add_argument_group("scale frequencies")
+scale_options = uvvis_parser.add_argument_group("scale energies")
+scale_options.add_argument(
+    "-ss", "--scalar-shift",
+    type=float,
+    default=0.0,
+    dest="scalar_scale",
+    help="subtract scalar shift from each excitation\n"
+    "Default: 0 (no shift)",
+)
+
 scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
@@ -147,16 +161,7 @@ scale_options.add_argument(
     "Default: 0 (no scaling)",
 )
 
-ir_parser.add_argument(
-    "-nr", "--no-reverse",
-    action="store_false",
-    default=True,
-    dest="reverse_x",
-    help="do not reverse x-axis",
-)
-
-
-section_options = ir_parser.add_argument_group("x-axis interruptions")
+section_options = uvvis_parser.add_argument_group("x-axis interruptions")
 section_options.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
@@ -175,21 +180,21 @@ section_options.add_argument(
     "should be separated by commas, with one for each section"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-fw", "--figure-width",
     type=float,
     dest="fig_width",
     help="width of figure in inches"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-fh", "--figure-height",
     type=float,
     dest="fig_height",
     help="height of figure in inches"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-csv", "--experimental-csv",
     type=str,
     nargs="+",
@@ -198,7 +203,7 @@ ir_parser.add_argument(
     "frequency job files should not come directly after this flag"
 )
 
-energy_options = ir_parser.add_argument_group("energy weighting")
+energy_options = uvvis_parser.add_argument_group("energy weighting")
 energy_options.add_argument(
     "-w", "--weighting-energy",
     type=weight_type,
@@ -227,7 +232,11 @@ energy_options.add_argument(
     "Default: 100 cm^-1",
 )
 
-args = ir_parser.parse_args()
+args = uvvis_parser.parse_args()
+
+units = "nm"
+if args.ev_unit:
+    units = "eV"
 
 exp_data = None
 if args.exp_data:
@@ -238,11 +247,16 @@ if args.exp_data:
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
-compouts = []
-for f in glob_files(args.infiles, parser=ir_parser):
+filereaders = []
+for f in glob_files(args.infiles, parser=uvvis_parser):
     fr = FileReader(f, just_geom=False)
-    co = CompOutput(fr)
-    compouts.append(co)
+    filereaders.append(fr)
+
+compouts = []
+if args.freq_files:
+    for f in glob_files(args.freq_files, parser=uvvis_parser):
+        co = CompOutput(f)
+        compouts.append(co)
 
 if args.weighting == "electronic":
     weighting = CompOutput.ELECTRONIC_ENERGY
@@ -257,6 +271,9 @@ elif args.weighting == "quasi-rrho":
 elif args.weighting == "quasi-harmonic":
     weighting = CompOutput.QUASI_HARMONIC
 
+if (args.weighting == "electronic" or "frequency" in fr.other) and not compouts:
+    compouts = [CompOutput(fr) for fr in filereaders]
+
 weights = CompOutput.boltzmann_weights(
     compouts,
     temperature=args.temperature,
@@ -264,8 +281,8 @@ weights = CompOutput.boltzmann_weights(
     v0=args.w0,
 )
 
-mixed_freq = Frequency.get_mixed_signals(
-    [co.frequency for co in compouts],
+mixed_uvvis = ValenceExcitations.get_mixed_signals(
+    [fr.other["uv_vis"] for fr in filereaders],
     weights=weights,
 )
 
@@ -273,20 +290,20 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
     fig = plt.gcf()
     fig.clear()
     
-    mixed_freq.plot_ir(
+    mixed_uvvis.plot_uv_vis(
         fig,
         centers=args.centers,
         widths=args.widths,
         plot_type=args.plot_type,
         peak_type=args.peak_type,
-        reverse_x=args.reverse_x,
         fwhm=args.fwhm,
         point_spacing=args.point_spacing,
         voigt_mixing=args.voigt_mixing,
+        scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
-        anharmonic=mixed_freq.anharm_data and args.anharmonic,
+        units=units,
     )
     
     if args.fig_width:
@@ -302,23 +319,33 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
         plt.show()
 
 else:
-    intensity_attr = "intensity"
-    if args.plot_type.lower() == "vcd":
-        intensity_attr = "rotation"
-    if args.plot_type.lower() == "raman":
-        intensity_attr = "raman_activity"
+    intensity_attr = "dipole_str"
+    if plot_type.lower() == "uv-vis-veloctiy":
+        intensity_attr = "dipole_vel"
+    if plot_type.lower() == "ecd":
+        intensity_attr = "rotatory_str_len"
+    if plot_type.lower() == "ecd-velocity":
+        intensity_attr = "rotatory_str_vel"
 
-    funcs, x_positions, intensities = mixed_freq.get_spectrum_functions(
+    change_x_unit_func = None
+    x_label = "wavelength (nm)"
+    if units == "eV":
+        change_x_unit_func = ValenceExcitations.nm_to_ev
+        x_label = r"$h\nu$ (eV)"
+
+
+    funcs, x_positions, intensities = mixed_uvvis.get_spectrum_functions(
         fwhm=args.fwhm,
         peak_type=args.peak_type,
         voigt_mixing=args.voigt_mixing,
+        scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
-        data_attr="anharm_data" if mixed_freq.anharm_data and args.anharmonic else "data",
+        change_x_unit_func=change_x_unit_func,
         intensity_attr=intensity_attr,
     )
 
-    x_values, y_values = mixed_freq.get_plot_data(
+    x_values, y_values = mixed_uvvis.get_plot_data(
         funcs,
         x_positions,
         point_spacing=args.point_spacing,
@@ -327,18 +354,19 @@ else:
         fwhm=args.fwhm,
     )
 
-    if args.plot_type.lower() == "transmittance":
+    if y_label is None and plot_type.lower() == "transmittance":
         y_label = "Transmittance (%)"
-    elif args.plot_type.lower() == "absorbance":
+    elif y_label is None and plot_type.lower() == "uv-vis":
         y_label = "Absorbance (arb.)"
-    elif args.plot_type.lower() == "vcd":
+    elif y_label is None and plot_type.lower() == "uv-vis-veloctiy":
+        y_label = "Absorbance (arb.)"
+    elif y_label is None and plot_type.lower() == "ecd":
         y_label = "delta_Absorbance (arb.)"
-    elif args.plot_type.lower() == "raman":
-        y_label = "Activity (arb.)"
-
+    elif y_label is None and plot_type.lower() == "ecd-velocity":
+        y_label = "delta_Absorbance (arb.)"
 
     with open(args.outfile, "w") as f:
-        s = ",".join(["frequency (cm^-1)", y_label])
+        s = ",".join([x_label, y_label])
         s += "\n"
         for x, y in zip(x_values, y_values):
             s += ",".join(["%.4f" % z for z in [x, y]])

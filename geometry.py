@@ -512,6 +512,7 @@ class Geometry:
 
     @classmethod
     def get_diastereomers(cls, geometry, minimize=True):
+        """returns a list of all diastereomers for detected chiral centers"""
         from AaronTools.finders import ChiralCenters, Bridgehead, NotAny, SpiroCenters
         from AaronTools.ring import Ring
         from AaronTools.substituent import Substituent
@@ -523,6 +524,8 @@ class Geometry:
         if not getattr(updating_diastereomer, "substituents", False):
             updating_diastereomer.substituents = []
 
+        # we can invert any chiral center that isn't part of a 
+        # fused ring unless it's a spiro center
         chiral_centers = updating_diastereomer.find(ChiralCenters())
         spiro_chiral = updating_diastereomer.find(SpiroCenters(), chiral_centers)
         ring_centers = updating_diastereomer.find(
@@ -2430,8 +2433,8 @@ class Geometry:
                     tot_points = 0
     
                 else:
-                    buried_points = np.zeros(4)
-                    tot_points = np.zeros(4)
+                    buried_points = np.zeros(8)
+                    tot_points = np.zeros(8)
 
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
@@ -2453,15 +2456,24 @@ class Geometry:
                 if basis is not None:
                     # determine what quadrant this point is in, add it to the appropriate bin
                     map_xyz = np.dot(xyz, basis)
-                    for p in map_xyz:
-                        if p[0] > 0 and p[1] > 0:
-                            tot_points[0] += 1
-                        elif p[0] <= 0 and p[1] > 0:
-                            tot_points[1] += 1
-                        elif p[0] <= 0 and p[1] <= 0:
-                            tot_points[2] += 1
-                        else:
-                            tot_points[3] += 1
+                    signs = np.sign(map_xyz)
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    tot_points[0] += sum(oct_0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    tot_points[1] += sum(oct_1)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    tot_points[2] += sum(oct_2)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    tot_points[3] += sum(oct_3)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    tot_points[4] += sum(oct_4)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    tot_points[5] += sum(oct_5)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    tot_points[6] += sum(oct_6)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    tot_points[7] += sum(oct_7)
+
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
@@ -2472,15 +2484,24 @@ class Geometry:
                 else:
                     mask = np.any(diff_mat <= 0, axis=1)
                     buried_coords = map_xyz[mask]
-                    for bc in buried_coords:
-                        if bc[0] > 0 and bc[1] > 0:
-                            buried_points[0] += 1
-                        elif bc[0] <= 0 and bc[1] > 0:
-                            buried_points[1] += 1
-                        elif bc[0] <= 0 and bc[1] <= 0:
-                            buried_points[2] += 1
-                        else:
-                            buried_points[3] += 1
+                    signs = np.sign(buried_coords)
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    buried_points[0] += sum(oct_0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    buried_points[1] += sum(oct_1)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    buried_points[2] += sum(oct_2)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    buried_points[3] += sum(oct_3)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    buried_points[4] += sum(oct_4)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    buried_points[5] += sum(oct_5)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    buried_points[6] += sum(oct_6)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    buried_points[7] += sum(oct_7)
+
                 return buried_points, tot_points
 
 
@@ -2492,10 +2513,10 @@ class Geometry:
                 tot_points = 0
 
             else:
-                prev_vol = np.zeros(4)
-                cur_vol = np.zeros(4)
-                buried_points = np.zeros(4)
-                tot_points = np.zeros(4)
+                prev_vol = np.zeros(8)
+                cur_vol = np.zeros(8)
+                buried_points = np.zeros(8)
+                tot_points = np.zeros(8)
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
@@ -2511,7 +2532,7 @@ class Geometry:
                         dV.append(abs(cur_vol - prev_vol))
                         prev_vol = cur_vol
                     else:
-                        cur_vol = np.divide(buried_points, tot_points) / 4
+                        cur_vol = np.divide(buried_points, tot_points) / 8
                         dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                         prev_vol = cur_vol
 
@@ -2529,7 +2550,7 @@ class Geometry:
                             prev_vol = cur_vol
                         else:
                             tot_points += results[k][1]
-                            cur_vol = np.divide(buried_points, tot_points) / 4
+                            cur_vol = np.divide(buried_points, tot_points) / 8
                             dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                             prev_vol = cur_vol
                 i += n_threads
@@ -2551,7 +2572,7 @@ class Geometry:
 
             # value of integral (without 4 pi r^2) for each shell
             if basis is not None:
-                shell_values = np.zeros((4, rpoints))
+                shell_values = np.zeros((8, rpoints))
             else:
                 shell_values = np.zeros(rpoints)
             # loop over radial shells
@@ -2571,15 +2592,26 @@ class Geometry:
                 else:
                     mask = np.any(diff_mat <= 0, axis=1)
                     buried_coords = map_agrid_r[mask]
-                    for bc, aweight in zip(buried_coords, aweights[mask]):
-                        if bc[0] > 0 and bc[1] > 0:
-                            shell_values[0][i] += aweight
-                        elif bc[0] <= 0 and bc[1] > 0:
-                            shell_values[1][i] += aweight
-                        elif bc[0] <= 0 and bc[1] <= 0:
-                            shell_values[2][i] += aweight
-                        else:
-                            shell_values[3][i] += aweight
+                    buried_weights = aweights[mask]
+                    signs = np.sign(buried_coords)
+                    # dot product should be 3, but > 2 allows for
+                    # numerical error
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    shell_values[0][i] += np.dot(oct_0, buried_weights)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    shell_values[1][i] += np.dot(oct_1, buried_weights)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    shell_values[2][i] += np.dot(oct_2, buried_weights)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    shell_values[3][i] += np.dot(oct_3, buried_weights)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    shell_values[4][i] += np.dot(oct_4, buried_weights)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    shell_values[5][i] += np.dot(oct_5, buried_weights)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    shell_values[6][i] += np.dot(oct_6, buried_weights)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    shell_values[7][i] += np.dot(oct_7, buried_weights)
 
             if basis is not None:
                 # return a list of buried volume in each quadrant
@@ -2587,7 +2619,7 @@ class Geometry:
                     300
                     * np.dot(shell_values[k] * rgrid ** 2, rweights)
                     / (radius ** 3)
-                    for k in range(0, 4)
+                    for k in range(0, 8)
                 ]
             else:
                 # return buried volume
@@ -2715,6 +2747,7 @@ class Geometry:
         atoms_within_radius = []
         radius_list = []
         for i, atom in enumerate(targets):
+            print("target", atom)
             if (
                 shape == "circle"
                 and dist_ip[i] - radii_dict[atom.element] < radius

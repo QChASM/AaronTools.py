@@ -149,84 +149,63 @@ class CompOutput:
             self.E_ZPVE = self.energy + self.ZPVE
 
     @staticmethod
-    def mix_spectra(
-        comp_outputs,
-        fractions=None,
-        v0=100,
+    def boltzmann_weights(
+        thermo_cos,
+        nrg_cos=None,
+        weighting="RRHO",
         temperature=298.15,
-        weighting=QUASI_RRHO,
-        plot_type="transmittance",
-        **kwargs,
+        v0=100,
     ):
         """
-        get functions for a spectrum that is a mixture
-        of compounds
-        
-        comp_outputs: either a list of comp_outputs or a 
-            list of lists of comp_outputs
-            for a list of comp_outputs, boltzmann weighting
-            will be used to produce the spectrum
-            if a list of lists is given, each list of
-            comp_outputs will be boltzmann weighted
-            and multiplied by the corresponding fraction
-            to produce the spectrum
-        fractions: array of floats if comp_outputs
-            is a list of lists
-            ignored otherwise
-        weighting: what energy type to use for boltzmann
-        kwargs: keywords for Frequency.get_spectrum_functions
+        returns boltzmann weights
+        thermo_cos - list of CompOutput instances for thermochem corrections
+        nrg_cos - list of CompOutput to take the electronic energy from
+            order should correspond to thermo_cos
+            if not given, the energies from thermo_cos are used
+        weighting - type of energy to use for weighting
+            can be:
+                "NRG"
+                "ZPE"
+                "ENTHALPY"
+                "QHARM"
+                "QRRHO"
+                "RRHO"
+        temperature - temperature in K
+        v0 - parameter for quasi free energy corrections
         """
-        if "intensity_attr" not in kwargs:
-            intensity_attr = "intensity"
-            if plot_type.lower() == "vcd":
-                intensity_attr = "rotation"
-            kwargs["intensity_attr"] = intensity_attr
-        
-        functions = []
-        frequencies = []
-        intensities = []
-        
-        if not hasattr(comp_outputs[0], "__iter__"):
-            comp_outputs = [comp_outputs]
-            fractions = [1]
-        
-        for group, frac in zip(comp_outputs, fractions):
-            min_nrg = None
-            nrgs = []
-            for compout in group:
-                if weighting == CompOutput.ELECTRONIC_ENERGY:
-                    nrg = compout.energy
-                elif weighting == CompOutput.ZEROPOINT_ENERGY:
-                    nrg = compout.E_ZPVE
-                elif weighting == CompOutput.RRHO_ENTHALPY:
-                    _, Hcorr, _ = compout.therm_corr(
-                        temperature=temperature, v0=v0
-                    )
-                    nrg = compout.energy + Hcorr
-                else:
-                    Gcorr = compout.calc_G_corr(
-                        method=weighting, temperature=temperature, v0=v0
-                    )
-                    nrg = compout.energy + Gcorr
-                
-                if min_nrg is None or nrg < min_nrg:
-                    min_nrg = nrg
-                nrgs.append(nrg)
-            
-            for compout, nrg in zip(group, nrgs):
-                base_funcs, base_freqs, base_inten = compout.frequency.get_spectrum_functions(**kwargs)
-                scale = frac * np.exp(
-                    -(nrg - min_nrg) * UNIT.HART_TO_KCAL / (PHYSICAL.R * temperature)
-                )
-                for func, x in zip(base_funcs, base_freqs):
-                    functions.append(
-                        lambda x, s=scale, fun=func: s * fun(x)
-                    )
-
-                frequencies.extend(base_freqs)
-                intensities.extend(base_inten)
-
-        return functions, frequencies, intensities
+        if not nrg_cos:
+            nrg_cos = thermo_cos
+        energies = np.array([co.energy for co in nrg_cos])
+        corr = None
+        if weighting == CompOutput.ZEROPOINT_ENERGY:
+            corr = np.array([co.ZPVE for co in thermo_cos])
+        elif weighting == CompOutput.RRHO_ENTHALPY:
+            corr = np.array([
+                co.therm_corr(temperature=temperature, v0=v0)[1] for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.QUASI_HARMONIC:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.QUASI_RRHO:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.RRHO:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        if corr is not None:
+            energies += corr
+        relative = energies - min(energies)
+        w = np.exp(
+            -relative * UNIT.HART_TO_KCAL / (PHYSICAL.R * temperature)
+        )
+        return w / sum(w)
 
     def to_dict(self, skip_attrs=None):
         return obj_to_dict(self, skip_attrs=skip_attrs)

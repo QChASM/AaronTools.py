@@ -313,10 +313,14 @@ for f in glob_files(args.infile, parser=steric_parser):
         ax.hlines(0, -args.radius, args.radius, color="k")
         ax.vlines(0, -args.radius, args.radius, color="k")
 
-        ax.text(+0.7 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur[0])
-        ax.text(-0.9 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur[1])
-        ax.text(-0.9 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[2])
-        ax.text(+0.7 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur[3])
+        vbur_1 = vbur[0] + vbur[7]
+        vbur_2 = vbur[1] + vbur[6]
+        vbur_3 = vbur[2] + vbur[5]
+        vbur_4 = vbur[3] + vbur[4]
+        ax.text(+0.7 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur_1)
+        ax.text(-0.9 * args.radius, +0.9 * args.radius, "%.1f%%" % vbur_2)
+        ax.text(-0.9 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur_3)
+        ax.text(+0.7 * args.radius, -0.9 * args.radius, "%.1f%%" % vbur_4)
 
     if not args.outfile:
         plt.show()

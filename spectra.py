@@ -1,0 +1,1250 @@
+"""classes for storing signal data and plotting various spectra (IR, UV/vis, etc.)"""
+import re
+
+import numpy as np
+
+from AaronTools import addlogger
+from AaronTools.const import UNIT, PHYSICAL
+from AaronTools.utils.utils import float_num
+
+
+class Signal:
+    """
+    parent class for each signal in a spectrum
+    """
+    # attribute for the x position of this signal
+    x_attr = None
+    required_attrs = ()
+    nested = None
+    def __init__(self, x_var, **kwargs):
+        for attr in self.required_attrs:
+            setattr(self, attr, None)
+
+        for arg in kwargs:
+            setattr(self, arg, kwargs[arg])
+
+        setattr(self, self.x_attr, x_var)
+
+
+@addlogger
+class Signals:
+    """
+    parent class for storing data for different signals in the
+    spectrum and plotting a simulated spectrum
+    """
+    # label for x axis - should be set by child classes
+    x_label = None
+    
+    LOG = None
+    
+    def __init__(self, data, style="gaussian", *args, **kwargs):
+        self.data = []
+        if isinstance(data[0], Signal):
+            self.data = data
+            return
+
+        lines = False
+        if isinstance(data, str):
+            lines = data.splitlines()
+
+        if lines and style == "gaussian":
+            self.parse_gaussian_lines(lines, *args, **kwargs)
+        elif lines and style == "orca":
+            self.parse_orca_lines(lines, *args, **kwargs)
+        elif lines and style == "psi4":
+            self.parse_psi4_lines(lines, *args, **kwargs)
+        else:
+            raise NotImplementedError("cannot parse data for %s" % style)
+
+    def parse_gaussian_lines(self, lines, *args, **kwargs):
+        """parse data from Gaussian output files related to this spectrum"""
+        raise NotImplementedError(
+            "parse_gaussian_lines not implemented by %s" %
+            self.__class__.__name__
+        )
+
+    def parse_orca_lines(self, lines, *args, **kwargs):
+        """parse data from ORCA output files related to this spectrum"""
+        raise NotImplementedError(
+            "parse_orca_lines not implemented by %s" %
+            self.__class__.__name__
+        )
+
+    def parse_psi4_lines(self, lines, *args, **kwargs):
+        """parse data from Psi4 output files related to this spectrum"""
+        raise NotImplementedError(
+            "parse_psi4_lines not implemented by %s" %
+            self.__class__.__name__
+        )
+
+    def filter_data(self, signal):
+        """
+        used to filter out some data from the spectrum (e.g.
+        imaginary modes from an IR spec)
+        return False if signal should not be in the spectrum
+        """
+        return True
+
+    def get_spectrum_functions(
+        self,
+        fwhm=15.0,
+        peak_type="pseudo-voigt",
+        voigt_mixing=0.5,
+        scalar_scale=0.0,
+        linear_scale=0.0,
+        quadratic_scale=0.0,
+        intensity_attr="intensity",
+        data_attr="data",
+        change_x_unit_func=None,
+    ):
+        """
+        returns a list of functions that can be evaluated to
+        produce a spectrum
+        fwhm - full width at half max of each peak
+        peak_type - gaussian, lorentzian, pseudo-voigt, or delta
+        voigt_mixing - ratio of pseudo-voigt that is gaussian
+        scalar_scale - shift x data
+        linear_scale - scale x data
+        quadratic_scale - scale x data
+            x' = (1 - linear_scale * x - quadratic_scale * x^2 - scalar_scale)
+        intensity_attr - attribute of Signal used for the intensity
+            of that signal
+        data_attr - attribute of self for the list of Signal()
+        change_x_unit_func - function to change units of x axis
+        """
+        data = getattr(self, data_attr)
+        x_attr = data[0].x_attr
+        
+        
+        # scale x positions
+        if not data[0].nested:
+            x_positions = np.array(
+                [getattr(d, x_attr) for d in data if self.filter_data(d)]
+            )
+    
+            intensities = [
+                getattr(d, intensity_attr) for d in data if self.filter_data(d)
+            ]
+        else:
+            x_positions = []
+            intensities = []
+            x_positions.extend(
+                [getattr(d, x_attr) for d in data if self.filter_data(d)]
+            )
+            intensities.extend(
+                [getattr(d, intensity_attr) for d in data if self.filter_data(d)]
+            )
+            for nest in data[0].nested:
+                for d in data:
+                    nest_attr = getattr(d, nest)
+                    if isinstance(nest_attr, dict):
+                        for value in nest_attr.values():
+                            if hasattr(value, "__iter__"):
+                                for item in value:
+                                    x_positions.append(getattr(item, x_attr))
+                                    intensities.append(getattr(item, intensity_attr))
+                            else:
+                                x_positions.append(getattr(value, x_attr))
+                                intensities.append(getattr(value, intensity_attr))
+                    elif hasattr(nest_attr, "__iter__"):
+                        for item in nest_attr:
+                            x_positions.append(getattr(item, x_attr))
+                            intensities.append(getattr(item, intensity_attr))
+                    else:
+                        x_positions.append(getattr(nest_attr, x_attr))
+                        intensities.append(getattr(nest_attr, intensity_attr))
+                
+            x_positions = np.array(x_positions)
+
+        if change_x_unit_func:
+            x_positions = change_x_unit_func(x_positions)
+        x_positions -= (
+            linear_scale * x_positions + quadratic_scale * x_positions ** 2
+        )
+        x_positions -= scalar_scale
+
+        e_factor = -4 * np.log(2) / fwhm ** 2
+        sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+
+        functions = []
+
+        for x_pos, intensity in zip(x_positions, intensities):
+            if intensity is not None:
+                if peak_type.lower() == "gaussian":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * np.exp(e_factor * (x - x0) ** 2)
+                        * fwhm / (2 * np.sqrt(2 * np.log(2)))
+                    )
+
+                elif peak_type.lower() == "lorentzian":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * (
+                            0.5 * fwhm
+                            / (np.pi * ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                        )
+                    )
+
+                elif peak_type.lower() == "pseudo-voigt":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * (
+                            (1 - voigt_mixing)
+                            * (
+                                (0.5 * fwhm) ** 2
+                                / (((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                            )
+                            + voigt_mixing
+                            * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
+                        )
+                    )
+
+                elif peak_type.lower() == "delta":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * int(x == x0)
+                    )
+
+        return functions, x_positions, intensities
+
+    @staticmethod
+    def get_plot_data(
+        functions,
+        signal_centers,
+        point_spacing=None,
+        transmittance=False,
+        peak_type="pseudo-voigt",
+        normalize=True,
+        fwhm=15.0,
+    ):
+        """
+        returns arrays of x_values, y_values for a spectrum
+        point_spacing - spacing between points, default is higher resolution around
+                        each peak (i.e. not uniform)
+                        this is pointless if peak_type == delta
+        fwhm - full width at half max
+        transmittance - if true, take 10^(2 - y_values) before returning
+            to get transmittance as a %
+        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
+        voigt_mixing - fraction of pseudo-voigt that is gaussian
+        linear_scale - subtract linear_scale * frequency off each mode
+        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
+        """
+        if peak_type.lower() != "delta":
+            if point_spacing is not None and peak_type.lower():
+                x_values = []
+                x = -point_spacing
+                stop = max(signal_centers)
+                if peak_type.lower() != "delta":
+                    stop += 5 * fwhm
+                while x < stop:
+                    x += point_spacing
+                    x_values.append(x)
+            
+                x_values = np.array(x_values)
+            
+            else:
+                x_values = np.linspace(
+                    0,
+                    max(signal_centers) - 10 * fwhm,
+                    num=100
+                ).tolist()
+            
+                for freq in signal_centers:
+                    x_values.extend(
+                        np.linspace(
+                            max(freq - (7.5 * fwhm), 0),
+                            freq + (7.5 * fwhm),
+                            num=75,
+                        ).tolist()
+                    )
+                    x_values.append(freq)
+
+                if not point_spacing:
+                    x_values = np.array(list(set(x_values)))
+                    x_values.sort()
+
+            y_values = np.sum([f(x_values) for f in functions], axis=0)
+
+        else:
+            x_values = []
+            y_values = []
+
+            for freq, func in zip(signal_centers, functions):
+                y_values.append(func(freq))
+                x_values.append(freq)
+
+            y_values = np.array(y_values)
+
+        if len(y_values) == 0:
+            Signals.LOG.warning("nothing to plot")
+            return None
+
+        if normalize:
+            y_values /= abs(max(y_values.max(), y_values.min(), key=abs))
+
+        if transmittance:
+            y_values = np.array([10 ** (2 - y) for y in y_values])
+
+        return x_values, y_values
+
+    @classmethod
+    def plot_spectrum(
+        cls,
+        figure,
+        x_values,
+        y_values,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        reverse_x=None,
+        y_label=None,
+        plot_type="transmittance",
+        x_label=r"wavenumber (cm$^{-1}$)",
+        peak_type="pseudo-voigt",
+    ):
+        """
+        plot the x_data and y_data on figure (matplotlib figure)
+        this is intended for IR spectra
+
+        centers - array-like of float, plot is split into sections centered
+                  on the frequency specified by centers
+                  default is to not split into sections
+        widths - array-like of float, defines the width of each section
+        exp_data - other data to plot
+                   should be a list of (x_data, y_data, color)
+        reverse_x - if True, 0 cm^-1 will be on the right
+        """
+
+        if not centers:
+            # if no centers were specified, pretend they were so we
+            # can do everything the same way
+            axes = [figure.subplots(nrows=1, ncols=1)]
+            widths = [max(x_values)]
+            centers = [max(x_values) / 2]
+        else:
+            n_sections = len(centers)
+            figure.subplots_adjust(wspace=0.05)
+            # sort the sections so we don't jump around
+            widths = [
+                x
+                for _, x in sorted(
+                    zip(centers, widths),
+                    key=lambda p: p[0],
+                    reverse=reverse_x,
+                )
+            ]
+            centers = sorted(centers, reverse=reverse_x)
+
+            axes = figure.subplots(
+                nrows=1,
+                ncols=n_sections,
+                sharey=True,
+                gridspec_kw={"width_ratios": widths},
+            )
+            if not hasattr(axes, "__iter__"):
+                # only one section was specified (e.g. zooming in on a peak)
+                # make sure axes is iterable
+                axes = [axes]
+
+        for i, ax in enumerate(axes):
+            if i == 0:
+                ax.set_ylabel(y_label)
+
+                # need to split plot into sections
+                # put a / on the border at the top and bottom borders
+                # of the plot
+                if len(axes) > 1:
+                    ax.spines["right"].set_visible(False)
+                    ax.tick_params(labelright=False, right=False)
+                    ax.plot(
+                        [1, 1],
+                        [0, 1],
+                        marker=((-1, -1), (1, 1)),
+                        markersize=5,
+                        linestyle="none",
+                        color="k",
+                        mec="k",
+                        mew=1,
+                        clip_on=False,
+                        transform=ax.transAxes,
+                    )
+
+            elif i == len(axes) - 1 and len(axes) > 1:
+                # last section needs a set of / too, but on the left side
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(labelleft=False, left=False)
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle="none",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            elif len(axes) > 1:
+                # middle sections need two sets of /
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_visible(False)
+                ax.tick_params(
+                    labelleft=False, labelright=False, left=False, right=False
+                )
+                ax.plot(
+                    [0, 0],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    linestyle="none",
+                    label="Silence Between Two Subplots",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+                ax.plot(
+                    [1, 1],
+                    [0, 1],
+                    marker=((-1, -1), (1, 1)),
+                    markersize=5,
+                    label="Silence Between Two Subplots",
+                    linestyle="none",
+                    color="k",
+                    mec="k",
+                    mew=1,
+                    clip_on=False,
+                    transform=ax.transAxes,
+                )
+
+            if peak_type.lower() != "delta":
+                ax.plot(
+                    x_values,
+                    y_values,
+                    color="k",
+                    linewidth=0.5,
+                    label="computed",
+                )
+
+            else:
+                if plot_type.lower() == "transmittance":
+                    ax.vlines(
+                        x_values,
+                        y_values,
+                        [100 for y in y_values],
+                        linewidth=0.5,
+                        colors=["k" for x in x_values],
+                        label="computed",
+                    )
+                    ax.hlines(
+                        100,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=["k" for y in y_values],
+                        label="computed",
+                    )
+
+                else:
+                    ax.vlines(
+                        x_values,
+                        [0 for y in y_values],
+                        y_values,
+                        linewidth=0.5,
+                        colors=["k" for x in x_values],
+                        label="computed",
+                    )
+                    ax.hlines(
+                        0,
+                        0,
+                        max(4000, *x_values),
+                        linewidth=0.5,
+                        colors=["k" for y in y_values],
+                        label="computed",
+                    )
+
+            if exp_data:
+                for x, y, color in exp_data:
+                    ax.plot(
+                        x,
+                        y,
+                        color=color,
+                        zorder=-1,
+                        linewidth=0.5,
+                        label="observed",
+                    )
+
+            center = centers[i]
+            width = widths[i]
+            high = center + width / 2
+            low = center - width / 2
+            if reverse_x:
+                ax.set_xlim(high, low)
+            else:
+                ax.set_xlim(low, high)
+
+        # b/c we're doing things in sections, we can't add an x-axis label
+        # well we could, but which section would be put it one?
+        # it wouldn't be centered
+        # so instead the x-axis label is this
+        figure.text(
+            0.5, 0.0, x_label, ha="center", va="bottom"
+        )
+
+    @classmethod
+    def get_mixed_signals(
+        cls,
+        signal_groups,
+        weights,
+        fractions=None,
+        data_attr="data",
+        **kwargs,
+    ):
+        """
+        get signals for a mixture of components or conformers
+        signal_groups - list of Signals() instances or list of lists of Signals()
+            a list of Signals() is a group of conformers
+            a list of lists of Signals() are the different components
+        weights - weights for each conformer, organized according to signal_groups
+        fractions - fraction of each component in the mixture
+            default: all components have equal fractions
+        data_attr - attribute of Signals() for data
+        **kwargs - passed to cls.__init__, along with a new list of data
+        """
+        
+        if not hasattr(signal_groups[0], "__iter__"):
+            signal_groups = [signal_groups]
+        
+        if not hasattr(weights[0], "__iter__"):
+            weights = [weights]
+        
+        if fractions is None:
+            fractions = np.ones(len(signal_groups))
+        
+        new_data = []
+        for group, weighting, fraction in zip(signal_groups, weights, fractions):
+            for signals, weight in zip(group, weighting):
+                data = getattr(signals, data_attr)
+                for d in data:
+                    x_val = getattr(d, d.x_attr)
+                    vals = d.__dict__
+                    data_cls = d.__class__
+                    new_vals = dict()
+                    for key, item in vals.items():
+                        if isinstance(item, float):
+                            new_vals[key] = fraction * weight * item
+                        else:
+                            new_vals[key] = item
+                    
+                    if d.nested:
+                        if not isinstance(d.nested, str):
+                            for attr in d.nested:
+                                nest = getattr(d, attr)
+                                if isinstance(nest, dict):
+                                    for k, item in nest:
+                                        nest_vals = dict()
+                                        nest_x_val = getattr(item, item.x_attr)
+                                        vals = item.__dict__
+                                        nest_cls = item.__class__
+                                        for k, j in vals.items():
+                                            if isinstance(item, float):
+                                                nest_vals[k] = fraction * weight * j
+                                            else:
+                                                nest_vals[k] = j
+                                        new_vals[attr][k] = nest_cls(
+                                            nest_x_val, **nest_vals
+                                        )
+                                elif hasattr(nest, "__iter__"):
+                                    for item in nest:
+                                        nest_x_val = getattr(item, item.x_attr)
+                                        vals = item.__dict__
+                                        nest_cls = item.__class__
+                                        for k, j in vals.items():
+                                            if isinstance(item, float):
+                                                nest_vals[k] = fraction * weight * j
+                                            else:
+                                                nest_vals[k] = j
+                                        new_vals[attr][k] = nest_cls(
+                                            nest_x_val, **nest_vals
+                                        )
+                                else:
+                                    nest_x_val = getattr(nest, nest.x_attr)
+                                    vals = nest.__dict__
+                                    nest_cls = nest.__class__
+                                    for k, j in vals.items():
+                                        if isinstance(nest, float):
+                                            nest_vals[k] = fraction * weight * j
+                                        else:
+                                            nest_vals[k] = j
+                                    new_vals[attr][k] = nest_cls(
+                                        nest_x_val, **nest_vals
+                                    )
+                    
+                    new_data.append(data_cls(x_val, **new_vals))
+
+        return cls(new_data, **kwargs)
+
+
+class HarmonicVibration(Signal):
+    x_attr = "frequency"
+    required_attrs = (
+        "intensity", "vector", "symmetry", "rotation", "raman_activity",
+    )
+
+
+class AnharmonicVibration(Signal):
+    x_attr = "frequency"
+    required_attrs = (
+        "intensity", "harmonic", "overtones", "combinations",
+    )
+    nested = ("overtones", "combinations")
+
+
+class Frequency(Signals):
+    """for spectra in the IR/NIR region based on vibrational modes"""
+    
+    def __init__(self, *args, harmonic=True, hpmodes=None, **kwargs):
+        super().__init__(*args, harmonic=harmonic, hpmodes=hpmodes, **kwargs)
+        self.anharm_data = None
+        self.imaginary_frequencies = None
+        self.real_frequencies = None
+        self.lowest_frequency = None
+        self.by_frequency = {}
+        self.is_TS = None
+        self.sort_frequencies()
+
+    def parse_gaussian_lines(
+        self, lines, *args, hpmodes=None, harmonic=True, **kwargs
+    ):
+        if harmonic:
+            return self._parse_harmonic_gaussian(lines, hpmodes=hpmodes)
+        return self._parse_anharmonic_gaussian(lines)
+
+    def _parse_harmonic_gaussian(self, lines, hpmodes):
+        if hpmodes is None:
+            raise TypeError(
+                "hpmodes argument required when data is a string"
+            )
+        num_head = 0
+        for line in lines:
+            if "Harmonic frequencies" in line:
+                num_head += 1
+        if hpmodes and num_head != 2:
+            raise RuntimeError("Log file damaged, cannot get frequencies")
+
+        num_head = 0
+        idx = -1
+        modes = []
+        for k, line in enumerate(lines):
+            if "Harmonic frequencies" in line:
+                num_head += 1
+                if hpmodes and num_head == 2:
+                    # if hpmodes, want just the first set of freqs
+                    break
+                continue
+            if "Frequencies" in line and (
+                (hpmodes and "---" in line) or ("--" in line and not hpmodes)
+            ):
+                for i, symm in zip(
+                    float_num.findall(line), lines[k - 1].split()
+                ):
+                    self.data += [HarmonicVibration(float(i), symmetry=symm)]
+                    modes += [[]]
+                    idx += 1
+                continue
+
+            if ("Force constants" in line and "---" in line and hpmodes) or (
+                "Frc consts" in line and "--" in line and not hpmodes
+            ):
+                force_constants = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].forcek = float(force_constants[i])
+                continue
+
+            if ("Rot. strength" in line and "---" in line and hpmodes) or (
+                "Rot. str." in line and "--" in line and not hpmodes
+            ):
+                roational_strength = float_num.findall(line)
+                for i in range(-len(roational_strength), 0, 1):
+                    self.data[i].rotation = float(roational_strength[i])
+                continue
+
+            if ("Raman Activities" in line and "---" in line and hpmodes) or (
+                "Raman Activ" in line and "--" in line and not hpmodes
+            ):
+                roational_strength = float_num.findall(line)
+                for i in range(-len(roational_strength), 0, 1):
+                    self.data[i].raman_activity = float(roational_strength[i])
+                continue
+
+            if "IR Inten" in line and (
+                (hpmodes and "---" in line) or (not hpmodes and "--" in line)
+            ):
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].intensity = float(intensities[i])
+                continue
+
+            if hpmodes:
+                match = re.search(
+                    r"^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line
+                )
+                if match is None:
+                    continue
+                values = float_num.findall(line)
+                coord = int(values[0]) - 1
+                atom = int(values[1]) - 1
+                moves = values[3:]
+                for i, m in enumerate(moves):
+                    tmp = len(moves) - i
+                    mode = modes[-tmp]
+                    try:
+                        vector = mode[atom]
+                    except IndexError:
+                        vector = [0, 0, 0]
+                        modes[-tmp] += [[]]
+                    vector[coord] = m
+                    modes[-tmp][atom] = vector
+            else:
+                match = re.search(r"^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
+                if match is None:
+                    continue
+                values = float_num.findall(line)
+                atom = int(values[0]) - 1
+                moves = np.array(values[2:], dtype=np.float)
+                n_moves = len(moves) // 3
+                for i in range(-n_moves, 0):
+                    modes[i].append(
+                        moves[3 * n_moves + 3 * i : 4 * n_moves + 3 * i]
+                    )
+
+        for mode, data in zip(modes, self.data):
+            data.vector = np.array(mode, dtype=np.float64)
+
+    def _parse_anharmonic_gaussian(self, lines):
+        reading_combinations = False
+        reading_overtones = False
+        reading_fundamentals = False
+
+        combinations = []
+        overtones = []
+        fundamentals = []
+
+        mode_re = re.compile(r"(\d+)\((\d+)\)")
+
+        for line in lines:
+            if "---" in line or "Mode" in line or not line.strip():
+                continue
+            if "Fundamental Bands" in line:
+                reading_fundamentals = True
+                continue
+            if "Overtones" in line:
+                reading_overtones = True
+                continue
+            if "Combination Bands" in line:
+                reading_combinations = True
+                continue
+
+            if reading_combinations:
+                info = line.split()
+                mode1 = mode_re.search(info[0])
+                mode2 = mode_re.search(info[1])
+                ndx_1 = int(mode1.group(1))
+                exp_1 = int(mode1.group(2))
+                ndx_2 = int(mode2.group(1))
+                exp_2 = int(mode2.group(2))
+                harm_freq = float(info[2])
+                anharm_freq = float(info[3])
+                anharm_inten = float(info[4])
+                harm_inten = 0
+                combinations.append(
+                    (
+                        ndx_1,
+                        ndx_2,
+                        exp_1,
+                        exp_2,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
+                )
+            elif reading_overtones:
+                info = line.split()
+                mode = mode_re.search(info[0])
+                ndx = int(mode.group(1))
+                exp = int(mode.group(2))
+                harm_freq = float(info[1])
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[3])
+                harm_inten = 0
+                overtones.append(
+                    (
+                        ndx,
+                        exp,
+                        anharm_freq,
+                        anharm_inten,
+                        harm_freq,
+                        harm_inten,
+                    )
+                )
+            elif reading_fundamentals:
+                info = line.split()
+                harm_freq = float(info[1])
+                anharm_freq = float(info[2])
+                anharm_inten = float(info[4])
+                harm_inten = float(info[3])
+                fundamentals.append(
+                    (anharm_freq, anharm_inten, harm_freq, harm_inten)
+                )
+
+        self.anharm_data = []
+        for i, mode in enumerate(
+            sorted(fundamentals, key=lambda pair: pair[2])
+        ):
+            self.anharm_data.append(
+                AnharmonicVibration(mode[0], intensity=mode[1], harmonic=self.data[i])
+            )
+            self.anharm_data[-1].overtones = []
+            self.anharm_data[-1].combinations = dict()
+
+        for overtone in overtones:
+            ndx = len(fundamentals) - overtone[0]
+            data = self.anharm_data[ndx]
+            harm_data = HarmonicVibration(overtone[4], intensity=overtone[5])
+            data.overtones.append(
+                AnharmonicVibration(
+                    overtone[2], intensity=overtone[3], harmonic=harm_data
+                )
+            )
+        for combo in combinations:
+            ndx1 = len(fundamentals) - combo[0]
+            ndx2 = len(fundamentals) - combo[1]
+            data = self.anharm_data[ndx1]
+            harm_data = HarmonicVibration(combo[6], intensity=combo[7])
+            data.combinations[ndx2] = [
+                AnharmonicVibration(combo[4], intensity=combo[5], harmonic=harm_data)
+            ]
+
+    def parse_orca_lines(self, lines, *args, **kwargs):
+        """parse lines of orca output related to frequency
+        hpmodes is not currently used"""
+        # vibrational frequencies appear as a list, one per line
+        # block column 0 is the index of the mode
+        # block column 1 is the frequency in 1/cm
+        # skip line one b/c its just "VIBRATIONAL FREQUENCIES" with the way we got the lines
+        for n, line in enumerate(lines[1:]):
+            if line == "NORMAL MODES":
+                break
+
+            freq = line.split()[1]
+            self.data += [HarmonicVibration(float(freq))]
+
+        # all 3N modes are printed with six modes in each block
+        # each column corresponds to one mode
+        # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
+        displacements = np.zeros((len(self.data), len(self.data)))
+        carryover = 0
+        start = 0
+        stop = 6
+        for i, line in enumerate(lines[n + 2 :]):
+            if "IR SPECTRUM" in line:
+                break
+
+            if i % (len(self.data) + 1) == 0:
+                carryover = i // (len(self.data) + 1)
+                start = 6 * carryover
+                stop = start + 6
+                continue
+
+            ndx = (i % (len(self.data) + 1)) - 1
+            mode_info = line.split()[1:]
+
+            displacements[ndx][start:stop] = [float(x) for x in mode_info]
+
+        # reshape columns into Nx3 arrays
+        for k, data in enumerate(self.data):
+            data.vector = np.reshape(
+                displacements[:, k], (len(self.data) // 3, 3)
+            )
+
+        # purge rotational and translational modes
+        n_data = len(self.data)
+        k = 0
+        while k < n_data:
+            if self.data[k].frequency == 0:
+                del self.data[k]
+                n_data -= 1
+            else:
+                k += 1
+
+        for k, line in enumerate(lines):
+            if line.strip() == "IR SPECTRUM":
+                order = lines[k + 1].split()
+                if "Int" in order:
+                    ndx = order.index("Int")
+                else:
+                    ndx = order.index("T**2") - 1
+                intensity_start = k + 2
+
+        # IR intensities are only printed for vibrational
+        # the first column is the index of the mode
+        # the second column is the frequency
+        # the third is the intensity, which we read next
+        t = 0
+        for line in lines[intensity_start:]:
+            if not re.match(r"\s*\d+:", line):
+                continue
+            ir_info = line.split()
+            inten = float(ir_info[ndx])
+            self.data[t].intensity = inten
+            t += 1
+            if t >= len(self.data):
+                break
+
+        for k, line in enumerate(lines):
+            if line.strip() == "RAMAN SPECTRUM":
+                t = 0
+                for line in lines[k + 1:]:
+                    if not re.match(r"\s*\d+:", line):
+                        continue
+                    ir_info = line.split()
+                    inten = float(ir_info[2])
+                    self.data[t].raman_activity = inten
+                    t += 1
+                    if t >= len(self.data):
+                        break
+
+    def parse_psi4_lines(self, lines, *args, **kwargs):
+        """parse lines of psi4 output related to frequencies
+        hpmodes is not used"""
+        # normal mode info appears in blocks, with up to 3 modes per block
+        # at the top is the index of the normal mode
+        # next is the frequency in wavenumbers (cm^-1)
+        # after a line of '-----' are the normal displacements
+        read_displacement = False
+        modes = []
+        for n, line in enumerate(lines):
+            if len(line.strip()) == 0:
+                read_displacement = False
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.vector = np.array(modes[i])
+
+            elif read_displacement:
+                info = [float(x) for x in line.split()[2:]]
+                for i, mode in enumerate(modes):
+                    mode.append(info[3 * i : 3 * (i + 1)])
+
+            elif line.strip().startswith("Vibration"):
+                nmodes = len(line.split()) - 1
+
+            elif line.strip().startswith("Freq"):
+                freqs = [float(x) for x in line.split()[2:]]
+                for freq in freqs:
+                    self.data.append(HarmonicVibration(float(freq)))
+
+            elif line.strip().startswith("Force const"):
+                force_consts = [float(x) for x in line.split()[3:]]
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.forcek = force_consts[i]
+
+            elif line.strip().startswith("Irrep"):
+                # sometimes psi4 doesn't identify the irrep of a mode, so we can't
+                # use line.split()
+                symm = [
+                    x.strip() if x.strip() else None
+                    for x in [line[31:40], line[51:60], line[71:80]]
+                ]
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.symmetry = symm[i]
+
+            elif line.strip().startswith("----"):
+                read_displacement = True
+                modes = [[] for i in range(0, nmodes)]
+
+    def sort_frequencies(self):
+        self.imaginary_frequencies = []
+        self.real_frequencies = []
+        for data in self.data:
+            freq = data.frequency
+            if freq < 0:
+                self.imaginary_frequencies += [freq]
+            elif freq > 0:
+                self.real_frequencies += [freq]
+            self.by_frequency[freq] = {
+                "intensity": data.intensity,
+                "vector": data.vector,
+            }
+        if len(self.data) > 0:
+            self.lowest_frequency = self.data[0].frequency
+        else:
+            self.lowest_frequency = None
+        self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
+
+    def filter_data(self, signal):
+        return signal.frequency > 0
+
+    def plot_ir(
+        self,
+        figure,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        plot_type="transmittance",
+        peak_type="pseudo-voigt",
+        reverse_x=True,
+        y_label=None,
+        point_spacing=None,
+        normalize=True,
+        fwhm=15.0,
+        anharmonic=False,
+        **kwargs,
+    ):
+        """
+        plot IR data on figure
+        figure - matplotlib figure
+        centers - array-like of float, plot is split into sections centered
+                  on the frequency specified by centers
+                  default is to not split into sections
+        widths - array-like of float, defines the width of each section
+        exp_data - other data to plot
+                   should be a list of (x_data, y_data, color)
+        reverse_x - if True, 0 cm^-1 will be on the right
+        plot_type - see Frequency.get_plot_data
+        peak_type - any value allowed by Frequency.get_plot_data
+        kwargs - keywords for Frequency.get_spectrum_functions
+        """
+
+        if "intensity_attr" not in kwargs:
+            intensity_attr = "intensity"
+            if plot_type.lower() == "vcd":
+                intensity_attr = "rotation"
+            if plot_type.lower() == "raman":
+                intensity_attr = "raman_activity"
+            kwargs["intensity_attr"] = intensity_attr
+
+        data_attr = "data"
+        if anharmonic:
+            data_attr = "anharm_data"
+
+        functions, frequencies, intensities = self.get_spectrum_functions(
+            peak_type=peak_type,
+            fwhm=fwhm,
+            data_attr=data_attr,
+            **kwargs,
+        )
+
+        data = self.get_plot_data(
+            functions,
+            frequencies,
+            fwhm=fwhm,
+            transmittance=plot_type.lower() == "transmittance",
+            peak_type=peak_type,
+            point_spacing=point_spacing,
+            normalize=normalize,
+        )
+        if data is None:
+            return
+
+        x_values, y_values = data
+
+        if y_label is None and plot_type.lower() == "transmittance":
+            y_label = "Transmittance (%)"
+        elif y_label is None and plot_type.lower() == "absorbance":
+            y_label = "Absorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "vcd":
+            y_label = "ΔAbsorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "raman":
+            y_label = "Activity (arb.)"
+
+        self.plot_spectrum(
+            figure,
+            x_values,
+            y_values,
+            centers=centers,
+            widths=widths,
+            exp_data=exp_data,
+            reverse_x=reverse_x,
+            peak_type=peak_type,
+            plot_type=plot_type,
+            y_label=y_label,
+        )
+
+
+class ValenceExcitation(Signal):
+    x_attr = "excitation_wavelength"
+    required_attrs = (
+        "rotatory_str_len", "rotatory_str_vel", "dipole_str",
+        "dipole_vel", "symmetry", "multiplicity",
+    )
+
+
+class ValenceExcitations(Signals):
+    def parse_gaussian_lines(self, lines, *args, **kwargs):
+        i = 0
+        nrgs = []
+        rotatory_str_len = []
+        rotatory_str_vel = []
+        dipole_str = []
+        dipole_vel = []
+        symmetry = []
+        multiplicity = []
+        while i < len(lines):
+            if "Ground to excited state transition electric" in lines[i]:
+                i += 2
+                line = lines[i]
+                while line and line.split()[0].isdigit():
+                    dipole_str.append(float(line.split()[-1]))
+                    i += 1
+                    line = lines[i]
+            elif "Ground to excited state transition velocity" in lines[i]:
+                i += 2
+                line = lines[i]
+                while line and line.split()[0].isdigit():
+                    dipole_vel.append(float(line.split()[-1]))
+                    i += 1
+                    line = lines[i]
+            elif "R(length)" in lines[i]:
+                i += 1
+                line = lines[i]
+                while line and line.split()[0].isdigit():
+                    rotatory_str_len.append(float(line.split()[-1]))
+                    i += 1
+                    line = lines[i]
+            elif "R(velocity)" in lines[i]:
+                i += 1
+                line = lines[i]
+                while line and line.split()[0].isdigit():
+                    rotatory_str_vel.append(float(line.split()[-2]))
+                    i += 1
+                    line = lines[i]
+            elif re.search(r"Excited State\s*\d+:", lines[i]):
+                excitation_data = re.search(
+                    r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+(\d+\.\d+)",
+                    lines[i],
+                )
+                multiplicity.append(excitation_data.group(1))
+                symmetry.append(excitation_data.group(2))
+                nrgs.append(float(excitation_data.group(3)))
+                i += 1
+            else:
+                i += 1
+
+        for nrg, rot_len, rot_vel, dip_len, dip_vel, sym, mult in zip(
+            nrgs, rotatory_str_len, rotatory_str_vel, dipole_str,
+            dipole_vel, symmetry, multiplicity,
+        ):
+            nm = PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / nrg
+            self.data.append(
+                ValenceExcitation(
+                    nm, rotatory_str_len=rot_len,
+                    rotatory_str_vel=rot_vel, dipole_str=dip_len,
+                    dipole_vel=dip_vel, symmetry=sym,
+                    multiplicity=mult,
+                )
+            )
+
+    @staticmethod
+    def nm_to_ev(x):
+        """convert x nm to eV"""
+        return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x
+
+    def plot_uv_vis(
+        self,
+        figure,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        plot_type="uv-vis-veloctiy",
+        peak_type="gaussian",
+        reverse_x=False,
+        y_label=None,
+        point_spacing=None,
+        normalize=True,
+        fwhm=15.0,
+        units="nm",
+        **kwargs,
+    ):
+        """
+        plot IR data on figure
+        figure - matplotlib figure
+        centers - array-like of float, plot is split into sections centered
+                  on the frequency specified by centers
+                  default is to not split into sections
+        widths - array-like of float, defines the width of each section
+        exp_data - other data to plot
+                   should be a list of (x_data, y_data, color)
+        reverse_x - if True, 0 cm^-1 will be on the right
+        plot_type - see Frequency.get_plot_data
+        peak_type - any value allowed by Frequency.get_plot_data
+        kwargs - keywords for Frequency.get_spectrum_functions
+        """
+
+        if "intensity_attr" not in kwargs:
+            intensity_attr = "dipole_str"
+            if plot_type.lower() == "uv-vis-veloctiy":
+                intensity_attr = "dipole_vel"
+            if plot_type.lower() == "ecd":
+                intensity_attr = "rotatory_str_len"
+            if plot_type.lower() == "ecd-velocity":
+                intensity_attr = "rotatory_str_vel"
+            kwargs["intensity_attr"] = intensity_attr
+
+        change_x_unit_func = None
+        x_label = "wavelength (nm)"
+        if units == "eV":
+            change_x_unit_func = self.nm_to_ev
+            x_label = r"$h\nu$ (eV)"
+
+        functions, frequencies, intensities = self.get_spectrum_functions(
+            peak_type=peak_type,
+            fwhm=fwhm,
+            change_x_unit_func=change_x_unit_func,
+            **kwargs,
+        )
+
+        data = self.get_plot_data(
+            functions,
+            frequencies,
+            fwhm=fwhm,
+            transmittance=plot_type.lower() == "transmittance",
+            peak_type=peak_type,
+            point_spacing=point_spacing,
+            normalize=normalize,
+        )
+        if data is None:
+            return
+
+        x_values, y_values = data
+
+        if y_label is None and plot_type.lower() == "transmittance":
+            y_label = "Transmittance (%)"
+        elif y_label is None and plot_type.lower() == "uv-vis":
+            y_label = "Absorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "uv-vis-velocity":
+            y_label = "Absorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "ecd":
+            y_label = "ΔAbsorbance (arb.)"
+        elif y_label is None and plot_type.lower() == "ecd-velocity":
+            y_label = "ΔAbsorbance (arb.)"
+        
+        print(plot_type)
+        
+        self.plot_spectrum(
+            figure,
+            x_values,
+            y_values,
+            centers=centers,
+            widths=widths,
+            exp_data=exp_data,
+            reverse_x=reverse_x,
+            peak_type=peak_type,
+            plot_type=plot_type,
+            x_label=x_label,
+            y_label=y_label,
+        )

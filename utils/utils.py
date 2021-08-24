@@ -620,17 +620,13 @@ def perp_vector(vec):
     """
     vec = np.squeeze(vec)
     if vec.ndim == 1:
-        out_vec = np.zeros(len(vec))
-        for k in range(0, len(vec)):
-            if vec[k] != 0:
-                if k == 0:
-                    out_vec[1] = vec[k]
-                    out_vec[0] = vec[1]
-                else:
-                    out_vec[0] = vec[k]
-                    out_vec[1] = vec[0]
-                break
-        else:
+        out_vec = np.roll(vec, 1)
+        if all(x == vec[0] for x in vec):
+            for k in range(0, len(vec)):
+                if out_vec[k] != 0:
+                    out_vec[k] *= -1
+                    break
+        if np.linalg.norm(vec) == 0:
             # a zero-vector was given
             return np.ones(len(vec)) / len(vec)
 
@@ -732,3 +728,20 @@ def angle_between_vectors(v1, v2, renormalize=True):
 
     # math.acos is faster than numpy.arccos for non-arrays
     return acos(t)
+
+
+def is_alpha(test):
+    rv = re.search("^[a-zA-Z]+$", test)
+    return bool(rv)
+
+
+def is_int(test):
+    rv = re.search("^[+-]?\d+$", test)
+    return bool(rv)
+
+
+def is_num(test):
+    rv = re.search("^[+-]?\d+\.?\d*", test)
+    return bool(rv)
+
+float_num = re.compile("[-+]?\d+\.?\d*")
