@@ -323,7 +323,8 @@ class Signals:
             # if no centers were specified, pretend they were so we
             # can do everything the same way
             axes = [figure.subplots(nrows=1, ncols=1)]
-            y_nonzero = np.nonzero(y_values)
+            y_nonzero = np.nonzero(y_values)[0]
+            x_values = np.array(x_values)
             widths = [max(x_values[y_nonzero])]
             centers = [max(x_values[y_nonzero]) / 2]
         else:
