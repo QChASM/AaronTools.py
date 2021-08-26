@@ -1050,7 +1050,7 @@ class Frequency(Signals):
             functions,
             frequencies,
             fwhm=fwhm,
-            transmittance=plot_type.lower() == "transmittance",
+            transmittance=plot_type.lower().startswith("transmittance"),
             peak_type=peak_type,
             point_spacing=point_spacing,
             normalize=normalize,
@@ -1060,7 +1060,7 @@ class Frequency(Signals):
 
         x_values, y_values = data
 
-        if y_label is None and plot_type.lower() == "transmittance":
+        if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
         elif y_label is None and plot_type.lower() == "absorbance":
             y_label = "Absorbance (arb.)"
@@ -1235,7 +1235,7 @@ class ValenceExcitations(Signals):
             functions,
             frequencies,
             fwhm=fwhm,
-            transmittance=plot_type.lower() == "transmittance",
+            transmittance=plot_type.lower().startswith("transmittance"),
             peak_type=peak_type,
             point_spacing=point_spacing,
             change_x_unit_func=change_x_unit_func,
@@ -1246,7 +1246,7 @@ class ValenceExcitations(Signals):
 
         x_values, y_values = data
 
-        if y_label is None and plot_type.lower() == "transmittance":
+        if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
         elif y_label is None and plot_type.lower() == "uv-vis":
             y_label = "Absorbance (arb.)"
