@@ -331,6 +331,14 @@ elif args.weighting == "quasi-rrho":
 elif args.weighting == "quasi-harmonic":
     weighting = CompOutput.QUASI_HARMONIC
 
+for freq, sp in zip(compouts, sp_cos):
+    rmsd = freq.geometry.RMSD(sp.geometry, sort=True)
+    if rmsd > 1e-2:
+        print(
+            "single point energy structure might not match frequency file:\n"
+            "%s %s RMSD = %.2f" % (sp.geometry.name,  freq.geometry.name, rmsd)
+        )
+
 weights = CompOutput.boltzmann_weights(
     compouts,
     nrg_cos=sp_cos,

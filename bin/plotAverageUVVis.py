@@ -2,9 +2,11 @@
 
 import argparse
 import sys
+from warnings import warn
 
 from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
+from AaronTools.geometry import Geometry
 from AaronTools.spectra import ValenceExcitations
 from AaronTools.utils.utils import get_filename, glob_files
 
@@ -333,6 +335,24 @@ if args.freq_files:
         co = CompOutput(f)
         compouts.append(co)
 
+if (args.weighting == "electronic" or "frequency" in fr.other) and not compouts:
+    compouts = [CompOutput(fr) for fr in filereaders]
+
+for fr, sp, freq in zip(filereaders, sp_cos, compouts):
+    geom = Geometry(fr)
+    rmsd = geom.RMSD(sp.geometry, sort=True)
+    if rmsd > 1e-2:
+        print(
+            "TD-DFT structure might not match SP energy file:\n"
+            "%s %s RMSD = %.2f" % (fr.name,  sp.geometry.name, rmsd)
+        )
+    rmsd = geom.RMSD(freq.geometry, sort=True)
+    if rmsd > 1e-2:
+        print(
+            "TD-DFT structure might not match frequency file:\n"
+            "%s %s RMSD = %.2f" % (fr.name,  freq.geometry.name, rmsd)
+        )
+
 if args.weighting == "electronic":
     weighting = CompOutput.ELECTRONIC_ENERGY
 elif args.weighting == "zero-point":
@@ -345,9 +365,6 @@ elif args.weighting == "quasi-rrho":
     weighting = CompOutput.QUASI_RRHO
 elif args.weighting == "quasi-harmonic":
     weighting = CompOutput.QUASI_HARMONIC
-
-if (args.weighting == "electronic" or "frequency" in fr.other) and not compouts:
-    compouts = [CompOutput(fr) for fr in filereaders]
 
 weights = CompOutput.boltzmann_weights(
     compouts,

@@ -120,7 +120,7 @@ class CompOutput:
 
         if from_file.atoms:
             self.geometry = Geometry(
-                from_file.atoms, comment=from_file.comment
+                from_file.atoms, comment=from_file.comment, name=from_file.name,
             )
         if from_file.all_geom:
             self.opts = []
