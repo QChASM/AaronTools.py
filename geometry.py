@@ -2747,7 +2747,6 @@ class Geometry:
         atoms_within_radius = []
         radius_list = []
         for i, atom in enumerate(targets):
-            print("target", atom)
             if (
                 shape == "circle"
                 and dist_ip[i] - radii_dict[atom.element] < radius

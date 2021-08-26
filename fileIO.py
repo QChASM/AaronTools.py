@@ -862,8 +862,8 @@ class FileReader:
                 self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
-        if get_all:
-            self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
+        # if get_all:
+        #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
 
     def read_sd(self, f, get_all=False):
         self.all_geom = []

@@ -15,7 +15,7 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = ["transmittance", "uv-vis", "uv-vis-velocity", "ecd", "ecd-velocity"]
+plot_types = ["transmittance", "transmittance-velocity", "uv-vis", "uv-vis-velocity", "ecd", "ecd-velocity"]
 
 
 def peak_type(x):
@@ -63,9 +63,9 @@ uvvis_parser.add_argument(
     "-t", "--plot-type",
     type=plot_type,
     choices=plot_types,
-    default="uv-vis",
+    default="uv-vis-velocity",
     dest="plot_type",
-    help="type of plot\nDefault: uv-vis (absorbance)",
+    help="type of plot\nDefault: uv-vis-velocity (absorbance)",
 )
 
 uvvis_parser.add_argument(
@@ -98,9 +98,9 @@ peak_options.add_argument(
 peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
-    default=0.1,
+    default=0.5,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 0.1 eV",
+    help="full width at half max. of peaks\nDefault: 0.5 eV",
 )
 
 uvvis_parser.add_argument(
@@ -128,7 +128,7 @@ scale_options.add_argument(
     type=float,
     default=0.0,
     dest="linear_scale",
-    help="subtract linear_scale * energy from each excitation (i.e. this is 1 - λ)\n"
+    help="subtract linear_scale * energy from each excitation\n"
     "Default: 0 (no scaling)",
 )
 
@@ -137,13 +137,12 @@ scale_options.add_argument(
     type=float,
     default=0.0,
     dest="quadratic_scale",
-    help="subtract quadratic_scale * energy^2 from each mode\n"
+    help="subtract quadratic_scale * energy^2 from each excitation\n"
     "Default: 0 (no scaling)",
 )
 
-
-section_options = uvvis_parser.add_argument_group("x-axis interruptions")
-section_options.add_argument(
+center_centric = uvvis_parser.add_argument_group("x-centered interruptions")
+center_centric.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="centers",
@@ -152,13 +151,32 @@ section_options.add_argument(
     "values should be separated by commas"
 )
 
-section_options.add_argument(
+center_centric.add_argument(
     "-sw", "--section-widths",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
     default=None,
     help="width of each section specified by -c/--centers\n"
     "should be separated by commas, with one for each section"
+)
+
+minmax_centric = uvvis_parser.add_argument_group("x-range interruptions")
+minmax_centric.add_argument(
+    "-xmin", "--x-minima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmin",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
+)
+
+minmax_centric.add_argument(
+    "-xmax", "--x-maxima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmax",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
 )
 
 uvvis_parser.add_argument(
@@ -184,7 +202,43 @@ uvvis_parser.add_argument(
     "frequency job files should not come directly after this flag"
 )
 
+uvvis_parser.add_argument(
+    "-rx", "--rotate-x-ticks",
+    action="store_true",
+    dest="rotate_x_ticks",
+    default=False,
+    help="rotate x-axis tick labels by 45 degrees"
+)
+
 args = uvvis_parser.parse_args()
+
+
+if bool(args.centers) != bool(args.widths):
+    sys.stderr.write(
+        "both -sw/--section-widths and -sc/--section-centers must be specified"
+    )
+    sys.exit(2)
+
+if bool(args.xmin) != bool(args.xmax):
+    sys.stderr.write(
+        "both -xmin/--x-minima and -xmax/--x-maxima must be specified"
+    )
+    sys.exit(2)
+
+if args.xmax and bool(args.xmax) == bool(args.widths):
+    sys.stderr.write(
+        "cannot use -xmin/--x-minima with -sw/--section-widths"
+    )
+    sys.exit(2)
+
+centers = args.centers
+widths = args.widths
+if args.xmax:
+    centers = []
+    widths = []
+    for xmin, xmax in zip(args.xmin, args.xmax):
+        centers.append((xmin + xmax) / 2)
+        widths.append(xmax - xmin)
 
 units = "nm"
 if args.ev_unit:
@@ -209,8 +263,8 @@ for f in glob_files(args.infiles, parser=uvvis_parser):
 
     uv_vis.plot_uv_vis(
         fig,
-        centers=args.centers,
-        widths=args.widths,
+        centers=centers,
+        widths=widths,
         plot_type=args.plot_type,
         peak_type=args.peak_type,
         fwhm=args.fwhm,
@@ -221,6 +275,7 @@ for f in glob_files(args.infiles, parser=uvvis_parser):
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
         units=units,
+        rotate_x_ticks=args.rotate_x_ticks,
     )
 
     if args.fig_width:

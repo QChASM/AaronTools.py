@@ -103,7 +103,7 @@ peak_options.add_argument(
     type=float,
     default=15.0,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 15 cm^1",
+    help="full width at half max. of peaks\nDefault: 15 cm^-1",
 )
 
 ir_parser.add_argument(
@@ -114,7 +114,6 @@ ir_parser.add_argument(
     help="spacing between each x value\n"
     "Default: a non-uniform spacing that is more dense near peaks",
 )
-
 
 scale_options = ir_parser.add_argument_group("scale frequencies")
 scale_options.add_argument(
@@ -143,9 +142,8 @@ ir_parser.add_argument(
     help="do not reverse x-axis",
 )
 
-
-section_options = ir_parser.add_argument_group("x-axis interruptions")
-section_options.add_argument(
+center_centric = ir_parser.add_argument_group("x-centered interruptions")
+center_centric.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="centers",
@@ -154,13 +152,32 @@ section_options.add_argument(
     "values should be separated by commas"
 )
 
-section_options.add_argument(
+center_centric.add_argument(
     "-sw", "--section-widths",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
     default=None,
     help="width of each section specified by -c/--centers\n"
     "should be separated by commas, with one for each section"
+)
+
+minmax_centric = ir_parser.add_argument_group("x-range interruptions")
+minmax_centric.add_argument(
+    "-xmin", "--x-minima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmin",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
+)
+
+minmax_centric.add_argument(
+    "-xmax", "--x-maxima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmax",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
 )
 
 ir_parser.add_argument(
@@ -186,7 +203,24 @@ ir_parser.add_argument(
     "frequency job files should not come directly after this flag"
 )
 
+ir_parser.add_argument(
+    "-rx", "--rotate-x-ticks",
+    action="store_true",
+    dest="rotate_x_ticks",
+    default=False,
+    help="rotate x-axis tick labels by 45 degrees"
+)
+
 args = ir_parser.parse_args()
+
+centers = args.centers
+widths = args.widths
+if args.xmax:
+    centers = []
+    widths = []
+    for xmin, xmax in zip(args.xmin, args.xmax):
+        centers.append((xmin + xmax) / 2)
+        widths.append(xmax - xmin)
 
 exp_data = None
 if args.exp_data:
@@ -207,8 +241,8 @@ for f in glob_files(args.infiles, parser=ir_parser):
 
     freq.plot_ir(
         fig,
-        centers=args.centers,
-        widths=args.widths,
+        centers=centers,
+        widths=widths,
         plot_type=args.plot_type,
         peak_type=args.peak_type,
         reverse_x=args.reverse_x,
@@ -219,6 +253,7 @@ for f in glob_files(args.infiles, parser=ir_parser):
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
         anharmonic=freq.anharm_data and args.anharmonic,
+        rotate_x_ticks=args.rotate_x_ticks,
     )
 
     if args.fig_width:

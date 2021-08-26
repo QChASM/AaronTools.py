@@ -200,7 +200,14 @@ class CompOutput:
                 co in thermo_cos
             ])
         if corr is not None:
-            energies += corr
+            try:
+                energies += corr
+            except ValueError:
+                raise RuntimeError(
+                    "number of single point energies (%i) "
+                    "does not match number of thermochemical "
+                    "corrections (%i)" % (len(energies), len(corr))
+                )
         relative = energies - min(energies)
         w = np.exp(
             -relative * UNIT.HART_TO_KCAL / (PHYSICAL.R * temperature)

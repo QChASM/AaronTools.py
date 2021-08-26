@@ -305,6 +305,7 @@ class Signals:
         plot_type="transmittance",
         x_label=r"wavenumber (cm$^{-1}$)",
         peak_type="pseudo-voigt",
+        rotate_x_ticks=False,
     ):
         """
         plot the x_data and y_data on figure (matplotlib figure)
@@ -499,6 +500,8 @@ class Signals:
         figure.text(
             0.5, 0.0, x_label, ha="center", va="bottom"
         )
+        if rotate_x_ticks:
+            figure.autofmt_xdate(rotation=-45, ha="center")
 
     @classmethod
     def get_mixed_signals(
@@ -1006,6 +1009,7 @@ class Frequency(Signals):
         normalize=True,
         fwhm=15.0,
         anharmonic=False,
+        rotate_x_ticks=False,
         **kwargs,
     ):
         """
@@ -1076,6 +1080,7 @@ class Frequency(Signals):
             peak_type=peak_type,
             plot_type=plot_type,
             y_label=y_label,
+            rotate_x_ticks=rotate_x_ticks,
         )
 
 
@@ -1179,6 +1184,7 @@ class ValenceExcitations(Signals):
         normalize=True,
         fwhm=15.0,
         units="nm",
+        rotate_x_ticks=False,
         **kwargs,
     ):
         """
@@ -1203,6 +1209,8 @@ class ValenceExcitations(Signals):
         if "intensity_attr" not in kwargs:
             intensity_attr = "dipole_str"
             if plot_type.lower() == "uv-vis-veloctiy":
+                intensity_attr = "dipole_vel"
+            if plot_type.lower() == "transmittance-velocity":
                 intensity_attr = "dipole_vel"
             if plot_type.lower() == "ecd":
                 intensity_attr = "rotatory_str_len"
@@ -1261,4 +1269,5 @@ class ValenceExcitations(Signals):
             plot_type=plot_type,
             x_label=x_label,
             y_label=y_label,
+            rotate_x_ticks=rotate_x_ticks,
         )

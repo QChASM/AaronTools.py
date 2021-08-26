@@ -52,7 +52,7 @@ def weight_type(x):
 
 
 ir_parser = argparse.ArgumentParser(
-    description="plot IR spectrum",
+    description="plot a Boltzmann-averaged IR spectrum",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -68,7 +68,9 @@ ir_parser.add_argument(
     type=str,
     default=None,
     dest="outfile",
-    help="output destination\nDefault: show plot",
+    help="output destination\n"
+    "if the file extension is .csv, a CSV file will be written\n"
+    "Default: show plot",
 )
 
 ir_parser.add_argument(
@@ -115,7 +117,7 @@ peak_options.add_argument(
     type=float,
     default=15.0,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 15 cm^1",
+    help="full width at half max. of peaks\nDefault: 15 cm^-1",
 )
 
 ir_parser.add_argument(
@@ -155,9 +157,8 @@ ir_parser.add_argument(
     help="do not reverse x-axis",
 )
 
-
-section_options = ir_parser.add_argument_group("x-axis interruptions")
-section_options.add_argument(
+center_centric = ir_parser.add_argument_group("x-centered interruptions")
+center_centric.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="centers",
@@ -166,13 +167,32 @@ section_options.add_argument(
     "values should be separated by commas"
 )
 
-section_options.add_argument(
+center_centric.add_argument(
     "-sw", "--section-widths",
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
     default=None,
-    help="width of each section specified by -c/--centers\n"
+    help="width of each section specified by -sc/--section-centers\n"
     "should be separated by commas, with one for each section"
+)
+
+minmax_centric = ir_parser.add_argument_group("x-range interruptions")
+minmax_centric.add_argument(
+    "-xmin", "--x-minima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmin",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
+)
+
+minmax_centric.add_argument(
+    "-xmax", "--x-maxima",
+    type=lambda x: [float(v) for v in x.split(",")],
+    dest="xmax",
+    default=None,
+    help="split plot into sections that start at XMIN and end\n"
+    "at the corresponding XMAX"
 )
 
 ir_parser.add_argument(
@@ -210,6 +230,17 @@ energy_options.add_argument(
 )
 
 energy_options.add_argument(
+    "-sp", "--single-point-files",
+    type=str,
+    nargs="+",
+    default=None,
+    required=False,
+    dest="sp_files",
+    help="single point energies to use for thermochem\n"
+    "Default: energies from INFILES"
+)
+
+energy_options.add_argument(
     "-temp", "--temperature",
     type=float,
     dest="temperature",
@@ -227,7 +258,42 @@ energy_options.add_argument(
     "Default: 100 cm^-1",
 )
 
+ir_parser.add_argument(
+    "-rx", "--rotate-x-ticks",
+    action="store_true",
+    dest="rotate_x_ticks",
+    default=False,
+    help="rotate x-axis tick labels by 45 degrees"
+)
+
 args = ir_parser.parse_args()
+
+if bool(args.centers) != bool(args.widths):
+    sys.stderr.write(
+        "both -sw/--section-widths and -sc/--section-centers must be specified"
+    )
+    sys.exit(2)
+
+if bool(args.xmin) != bool(args.xmax):
+    sys.stderr.write(
+        "both -xmin/--x-minima and -xmax/--x-maxima must be specified"
+    )
+    sys.exit(2)
+
+if args.xmax and bool(args.xmax) == bool(args.widths):
+    sys.stderr.write(
+        "cannot use -xmin/--x-minima with -sw/--section-widths"
+    )
+    sys.exit(2)
+    
+centers = args.centers
+widths = args.widths
+if args.xmax:
+    centers = []
+    widths = []
+    for xmin, xmax in zip(args.xmin, args.xmax):
+        centers.append((xmin + xmax) / 2)
+        widths.append(xmax - xmin)
 
 exp_data = None
 if args.exp_data:
@@ -244,6 +310,14 @@ for f in glob_files(args.infiles, parser=ir_parser):
     co = CompOutput(fr)
     compouts.append(co)
 
+sp_cos = compouts
+if args.sp_files:
+    sp_cos = []
+    for f in glob_files(args.sp_files, parser=ir_parser):
+        fr = FileReader(f, just_geom=False)
+        co = CompOutput(fr)
+        sp_cos.append(co)
+
 if args.weighting == "electronic":
     weighting = CompOutput.ELECTRONIC_ENERGY
 elif args.weighting == "zero-point":
@@ -259,6 +333,7 @@ elif args.weighting == "quasi-harmonic":
 
 weights = CompOutput.boltzmann_weights(
     compouts,
+    nrg_cos=sp_cos,
     temperature=args.temperature,
     weighting=weighting,
     v0=args.w0,
@@ -266,6 +341,7 @@ weights = CompOutput.boltzmann_weights(
 
 mixed_freq = Frequency.get_mixed_signals(
     [co.frequency for co in compouts],
+    nrg_cos=sp_cos,
     weights=weights,
 )
 
@@ -275,8 +351,8 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
     
     mixed_freq.plot_ir(
         fig,
-        centers=args.centers,
-        widths=args.widths,
+        centers=centers,
+        widths=widths,
         plot_type=args.plot_type,
         peak_type=args.peak_type,
         reverse_x=args.reverse_x,
@@ -287,6 +363,7 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
         anharmonic=mixed_freq.anharm_data and args.anharmonic,
+        rotate_x_ticks=args.rotate_x_ticks,
     )
     
     if args.fig_width:
