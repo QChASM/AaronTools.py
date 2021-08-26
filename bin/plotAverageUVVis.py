@@ -177,21 +177,11 @@ center_centric.add_argument(
 
 minmax_centric = uvvis_parser.add_argument_group("x-range interruptions")
 minmax_centric.add_argument(
-    "-xmin", "--x-minima",
-    type=lambda x: [float(v) for v in x.split(",")],
-    dest="xmin",
+    "-r", "--ranges",
+    type=lambda x: [[float(v) for v in r.split("-")] for r in x.split(",")],
+    dest="ranges",
     default=None,
-    help="split plot into sections that start at XMIN and end\n"
-    "at the corresponding XMAX"
-)
-
-minmax_centric.add_argument(
-    "-xmax", "--x-maxima",
-    type=lambda x: [float(v) for v in x.split(",")],
-    dest="xmax",
-    default=None,
-    help="split plot into sections that start at XMIN and end\n"
-    "at the corresponding XMAX"
+    help="split plot into sections (e.g. 200-350,400-650)"
 )
 
 uvvis_parser.add_argument(
@@ -282,26 +272,20 @@ if bool(args.centers) != bool(args.widths):
     )
     sys.exit(2)
 
-if bool(args.xmin) != bool(args.xmax):
+if args.ranges and bool(args.ranges) == bool(args.widths):
     sys.stderr.write(
-        "both -xmin/--x-minima and -xmax/--x-maxima must be specified"
-    )
-    sys.exit(2)
-
-if args.xmax and bool(args.xmax) == bool(args.widths):
-    sys.stderr.write(
-        "cannot use -xmin/--x-minima with -sw/--section-widths"
+        "cannot use -r/--ranges with -sw/--section-widths"
     )
     sys.exit(2)
     
 centers = args.centers
 widths = args.widths
-if args.xmax:
+if args.ranges:
     centers = []
     widths = []
-    for xmin, xmax in zip(args.xmin, args.xmax):
+    for (xmin, xmax) in args.ranges:
         centers.append((xmin + xmax) / 2)
-        widths.append(xmax - xmin)
+        widths.append(abs(xmax - xmin))
 
 units = "nm"
 if args.ev_unit:
