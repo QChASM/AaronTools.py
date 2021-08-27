@@ -1040,6 +1040,10 @@ class Frequency(Signals):
                 intensity_attr = "rotation"
             elif plot_type.lower() == "raman":
                 intensity_attr = "raman_activity"
+            elif plot_type.lower() == "absorbance":
+                intensity_attr = "intensity"
+            elif plot_type.lower() == "transmittance":
+                intensity_attr = "intensity"
             else:
                 self.LOG.warning("unrecognized plot type: %s\nDefaulting to absorbance" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
@@ -1303,6 +1307,10 @@ class ValenceExcitations(Signals):
                 intensity_attr = "dipole_vel"
             elif plot_type.lower() == "transmittance-velocity":
                 intensity_attr = "dipole_vel"
+            elif plot_type.lower() == "transmittance":
+                intensity_attr = "dipole_str"
+            elif plot_type.lower() == "uv-vis":
+                intensity_attr = "dipole_str"
             elif plot_type.lower() == "ecd":
                 intensity_attr = "rotatory_str_len"
             elif plot_type.lower() == "ecd-velocity":
