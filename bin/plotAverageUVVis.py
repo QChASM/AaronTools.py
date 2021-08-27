@@ -322,7 +322,7 @@ if args.freq_files:
 if (args.weighting == "electronic" or "frequency" in fr.other) and not compouts:
     compouts = [CompOutput(fr) for fr in filereaders]
 
-for fr, sp, freq in zip(filereaders, sp_cos, compouts):
+for i, (fr, sp, freq) in enumerate(zip(filereaders, sp_cos, compouts)):
     geom = Geometry(fr)
     rmsd = geom.RMSD(sp.geometry, sort=True)
     if rmsd > 1e-2:
@@ -336,7 +336,13 @@ for fr, sp, freq in zip(filereaders, sp_cos, compouts):
             "TD-DFT structure might not match frequency file:\n"
             "%s %s RMSD = %.2f" % (fr.name,  freq.geometry.name, rmsd)
         )
-
+    for freq2 in compouts[:i]:
+        rmsd = freq.geometry.RMSD(freq2.geometry, sort=True)
+        if rmsd < 1e-2:
+            print(
+                "two frequency files appear to be identical:\n"
+                "%s %s RMSD = %.2f" % (freq2.geometry.name,  freq.geometry.name, rmsd)
+            )
 if args.weighting == "electronic":
     weighting = CompOutput.ELECTRONIC_ENERGY
 elif args.weighting == "zero-point":

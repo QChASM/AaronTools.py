@@ -1056,7 +1056,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="dat"
+                        freq_str, hpmodes=False, style="psi4"
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -1349,7 +1349,7 @@ class FileReader:
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="out"
+                        freq_str, hpmodes=False, style="orca"
                     )
 
                 elif line.startswith("Temperature"):
@@ -1511,6 +1511,17 @@ class FileReader:
                             self.other["basis_set_by_ele"][ele] = primitives
                         line = f.readline()
                         n += 1
+
+                elif "EXCITED STATES" in line or re.match("STEOM.* RESULTS", line):
+                    s = ""
+                    done = False
+                    while not done:
+                        s += line
+                        n += 1
+                        line = f.readline()
+                        if "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or re.search("TDM done", line):
+                            done = True
+                    self.other["uv_vis"] = ValenceExcitations(s, style="orca")
 
                 elif line.startswith("MOLECULAR ORBITALS"):
                     # read molecular orbitals

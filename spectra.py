@@ -610,6 +610,13 @@ class AnharmonicVibration(Signal):
     )
     nested = ("overtones", "combinations")
 
+    @property
+    def harmonic_frequency(self):
+        return self.harmonic.frequency
+
+    @property
+    def delta_anh(self):
+        return self.frequency - self.harmonic.frequency
 
 class Frequency(Signals):
     """for spectra in the IR/NIR region based on vibrational modes"""
@@ -1031,8 +1038,10 @@ class Frequency(Signals):
             intensity_attr = "intensity"
             if plot_type.lower() == "vcd":
                 intensity_attr = "rotation"
-            if plot_type.lower() == "raman":
+            elif plot_type.lower() == "raman":
                 intensity_attr = "raman_activity"
+            else:
+                self.LOG.warning("unrecognized plot type: %s\nDefaulting to absorbance" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
 
         data_attr = "data"
@@ -1156,6 +1165,88 @@ class ValenceExcitations(Signals):
                 )
             )
 
+    def parse_orca_lines(self, lines, *args, **kwargs):
+        i = 0
+        nrgs = []
+        rotatory_str_len = []
+        rotatory_str_vel = []
+        dipole_str = []
+        dipole_vel = []
+        multiplicity = []
+        mult = "Singlet"
+        while i < len(lines):
+            line = lines[i]
+            if "SINGLETS" in line:
+                mult = "Singlet"
+                i += 1
+            elif "TRIPLETS" in line:
+                mult = "Triplet"
+                i += 1
+            elif re.search("IROOT=.+?(\d+\.\d+)\seV", line):
+                info = re.search("IROOT=.+?(\d+\.\d+)\seV", line)
+                nrgs.append(float(info.group(1)))
+                i += 1
+            elif line.startswith("STATE"):
+                info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(\d+\.\d+)", line)
+                nrgs.append(float(info.group(1)))
+                multiplicity.append(mult)
+                i += 1
+            elif "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    dipole_str.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    dipole_vel.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            elif line.endswith("CD SPECTRUM"):
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    rotatory_str_len.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            elif "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    rotatory_str_vel.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            else:
+                i += 1
+
+        if not multiplicity:
+            multiplicity = [None for x in nrgs]
+
+        if not rotatory_str_vel:
+            rotatory_str_vel = [None for x in rotatory_str_len]
+
+        if not dipole_vel:
+            dipole_vel = [None for x in dipole_str]
+
+        for nrg, rot_len, rot_vel, dip_len, dip_vel, mult in zip(
+            nrgs, rotatory_str_len, rotatory_str_vel, dipole_str,
+            dipole_vel, multiplicity,
+        ):
+            self.data.append(
+                ValenceExcitation(
+                    nrg, rotatory_str_len=rot_len,
+                    rotatory_str_vel=rot_vel, dipole_str=dip_len,
+                    dipole_vel=dip_vel, multiplicity=mult,
+                )
+            )
+
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
@@ -1208,15 +1299,20 @@ class ValenceExcitations(Signals):
 
         if "intensity_attr" not in kwargs:
             intensity_attr = "dipole_str"
-            if plot_type.lower() == "uv-vis-veloctiy":
+            if plot_type.lower() == "uv-vis-velocity":
                 intensity_attr = "dipole_vel"
-            if plot_type.lower() == "transmittance-velocity":
+            elif plot_type.lower() == "transmittance-velocity":
                 intensity_attr = "dipole_vel"
-            if plot_type.lower() == "ecd":
+            elif plot_type.lower() == "ecd":
                 intensity_attr = "rotatory_str_len"
-            if plot_type.lower() == "ecd-velocity":
+            elif plot_type.lower() == "ecd-velocity":
                 intensity_attr = "rotatory_str_vel"
+            else:
+                self.LOG.warning("unrecognized plot type: %s\nDefaulting to uv-vis" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
+
+        if getattr(self.data[0], kwargs["intensity_attr"]) is None:
+            raise RuntimeError("no data was parsed for %s" % kwargs["intensity_attr"])
 
         change_x_unit_func = None
         x_label = "wavelength (nm)"
