@@ -1512,14 +1512,18 @@ class FileReader:
                         line = f.readline()
                         n += 1
 
-                elif "EXCITED STATES" in line or re.match("STEOM.* RESULTS", line):
+                elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
                     s = ""
                     done = False
                     while not done:
                         s += line
                         n += 1
                         line = f.readline()
-                        if "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or re.search("TDM done", line):
+                        if (
+                            "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
+                            re.search("TDM done", line) or
+                            "TIMINGS" in line
+                        ):
                             done = True
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
 
