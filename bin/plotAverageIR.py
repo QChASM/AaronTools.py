@@ -337,9 +337,15 @@ weights = CompOutput.boltzmann_weights(
     v0=args.w0,
 )
 
+data_attr = "data"
+if all(co.frequency.anharm_data for co in compouts) and args.anharmonic:
+    data_attr = "anharm_data"
+
+
 mixed_freq = Frequency.get_mixed_signals(
     [co.frequency for co in compouts],
     weights=weights,
+    data_attr=data_attr,
 )
 
 if not args.outfile or not args.outfile.lower().endswith("csv"):

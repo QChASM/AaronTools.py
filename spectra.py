@@ -551,22 +551,23 @@ class Signals:
                         if not isinstance(d.nested, str):
                             for attr in d.nested:
                                 nest = getattr(d, attr)
+                                nest_vals = dict()
                                 if isinstance(nest, dict):
-                                    for k, item in nest:
-                                        nest_vals = dict()
-                                        nest_x_val = getattr(item, item.x_attr)
-                                        vals = item.__dict__
-                                        nest_cls = item.__class__
-                                        for k, j in vals.items():
-                                            if isinstance(item, float):
-                                                nest_vals[k] = fraction * weight * j
-                                            else:
-                                                nest_vals[k] = j
-                                        new_vals[attr][k] = nest_cls(
-                                            nest_x_val, **nest_vals
-                                        )
+                                    for k, items in nest.items():
+                                        for i, item in enumerate(items):
+                                            nest_x_val = getattr(item, item.x_attr)
+                                            vals = item.__dict__
+                                            nest_cls = item.__class__
+                                            for k2, j in vals.items():
+                                                if isinstance(item, float):
+                                                    nest_vals[k2] = fraction * weight * j
+                                                else:
+                                                    nest_vals[k2] = j
+                                            new_vals[attr][k][i] = nest_cls(
+                                                nest_x_val, **nest_vals
+                                            )
                                 elif hasattr(nest, "__iter__"):
-                                    for item in nest:
+                                    for i, item in enumerate(nest):
                                         nest_x_val = getattr(item, item.x_attr)
                                         vals = item.__dict__
                                         nest_cls = item.__class__
@@ -575,7 +576,7 @@ class Signals:
                                                 nest_vals[k] = fraction * weight * j
                                             else:
                                                 nest_vals[k] = j
-                                        new_vals[attr][k] = nest_cls(
+                                        new_vals[attr][i] = nest_cls(
                                             nest_x_val, **nest_vals
                                         )
                                 else:
@@ -607,6 +608,7 @@ class AnharmonicVibration(Signal):
     x_attr = "frequency"
     required_attrs = (
         "intensity", "harmonic", "overtones", "combinations",
+        "rotation", "raman_activity",
     )
     nested = ("overtones", "combinations")
 
@@ -991,8 +993,10 @@ class Frequency(Signals):
                 self.real_frequencies += [freq]
             self.by_frequency[freq] = {
                 "intensity": data.intensity,
-                "vector": data.vector,
             }
+            if hasattr(data, "vector"):
+                # anharmonic data might not have a vector
+                self.by_frequency[freq] = data.vector
         if len(self.data) > 0:
             self.lowest_frequency = self.data[0].frequency
         else:
