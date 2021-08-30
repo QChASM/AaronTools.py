@@ -653,6 +653,10 @@ class FileWriter:
             val = orbitals.fukui_acceptor_value(
                 coords, n_jobs=n_jobs, delta=delta
             )
+        elif kind.lower() == "fukui dual":
+            val = orbitals.fukui_dual_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
         else:
             val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
 
@@ -4636,3 +4640,7 @@ class Orbitals:
             )
 
         return plus_density
+
+    
+    def fukui_dual_value(self, *args, **kwargs):
+        return self.fukui_acceptor_value(*args, **kwargs) - self.fukui_donor_value(*args, **kwargs)

@@ -73,6 +73,15 @@ info.add_argument(
     "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
 )
 
+info.add_argument(
+    "-f2", "--fukui-dual",
+    dest="fukui_dual",
+    default=False,
+    action="store_true",
+    help="print Fukui dual values\n"
+    "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
+)
+
 cube_parser.add_argument(
     "-d", "--delta",
     type=float,
@@ -141,6 +150,8 @@ elif args.fukui_donor:
     kind = "fukui donor"
 elif args.fukui_acceptor:
     kind = "fukui acceptor"
+elif args.fukui_dual:
+    kind = "fukui dual"
 elif args.ao_ndx:
     kind = "AO %s" % args.ao_ndx
 elif args.mo_ndx.isdigit():
