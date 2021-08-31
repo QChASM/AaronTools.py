@@ -157,7 +157,7 @@ class Signals:
         x_positions -= (
             linear_scale * x_positions + quadratic_scale * x_positions ** 2
         )
-        x_positions -= scalar_scale
+        x_positions += scalar_scale
 
         e_factor = -4 * np.log(2) / fwhm ** 2
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
@@ -1258,15 +1258,21 @@ class ValenceExcitations(Signals):
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
+        if isinstance(x, float):
+            return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x
+
         x = np.array(x)
-        ndx = np.nonzero(x)[0]
+        ndx = np.where(x > 0)
         return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
 
     @staticmethod
     def ev_to_nm(x):
         """convert x eV to nm"""
+        if isinstance(x, float):
+            return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x
+
         x = np.array(x)
-        ndx = np.nonzero(x)[0]
+        ndx = np.where(x > 0)
         return PHYSICAL.SPEED_OF_LIGHT * 1e7 * PHYSICAL.PLANCK * UNIT.JOULE_TO_EV / x[ndx], ndx
 
     def plot_uv_vis(

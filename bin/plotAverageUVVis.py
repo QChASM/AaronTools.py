@@ -62,7 +62,7 @@ uvvis_parser.add_argument(
     "infiles", metavar="files",
     type=str,
     nargs="+",
-    help="TD-DFT job output files"
+    help="TD-DFT or EOM job output files"
 )
 
 uvvis_parser.add_argument(
