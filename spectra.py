@@ -620,6 +620,7 @@ class AnharmonicVibration(Signal):
     def delta_anh(self):
         return self.frequency - self.harmonic.frequency
 
+
 class Frequency(Signals):
     """for spectra in the IR/NIR region based on vibrational modes"""
     
@@ -996,7 +997,7 @@ class Frequency(Signals):
             }
             if hasattr(data, "vector"):
                 # anharmonic data might not have a vector
-                self.by_frequency[freq] = data.vector
+                self.by_frequency[freq]["vector"] = data.vector
         if len(self.data) > 0:
             self.lowest_frequency = self.data[0].frequency
         else:
@@ -1252,6 +1253,64 @@ class ValenceExcitations(Signals):
                     nrg, rotatory_str_len=rot_len,
                     rotatory_str_vel=rot_vel, dipole_str=dip_len,
                     dipole_vel=dip_vel, multiplicity=mult,
+                )
+            )
+
+    def parse_psi4_lines(self, lines, *args, **kwargs):
+        symmetry = []
+        energy = []
+        oscillator_str = []
+        oscillator_str_vel = []
+        rotation_str = []
+        rotation_str_vel = []
+        for line in lines:
+            if "->" not in line and line.split()[0].isdigit():
+                info = line.split()
+                symmetry.append(info[1])
+                energy.append(float(info[2]))
+                oscillator_str.append(float(info[6]))
+                rotation_str.append(float(info[7]))
+                rotation_str_vel.append(float(info[7]))
+                oscillator_str_vel.append(None)
+            elif re.search("\| State\s*\d+", line):
+                info = re.search("(\d+\.\d+)\s*eV", line)
+                energy.append(float(info.group(1)))
+            elif re.search("Oscillator strength \(length", line):
+                oscillator_str.append(float(line.split()[-1]))
+            elif re.search("Oscillator strength \(velocity", line):
+                oscillator_str_vel.append(float(line.split()[-1]))
+            elif re.search("Rotational strength \(length", line):
+                rotation_str.append(float(line.split()[-1]))
+            elif re.search("Rotational strength \(velocity", line):
+                rotation_str_vel.append(float(line.split()[-1]))
+            elif line.split()[0].isdigit():
+                info = line[46:].split()
+                symmetry.append(line.split("(")[1].split(")")[0])
+                energy.append(float(info[0]))
+                oscillator_str_vel.append(float(info[2]))
+                oscillator_str.append(float(info[3]))
+                rotation_str.append(float(info[4]))
+                rotation_str_vel.append(float(info[5]))
+        
+        lists = [
+            symmetry, energy, oscillator_str_vel, oscillator_str,
+            rotation_str, rotation_str_vel,
+        ]
+        
+        max_list = max(lists, key=len)
+        
+        for l in lists:
+            while len(l) < len(max_list):
+                l.append(None)
+
+        for nrg, sym, osc_v, osc, r_l, r_v in zip(
+            energy, symmetry, oscillator_str_vel, oscillator_str, 
+            rotation_str, rotation_str_vel,
+        ):
+            self.data.append(
+                ValenceExcitation(
+                    nrg, symmetry=sym, dipole_str=osc, rotatory_str_len=r_l,
+                    rotatory_str_vel=r_v, dipole_vel=osc_v,
                 )
             )
 

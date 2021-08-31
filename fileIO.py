@@ -948,6 +948,7 @@ class FileReader:
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
+        uv_vis = ""
         def get_atoms(f, n):
             rv = []
             self.skip_lines(f, 1)
@@ -1206,6 +1207,44 @@ class FileReader:
                         self.other[item] = float(line.split()[-1])
                     else:
                         self.other[item] = float(line.split()[-2])
+
+                elif "Ground State -> Excited State Transitions" in line:
+                    self.skip_lines(f, 3)
+                    n += 3
+                    line = f.readline()
+                    s = ""
+                    while line.strip():
+                        s += line
+                        n += 1
+                        line = f.readline()
+                    
+                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+
+                elif "Excitation Energy" in line and "Rotatory" in line:
+                    self.skip_lines(f, 2)
+                    n += 2
+                    line = f.readline()
+                    s = ""
+                    while line.strip():
+                        s += line
+                        n += 1
+                        line = f.readline()
+                    
+                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+
+                elif re.search("\| State\s*\d+", line):
+                    # read energies from property calculation
+                    uv_vis += line
+
+                elif "Excited state properties:" in line:
+                    # read osc str or rotation from property calculation
+                    while line.strip():
+                        uv_vis += line
+                        n += 1
+                        line = f.readline()
+                    
+                    if "Oscillator" in uv_vis or "Rotation" in uv_vis:
+                        self.other["uv_vis"] = ValenceExcitations(uv_vis, style="psi4")
 
                 if "error" not in self.other:
                     for err in ERROR_PSI4:
