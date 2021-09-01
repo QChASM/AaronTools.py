@@ -2104,6 +2104,7 @@ FREQUENCY_SCALE_LIBS = {
                 "aug-cc-pVTZ": 0.959,
                 "def2-TZVP": 0.960,
                 "ma-TZVP": 0.960,
+                "6-311++G(d,p)": 0.959,
             },
             "B3P86": {
                 "6-31G(d)": 0.946,
@@ -2132,7 +2133,7 @@ FREQUENCY_SCALE_LIBS = {
             "BLYP": {
                 "6-311G(df,p)": 0.987,
                 "6-31G(d)": 0.983,
-                "MG3S": 0.991,
+                "MG3S": 0.987,
             },
             "BMK": {
                 "ma-TZVP": 0.947,
@@ -2151,6 +2152,9 @@ FREQUENCY_SCALE_LIBS = {
             "CAM-B3LYP": {
                 "ma-TZVP": 0.951,
             },
+            "CASPT2(11,9)": {
+                "aug-cc-pVTZ": 0.932,
+            },
             "CCSD(T)": {
                 "jul-cc-pVTZ": 0.958,
                 "aug-cc-pVTZ": 0.961,
@@ -2161,12 +2165,20 @@ FREQUENCY_SCALE_LIBS = {
             "CCSD(T)-F12a": {
                 "cc-pVDZ-F12": 0.957,
                 "cc-pVTZ-F12": 0.958,
+                "jun-cc-pVTZ": 0.958,
             },
             "CCSD": {
                 "jul-cc-pVTZ": 0.948,
             },
             "CCSD-F12": {
                 "jul-cc-pVTZ": 0.946,
+            },
+            "DCSD-F12a": {
+                "cc-pVDZ-F12": 0.942,
+            },
+            "DF-CCSD(T)-F12b": {
+                "cc-pVDZ-F12": 0.957,
+                "jun-cc-pVDZ-F12": 0.955,
             },
             "G96LYP80": {
                 "6-311+G(d,p)": 0.924,
@@ -2210,8 +2222,10 @@ FREQUENCY_SCALE_LIBS = {
                 "MG3S": 0.937,
             },
             "M06": {
-                "6-31+G(d,p)": 0.950,
+                "6-31+G(d,p)": 0.955,
+                "6-311+G(d,p)": 0.957,
                 "aug-cc-pVTZ": 0.958,
+                "def2-SVP": 0.957,
                 "def2-TZVP": 0.956,
                 "def2-TZVPP": 0.963,
                 "ma-TZVP": 0.956,
@@ -2219,7 +2233,9 @@ FREQUENCY_SCALE_LIBS = {
                 "MG3S": 0.955,
             },
             "M06-2X": {
-                "6-31+G(d,p)": 0.940,
+                "6-31G(d,p)": 0.940,
+                "6-31+G(d,p)": 0.942,
+                "6-311G(d,p)": 0.943,
                 "6-311+G(d,p)": 0.944,
                 "6-311++G(d,p)": 0.944,
                 "aug-cc-pVDZ": 0.954,
@@ -2231,9 +2247,13 @@ FREQUENCY_SCALE_LIBS = {
                 "jul-cc-pVTZ": 0.946,
                 "jun-cc-pVDZ": 0.951,
                 "jun-cc-pVTZ": 0.946,
+                "may-cc-pVTZ": 0.946,
                 "ma-TZVP": 0.947,
                 "maug-cc-pV(T+d)Z": 0.945,
                 "MG3S": 0.944,
+            },
+            "M06CR": {
+                "MG3S": 0.955,
             },
             "M06-HF": {
                 "6-31+G(d,p)": 0.931,
@@ -2244,36 +2264,39 @@ FREQUENCY_SCALE_LIBS = {
                 "MG3S": 0.930,
             },
             "M06-L": {
+                "6-31G(d)": 0.951,
                 "6-31G(d,p)": 0.952,
                 "6-31+G(d,p)": 0.953,
                 "aug-cc-pVTZ": 0.955,
                 "aug-cc-pV(T+d)Z": 0.955,
                 "aug-cc-pVTZ-pp": 0.955,
                 "def2-TZVP": 0.951,
-                "def2-TZVPP": 0.956,
+                "def2-TZVPP": 0.951,
                 "ma-TZVP": 0.956,
                 "maug-cc-pVTZ": 0.952,
-                "MG3S": 0.958,
+                "MG3S": 0.952,
             },
             "M06-L(DKH2)": {
                 "aug-cc-pwcVTZ-DK": 0.959,
             },
             "M08-HX": {
-                "6-31+G(d,p)": 0.944,
+                "6-31+G(d,p)": 0.947,
                 "aug-cc-pVTZ": 0.950,
-                "cc-pVTZ+": 0.946,
-                "def2-TZVPP": 0.945,
-                "jun-cc-pVTZ": 0.947,
+                "cc-pVTZ+": 0.949,
+                "def2-TZVPP": 0.948,
+                "jun-cc-pVTZ": 0.949,
+                "may-cc-pVTZ": 0.949,
                 "ma-TZVP": 0.951,
                 "maug-cc-pVTZ": 0.951,
-                "MG3S": 0.946,
+                "MG3S": 0.948,
             },
             "M08-SO": {
-                "6-31+G(d,p)": 0.951,
+                "6-31+G(d,p)": 0.954,
                 "aug-cc-pVTZ": 0.959,
                 "cc-pVTZ+": 0.956,
                 "def2-TZVPP": 0.954,
                 "ma-TZVP": 0.958,
+                "jun-cc-pVTZ": 0.958,
                 "maug-cc-pVTZ": 0.957,
                 "MG3": 0.959,
                 "MG3S": 0.956,
@@ -2290,11 +2313,17 @@ FREQUENCY_SCALE_LIBS = {
                 "MG3S": 0.959,
             },
             "MN12-SX": {
-                "6-311++G(d,p)": 0.947,
+                "6-311++G(d,p)": 0.950,
                 "jul-cc-pVDZ": 0.954,
             },
+            "MN15": {
+                "aug-cc-pVTZ": 0.950,
+                "def2-SVP": 0.947,
+                "ma-TZVP": 0.950,
+            },
             "MN15-L": {
-                "MG3S": 0.952,
+                "def2-TZVP": 0.955,
+                "MG3S": 0.947,
                 "maug-cc-pVTZ": 0.954,
             },
             "MOHLYP": {
@@ -2307,7 +2336,7 @@ FREQUENCY_SCALE_LIBS = {
                 "6-31G(d)": 0.939,
                 "6-31G(d,p)": 0.933,
                 "cc-pVDZ": 0.952,
-                "cc-pVTZ": 0.953,
+                "cc-pVTZ": 0.950,
             },
             "MP2 (full)": {
                 "6-31G(d)": 0.938,
@@ -2364,6 +2393,10 @@ FREQUENCY_SCALE_LIBS = {
                 "ma-TZVP": 0.987,
             },
             "PBE0": {
+                "6-31G(d,p)": 0.980,
+                "aug-cc-pVTZ": 0.986,
+                "def2-TZVP": 0.985,
+                "ma-TZVP": 0.987,
                 "MG3S": 0.950,
             },
             "PBE1KCIS": {
@@ -2385,6 +2418,13 @@ FREQUENCY_SCALE_LIBS = {
             },
             "QCISD(T)": {
                 "aug-cc-pVQZ": 0.963,
+            },
+            "revM06": {
+                "ma-TZVP": 0.945,
+                "M3GS": 0.943,
+            },
+            "revM06-L": {
+                "def2-TZVP": 0.947,
             },
             "revTPSS": {
                 "def2-TZVP": 0.972,
@@ -2411,6 +2451,8 @@ FREQUENCY_SCALE_LIBS = {
                 "ma-TZVP": 0.945,
             },
             "ωB97X-D": {
+                "6-31G(d,p)": 0.943,
+                "6-31+G(d,p)": 0.946,
                 "def2-TZVP": 0.945,
                 "ma-TZVP": 0.946,
                 "maug-cc-pVTZ": 0.949,
@@ -2426,6 +2468,7 @@ FREQUENCY_SCALE_LIBS = {
             "AM1": 0.923,
             "PM3": 0.916,
             "PM6": 1.050,
+            "PM7": 1.050,
         }
     ),
 }
