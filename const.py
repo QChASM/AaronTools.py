@@ -2087,7 +2087,7 @@ FREQUENCY_SCALE_LIBS = {
             "DREIDING": 0.936,
         }
     ),
-    "UMN CTC (v4)": (
+    "UMN CTC (v5)": (
         "https://comp.chem.umn.edu/freqscale/index.html",
         {
             "B1B95": {

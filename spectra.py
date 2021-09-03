@@ -214,6 +214,7 @@ class Signals:
         normalize=True,
         fwhm=15.0,
         change_x_unit_func=None,
+        show_functions=None,
     ):
         """
         returns arrays of x_values, y_values for a spectrum
@@ -228,6 +229,7 @@ class Signals:
         linear_scale - subtract linear_scale * frequency off each mode
         quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
         """
+        other_y_list = []
         if peak_type.lower() != "delta":
             if point_spacing is not None and peak_type.lower():
                 x_values = []
@@ -263,6 +265,15 @@ class Signals:
                     x_values.sort()
 
             y_values = np.sum([f(x_values) for f in functions], axis=0)
+            
+            if show_functions:
+                for (ndx1, ndx2) in show_functions:
+                    other_y_list.append(
+                        np.sum(
+                            [f(x_values) for f in functions[ndx1: ndx2]],
+                            axis=0,
+                        )
+                    )
 
         else:
             x_values = []
@@ -278,18 +289,26 @@ class Signals:
             Signals.LOG.warning("nothing to plot")
             return None
 
-        if normalize:
-            y_values /= abs(max(y_values.max(), y_values.min(), key=abs))
+        if normalize or transmittance:
+            max_val = abs(max(y_values.max(), y_values.min(), key=abs))
+            y_values /= max_val
+            for y_vals in other_y_list:
+                y_vals /= max_val
 
         if transmittance:
             y_values = np.array([10 ** (2 - y) for y in y_values])
-
+            for i in range(0, len(other_y_list)):
+                other_y_list[i] = np.array(
+                    [10 ** (2 - y) for y in other_y_list[i]]
+                )
 
         if change_x_unit_func:
             x_values, ndx = change_x_unit_func(x_values)
             y_values = y_values[ndx]
+            for i in range(0, len(other_y_list)):
+                other_y_list[i] = other_y_list[i][ndx]
 
-        return x_values, y_values
+        return x_values, y_values, other_y_list
 
     @classmethod
     def plot_spectrum(
@@ -297,6 +316,8 @@ class Signals:
         figure,
         x_values,
         y_values,
+        other_y_values=None,
+        other_y_style=None,
         centers=None,
         widths=None,
         exp_data=None,
@@ -432,9 +453,21 @@ class Signals:
                     x_values,
                     y_values,
                     color="k",
-                    linewidth=0.5,
+                    linewidth=1,
                     label="computed",
                 )
+                
+                if other_y_values:
+                    for y_vals, style in zip(other_y_values, other_y_style):
+                        ax.plot(
+                            x_values,
+                            y_vals,
+                            color=style[0],
+                            linestyle=style[1],
+                            linewidth=1,
+                            label=style[2],
+                            zorder=-1,
+                        )
 
             else:
                 if plot_type.lower() == "transmittance":
@@ -442,7 +475,7 @@ class Signals:
                         x_values,
                         y_values,
                         [100 for y in y_values],
-                        linewidth=0.5,
+                        linewidth=1,
                         colors=["k" for x in x_values],
                         label="computed",
                     )
@@ -450,17 +483,29 @@ class Signals:
                         100,
                         0,
                         max(4000, *x_values),
-                        linewidth=0.5,
+                        linewidth=1,
                         colors=["k" for y in y_values],
                         label="computed",
                     )
-
+                    
+                    if other_y_values:
+                        for y_vals, style in zip(other_y_values, other_y_style):
+                            ax.vlines(
+                                x_values,
+                                y_vals,
+                                [100 for y in y_vals],
+                                colors=[style[0] for x in x_values],
+                                linestyles=style[1],
+                                linewidth=1,
+                                label=style[2],
+                                zorder=-1,
+                            )
                 else:
                     ax.vlines(
                         x_values,
                         [0 for y in y_values],
                         y_values,
-                        linewidth=0.5,
+                        linewidth=1,
                         colors=["k" for x in x_values],
                         label="computed",
                     )
@@ -468,10 +513,23 @@ class Signals:
                         0,
                         0,
                         max(4000, *x_values),
-                        linewidth=0.5,
+                        linewidth=1,
                         colors=["k" for y in y_values],
                         label="computed",
                     )
+                    
+                    if other_y_values:
+                        for y_vals, style in zip(other_y_values, other_y_style):
+                            ax.vlines(
+                                x_values,
+                                [0 for y in y_vals],
+                                y_vals,
+                                colors=[style[0] for x in x_values],
+                                linestyles=style[1],
+                                linewidth=1,
+                                label=style[2],
+                                zorder=-1,
+                            )
 
             if exp_data:
                 for x, y, color in exp_data:
@@ -479,8 +537,8 @@ class Signals:
                         x,
                         y,
                         color=color,
-                        zorder=-1,
-                        linewidth=0.5,
+                        zorder=1,
+                        linewidth=1,
                         label="observed",
                     )
 
@@ -1022,6 +1080,7 @@ class Frequency(Signals):
         fwhm=15.0,
         anharmonic=False,
         rotate_x_ticks=False,
+        show_functions=None,
         **kwargs,
     ):
         """
@@ -1064,6 +1123,12 @@ class Frequency(Signals):
             **kwargs,
         )
 
+        other_y_style = None
+        ndx_list = None
+        if show_functions is not None:
+            ndx_list = [info[0] for info in show_functions]
+            other_y_style = list(info[1:] for info in show_functions)
+
         data = self.get_plot_data(
             functions,
             frequencies,
@@ -1072,11 +1137,12 @@ class Frequency(Signals):
             peak_type=peak_type,
             point_spacing=point_spacing,
             normalize=normalize,
+            show_functions=ndx_list,
         )
         if data is None:
             return
 
-        x_values, y_values = data
+        x_values, y_values, other_y_values = data
 
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
@@ -1091,6 +1157,8 @@ class Frequency(Signals):
             figure,
             x_values,
             y_values,
+            other_y_values=other_y_values,
+            other_y_style=other_y_style,
             centers=centers,
             widths=widths,
             exp_data=exp_data,
@@ -1349,6 +1417,7 @@ class ValenceExcitations(Signals):
         fwhm=15.0,
         units="nm",
         rotate_x_ticks=False,
+        show_functions=None,
         **kwargs,
     ):
         """
@@ -1404,6 +1473,12 @@ class ValenceExcitations(Signals):
             **kwargs,
         )
 
+        other_y_style = None
+        ndx_list = None
+        if show_functions is not None:
+            ndx_list = [info[0] for info in show_functions]
+            other_y_style = list(info[1:] for info in show_functions)
+
         data = self.get_plot_data(
             functions,
             frequencies,
@@ -1413,11 +1488,12 @@ class ValenceExcitations(Signals):
             point_spacing=point_spacing,
             change_x_unit_func=change_x_unit_func,
             normalize=normalize,
+            show_functions=ndx_list,
         )
         if data is None:
             return
 
-        x_values, y_values = data
+        x_values, y_values, other_y_values = data
 
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
@@ -1434,6 +1510,8 @@ class ValenceExcitations(Signals):
             figure,
             x_values,
             y_values,
+            other_y_values=other_y_values,
+            other_y_style=other_y_style,
             centers=centers,
             widths=widths,
             exp_data=exp_data,

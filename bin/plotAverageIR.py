@@ -398,7 +398,7 @@ else:
         intensity_attr=intensity_attr,
     )
 
-    x_values, y_values = mixed_freq.get_plot_data(
+    x_values, y_values, _ = mixed_freq.get_plot_data(
         funcs,
         x_positions,
         point_spacing=args.point_spacing,

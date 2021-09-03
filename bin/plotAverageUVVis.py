@@ -404,17 +404,17 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
 
 else:
     intensity_attr = "dipole_str"
-    if plot_type.lower() == "uv-vis-veloctiy":
+    if args.plot_type.lower() == "uv-vis-veloctiy":
         intensity_attr = "dipole_vel"
-    if plot_type.lower() == "ecd":
+    if args.plot_type.lower() == "ecd":
         intensity_attr = "rotatory_str_len"
-    if plot_type.lower() == "ecd-velocity":
+    if args.plot_type.lower() == "ecd-velocity":
         intensity_attr = "rotatory_str_vel"
 
-    change_x_unit_func = None
+    change_x_unit_func = ValenceExcitations.ev_to_nm
     x_label = "wavelength (nm)"
     if units == "eV":
-        change_x_unit_func = ValenceExcitations.nm_to_ev
+        change_x_unit_func = None
         x_label = r"$h\nu$ (eV)"
 
 
@@ -425,19 +425,20 @@ else:
         scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
-        change_x_unit_func=change_x_unit_func,
         intensity_attr=intensity_attr,
     )
 
-    x_values, y_values = mixed_uvvis.get_plot_data(
+    x_values, y_values, _ = mixed_uvvis.get_plot_data(
         funcs,
         x_positions,
         point_spacing=args.point_spacing,
         transmittance=args.plot_type == "transmittance",
         peak_type=args.peak_type,
+        change_x_unit_func=change_x_unit_func,
         fwhm=args.fwhm,
     )
 
+    y_label = "Absorbance (arb.)"
     if y_label is None and plot_type.lower() == "transmittance":
         y_label = "Transmittance (%)"
     elif y_label is None and plot_type.lower() == "uv-vis":
