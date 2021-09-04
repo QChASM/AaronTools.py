@@ -8,7 +8,7 @@ from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.spectra import Frequency, HarmonicVibration
-from AaronTools.finders import AnyNonTransitionMetal, AnyTransitionMetal, NotAny
+from AaronTools.finders import Finder, AnyNonTransitionMetal, AnyTransitionMetal, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.theory import (
@@ -40,6 +40,8 @@ class ATEncoder(json.JSONEncoder):
             return self._encode_frequency(obj)
         elif isinstance(obj, Theory):
             return self._encode_theory(obj)
+        elif isinstance(obj, Finder):
+            return self._encode_finder(obj)
         else:
             super().default(obj)
 
@@ -148,7 +150,7 @@ class ATEncoder(json.JSONEncoder):
         if obj.empirical_dispersion:
             rv["disp"] = obj.empirical_dispersion.name
         if obj.solvent:
-            rv["solvent model"] = obj.solvent.name
+            rv["solvent model"] = obj.solvent.solvent_model
             rv["solvent"] = obj.solvent.solvent
         if obj.processors:
             rv["nproc"] = obj.processors
@@ -176,7 +178,7 @@ class ATEncoder(json.JSONEncoder):
                 for basis in obj.basis.basis:
                     rv["basis"]["name"].append(basis.name)
                     rv["basis"]["elements"].append([])
-                    for ele in basis.ele_selection:
+                    for ele in basis.elements:
                         if isinstance(ele, str):
                             rv["basis"]["elements"][-1].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
@@ -201,7 +203,7 @@ class ATEncoder(json.JSONEncoder):
                 rv["ecp"] = {"name": [], "elements":[], "file":[]}
                 for basis in obj.basis.ecp:
                     rv["ecp"]["name"].append(basis.name)
-                    for ele in basis.ele_selection:
+                    for ele in basis.elements:
                         if isinstance(ele, str):
                             rv["ecp"]["elements"].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
@@ -226,6 +228,11 @@ class ATEncoder(json.JSONEncoder):
                 rv["other"] = obj.kwargs
 
         return rv
+
+    def _encode_finder(self, obj):
+        rv = {"_type": "Finder"}
+        rv["_spec_type"] = "Finder"
+        rv["kwargs"] = obj.__dict__
 
 
 class ATDecoder(json.JSONDecoder):
@@ -398,3 +405,8 @@ class ATDecoder(json.JSONDecoder):
             rv.kwargs = obj["other"]
         
         return rv
+
+    def _decode_finder(self, obj):
+        specific_type = obj["_spec_type"]
+        kwargs = obj["kwargs"]
+        return get_class(specific_type)(kwargs)

@@ -1,4 +1,5 @@
 """methods (e.g. DFT functionals, coupled-cluster methods) for Theory()"""
+from AaronTools import addlogger
 
 KNOWN_SEMI_EMPIRICAL = [
     "AM1",
@@ -28,6 +29,9 @@ class Method:
     used to ensure the proper keyword is used
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
+
+    LOG = None
+
     def __init__(self, name, is_semiempirical=False):
         """
         name: str, functional name
@@ -92,6 +96,26 @@ class Method:
             warning += "\n".join([valid[i] for i in ndx])
 
         return warning
+
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
 
     def get_gaussian(self):
         """maps proper functional name to one Gaussian accepts"""

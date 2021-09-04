@@ -1,4 +1,5 @@
 """used to specify implicit solvent info for Theory()"""
+from AaronTools import addlogger
 from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE
 
 
@@ -415,16 +416,38 @@ class ImplicitSolvent:
 
     KNOWN_ORCA_MODELS = ["SMD", "CPCM", "C-PCM", "PCM"]
 
+    LOG = None
+
     def __init__(self, solvent_model, solvent):
-        self.name = solvent_model
+        self.solvent_model = solvent_model
         self.solvent = solvent
 
     def __repr__(self):
-        return "%s(%s)" % (self.name.upper(), self.solvent.lower())
+        return "%s(%s)" % (self.solvent_model.upper(), self.solvent.lower())
 
     def __eq__(self, other):
         return repr(self) == repr(other)
 
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
+ 
     def get_gaussian(self):
         """returns dict() with solvent information for gaussian input files"""
         # need to check if solvent model is available
@@ -434,12 +457,12 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model for model in self.KNOWN_GAUSSIAN_MODELS
+                self.solvent_model.upper() == model for model in self.KNOWN_GAUSSIAN_MODELS
         ):
             warnings.append(
                 "solvent model is not available in Gaussian: %s\nuse one of: %s"
                 % (
-                    self.name,
+                    self.solvent_model,
                     " ".join(
                         [
                             "SMD",
@@ -473,9 +496,9 @@ class ImplicitSolvent:
                     "see AaronTools.theory.implicit_solvent.KNOWN_GAUSSIAN_SOLVENTS"
                 )
 
-        # route option: scrf(model,solvent=solvent name)
+        # route option: scrf(model,solvent=solvent solvent_model)
         return (
-            {GAUSSIAN_ROUTE: {"scrf": [self.name, "solvent=%s" % solvent]}},
+            {GAUSSIAN_ROUTE: {"scrf": [self.solvent_model, "solvent=%s" % solvent]}},
             warnings,
         )
 
@@ -486,18 +509,18 @@ class ImplicitSolvent:
             return (dict(), warnings)
 
         if not any(
-                self.name.upper() == model for model in self.KNOWN_ORCA_MODELS
+                self.solvent_model.upper() == model for model in self.KNOWN_ORCA_MODELS
         ):
             warnings.append(
                 "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
-                % self.name
+                % self.solvent_model
             )
 
         out = {}
         cpcm = True
         # route option: CPCM(solvent name)
         # if using smd, add block %cpcm smd true end
-        if self.name.upper() == "SMD":
+        if self.solvent_model.upper() == "SMD":
             cpcm = False
             out[ORCA_BLOCKS] = {"cpcm": ["smd    true"]}
 

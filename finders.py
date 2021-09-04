@@ -1,5 +1,14 @@
 """finders are used by Geometry.find to locate atoms in a more general way"""
+import sys
+import inspect
+
 import numpy as np
+
+
+def get_class(name):
+    for obj_name, obj in inspect.getmembers(sys.modules[__name__]):
+        if obj_name == name and inspect.isclass(obj):
+            return obj
 
 
 class Finder:
@@ -18,11 +27,11 @@ class BondsFrom(Finder):
         super().__init__()
 
         self.central_atom = atom
-        self.n_bonds = number_of_bonds
+        self.number_of_bonds = number_of_bonds
         self.avoid = avoid
 
     def __repr__(self):
-        return "atoms %i bonds of %s" % (self.n_bonds, self.central_atom)
+        return "atoms %i bonds of %s" % (self.number_of_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
@@ -33,7 +42,7 @@ class BondsFrom(Finder):
             except LookupError:
                 continue
 
-            if len(path) - 1 == self.n_bonds:
+            if len(path) - 1 == self.number_of_bonds:
                 matching_atoms.append(atom)
 
         return matching_atoms
@@ -45,7 +54,7 @@ class WithinBondsOf(BondsFrom):
         super().__init__(atom, number_of_bonds)
 
     def __repr__(self):
-        return "atoms %i bonds of %s" % (self.n_bonds, self.central_atom)
+        return "atoms %i bonds of %s" % (self.number_of_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
@@ -56,7 +65,7 @@ class WithinBondsOf(BondsFrom):
             except LookupError:
                 continue
 
-            if len(path) - 1 <= self.n_bonds and len(path) > 1:
+            if len(path) - 1 <= self.number_of_bonds and len(path) > 1:
                 matching_atoms.append(atom)
 
         return matching_atoms
@@ -173,10 +182,10 @@ class AnyNonTransitionMetal(NotAny):
 
 class HasAttribute(Finder):
     """all atoms with the specified attribute"""
-    def __init__(self, attribute):
+    def __init__(self, attribute_name):
         super().__init__()
 
-        self.attribute_name = attribute
+        self.attribute_name = attribute_name
 
     def __repr__(self):
         return "atoms with the '%s' attribute" % self.attribute_name
@@ -189,10 +198,10 @@ class HasAttribute(Finder):
 class VSEPR(Finder):
     """atoms with the specified VSEPR geometry
     see Atom.get_shape for a list of valid vsepr_geometry strings"""
-    def __init__(self, vsepr_geometry):
+    def __init__(self, vsepr):
         super().__init__()
         
-        self.vsepr = vsepr_geometry
+        self.vsepr = vsepr
     
     def __repr__(self):
         return "atoms with %s shape" % self.vsepr
