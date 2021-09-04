@@ -1245,6 +1245,7 @@ class ValenceExcitations(Signals):
     def parse_orca_lines(self, lines, *args, **kwargs):
         i = 0
         nrgs = []
+        corr = []
         rotatory_str_len = []
         rotatory_str_vel = []
         dipole_str = []
@@ -1300,8 +1301,21 @@ class ValenceExcitations(Signals):
                     rotatory_str_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
+            elif "CALCULATED SOLVENT SHIFTS" in line:
+                i += 8
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    corr.append(float(info[-1]))
+                    i += 1
+                    line = lines[i]
+                
             else:
                 i += 1
+
+        if corr:
+            for i in range(0, len(nrgs)):
+                nrgs[i] = corr[i]
 
         if not multiplicity:
             multiplicity = [None for x in nrgs]
