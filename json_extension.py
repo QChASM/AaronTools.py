@@ -8,7 +8,13 @@ from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
 from AaronTools.spectra import Frequency, HarmonicVibration
-from AaronTools.finders import Finder, AnyNonTransitionMetal, AnyTransitionMetal, NotAny
+from AaronTools.finders import (
+    Finder,
+    AnyNonTransitionMetal,
+    AnyTransitionMetal,
+    NotAny,
+    get_class,
+)
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.theory import (
@@ -178,7 +184,7 @@ class ATEncoder(json.JSONEncoder):
                 for basis in obj.basis.basis:
                     rv["basis"]["name"].append(basis.name)
                     rv["basis"]["elements"].append([])
-                    for ele in basis.elements:
+                    for ele in basis.ele_selection:
                         if isinstance(ele, str):
                             rv["basis"]["elements"][-1].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
@@ -203,7 +209,7 @@ class ATEncoder(json.JSONEncoder):
                 rv["ecp"] = {"name": [], "elements":[], "file":[]}
                 for basis in obj.basis.ecp:
                     rv["ecp"]["name"].append(basis.name)
-                    for ele in basis.elements:
+                    for ele in basis.ele_selection:
                         if isinstance(ele, str):
                             rv["ecp"]["elements"].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
@@ -231,8 +237,12 @@ class ATEncoder(json.JSONEncoder):
 
     def _encode_finder(self, obj):
         rv = {"_type": "Finder"}
-        rv["_spec_type"] = "Finder"
+        rv["_spec_type"] = obj.__class__.__name__
         rv["kwargs"] = obj.__dict__
+        for kw in rv["kwargs"]:
+            if isinstance(rv["kwargs"][kw], np.ndarray):
+                rv["kwargs"][kw] = rv["kwargs"][kw].tolist()
+        return rv
 
 
 class ATDecoder(json.JSONDecoder):
@@ -258,6 +268,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_comp_output(obj)
         if obj["_type"] == "Theory":
             return self._decode_theory(obj)
+        if obj["_type"] == "Finder":
+            return self._decode_finder(obj)
 
     def _decode_atom(self, obj):
         kwargs = {}
@@ -409,4 +421,13 @@ class ATDecoder(json.JSONDecoder):
     def _decode_finder(self, obj):
         specific_type = obj["_spec_type"]
         kwargs = obj["kwargs"]
-        return get_class(specific_type)(kwargs)
+        cls = get_class(specific_type)
+        args = []
+        sig = signature(cls.__init__)
+        for param in sig.parameters.values():
+            if param.name in kwargs and (
+                param.kind == param.POSITIONAL_ONLY or
+                param.kind == param.POSITIONAL_OR_KEYWORD
+            ):
+                args.append(kwargs.pop(param.name))
+        return cls(*args, **kwargs)

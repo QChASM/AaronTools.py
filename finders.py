@@ -6,9 +6,11 @@ import numpy as np
 
 
 def get_class(name):
+    """returns the finder class with the given name"""
     for obj_name, obj in inspect.getmembers(sys.modules[__name__]):
         if obj_name == name and inspect.isclass(obj):
             return obj
+    raise ValueError("no finder named %s in AaronTools.finders" % name)
 
 
 class Finder:
@@ -23,15 +25,15 @@ class Finder:
 class BondsFrom(Finder):
     """exact number of bonds from specified atom
     avoid: bonding path cannot pass through these atoms"""
-    def __init__(self, atom, number_of_bonds, avoid=None):
+    def __init__(self, central_atom, number_of_bonds, avoid=None):
         super().__init__()
 
-        self.central_atom = atom
+        self.central_atom = central_atom
         self.number_of_bonds = number_of_bonds
         self.avoid = avoid
 
     def __repr__(self):
-        return "atoms %i bonds of %s" % (self.number_of_bonds, self.central_atom)
+        return "atoms %i bonds from %s" % (self.number_of_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
@@ -50,11 +52,11 @@ class BondsFrom(Finder):
 
 class WithinBondsOf(BondsFrom):
     """within a specified number of bonds from the atom"""
-    def __init__(self, atom, number_of_bonds):
-        super().__init__(atom, number_of_bonds)
+    def __init__(self, central_atom, number_of_bonds, **kwargs):
+        super().__init__(central_atom, number_of_bonds)
 
     def __repr__(self):
-        return "atoms %i bonds of %s" % (self.number_of_bonds, self.central_atom)
+        return "atoms within %i bonds of %s" % (self.number_of_bonds, self.central_atom)
 
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
@@ -134,11 +136,16 @@ class WithinRadiusFromAtom(Finder):
 
 class NotAny(Finder):
     """atoms not matching specifiers/Finders"""
-    def __init__(self, *args):
-        """args can be any number of Finders and/or other atom specifiers (tags, elements, etc.)"""
+    def __init__(self, *critera, **kwargs):
+        """critera can be any number of Finders and/or other atom specifiers (tags, elements, etc.)"""
         super().__init__()
 
-        self.critera = args
+        if not critera and "critera" in kwargs:
+            critera = kwargs["critera"]
+        if len(critera) == 1:
+            if isinstance(critera[0], tuple):
+                critera = critera[0]
+        self.critera = critera
 
     def __repr__(self):
         return "not any of: %s" % ", ".join([str(x) for x in self.critera])
@@ -173,7 +180,7 @@ class AnyTransitionMetal(Finder):
 
 class AnyNonTransitionMetal(NotAny):
     """any atoms that are not transition metals"""
-    def __init__(self):
+    def __init__(self, *a, **kw):
         super().__init__(AnyTransitionMetal())
 
     def __repr__(self):
@@ -223,12 +230,14 @@ class BondedElements(Finder):
     if match_exact=True (default), elements must match exactly 
     e.g. BondedElements('C') will find
     atoms bonded to only one carbon and nothing else"""
-    def __init__(self, *args, match_exact=True):
+    def __init__(self, *args, match_exact=True, **kwargs):
         super().__init__()
         
+        if not args and "elements" in kwargs:
+            args = kwargs["elements"]
         self.elements = list(args)
         self.match_exact = match_exact
-        
+
     def __repr__(self):
         if len(self.elements) == 0:
             return "atoms bonded to nothing"
@@ -287,14 +296,12 @@ class ChiralCentres(Finder):
                             False will include r/s centers as well
         """
         super().__init__()
-        self.cip = RS_only
+        self.RS_only = RS_only
 
     def __repr__(self):
         return "chiral centers"
 
     def get_matching_atoms(self, atoms, geometry):
-        from AaronTools.geometry import Geometry
-
         matching_atoms = []
 
         # b/c they are connected to chiral fragments
@@ -324,15 +331,15 @@ class ChiralCentres(Finder):
                 #planar vsepr don't get checked
                 vsepr = atom.get_vsepr()
                 if vsepr is not None:
-                    shape, score = vsepr
-                    if shape in  ['trigonal planar', 't shaped', 'sqaure planar']:
+                    shape, _ = vsepr
+                    if shape in ['trigonal planar', 't shaped', 'sqaure planar']:
                         continue
 
                 chiral = True
                 for i, frag1 in enumerate(frags[ndx]):
                     #get the ranks of the atoms in this fragment
                     ranks_1 = [ranks[geometry.atoms.index(atom)] for atom in frag1]
-                    for j, frag2 in enumerate(frags[ndx][:i]):
+                    for frag2 in frags[ndx][:i]:
                         same = True
                         
                         ranks_2 = [ranks[geometry.atoms.index(atom)] for atom in frag2]
@@ -349,27 +356,36 @@ class ChiralCentres(Finder):
                            
                         for a, b in zip(sorted(frag1), sorted(frag2)):
                             # and other chiral atoms
-                            if not self.cip and a in matching_atoms and b in matching_atoms:
+                            if not self.RS_only and a in matching_atoms and b in matching_atoms:
                                 #use RMSD to see if they have the same handedness
                                 a_connected = sorted(a.connected)
                                 b_connected = sorted(b.connected)
                                 a_targets = [a] + list(a_connected)
                                 b_targets = [b] + list(b_connected)
-                                if geometry.RMSD(geometry, targets=a_targets, ref_targets=b_targets, sort=False, align=False) < 0.1:
+                                if geometry.RMSD(
+                                    geometry,
+                                    targets=a_targets,
+                                    ref_targets=b_targets,
+                                    sort=False,
+                                    align=False,
+                                ) < 0.1:
                                     same = False
                                     break
 
                             # and correct connected elements
-                            for i, j in zip(
+                            for k, l in zip(
                                 sorted([aa.element for aa in a.connected]),
                                 sorted([bb.element for bb in b.connected]),
                             ):
-                                if i != j:
+                                if k != l:
                                     same = False
                                     break
 
                         
-                        ring_atoms = [bonded_atom for bonded_atom in atom.connected if bonded_atom in frag1 and bonded_atom in frag2]
+                        ring_atoms = [
+                            bonded_atom for bonded_atom in atom.connected
+                            if bonded_atom in frag1 and bonded_atom in frag2
+                        ]
                         if len(ring_atoms) > 0:
                             #this is a ring
                             #look at the rank of all atoms that are n bonds away from this atom
@@ -379,21 +395,30 @@ class ChiralCentres(Finder):
                             while acceptable_nbonds:
                                 try:
                                     atoms_within_nbonds = geometry.find(BondsFrom(atom, n_bonds))
-                                    nbonds_ranks = [ranks[geometry.atoms.index(a)] for a in atoms_within_nbonds]
-                                    if all([nbonds_ranks.count(r) == 1 for r in nbonds_ranks]):
+                                    nbonds_ranks = [
+                                        ranks[geometry.atoms.index(a)] for a in atoms_within_nbonds
+                                    ]
+                                    if all(nbonds_ranks.count(r) == 1 for r in nbonds_ranks):
                                         same = False
                                         acceptable_nbonds = False
-                                    elif not self.cip:
-                                        #need to find things in the ring that are chiral b/c of other chiral centers
-                                        for i, atom1 in enumerate(atoms_within_nbonds):
-                                            for j, atom2 in enumerate(atoms_within_nbonds[i+1:]):
-                                                k = j + i + 1
-                                                if nbonds_ranks[i] == nbonds_ranks[k]:
+                                    elif not self.RS_only:
+                                        # need to find things in the ring that are chiral
+                                        # b/c of other chiral centers
+                                        for n, atom1 in enumerate(atoms_within_nbonds):
+                                            for m, atom2 in enumerate(atoms_within_nbonds[n+1:]):
+                                                k = m + n + 1
+                                                if nbonds_ranks[n] == nbonds_ranks[k]:
                                                     a_connected = sorted(atom1.connected)
                                                     b_connected = sorted(atom2.connected)
                                                     a_targets = [atom1] + list(a_connected)
                                                     b_targets = [atom2] + list(b_connected)
-                                                    if geometry.RMSD(geometry, targets=a_targets, ref_targets=b_targets, sort=False, align=False) < 0.1:
+                                                    if geometry.RMSD(
+                                                        geometry,
+                                                        targets=a_targets,
+                                                        ref_targets=b_targets,
+                                                        sort=False,
+                                                        align=False,
+                                                    ) < 0.1:
                                                         same = False
                                                         break
                                         if not same:
@@ -405,7 +430,6 @@ class ChiralCentres(Finder):
 
                             if not same:
                                 break
-
 
                         if same:
                             chiral = False
@@ -426,9 +450,6 @@ class FlaggedAtoms(Finder):
     atoms with a non-zero flag
     """
     # useful for finding constrained atoms
-    def __init__(self):
-        super().__init__()
-
     def __repr__(self):
         return "flagged atoms"
 
@@ -442,40 +463,40 @@ class CloserTo(Finder):
     """
     def __init__(self, atom1, atom2, include_ties=False):
         super().__init__()
-        
+
         self.atom1 = atom1
         self.atom2 = atom2
         self.include_ties = include_ties
-    
+
     def __repr__(self):
         return "atoms closer to %s than %s" % (self.atom1, self.atom2)
-    
+
     def get_matching_atoms(self, atoms, geometry):
         matching_atoms = []
         for atom in atoms:
             if atom is self.atom1 and atom is not self.atom2:
                 matching_atoms.append(atom)
                 continue
-                
+
             try:
                 d1 = len(geometry.shortest_path(self.atom1, atom))
             except LookupError:
                 d1 = False
-            
+
             try:
                 d2 = len(geometry.shortest_path(self.atom2, atom))
             except LookupError:
                 d2 = False
-            
+
             if d1 is not False and d2 is not False and d1 <= d2:
                 if self.include_ties:
                     matching_atoms.append(atom)
                 elif d1 < d2:
                     matching_atoms.append(atom)
-            
+
             elif d1 is not False and d2 is False:
                 matching_atoms.append(atom)
-        
+
         return matching_atoms
 
 
@@ -489,9 +510,8 @@ class AmideCarbon(Finder):
         return "amide carbons"
 
     def get_matching_atoms(self, atoms, geometry):
-        from AaronTools.atoms import BondOrder
         matching_atoms = []
-        
+
         carbons = geometry.find("C", VSEPR("trigonal planar"))
         oxygens = geometry.find("O", VSEPR("linear 1"))
         nitrogens = geometry.find("N", NumberOfBonds(3))
@@ -501,7 +521,7 @@ class AmideCarbon(Finder):
                     and any(atom in nitrogens for atom in carbon.connected)
             ):
                 matching_atoms.append(carbon)
-        
+
         return matching_atoms
 
 
@@ -516,26 +536,25 @@ class Bridgehead(Finder):
                       two 6-membered rings)
                       not specifying yields bridgehead atoms for any ring size
         match_exact - bool, if True, return atoms only bridging the specified rings
-                      if False, the ring_sizes is taken as a minimum (e.g. 
+                      if False, the ring_sizes is taken as a minimum (e.g.
                       ring_size=[6, 6], match_exact=False would also yield atoms
                       bridging three 6-membered rings or two six-membered rings and
                       a five-membered ring)
         """
         self.ring_sizes = ring_sizes
         self.match_exact = match_exact
-    
+
     def __repr__(self):
         if self.ring_sizes:
             return "bridgeheads of %s-member rings" % " or ".join([str(x) for x in self.ring_sizes])
-        else:
-            return "bridgehead atoms"
+        return "bridgehead atoms"
 
     def get_matching_atoms(self, atoms, geometry):
         matching_atoms = []
         for atom1 in atoms:
             matching = True
             if self.ring_sizes:
-                unfound_rings = [x for x in self.ring_sizes]
+                unfound_rings = list(self.ring_sizes)
             n_rings = 0
             for i, atom2 in enumerate(atom1.connected):
                 for atom3 in list(atom1.connected)[:i]:
@@ -559,7 +578,7 @@ class Bridgehead(Finder):
                 matching_atoms.append(atom1)
             elif n_rings > 1 and not self.ring_sizes:
                 matching_atoms.append(atom1)
-        
+
         return matching_atoms
 
 
@@ -573,26 +592,27 @@ class SpiroCenters(Finder):
                       two 6-membered rings)
                       not specifying yields bridgehead atoms for any ring size
         match_exact - bool, if True, return atoms only bridging the specified rings
-                      if False, the ring_sizes is taken as a minimum (e.g. 
+                      if False, the ring_sizes is taken as a minimum (e.g.
                       ring_size=[6, 6], match_exact=False would also yield atoms
                       bridging three 6-membered rings or two six-membered rings and
                       a five-membered ring)
         """
         self.ring_sizes = ring_sizes
         self.match_exact = match_exact
-    
+
     def __repr__(self):
         if self.ring_sizes:
-            return "atoms in different %s-member rings" % " or ".join([str(x) for x in self.ring_sizes])
-        else:
-            return "spiro atoms"
+            return "atoms in different %s-member rings" % " or ".join(
+                [str(x) for x in self.ring_sizes]
+            )
+        return "spiro atoms"
 
     def get_matching_atoms(self, atoms, geometry):
         matching_atoms = []
         for atom1 in atoms:
             matching = True
             if self.ring_sizes:
-                unfound_rings = [x for x in self.ring_sizes]
+                unfound_rings = list(self.ring_sizes)
             n_rings = 0
             rings = []
             for i, atom2 in enumerate(atom1.connected):
@@ -629,5 +649,5 @@ class SpiroCenters(Finder):
                 matching_atoms.append(atom1)
             elif n_rings > 1 and not self.ring_sizes:
                 matching_atoms.append(atom1)
-        
+
         return matching_atoms

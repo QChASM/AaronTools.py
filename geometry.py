@@ -1113,6 +1113,9 @@ class Geometry:
                     if test_name.search(a.name) is not None:
                         rv += [a]
 
+            elif arg == "all":
+                rv += [a for a in self.atoms]
+
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
                 # print("comma list")
                 list_style = arg.split(",")
