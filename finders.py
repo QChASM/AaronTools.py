@@ -373,11 +373,11 @@ class ChiralCentres(Finder):
                                     break
 
                             # and correct connected elements
-                            for k, l in zip(
+                            for o, l in zip(
                                 sorted([aa.element for aa in a.connected]),
                                 sorted([bb.element for bb in b.connected]),
                             ):
-                                if k != l:
+                                if o != l:
                                     same = False
                                     break
 
@@ -406,8 +406,8 @@ class ChiralCentres(Finder):
                                         # b/c of other chiral centers
                                         for n, atom1 in enumerate(atoms_within_nbonds):
                                             for m, atom2 in enumerate(atoms_within_nbonds[n+1:]):
-                                                k = m + n + 1
-                                                if nbonds_ranks[n] == nbonds_ranks[k]:
+                                                p = m + n + 1
+                                                if nbonds_ranks[n] == nbonds_ranks[p]:
                                                     a_connected = sorted(atom1.connected)
                                                     b_connected = sorted(atom2.connected)
                                                     a_targets = [atom1] + list(a_connected)
