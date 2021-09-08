@@ -843,6 +843,8 @@ class Theory:
             if GAUSSIAN_GEN_ECP in basis_info:
                 out_str += basis_info[GAUSSIAN_GEN_ECP]
 
+                out_str += "\n"
+
         # post info e.g. for NBOREAD
         if GAUSSIAN_POST in other_kw_dict:
             for item in other_kw_dict[GAUSSIAN_POST]:
