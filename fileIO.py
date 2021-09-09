@@ -377,6 +377,9 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
 
     @classmethod
     def write_in(
@@ -424,6 +427,10 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
+
 
     @classmethod
     def write_sqm(
