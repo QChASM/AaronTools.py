@@ -5,8 +5,10 @@ import re
 import sys
 from copy import deepcopy
 from io import IOBase, StringIO
+from math import ceil
 
 import numpy as np
+from scipy.spatial import distance_matrix
 from scipy.special import factorial2
 
 from AaronTools import addlogger
@@ -14,7 +16,14 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.spectra import Frequency, ValenceExcitations
 from AaronTools.theory import *
-from AaronTools.utils.utils import is_alpha, is_int, is_num, float_num
+from AaronTools.utils.utils import (
+    is_alpha,
+    is_int,
+    is_num,
+    float_num,
+    lebedev_sphere,
+    gauss_legendre_grid,
+)
 
 read_types = [
     "xyz",
@@ -121,7 +130,6 @@ def step2str(step):
         return str(int(step))
     else:
         return str(step).replace(".", "-")
-
 
 def str2step(step_str):
     if "-" in step_str:
@@ -638,8 +646,8 @@ class FileWriter:
             )
 
         # extra section - only for MO data
-        if mo is not None:
-            s += " %5i %5i\n" % (1, int(kind.split()[-1]))
+        if isinstance(mo, int):
+            s += " %5i %5i\n" % (1, mo + 1)
 
         # get values for this MO
         if kind.lower() == "density":
@@ -710,6 +718,7 @@ class FileReader:
         freq_name=None,
         conf_name=None,
         nbo_name=None,
+        max_length=10000000,
     ):
         """
         :fname: either a string specifying the file name of the file to read
@@ -723,6 +732,9 @@ class FileReader:
             using the --hess runtype option)
         :nbo_name: Name of the file containing the NBO orbital coefficients
             in the AO basis. Only used when reading *.47 files.
+        :max_length: maximum array size to store from FCHK files
+            any array that would be larger than this will be the
+            size the array would be
         """
         # Initialization
         self.name = ""
@@ -748,7 +760,10 @@ class FileReader:
         if self.content is None:
             self.read_file(
                 get_all, just_geom,
-                freq_name=freq_name, conf_name=conf_name, nbo_name=nbo_name
+                freq_name=freq_name,
+                conf_name=conf_name,
+                nbo_name=nbo_name,
+                max_length=max_length,
             )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
@@ -771,7 +786,7 @@ class FileReader:
             elif self.file_type == "dat":
                 self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
-                self.read_fchk(f, just_geom)
+                self.read_fchk(f, just_geom, max_length=max_length)
             elif self.file_type == "crest":
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
@@ -786,6 +801,7 @@ class FileReader:
     def read_file(
         self, get_all=False, just_geom=True,
         freq_name=None, conf_name=None, nbo_name=None,
+        max_length=10000000,
     ):
         """
         Reads geometry information from fname.
@@ -793,6 +809,11 @@ class FileReader:
             get_all     If false (default), only keep the last geom
                         If true, self is last geom, but return list
                             of all others encountered
+            nbo_name    nbo output file containing coefficients to
+                        map AO's to orbitals
+            max_length  max. array size for arrays to store in FCHK
+                        files - anything larger will be the size
+                        the array would be
         """
         if os.path.isfile(self.name):
             f = open(self.name)
@@ -822,7 +843,7 @@ class FileReader:
         elif self.file_type == "dat":
             self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
-            self.read_fchk(f, just_geom)
+            self.read_fchk(f, just_geom, max_length=max_length)
         elif self.file_type == "crest":
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
@@ -2384,28 +2405,41 @@ class FileReader:
         self.other = other
         return
 
-    def read_fchk(self, f, just_geom=True):
-        def parse_to_list(i, lines, length, data_type):
+    def read_fchk(self, f, just_geom=True, max_length=10000000):
+        def parse_to_list(
+            i, lines, length, data_type, debug=False, max_length=max_length,
+        ):
             """takes a block in an fchk file and turns it into an array
             block headers all end with N=   <int>
             the length of the array will be <int>
             the data type is specified by data_type"""
             i += 1
-            line = lines[i]
+            line = f.readline()
+            # print("first line", line)
             items_per_line = len(line.split())
+            # print("items per line", items_per_line)
             total_items = items_per_line
-            num_lines = 1
-            while total_items < length:
-                total_items += items_per_line
-                num_lines += 1
+            num_lines = ceil(length / items_per_line)
 
-            block = ""
-            for line in lines[i : i + num_lines]:
-                block += " "
-                block += line
+            # print("lines in block", num_lines)
+
+            block = [line]
+            for k in range(0, num_lines - 1):
+                line = f.readline()
+                if max_length < length:
+                    continue
+                block.append(line)
+            
+            if max_length < length:
+                return length, i + num_lines
+            block = " ".join(block)
+
+            if debug:
+                print("full block")
+                print(block)
 
             return (
-                np.array([data_type(x) for x in block.split()]),
+                np.fromstring(block, count=length, dtype=data_type, sep=" "),
                 i + num_lines,
             )
 
@@ -2425,16 +2459,15 @@ class FileReader:
 
         theory = Theory()
 
-        lines = f.readlines()
+        line = f.readline()
 
         i = 0
-        while i < len(lines):
-            line = lines[i]
+        while line != "":
             if i == 0:
                 other["comment"] = line.strip()
             elif i == 1:
                 i += 1
-                line = lines[i]
+                line = f.readline()
                 job_info = line.split()
                 if job_info[0] == "SP":
                     theory.job_type = [SinglePointJob()]
@@ -2452,6 +2485,7 @@ class FileReader:
                     theory.basis = job_info[2]
 
                 i += 1
+                line = f.readline()
                 continue
 
             int_match = int_info.match(line)
@@ -2459,35 +2493,35 @@ class FileReader:
             char_match = char_info.match(line)
             if int_match is not None:
                 data = int_match.group(1)
+                # print("int", data)
                 value = int_match.group(3)
                 if data == "Charge" and not just_geom:
                     theory.charge = int(value)
                 elif data == "Multiplicity" and not just_geom:
                     theory.multiplicity = int(value)
                 elif data == "Atomic numbers":
-                    atom_numbers, i = parse_to_list(i, lines, int(value), int)
+                    atom_numbers, i = parse_to_list(i, f, int(value), int)
                 elif not just_geom:
                     if int_match.group(2):
                         other[data], i = parse_to_list(
-                            i, lines, int(value), int
+                            i, f, int(value), int
                         )
-                        continue
                     else:
                         other[data] = int(value)
 
             elif real_match is not None:
                 data = real_match.group(1)
+                # print("real", data)
                 value = real_match.group(3)
                 if data == "Current cartesian coordinates":
-                    atom_coords, i = parse_to_list(i, lines, int(value), float)
+                    atom_coords, i = parse_to_list(i, f, int(value), float)
                 elif data == "Total Energy":
                     other["energy"] = float(value)
                 elif not just_geom:
                     if real_match.group(2):
                         other[data], i = parse_to_list(
-                            i, lines, int(value), float
+                            i, f, int(value), float
                         )
-                        continue
                     else:
                         other[data] = float(value)
 
@@ -2498,11 +2532,17 @@ class FileReader:
             #         other[data] = lines[i + 1]
             #         i += 1
 
+            line = f.readline()
             i += 1
 
         self.other = other
         self.other["theory"] = theory
 
+        if isinstance(atom_coords, int):
+            raise RuntimeError(
+                "max. array size is insufficient to parse atom data\n"
+                "must be at least %i" % atom_coords
+            )
         coords = np.reshape(atom_coords, (len(atom_numbers), 3))
         for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
             atom = Atom(
@@ -2516,6 +2556,22 @@ class FileReader:
             self.other["orbitals"] = Orbitals(self)
         except NotImplementedError:
             pass
+        except (TypeError, ValueError) as err:
+            self.LOG.warning(
+                "could not create Orbitals, try increasing the max.\n"
+                "array size to read from FCHK files\n\n"
+                "%s" % err
+            )
+            for key in [
+                "Alpha MO coefficients", "Beta MO coefficients",
+                "Shell types", "Shell to atom map", "Contraction coefficients",
+                "Primitive exponents", "Number of primitives per shell",
+                "Coordinates of each shell",
+            ]:
+                if key in self.other and isinstance(self.other[key], int):
+                    self.LOG.warning(
+                        "size of %s is > %i: %i" % (key, max_length, self.other[key])
+                    )
 
     def read_crest(self, f, conf_name=None):
         """
@@ -4680,6 +4736,5 @@ class Orbitals:
 
         return plus_density
 
-    
     def fukui_dual_value(self, *args, **kwargs):
         return self.fukui_acceptor_value(*args, **kwargs) - self.fukui_donor_value(*args, **kwargs)

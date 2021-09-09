@@ -139,6 +139,19 @@ cube_parser.add_argument(
     "ignored unless input file is a *.47 file"
 )
 
+cube_parser.add_argument(
+    "-m", "--max-array",
+    type=int,
+    default=10000000,
+    dest="max_length",
+    help="max. array size to read from FCHK files\n"
+    "a reasonable size for setting parsing orbital data\n"
+    "can improve performance when reading large FCHK files\n"
+    "too small of a value will prevent orbital data from\n"
+    "being parsed\n"
+    "Default: 10000000",
+)
+
 
 args = cube_parser.parse_args()
 
@@ -160,7 +173,9 @@ elif args.mo_ndx.isdigit():
 
 for f in glob_files(args.infile, parser=cube_parser):
     if isinstance(f, str):
-        infile = FileReader(f, just_geom=False, nbo_name=args.nbo_name)
+        infile = FileReader(
+            f, just_geom=False, nbo_name=args.nbo_name, max_length=args.max_length
+        )
     elif len(sys.argv) >= 1:
         infile = FileReader(
             ("from stdin", "fchk", f),
