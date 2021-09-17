@@ -806,6 +806,32 @@ class Geometry:
                             continue
                         tmp += [a]
                 rv["ligand"] += [tmp]
+        #link atoms
+        match = re.search("LA:([0-9;-]+)", self.comment)
+        if match is not None:
+            rv["link_atoms"] = []
+            match = match.group(1).split(";")
+            for m in match:
+                if m == "":
+                    continue
+                m = m.split("-")
+                m = [int(i) - 1 for i in m]
+                rv["link_atoms"] += [m]
+                for i, j in zip(m[:-1], m[1:]):
+                    a = self.atoms[i]
+                    b = self.atoms[j]
+                    a.add_tag("LAH bonded to " + b.name)
+                    b.add_tag("bonded to LA on " + a.name)
+        # scale factors for link atoms
+        match = re.search("SF:([0-9,.;-]+)", self.comment)
+        if match is not None:
+            rv["scale factors"] = []
+            match = match.group(1).split(";")
+            for m in match:
+                m = m.split("-")
+                atom_index = int(m[0])-1
+                scale_factors = m[1].split(",")
+                self.atoms[atom_index].add_tag("scale factors " + scale_factors)
         # key atoms
         match = re.search("K:([0-9,;]+)", self.comment)
         if match is not None:
@@ -884,23 +910,6 @@ class Geometry:
                     new_comment += "{}-{},".format(tmp[0], tmp[-1])
                 new_comment = new_comment[:-1] + ";"
             new_comment = new_comment[:-1]
-
-        #link atoms
-        match = re.search("LA:([0-9;-]+)", self.comment)
-        if match is not None:
-            rv["link_atoms"] = []
-            match = match.group(1).split(";")
-            for m in match:
-                if m == "":
-                    continue
-                m = m.split("-")
-                m = [int(i) - 1 for i in m]
-                rv["link_atoms"] += [m]
-                for i, j in zip(m[:-1], m[1:]):
-                    a = self.atoms[i]
-                    b = self.atoms[j]
-                    a.add_tag("LAH bonded to " + b.name)
-                    b.add_tag("bonded to LA on " + a.name)
 
 
         # save new comment (original comment still in self.other)
@@ -5339,10 +5348,28 @@ class Geometry:
             matches = OfType(atomtype).get_matching_atoms(atoms,self)
             for match in matches:
                 untyped_atoms.remove(match)
-                oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype)
+                try:
+                    oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, layer=match.layer, flag=match.flag, tags=match.tags, charge=match.charge)
+                except AttributeError:
+                    try:
+                        oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags, charge=match.charge)
+                    except AttributeError:
+                        try:
+                            oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags, layer=match.layer)
+                        except AttributeError:
+                            oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags)
                 oniomatoms.append(oniomatom)
         for atom in untyped_atoms:
-            oniomatom = OniomAtom(element = atom.element, coords = atom.coords, name = atom.name, atomtype = atom.element)
+            try:
+                oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, layer=atom.layer, flag=atom.flag, tags=atom.tags, charge=atom.charge)
+            except AttributeError:
+                try:
+                    oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags, charge=atom.charge)
+                except AttributeError:
+                    try:
+                        oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags, layer=atom.layer)
+                    except AttributeError:
+                        oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags)
             oniomatoms.append(oniomatom)
         import operator
         typed_geom = Geometry(structure=sorted(oniomatoms, key=operator.attrgetter("index")), name = self.name)

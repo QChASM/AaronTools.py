@@ -662,12 +662,13 @@ class ONIOMLayer(Finder):
                     for layer in self.layers:
                         if atom.layer.capitalize() == layer.capitalize(): matching_atoms.append(atom)
                 except AttributeError:
-                    print("ONIOMlayer only accepts OniomAtom type atoms")
+                    pass
+                    #print("ONIOMlayer only accepts OniomAtom type atoms")
             else:
                 try:
                     if atom.layer.capitalize() == self.layer.capitalize(): matching_atoms.append(atom)
                 except AttributeError:
-                    print("ONIOMlayer only accepts OniomAtom type atoms")
+                    pass #print("ONIOMlayer only accepts OniomAtom type atoms")
         return matching_atoms
 
 class AmideCarbon(Finder):

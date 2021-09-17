@@ -60,8 +60,10 @@ class Basis:
         """
         self.name = name
         if oniom_layer is not None:
-            self.oniom_layer = oniom_layer.capitalize()
+            oniom_layer = oniom_layer.capitalize()
             self.not_anys = [ONIOMLayer(layers=['H','M','L'].remove(self.oniom_layer))]
+
+        self.oniom_layer = oniom_layer
 
         if elements is None and oniom_layer is None:
             self.elements = []

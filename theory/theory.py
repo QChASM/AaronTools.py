@@ -10,6 +10,7 @@ from AaronTools.theory import (
     GAUSSIAN_GEN_ECP,
     GAUSSIAN_MM,
     GAUSSIAN_ONIOM,
+    GAUSSIAN_MM_PARAMS,
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
@@ -250,46 +251,52 @@ class Theory:
 
         if high_basis is not None:
             if isinstance(high_basis, Basis):
-                if any((high_basis.oniom_layer is None, high_basis.oniom_layer.upper() in ["M", "L"])):
-                    high_basis.oniom_layer = "H"
+                high_basis.oniom_layer = "H"
+                self.high_basis = BasisSet(basis=high_basis)
+            elif isinstance(high_basis, BasisSet):
                 self.high_basis = high_basis
-            elif isinstance (high_basis, str):
-                parsed_basis = BasisSet(basis=high_basis) 
-                if len(parsed_basis.basis) == 1:
-                    for basis in parsed_basis.basis:
-                        new_high_basis = Basis(basis.name, user_defined = basis.user_defined, oniom_layer = "H") #, atoms = basis.elements)
-                    self.high_basis = new_high_basis
-                else: raise ValueError("high_basis was defined incorrectly, see example at (need example)")
+            elif isinstance(high_basis, str):
+                self.high_basis = BasisSet(basis=high_basis) 
+                if self.high_basis.basis:
+                    for basis in self.high_basis.basis:
+                        #new_high_basis = Basis(basis.name, user_defined = basis.user_defined, oniom_layer = "H") #, atoms = basis.elements)
+                        basis.oniom_layer = "H"
+                if self.high_basis.ecp:
+                    for basis in self.high_basis.ecp:
+                        basis.oniom_layer = "H"
             else:
                 self.high_basis = high_basis
 
         if medium_basis is not None:
             if isinstance(medium_basis, Basis):
-                if any((medium_basis.oniom_layer is None, medium_basis.oniom_layer.upper() in ["H","L"])):
-                    medium_basis.oniom_layer = "M"
+                medium_basis.oniom_layer = "M"
+                self.medium_basis = BasisSet(basis=medium_basis)
+            elif isinstance(medium_basis, BasisSet):
+                for basis in medium_basis.basis:
+                    basis.oniom_layer = "M"
                 self.medium_basis = medium_basis
-            elif isinstance (medium_basis, str):
-                parsed_basis = BasisSet(basis=medium_basis) 
-                if len(parsed_basis.basis) == 1:
-                    for basis in parsed_basis.basis:
-                        new_medium_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "H", atoms = basis.atoms)
-                    self.medium_basis = new_medium_basis
-                else: raise ValueError("medium_basis was defined incorrectly, see example at (need example)")
+            elif isinstance(medium_basis, str):
+                self.medium_basis = BasisSet(basis=medium_basis) 
+                if self.medium_basis.basis:
+                    for basis in self.medium_basis.basis:
+                        #new_medium_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "H", atoms = basis.atoms)
+                        basis.oniom_layer = "M"
             else:
                 self.medium_basis = medium_basis
 
         if low_basis is not None:
             if isinstance(low_basis, Basis):
-                if any((low_basis.oniom_layer is None, low_basis.oniom_layer.upper() in ["H", "M"])):
-                    low_basis.oniom_layer = "L"
-                self.low_basis = low_basis
+                low_basis.oniom_layer = "L"
+                self.low_basis = BasisSet(basis=low_basis)
+            elif isinstance(low_basis, BasisSet):
+                for basis in low_basis.basis:
+                    basis.oniom_layer = "L"
             elif isinstance (low_basis, str):
-                parsed_basis = BasisSet(basis=low_basis) 
-                if len(parsed_basis.basis) == 1:
-                    for basis in parsed_basis.basis:
-                        new_low_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "L", atoms = basis.atoms)
-                    self.low_basis = new_low_basis
-                else: raise ValueError("low_basis was defined incorrectly, see example at (need example)")
+                self.low_basis = BasisSet(basis=low_basis) 
+                if self.low_basis.basis:
+                    for basis in self.low_basis.basis:
+                        #new_low_basis = Basis(basis.name, elements = basis.elements, user_defined = basis.user_defined, oniom_layer = "L", atoms = basis.atoms)
+                        basis.oniom_layer = "L"
             else:
                 self.low_basis = low_basis
 
@@ -1029,14 +1036,45 @@ class Theory:
 
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
+        oniom = False
+        has_type = False
+        has_charge = False
         for atom in self.geometry.atoms:
             if atom.flag:
                 has_frozen = True
                 break
+        for atom in self.geometry.atoms:
+            if hasattr(atom, "layer"):
+                oniom = True
+                break
+        for atom in self.geometry.atoms:
+            if hasattr(atom, "atomtype"):
+                if atom.atomtype != "":
+                    has_type = True
+                    break
+        for atom in self.geometry.atoms:
+            if hasattr(atom, "charge"):
+                if atom.charge != "":
+                    has_charge = True
+                    break
         for atom, coord in zip(
             self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
-            s += "%-2s" % atom.element
+            spec = ""
+            if oniom:
+                s += "%s" % atom.element
+                spec += "%s" % atom.element
+            else:
+                s += "%-2s" % atom.element
+            if has_type:
+                s += "-%s" % atom.atomtype
+                spec += "-%s" % atom.atomtype
+            if has_charge:
+                s += "-%f" % atom.charge
+                spec += "-%f" % atom.charge
+            if oniom:
+                num_spaces = 20-len(spec)
+                s += " " * num_spaces
             if has_frozen:
                 s += " % 2d" % (-1 if atom.flag else 0)
             for val in coord:
@@ -1049,6 +1087,29 @@ class Theory:
                     s += " %3i" % val
                 else:
                     warnings.append("unknown coordinate type: %s" % type(val))
+            if oniom:
+                s += " %s" % atom.layer
+                lac = re.search("LAH bonded to (\d+)", str(atom.tags))
+                if lac:
+                    lac_name = int(lac.group(1))
+                    lac_index = int(lac.group(1))-1
+                    if geometry.atoms[lac_index].atomtype == "ca":
+                        link_type = "ha"
+                    elif geometry.atoms[lac_index].atomtype.startswith("c"):
+                        link_type = "hc"
+                    elif geometry.atoms[lac_index].atomtype.startswith("n"):
+                        link_type = "hn"
+                    elif geometry.atoms[lac_index].atomtype.startswith("o"):
+                        link_type = "ho"
+                    elif geometry.atoms[lac_index].atomtype.startswith("s"):
+                        link_type = "hs"
+                    elif geometry.atoms[lac_index].atomtype.startswith("p"):
+                        link_type = "hp"
+                    s += " H-%s-%f  %i" % (link_type, atom.charge, lac_name)
+                    scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
+                    if scale_fax:
+                        for scale_fac in scal_fax.group(1).split(","):
+                            s += " %i" % int(scale_fac)
             s += "\n"
 
         if (
@@ -1115,6 +1176,21 @@ class Theory:
             basis_info = {}
             warnings.append("no basis specfied")
 
+        elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
+            if self.high_method is not None and not self.high_method.is_semiempirical and self.high_basis is not None:
+                high_basis_info, high_warnings = self.high_basis.get_gaussian_basis_info()
+            if self.medium_method is not None and not self.medium_method.is_semiempirical and self.medium_basis is not None:
+                medium_basis_info = {} # medium_warnings = self.medium_basis.get_gaussian_basis_info()
+            if self.low_method is not None and not self.low_method.is_semiempirical and self.low_basis is not None:
+                low_basis_info = {} # low_warnings = self.low_basis.get_gaussian_basis_info()
+
+            basis_info = {} #list((high_basis_info, medium_basis_info, low_basis_info))
+            #warnings = list((high_basis_warnings, medium_basis_warnings, low_basis_warnings))
+
+        elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)) and self.high_basis is None and self.medium_basis is None and self.low_basis is None:
+            basis_info = {}
+            warnings.append("no basis specified")
+
         out_str += "\n"
 
         # bond, angle, and torsion constraints
@@ -1125,8 +1201,21 @@ class Theory:
 
             out_str += "\n"
 
+        #mm param file
+        if GAUSSIAN_MM_PARAMS in other_kw_dict:
+            param_path = str(other_kw_dict[GAUSSIAN_MM_PARAMS][0])
+            #param_path_list = param_path.split("/")
+            #param_file = param_path_list[len(param_path_list)-1]
+            out_str += param_path
+            if GAUSSIAN_GEN_BASIS in basis_info:
+                raise NotImplementedError("basis=gen cannot be used with paramater files")
+            elif GAUSSIAN_GEN_ECP in basis_info:
+                out_str += "\n"
+            else:
+                out_str += "\n\n"
+
         # write gen info
-        if self.method is not None and not self.method.is_semiempirical:
+        if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
             if GAUSSIAN_GEN_BASIS in basis_info:
                 out_str += basis_info[GAUSSIAN_GEN_BASIS]
 

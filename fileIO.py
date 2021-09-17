@@ -210,9 +210,9 @@ class FileWriter:
                     "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
             if "oniom" in kwargs:
-                out = cls.write_oniom_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_oniom_com(geom, theory, outfile, **kwargs)
             elif "oniom" not in kwargs:
-                out = cls.write_com(geom, step, theory, outfile, **kwargs)
+                out = cls.write_com(geom, theory, outfile, **kwargs)
         elif style.lower() == "inp":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -2396,57 +2396,55 @@ class FileReader:
             # atom coords
             nums = float_num.findall(line)
             line = line.split()
-            if len(line) == 8 and is_alpha(line[0].split('-')[0]):
-                line0 = line[0].split('-')
-                line6 = line[6].split('-')
-                tags = []
-                for i in line6:
-                    tags.append(i)
-                tags.append(line[7])
-                if line0[2]=='':
-                    line0[3]=str(float(line0[3])*(-1))
-                    a = OniomAtom(element=line0[0], flag=nums[1], coords=nums[2:5], layer=line[5], atomtype=line0[1],charge=line0[3],tags=tags)
-                else:
-                    a = OniomAtom(element=line0[0], flag=nums[1], coords=nums[2:5], layer=line[5], atomtype=line0[1],charge=line0[2],tags=tags)
-            elif len(line) == 8 and is_alpha(line[0]):
-                a = OniomAtom(element=line[0], flag=nums[0], coords=nums[1:4], layer=line[5], tags=line[6:])
-            elif len(line) == 7 and is_alpha(line[0].split('-')[0]):
-                line0 = line[0].split('-')
-                line5 = line[5].split('-')
-                tags = []
-                for i in line5:
-                    tags.append(i)
-                tags.append(line[6])
-                if line0[2]=='':
-                    line0[3]=str(float(line0[3])*(-1))
-                    a = OniomAtom(element=line0[0], coords=nums[1:4], layer=line[4], atomtype=line0[1],charge=line0[3],tags=tags)
-                else:
-                    a = OniomAtom(element=line0[0], coords=nums[1:4], layer=line[4], atomtype=line0[1],charge=line0[2],tags=tags)
-            elif len(line) == 7 and is_alpha(line[0]):
-                a = OniomAtom(element=line[0], coords=nums[0:3], layer=line[4], tags=line[5:])
-            elif len(line) == 6 and is_alpha(line[0].split('-')[0]): 
-                line0 = line[0].split('-')
-                a = OniomAtom(element=line[0], flag=nums[0], coords=nums[1:], layer=line[5])
-            elif len(line) == 6 and is_alpha(line[0]) and len(nums) == 4:
-                a = OniomAtom(element=line[0], coords=nums[1:], layer=line[5], flag=nums[0])
-            elif len(line) == 5 and is_alpha(line[0]) and len(nums) == 4:
-                if not is_int(line[1]):
-                    continue
-                a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
-            elif len(line) == 5 and is_alpha(line[0]) and len(nums) == 3:
-                a = OniomAtom(element=line[0], coords=nums[0:], layer=line[4])
-            elif len(line) == 5 and is_alpha(line[0].split('-')[0]):
-                line0 = line[0].split('-')
-                if line0[2]=='':
-                    line0[3]=str(float(line0[3])*(-1))
-                    a = OniomAtom(element=line0[0], coords=nums[1:], layer=line[4], atomtype=line0[1], charge=line0[3])
-                else:
-                    a = OniomAtom(element=line0[0], coords=nums[1:], layer=line[4], atomtype=line0[1], charge=line0[2])
-            elif len(line) == 4 and is_alpha(line[0]) and len(nums) == 3:
-                a = Atom(element=line[0], coords=nums)
-            else:
-                continue
-            atoms += [a]
+            is_oniom = False
+            flag = ""
+            atomtype = ""
+            charge = ""
+            tags = []
+            has_charge = False
+            has_flag = False
+            if "oniom" in other["method"].lower():
+                is_oniom = True
+            if not is_oniom:
+                if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4: 
+                    if not is_int(line[1]):
+                        continue
+                    a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
+                    atoms += [a]
+                elif len(line) == 4 and is_alpha(line[0]) and len(nums) == 3:
+                    a = Atom(element=line[0], coords=nums)
+                    atoms += [a]
+            elif is_oniom:
+                if len(line) > 0 and len(line[0].split("-")) > 0 and len(nums) > 2:
+                    if len(line[0].split("-")) > 2:
+                        has_charge = True
+                        charge = nums[0]
+                        atomtype = line[0].split("-")[1]
+                    if len(line[0].split("-")) > 1:
+                        if not is_alpha(line[0].split("-")[1]):
+                            has_charge = True
+                            charge = nums[0]
+                        if is_alpha(line[0].split("-")[1]):
+                            atomtype = line[0].split("-")[1]
+                    if len(line)%2 == 0:
+                        has_flag = True
+                        for num in nums:
+                            if is_int(num):
+                                flag = num 
+                                break
+                    if len(line) > 6:
+                        tags.append(line[len(line)-2:])
+                        layer = line[len(line)-3]
+                    if len(line) < 7:
+                        layer = line[len(line)-1]
+                    if has_charge ^ has_flag:
+                        coords = nums[1:4]
+                    if has_charge and has_flag:
+                        coords = nums[2:5]
+                    if not has_charge and not has_flag:
+                        coords = nums[0:3]
+                    a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,tags=tags)
+                    atoms += [a] 
         for i, a in enumerate(atoms):
             a.name = str(i + 1)
         self.atoms = atoms

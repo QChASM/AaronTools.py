@@ -45,8 +45,7 @@ class OniomAtom(Atom):
         if layer == "":
             self.layer=layer
         elif layer not in ['H', 'L', 'M']:
-            self.layer="H"
-            raise ValueError("Layer set to 'High.' Incorrect symbol for layer: " + layer)
+            raise ValueError("Incorrect symbol for layer: " + layer)
         else:
             self.layer=layer
 
