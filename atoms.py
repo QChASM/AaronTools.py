@@ -342,6 +342,10 @@ class Atom:
                 rv.__dict__[key] = val.copy()
             except AttributeError:
                 rv.__dict__[key] = val
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in val.__class__.__module__:
+                    continue
                 if val.__class__.__module__ != "builtins":
                     self.LOG.warning(
                         "No copy method for {}: in-place changes may occur".format(

@@ -516,6 +516,59 @@ class Geometry:
 
         return geoms, cc_type
 
+    @classmethod
+    def get_diastereomers(cls, geometry, minimize=True):
+        """returns a list of all diastereomers for detected chiral centers"""
+        from AaronTools.finders import ChiralCenters, Bridgehead, NotAny, SpiroCenters
+        from AaronTools.ring import Ring
+        from AaronTools.substituent import Substituent
+        
+        if not isinstance(geometry, Geometry):
+            geometry = Geometry(geometry)
+        
+        updating_diastereomer = geometry.copy()
+        if not getattr(updating_diastereomer, "substituents", False):
+            updating_diastereomer.substituents = []
+
+        # we can invert any chiral center that isn't part of a 
+        # fused ring unless it's a spiro center
+        chiral_centers = updating_diastereomer.find(ChiralCenters())
+        spiro_chiral = updating_diastereomer.find(SpiroCenters(), chiral_centers)
+        ring_centers = updating_diastereomer.find(
+            chiral_centers, Bridgehead(), NotAny(spiro_chiral)
+        )
+        chiral_centers = [c for c in chiral_centers if c not in ring_centers]
+
+        diastereomer_count = [2 for c in chiral_centers]
+        mod_array = []
+        for i in range(0, len(diastereomer_count)):
+            mod_array.append(1)
+            for j in range(i + 1, len(diastereomer_count)):
+                mod_array[i] *= diastereomer_count[j]
+        
+        diastereomers = [updating_diastereomer.copy()]
+
+        previous_diastereomer = 0
+        for d in range(1, int(np.prod(diastereomer_count))):
+            for i, center in enumerate(chiral_centers):
+                flip = int(d / mod_array[i]) % diastereomer_count[i]
+                flip -= int(previous_diastereomer / mod_array[i]) % diastereomer_count[i]
+                
+                if flip == 0:
+                    continue
+            
+                updating_diastereomer.change_chirality(center)
+
+            diastereomers.append(updating_diastereomer.copy())
+            
+            previous_diastereomer = d
+
+        if minimize:
+            for diastereomer in diastereomers:
+                diastereomer.minimize_sub_torsion(increment=15)
+
+        return diastereomers
+
     @staticmethod
     def weighted_percent_buried_volume(
         geometries, energies, temperature, *args, **kwargs
@@ -741,11 +794,11 @@ class Geometry:
         if comment is None:
             comment = self.comment
         atoms = self._fix_connectivity(atoms)
-        if hasattr(self, "components") and self.components is not None:
+        if hasattr(self, "components") and self.components is not None and comment is None:
             self.fix_comment()
         if copy_atoms:
-            return Geometry([a.copy() for a in atoms], name, comment)
-        return Geometry(atoms, name, comment)
+            return Geometry([a.copy() for a in atoms], name, comment=comment)
+        return Geometry(atoms, name, comment=comment)
 
     def parse_comment(self):
         """
@@ -1101,6 +1154,9 @@ class Geometry:
                 for a in self.atoms:
                     if test_name.search(a.name) is not None:
                         rv += [a]
+
+            elif arg == "all":
+                rv += [a for a in self.atoms]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
                 # print("comma list")
@@ -1853,7 +1909,7 @@ class Geometry:
         ref,
         align=False,
         heavy_only=False,
-        sort=False,
+        sort=True,
         targets=None,
         ref_targets=None,
         debug=False,
@@ -2026,7 +2082,7 @@ class Geometry:
         # return rmsd
         if not align:
             if debug:
-                return this, ref, rmsd
+                return this, ref, rmsd, vec
             else:
                 return rmsd
         # or update geometry and return rmsd
@@ -2036,7 +2092,7 @@ class Geometry:
         self.coord_shift(ref_com)
         if debug:
             this.rotate(vec)
-            return this, ref, rmsd
+            return this, ref, rmsd, vec
         else:
             return rmsd
 
@@ -2422,8 +2478,8 @@ class Geometry:
                     tot_points = 0
     
                 else:
-                    buried_points = np.zeros(4)
-                    tot_points = np.zeros(4)
+                    buried_points = np.zeros(8)
+                    tot_points = np.zeros(8)
 
                 # get a random point uniformly distributed inside the sphere
                 # only sample points between minr and maxr because maybe that makes
@@ -2445,15 +2501,24 @@ class Geometry:
                 if basis is not None:
                     # determine what quadrant this point is in, add it to the appropriate bin
                     map_xyz = np.dot(xyz, basis)
-                    for p in map_xyz:
-                        if p[0] > 0 and p[1] > 0:
-                            tot_points[0] += 1
-                        elif p[0] <= 0 and p[1] > 0:
-                            tot_points[1] += 1
-                        elif p[0] <= 0 and p[1] <= 0:
-                            tot_points[2] += 1
-                        else:
-                            tot_points[3] += 1
+                    signs = np.sign(map_xyz)
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    tot_points[0] += sum(oct_0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    tot_points[1] += sum(oct_1)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    tot_points[2] += sum(oct_2)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    tot_points[3] += sum(oct_3)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    tot_points[4] += sum(oct_4)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    tot_points[5] += sum(oct_5)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    tot_points[6] += sum(oct_6)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    tot_points[7] += sum(oct_7)
+
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
@@ -2464,15 +2529,24 @@ class Geometry:
                 else:
                     mask = np.any(diff_mat <= 0, axis=1)
                     buried_coords = map_xyz[mask]
-                    for bc in buried_coords:
-                        if bc[0] > 0 and bc[1] > 0:
-                            buried_points[0] += 1
-                        elif bc[0] <= 0 and bc[1] > 0:
-                            buried_points[1] += 1
-                        elif bc[0] <= 0 and bc[1] <= 0:
-                            buried_points[2] += 1
-                        else:
-                            buried_points[3] += 1
+                    signs = np.sign(buried_coords)
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    buried_points[0] += sum(oct_0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    buried_points[1] += sum(oct_1)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    buried_points[2] += sum(oct_2)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    buried_points[3] += sum(oct_3)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    buried_points[4] += sum(oct_4)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    buried_points[5] += sum(oct_5)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    buried_points[6] += sum(oct_6)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    buried_points[7] += sum(oct_7)
+
                 return buried_points, tot_points
 
 
@@ -2484,10 +2558,10 @@ class Geometry:
                 tot_points = 0
 
             else:
-                prev_vol = np.zeros(4)
-                cur_vol = np.zeros(4)
-                buried_points = np.zeros(4)
-                tot_points = np.zeros(4)
+                prev_vol = np.zeros(8)
+                cur_vol = np.zeros(8)
+                buried_points = np.zeros(8)
+                tot_points = np.zeros(8)
             # determine %V_bur
             # do at least 75000 total points, but keep going until
             # the last 5 changes are all less than 1e-4
@@ -2503,7 +2577,7 @@ class Geometry:
                         dV.append(abs(cur_vol - prev_vol))
                         prev_vol = cur_vol
                     else:
-                        cur_vol = np.divide(buried_points, tot_points) / 4
+                        cur_vol = np.divide(buried_points, tot_points) / 8
                         dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                         prev_vol = cur_vol
 
@@ -2521,7 +2595,7 @@ class Geometry:
                             prev_vol = cur_vol
                         else:
                             tot_points += results[k][1]
-                            cur_vol = np.divide(buried_points, tot_points) / 4
+                            cur_vol = np.divide(buried_points, tot_points) / 8
                             dV.append(abs(sum(cur_vol) - sum(prev_vol)))
                             prev_vol = cur_vol
                 i += n_threads
@@ -2543,7 +2617,7 @@ class Geometry:
 
             # value of integral (without 4 pi r^2) for each shell
             if basis is not None:
-                shell_values = np.zeros((4, rpoints))
+                shell_values = np.zeros((8, rpoints))
             else:
                 shell_values = np.zeros(rpoints)
             # loop over radial shells
@@ -2563,15 +2637,26 @@ class Geometry:
                 else:
                     mask = np.any(diff_mat <= 0, axis=1)
                     buried_coords = map_agrid_r[mask]
-                    for bc, aweight in zip(buried_coords, aweights[mask]):
-                        if bc[0] > 0 and bc[1] > 0:
-                            shell_values[0][i] += aweight
-                        elif bc[0] <= 0 and bc[1] > 0:
-                            shell_values[1][i] += aweight
-                        elif bc[0] <= 0 and bc[1] <= 0:
-                            shell_values[2][i] += aweight
-                        else:
-                            shell_values[3][i] += aweight
+                    buried_weights = aweights[mask]
+                    signs = np.sign(buried_coords)
+                    # dot product should be 3, but > 2 allows for
+                    # numerical error
+                    oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
+                    shell_values[0][i] += np.dot(oct_0, buried_weights)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    shell_values[1][i] += np.dot(oct_1, buried_weights)
+                    oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
+                    shell_values[2][i] += np.dot(oct_2, buried_weights)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    shell_values[3][i] += np.dot(oct_3, buried_weights)
+                    oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
+                    shell_values[4][i] += np.dot(oct_4, buried_weights)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    shell_values[5][i] += np.dot(oct_5, buried_weights)
+                    oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
+                    shell_values[6][i] += np.dot(oct_6, buried_weights)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    shell_values[7][i] += np.dot(oct_7, buried_weights)
 
             if basis is not None:
                 # return a list of buried volume in each quadrant
@@ -2579,7 +2664,7 @@ class Geometry:
                     300
                     * np.dot(shell_values[k] * rgrid ** 2, rweights)
                     / (radius ** 3)
-                    for k in range(0, 4)
+                    for k in range(0, 8)
                 ]
             else:
                 # return buried volume
@@ -2763,10 +2848,13 @@ class Geometry:
         return_vector=False,
         radii="bondi",
         at_L=None,
+        max_error=None,
     ):
         """
         returns sterimol parameter values in a dictionary
         keys are B1, B2, B3, B4, B5, and L
+        B1 is determined numerically; B2-B4 depend on B1
+        B5 and L are analytical (unless L_func is not analytical)
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
         selectivity. Pestic. Sci., 7: 379-390.
@@ -2795,10 +2883,13 @@ class Geometry:
                         for vectors to represent the parameters in 3D space
         at_L - L value to calculate sterimol parameters at
                Used for Sterimol2Vec
+        max_error - max. error in angstroms for B1
+                    higher error can sometimes make the calculation
+                    go slightly faster
+                    max_error=None will have an error for B1 of at most
+                    (sum of radii tangent to B1 face) * (1 - cos(0.5 degrees))
         """
         from scipy.spatial import ConvexHull
-
-        from AaronTools.finders import BondedTo
 
         CITATION = "doi:10.1002/ps.2780070410"
         if at_L:
@@ -2861,27 +2952,14 @@ class Geometry:
         # are on the outside (vertices)
         # we then just need to find the bounding box with the minimum distance
         # from L-axis to one side of the box
-        points = []
-        ndx = []
+        points = np.empty((0,2))
+        ndx = np.empty(0, dtype=int)
         # just grab a random vector perpendicular to the L-axis
         # it doesn't matter really
         ip_vector = utils.perp_vector(L_axis)
         x_vec = np.cross(ip_vector, L_axis)
         x_vec /= np.linalg.norm(x_vec)
         basis = np.array([x_vec, ip_vector, L_axis]).T
-
-        num_pts = 360
-        b1_points = np.array(
-            [
-                [np.cos(x), np.sin(x)]
-                for x in np.linspace(
-                    0,
-                    2 * np.pi,
-                    num=num_pts,
-                )
-            ]
-        )
-        std_ndx = np.ones(num_pts, dtype=int)
 
         if not radius_list:
             radius_list = []
@@ -2898,6 +2976,28 @@ class Geometry:
             if L is None or test_L > L:
                 L = test_L
                 vector["L"] = L_vec
+        
+        num_pts = 360
+        if max_error is not None:
+            # max error estimate is:
+            # (sum of atom radii that are tangent to B1 face) *
+            # (1 - cos(360 degrees / (2 * number of points)))
+            # we don't know B1 until after we pick num_pts, so
+            # we don't know which atoms determine the B1 face here
+            # but it is either one or two atoms and we guess
+            # it's the two largest atoms
+            num_pts = int(
+                2 / np.arccos(
+                    1 - max_error / sum(
+                        np.argsort(radius_list)[:-2][::-1]
+                    )
+                )
+            )
+        v = np.linspace(0, 2 * np.pi, num=num_pts)
+        b1_points = np.stack(
+            (np.cos(v), np.sin(v)), axis=1
+        )
+        std_ndx = np.ones(num_pts, dtype=int)
 
         # if a specific L value was requested, only check atoms
         # with a radius that intersects the plane at that L
@@ -2937,11 +3037,10 @@ class Geometry:
             # in plane coordinates - z-axis is L-axis, which
             # we don't care about for B1
             ip_coords = new_coords[0:2]
-            ndx.extend((i * std_ndx).tolist())
+            ndx = np.append(ndx, (i * std_ndx))
             grid = rad * b1_points
             grid += ip_coords
-            points.extend(grid)
-
+            points = np.append(points, grid, axis=0)
             # B5
             # find distance along L-axis, then subtract this from vector from
             # vector from molecule to this atom to get the B5 vector
@@ -2965,45 +3064,58 @@ class Geometry:
 
                 vector["B5"] = (start_x, end)
 
-        points = np.array(points)
-
         hull = ConvexHull(points)
 
         # import matplotlib.pyplot as plt
-        # plt.plot(points[:, 0], points[:, 1], 'o')
+        # for i, pt in enumerate(points):
+        #     color = "blue"
+        #     if self.atoms[ndx[i]].element == "H":
+        #         color = "white"
+        #     if self.atoms[ndx[i]].element == "C":
+        #         color = "#5c5c5c"
+        #     if self.atoms[ndx[i]].element == "F":
+        #         color = "#90e050"
+        #     if self.atoms[ndx[i]].element == "O":
+        #         color = "#ff0000"
+        #     plt.plot(*pt, 'o', markersize=1, color=color)
+        # # plt.plot(points[:, 0], points[:, 1], 'o', markersize=0.1)
         # plt.plot(0, 0, 'kx')
-        # plt.plot(points[hull.vertices,0], points[hull.vertices,1], 'ro')
-
+        # plt.plot(
+        #     [*points[hull.vertices, 0], points[hull.vertices[0], 0]],
+        #     [*points[hull.vertices, 1], points[hull.vertices[0], 1]],
+        #     'ro-',
+        #     markersize=3,    
+        # )
+        # 
         # ax = plt.gca()
         # ax.set_aspect('equal')
+        # ax.set_facecolor("#dddddd")
 
         # go through each edge, find a vector perpendicular to the one
         # defined by the edge that passes through the origin
         # the length of the shortest of these vectors is B1
-        for i in range(0, len(hull.vertices) - 1):
-            # the vertices of the hull are organized in a counterclockwise
-            # direction, so neighboring indices define an edge
-            v_ndx_0, v_ndx_1 = hull.vertices[i : i + 2]
-            # find 'tangent' of the edge
-            v = points[v_ndx_1] - points[v_ndx_0]
-            v /= np.linalg.norm(v)
-            # find normal to this edge by projecting a vector from the
-            # L axis to one of the points on the edge
-            b = points[v_ndx_0]
-            t = np.dot(b, v)
-            perp = b - t * v
-            # plt.plot(perp[0], perp[1], 'g*')
-            test_b1 = np.linalg.norm(perp)
-            if B1 is None or test_b1 < B1:
-                B1 = test_b1
-                # figure out vector from L axis to represent B1
-                b1_atom_coords = coords[ndx[v_ndx_0]]
-                test_v = b1_atom_coords - start.coords
-                test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
-                start_x = b1_atom_coords - test_B1_v
-                end = x_vec * perp[0] + ip_vector * perp[1]
-                end += start_x
-                vector["B1"] = (start_x, end)
+        tangents = points[hull.vertices[1:]] - points[hull.vertices[:-1]]
+        tangents = np.append(
+            tangents,
+            [points[hull.vertices[-1]] - points[hull.vertices[0]]],
+            axis=0,
+        )
+
+        tangents = tangents / np.linalg.norm(tangents, axis=1)[:, None]
+        paras = np.sum(
+            tangents * points[hull.vertices], axis=1
+        )
+        norms = points[hull.vertices] - paras[:, None] * tangents
+        norm_mags = np.linalg.norm(norms, axis=1)
+        B1_ndx = np.argmin(norm_mags)
+        B1 = norm_mags[B1_ndx]
+        b1_atom_coords = coords[ndx[hull.vertices[B1_ndx]]]
+        test_v = b1_atom_coords - start.coords
+        test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
+        start_x = b1_atom_coords - test_B1_v
+        end = x_vec * norms[B1_ndx][0] + ip_vector * norms[B1_ndx][1]
+        end += start_x
+        vector["B1"] = (start_x, end)
 
         # figure out B2-4
         # these need to be sorted in increasing order
@@ -3095,8 +3207,11 @@ class Geometry:
             "L": L,
         }
 
-        # plt.plot(points[min_ndx,0], points[min_ndx,1], 'g*')
-
+        # plt.plot(
+        #     [0, norms[B1_ndx,0]],
+        #     [0, norms[B1_ndx,1]],
+        #     'g-', markersize=10,
+        # )
         # plt.show()
 
         if return_vector:
@@ -3404,6 +3519,32 @@ class Geometry:
         if center is not None:
             self.coord_shift(center)
 
+    def mirror(self, plane="xy"):
+        """
+        mirror self across a plane
+        plane can be xy, xz, yz or an array for a vector orthogonal to a plane
+        """
+        eye = np.identity(3)
+        if isinstance(plane, str):
+            if plane.lower() == "xy":
+                eye[0, 0] *= -1
+            if plane.lower() == "xz":
+                eye[1, 1] *= -1
+            if plane.lower() == "yz":
+                eye[2, 2] *= -1
+
+        else:
+            eye = utils.mirror_matrix(plane)
+
+        self.update_geometry(np.dot(self.coords, eye))
+
+    def invert(self, plane="xy"):
+        """
+        invert self's coordinates 
+        """
+        op = -np.identity(3)
+        self.update_geometry(np.dot(self.coords, op))
+
     def change_angle(
         self,
         a1,
@@ -3568,20 +3709,48 @@ class Geometry:
                 "`fix` must be 0, 1, or 4 (supplied: {})".format(fix)
             )
 
-    def minimize_sub_torsion(self, geom=None, all_frags=False, increment=30):
+    def minimize_sub_torsion(
+        self, geom=None, all_frags=False, increment=30, allow_planar=False
+    ):
         """rotate substituents to try to minimize LJ potential
         geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
         all_frags: minimize rotatable bonds on substituents
+        allow_planar: allow substituents that start and end with atoms
+                      with planar VSEPR geometries that are nearly
+                      planar to be rotated
         """
         # minimize torsion for each substituent
 
         if not hasattr(self, "substituents") or self.substituents is None:
             self.detect_substituents()
 
+        # we don't want to rotate any substituents that
+        # shouldn't be rotate-able
+        # filter out any substituents that start on a planar atom
+        # and end on a planar atom
+        if not allow_planar:
+            vsepr = [atom.get_vsepr()[0] for atom in self.atoms]
+
         for i, sub in enumerate(sorted(self.substituents, reverse=True)):
             if len(sub.atoms) < 2:
                 continue
+            
+            if not allow_planar:
+                # don't rotate substituents that might be E/Z
+                vsepr_1 = vsepr[self.atoms.index(sub.end)]
+                vsepr_2 = vsepr[self.atoms.index(sub.atoms[0])]
+                if (
+                    vsepr_1 and vsepr_2 and
+                    "planar" in vsepr_1 and "planar" in vsepr_2
+                ):
+                    a1 = [a for a in sub.end.connected if a is not sub.atoms[0]][0]
+                    a2 = [a for a in sub.atoms[0].connected if a is not sub.end][0]
+                    angle = self.dihedral(a1, sub.end, sub.atoms[0], a2)
+                    # ~5 degree tolerance for being planar
+                    if any(np.isclose(angle, ref, atol=0.09) for ref in [np.pi, 0, -np.pi]):
+                        continue
+            
             axis = sub.atoms[0].bond(sub.end)
             center = sub.end
             self.minimize_torsion(
@@ -5375,4 +5544,63 @@ class Geometry:
         typed_geom = Geometry(structure=sorted(oniomatoms, key=operator.attrgetter("index")), name = self.name)
 
         return typed_geom
+
+
+    def change_chirality(self, target):
+        """
+        change chirality of the target atom
+        target should be a chiral center that is not a bridgehead
+        of a fused ring, though spiro centers are allowed
+        """
+        # find two fragments
+        # rotate those about the vector that bisects the angle between them
+        # this effectively changes the chirality
+        target = self.find_exact(target)[0]
+        fragments = []
+        for a in target.connected:
+            frag = self.get_fragment(
+                a, target,
+            )
+            if sum(int(target in frag_atom.connected) for frag_atom in frag) == 1:
+                fragments.append([atom.copy() for atom in frag])
+            if len(fragments) == 2:
+                break
+        
+        # if there are not two fragments not in a ring,
+        # this is a spiro center
+        # find a spiro ring and rotate that
+        if len(fragments) < 2:
+            for a1 in target.connected:
+                targets = self.get_fragment(
+                    a1, stop=target,
+                )
+                a2 = [a for a in targets if a in target.connected and a is not a1]
+                if a2:
+                    a2 = a2[0]
+                    break
+            v1 = target.bond(a1)
+            v1 /= np.linalg.norm(v1)
+            v2 = target.bond(a2)
+            v2 /= np.linalg.norm(v2)
+            rv = v1 + v2
+        
+            self.rotate(
+                rv, angle=np.pi, center=target,
+                targets=targets,
+            )
+        else:
+            v1 = target.bond(fragments[0][0])
+            v1 /= np.linalg.norm(v1)
+            v2 = target.bond(fragments[1][0])
+            v2 /= np.linalg.norm(v2)
+            rv = v1 + v2
+        
+            targets = [atom.name for atom in fragments[0]]
+            targets.extend([atom.name for atom in fragments[1]])
+        
+            self.rotate(
+                rv, angle=np.pi, center=target,
+                targets=targets,
+            )
+        return targets
 

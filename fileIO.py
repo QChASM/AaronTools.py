@@ -2,17 +2,29 @@
 import concurrent.futures
 import os
 import re
+import sys
 from copy import deepcopy
 from io import IOBase, StringIO
+from math import ceil
 
 import numpy as np
+from scipy.spatial import distance_matrix
 from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.oniomatoms import OniomAtom
+from AaronTools.spectra import Frequency, ValenceExcitations
 from AaronTools.theory import *
+from AaronTools.utils.utils import (
+    is_alpha,
+    is_int,
+    is_num,
+    float_num,
+    lebedev_sphere,
+    gauss_legendre_grid,
+)
 
 read_types = [
     "xyz",
@@ -34,7 +46,6 @@ read_types = [
 ]
 write_types = ["xyz", "com", "inp", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
-float_num = re.compile("[-+]?\d+\.?\d*")
 LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
 LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
 LA_charge = re.compile("[-+]?[0-9]*\.[0-9]+")
@@ -123,33 +134,53 @@ ERROR_PSI4 = {
 }
 
 
-def is_alpha(test):
-    rv = re.search("^[a-zA-Z]+$", test)
-    return bool(rv)
-
-
-def is_int(test):
-    rv = re.search("^[+-]?\d+$", test)
-    return bool(rv)
-
-
-def is_num(test):
-    rv = re.search("^[+-]?\d+\.?\d*", test)
-    return bool(rv)
-
-
 def step2str(step):
     if int(step) == step:
         return str(int(step))
     else:
         return str(step).replace(".", "-")
 
-
 def str2step(step_str):
     if "-" in step_str:
         return float(step_str.replace("-", "."))
     else:
         return float(step_str)
+
+def expected_inp_ext(exec_type):
+    """
+    extension expected for an input file for exec_type
+    Gaussian - .com (.gjf on windows)
+    ORCA - .inp
+    Psi4 - .in
+    SQM - .mdin
+    """
+    if exec_type.lower() == "gaussian":
+        if sys.platform.startswith("win"):
+            return ".gjf"
+        return ".com"
+    if exec_type.lower() == "orca":
+        return ".inp"
+    if exec_type.lower() == "psi4":
+        return ".in"
+    if exec_type.lower() == "sqm":
+        return ".mdin"
+
+def expected_out_ext(exec_type):
+    """
+    extension expected for an input file for exec_type
+    Gaussian - .log
+    ORCA - .out
+    Psi4 - .out
+    SQM - .mdout
+    """
+    if exec_type.lower() == "gaussian":
+        return ".log"
+    if exec_type.lower() == "orca":
+        return ".out"
+    if exec_type.lower() == "psi4":
+        return ".out"
+    if exec_type.lower() == "sqm":
+        return ".mdout"
 
 
 class FileWriter:
@@ -494,6 +525,9 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
 
     @classmethod
     def write_in(
@@ -541,6 +575,10 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
+
 
     @classmethod
     def write_sqm(
@@ -597,13 +635,13 @@ class FileWriter:
         geom,
         orbitals=None,
         outfile=None,
-        mo=None,
-        ao=None,
+        kind="homo",
         padding=4.0,
         spacing=0.2,
         alpha=True,
         xyz=False,
         n_jobs=1,
+        delta=0.1,
         **kwargs,
     ):
         """
@@ -622,6 +660,7 @@ class FileWriter:
                  this is on top of NumPy's multithreading, so
                  if NumPy uses 8 threads and n_jobs=2, you can
                  expect to see 16 threads in use
+        delta - see Orbitals.fukui_donor_value or fukui_acceptor_value
         """
         if orbitals is None:
             raise RuntimeError(
@@ -696,36 +735,30 @@ class FileWriter:
             except np.linalg.LinAlgError:
                 n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
 
-        # default to HOMO
-        if mo is None and ao is None:
-            mo = "homo"
-
-        # an atomic orbital was requested
-        # set up an array of zeros, but 1 for that AO
-        if ao is not None:
+        mo = None
+        if kind.lower() == "homo":
+            mo = max(orbitals.n_alpha, orbitals.n_beta) - 1
+        elif kind.lower() == "lumo":
+            mo = max(orbitals.n_alpha, orbitals.n_beta)
+        elif kind.lower().startswith("mo"):
+            mo = int(kind.split()[-1])
+        elif kind.lower().startswith("ao"):
             mo = np.zeros(orbitals.n_mos)
-            mo[ao] = 1.0
-
-        if isinstance(mo, str):
-            if mo.lower() == "homo":
-                mo = max(orbitals.n_alpha, orbitals.n_beta) - 1
-            elif mo.lower() == "lumo":
-                mo = max(orbitals.n_alpha, orbitals.n_beta)
-            else:
-                raise TypeError('mo should be an integer, "homo", or "lumo"')
-            if mo < 0:
-                mo = 0
+            mo = mo[int(kind.split()[-1])] = 1
+        
         s = ""
         s += " %s\n" % geom.comment
-        if ao is None:
-            s += " mo index: %i\n" % mo
-        else:
-            s += " ao inedx: %i\n" % ao
+        s += " %s\n" % kind
+
         # the '-' in front of the number of atoms indicates that this is
         # MO info so there's an extra data entry between the molecule
         # and the function values
         bohr_com = com / UNIT.A0_TO_BOHR
-        s += " -%i %13.5f %13.5f %13.5f 1\n" % (
+        if mo:
+            s += " -"
+        else:
+            s += "  "
+        s += "%i %13.5f %13.5f %13.5f 1\n" % (
             len(geom.atoms), *bohr_com,
         )
 
@@ -768,23 +801,37 @@ class FileWriter:
             )
 
         # extra section - only for MO data
-        if ao is None:
+        if isinstance(mo, int):
             s += " %5i %5i\n" % (1, mo + 1)
-        else:
-            s += " %5i %5i\n" % (1, ao + 1)
 
         # get values for this MO
-        mo_val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
+        if kind.lower() == "density":
+            val = orbitals.density_value(coords, n_jobs=n_jobs)
+            # val = orbitals.low_mem_density_value(coords, n_jobs=n_jobs)
+        elif kind.lower() == "fukui donor":
+            val = orbitals.fukui_donor_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
+        elif kind.lower() == "fukui acceptor":
+            val = orbitals.fukui_acceptor_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
+        elif kind.lower() == "fukui dual":
+            val = orbitals.fukui_dual_value(
+                coords, n_jobs=n_jobs, delta=delta
+            )
+        else:
+            val = orbitals.mo_value(mo, coords, n_jobs=n_jobs)
 
         # write to a file
         for n1 in range(0, n_list[0]):
             for n2 in range(0, n_list[1]):
                 val_ndx = n1 * n_list[2] * n_list[1] + n2 * n_list[2]
-                val_subset = mo_val[val_ndx : val_ndx + n_list[2]]
-                for i, val in enumerate(val_subset):
-                    if abs(val) < 1e-30:
-                        val = 0
-                    s += "%13.5e" % val
+                val_subset = val[val_ndx : val_ndx + n_list[2]]
+                for i, v in enumerate(val_subset):
+                    if abs(v) < 1e-30:
+                        v = 0
+                    s += "%13.5e" % v
                     if (i + 1) % 6 == 0:
                         s += "\n"
                 if (i + 1) % 6 != 0:
@@ -827,6 +874,7 @@ class FileReader:
         freq_name=None,
         conf_name=None,
         nbo_name=None,
+        max_length=10000000,
     ):
         """
         :fname: either a string specifying the file name of the file to read
@@ -840,6 +888,9 @@ class FileReader:
             using the --hess runtype option)
         :nbo_name: Name of the file containing the NBO orbital coefficients
             in the AO basis. Only used when reading *.47 files.
+        :max_length: maximum array size to store from FCHK files
+            any array that would be larger than this will be the
+            size the array would be
         """
         # Initialization
         self.name = ""
@@ -864,8 +915,12 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(
-                get_all, just_geom, oniom=oniom,
-                freq_name=freq_name, conf_name=conf_name, nbo_name=nbo_name, 
+                get_all, just_geom,
+                freq_name=freq_name,
+                conf_name=conf_name,
+                nbo_name=nbo_name,
+                max_length=max_length,
+                oniom=oniom
             )
         elif isinstance(self.content, str):
             f = StringIO(self.content)
@@ -888,7 +943,7 @@ class FileReader:
             elif self.file_type == "dat":
                 self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
-                self.read_fchk(f, just_geom)
+                self.read_fchk(f, just_geom, max_length=max_length)
             elif self.file_type == "crest":
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
@@ -902,7 +957,8 @@ class FileReader:
 
     def read_file(
         self, get_all=False, just_geom=True,
-        freq_name=None, conf_name=None, nbo_name=None, oniom=False
+        freq_name=None, conf_name=None, nbo_name=None, oniome=False,
+        max_length=10000000,
     ):
         """
         Reads geometry information from fname.
@@ -910,6 +966,11 @@ class FileReader:
             get_all     If false (default), only keep the last geom
                         If true, self is last geom, but return list
                             of all others encountered
+            nbo_name    nbo output file containing coefficients to
+                        map AO's to orbitals
+            max_length  max. array size for arrays to store in FCHK
+                        files - anything larger will be the size
+                        the array would be
         """
         if os.path.isfile(self.name):
             f = open(self.name)
@@ -939,7 +1000,7 @@ class FileReader:
         elif self.file_type == "dat":
             self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
-            self.read_fchk(f, just_geom)
+            self.read_fchk(f, just_geom, max_length=max_length)
         elif self.file_type == "crest":
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
@@ -1001,8 +1062,8 @@ class FileReader:
                                     self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
-        if get_all:
-            self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
+        # if get_all:
+        #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
 
     def read_sd(self, f, get_all=False):
         self.all_geom = []
@@ -1083,6 +1144,7 @@ class FileReader:
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
+        uv_vis = ""
         def get_atoms(f, n):
             rv = []
             self.skip_lines(f, 1)
@@ -1195,7 +1257,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="dat"
+                        freq_str, hpmodes=False, style="psi4"
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -1342,6 +1404,44 @@ class FileReader:
                     else:
                         self.other[item] = float(line.split()[-2])
 
+                elif "Ground State -> Excited State Transitions" in line:
+                    self.skip_lines(f, 3)
+                    n += 3
+                    line = f.readline()
+                    s = ""
+                    while line.strip():
+                        s += line
+                        n += 1
+                        line = f.readline()
+                    
+                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+
+                elif "Excitation Energy" in line and "Rotatory" in line:
+                    self.skip_lines(f, 2)
+                    n += 2
+                    line = f.readline()
+                    s = ""
+                    while line.strip():
+                        s += line
+                        n += 1
+                        line = f.readline()
+                    
+                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+
+                elif re.search("\| State\s*\d+", line):
+                    # read energies from property calculation
+                    uv_vis += line
+
+                elif "Excited state properties:" in line:
+                    # read osc str or rotation from property calculation
+                    while line.strip():
+                        uv_vis += line
+                        n += 1
+                        line = f.readline()
+                    
+                    if "Oscillator" in uv_vis or "Rotation" in uv_vis:
+                        self.other["uv_vis"] = ValenceExcitations(uv_vis, style="psi4")
+
                 if "error" not in self.other:
                     for err in ERROR_PSI4:
                         if err in line:
@@ -1462,7 +1562,7 @@ class FileReader:
                     self.skip_lines(f, 4)
                     n += 5
                     line = f.readline()
-                    while not (stage == "IR" and line == "\n") and line:
+                    while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":
                             freq_str += line
 
@@ -1471,16 +1571,24 @@ class FileReader:
                             self.skip_lines(f, 6)
                             n += 6
 
+                        if "RAMAN SPECTRUM" in line:
+                            stage = "RAMAN"
+                            self.skip_lines(f, 2)
+                            n += 2
+
                         if "IR SPECTRUM" in line:
                             stage = "IR"
                             self.skip_lines(f, 2)
                             n += 2
 
+                        if "THERMOCHEMISTRY" in line:
+                            stage = "THERMO"
+
                         n += 1
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="out"
+                        freq_str, hpmodes=False, style="orca"
                     )
 
                 elif line.startswith("Temperature"):
@@ -1643,6 +1751,21 @@ class FileReader:
                         line = f.readline()
                         n += 1
 
+                elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
+                    s = ""
+                    done = False
+                    while not done:
+                        s += line
+                        n += 1
+                        line = f.readline()
+                        if (
+                            "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
+                            re.search("TDM done", line) or
+                            "TIMINGS" in line
+                        ):
+                            done = True
+                    self.other["uv_vis"] = ValenceExcitations(s, style="orca")
+
                 elif line.startswith("MOLECULAR ORBITALS"):
                     # read molecular orbitals
                     self.skip_lines(f, 1)
@@ -1683,7 +1806,7 @@ class FileReader:
                                 coeffs = []
                                 # there might not always be a space between the coefficients
                                 # so we can't just split(), but they are formatted(-ish)
-                                for coeff in re.findall("-?\d+\.\d+", line[16:]):
+                                for coeff in re.findall("-?\d+\.\d\d\d\d\d\d", line[16:]):
                                     coeffs.append(float(coeff))
                                 for coeff, mo in zip(coeffs, mo_coefficients):
                                     mo.append(coeff)
@@ -1697,6 +1820,14 @@ class FileReader:
                                     self.other[coeff_name].extend(
                                         mo_coefficients
                                     )
+                                    if not all(
+                                        len(coeff) == len(mo_coefficients[0])
+                                        for coeff in mo_coefficients
+                                    ):
+                                        self.LOG.warning(
+                                            "orbital coefficients may not "
+                                            "have been parsed correctly"
+                                        )
                                 mo_coefficients = [[] for x in orbit_nrgs]
                                 orbit_nrgs = []
                             line = f.readline()
@@ -1952,7 +2083,7 @@ class FileReader:
                 if "hpmodes" not in self.other:
                     self.other["hpmodes"] = False
                 self.other["frequency"] = Frequency(
-                    freq_str, self.other["hpmodes"]
+                    freq_str, hpmodes=self.other["hpmodes"]
                 )
 
             if "Anharmonic Infrared Spectroscopy" in line:
@@ -1971,8 +2102,8 @@ class FileReader:
                     if combinations and line == "\n":
                         combinations_read = True
 
-                self.other["frequency"].parse_gaussian_anharm(
-                    anharm_str.splitlines()
+                self.other["frequency"].parse_gaussian_lines(
+                    anharm_str.splitlines(), harmonic=False,
                 )
 
             # X matrix for anharmonic
@@ -1999,6 +2130,35 @@ class FileReader:
 
             if "Total X0" in line:
                 self.other["X0"] = float(line.split()[5])
+
+            # TD-DFT output
+            if line.strip().startswith("Ground to excited state"):
+                uv_vis = ""
+                highest_state = 0
+                done = False
+                read_states = False
+                while not done:
+                    n += 1
+                    uv_vis += line
+                    if not read_states and line.strip() and line.split()[0].isdigit():
+                        state = int(line.split()[0])
+                        if state > highest_state:
+                            highest_state = state
+                    if line.strip().startswith("Ground to excited state transition velocity"):
+                        read_states = True
+                    if re.search("Excited State\s*%i:" % highest_state, line):
+                        done = True
+                    if line.strip().startswith("Total Energy, E"):
+                        nrg = re.search(
+                            r"Total Energy, E\((\S+)\)\s*=\s*(-?\d+\.\d+)", line
+                        )
+                        self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
+                        self.other["energy"] = float(nrg.group(2))
+
+                    line = f.readline()
+                self.other["uv_vis"] = ValenceExcitations(
+                    uv_vis, style="gaussian"
+                )
 
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
@@ -2110,6 +2270,12 @@ class FileReader:
                 self.other["electric_potential"] = np.array(self.other["electric_potential"])
                 self.other["electric_field"] = np.array(self.other["electric_field"])
 
+            # optical features
+            if "[Alpha]" in line:
+                alpha_match = re.search("\[Alpha\].*\(\s*(.*\s?.*)\)\s*=\s*(-?\d+\.\d+)", line)
+                self.other["optical_rotation_(%s)" % alpha_match.group(1)] = \
+                float(alpha_match.group(2))
+
             # symmetry
             if "Full point group" in line:
                 self.other["full_point_group"] = line.split()[-3]
@@ -2200,6 +2366,8 @@ class FileReader:
                                     from AaronTools.finders import FlaggedAtoms
 
                                     constraints = {"atoms": FlaggedAtoms}
+                                    if not any(atom.flag for atom in self.atoms):
+                                        constraints = None
                                 job_type.append(
                                     OptimizationJob(constraints=constraints)
                                 )
@@ -2451,28 +2619,41 @@ class FileReader:
         self.other = other
         return
 
-    def read_fchk(self, f, just_geom=True):
-        def parse_to_list(i, lines, length, data_type):
+    def read_fchk(self, f, just_geom=True, max_length=10000000):
+        def parse_to_list(
+            i, lines, length, data_type, debug=False, max_length=max_length,
+        ):
             """takes a block in an fchk file and turns it into an array
             block headers all end with N=   <int>
             the length of the array will be <int>
             the data type is specified by data_type"""
             i += 1
-            line = lines[i]
+            line = f.readline()
+            # print("first line", line)
             items_per_line = len(line.split())
+            # print("items per line", items_per_line)
             total_items = items_per_line
-            num_lines = 1
-            while total_items < length:
-                total_items += items_per_line
-                num_lines += 1
+            num_lines = ceil(length / items_per_line)
 
-            block = ""
-            for line in lines[i : i + num_lines]:
-                block += " "
-                block += line
+            # print("lines in block", num_lines)
+
+            block = [line]
+            for k in range(0, num_lines - 1):
+                line = f.readline()
+                if max_length < length:
+                    continue
+                block.append(line)
+            
+            if max_length < length:
+                return length, i + num_lines
+            block = " ".join(block)
+
+            if debug:
+                print("full block")
+                print(block)
 
             return (
-                np.array([data_type(x) for x in block.split()]),
+                np.fromstring(block, count=length, dtype=data_type, sep=" "),
                 i + num_lines,
             )
 
@@ -2492,16 +2673,15 @@ class FileReader:
 
         theory = Theory()
 
-        lines = f.readlines()
+        line = f.readline()
 
         i = 0
-        while i < len(lines):
-            line = lines[i]
+        while line != "":
             if i == 0:
                 other["comment"] = line.strip()
             elif i == 1:
                 i += 1
-                line = lines[i]
+                line = f.readline()
                 job_info = line.split()
                 if job_info[0] == "SP":
                     theory.job_type = [SinglePointJob()]
@@ -2519,6 +2699,7 @@ class FileReader:
                     theory.basis = job_info[2]
 
                 i += 1
+                line = f.readline()
                 continue
 
             int_match = int_info.match(line)
@@ -2526,35 +2707,35 @@ class FileReader:
             char_match = char_info.match(line)
             if int_match is not None:
                 data = int_match.group(1)
+                # print("int", data)
                 value = int_match.group(3)
                 if data == "Charge" and not just_geom:
                     theory.charge = int(value)
                 elif data == "Multiplicity" and not just_geom:
                     theory.multiplicity = int(value)
                 elif data == "Atomic numbers":
-                    atom_numbers, i = parse_to_list(i, lines, int(value), int)
+                    atom_numbers, i = parse_to_list(i, f, int(value), int)
                 elif not just_geom:
                     if int_match.group(2):
                         other[data], i = parse_to_list(
-                            i, lines, int(value), int
+                            i, f, int(value), int
                         )
-                        continue
                     else:
                         other[data] = int(value)
 
             elif real_match is not None:
                 data = real_match.group(1)
+                # print("real", data)
                 value = real_match.group(3)
                 if data == "Current cartesian coordinates":
-                    atom_coords, i = parse_to_list(i, lines, int(value), float)
+                    atom_coords, i = parse_to_list(i, f, int(value), float)
                 elif data == "Total Energy":
                     other["energy"] = float(value)
                 elif not just_geom:
                     if real_match.group(2):
                         other[data], i = parse_to_list(
-                            i, lines, int(value), float
+                            i, f, int(value), float
                         )
-                        continue
                     else:
                         other[data] = float(value)
 
@@ -2565,11 +2746,17 @@ class FileReader:
             #         other[data] = lines[i + 1]
             #         i += 1
 
+            line = f.readline()
             i += 1
 
         self.other = other
         self.other["theory"] = theory
 
+        if isinstance(atom_coords, int):
+            raise RuntimeError(
+                "max. array size is insufficient to parse atom data\n"
+                "must be at least %i" % atom_coords
+            )
         coords = np.reshape(atom_coords, (len(atom_numbers), 3))
         for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
             atom = Atom(
@@ -2583,6 +2770,22 @@ class FileReader:
             self.other["orbitals"] = Orbitals(self)
         except NotImplementedError:
             pass
+        except (TypeError, ValueError) as err:
+            self.LOG.warning(
+                "could not create Orbitals, try increasing the max.\n"
+                "array size to read from FCHK files\n\n"
+                "%s" % err
+            )
+            for key in [
+                "Alpha MO coefficients", "Beta MO coefficients",
+                "Shell types", "Shell to atom map", "Contraction coefficients",
+                "Primitive exponents", "Number of primitives per shell",
+                "Coordinates of each shell",
+            ]:
+                if key in self.other and isinstance(self.other[key], int):
+                    self.LOG.warning(
+                        "size of %s is > %i: %i" % (key, max_length, self.other[key])
+                    )
 
     def read_crest(self, f, conf_name=None):
         """
@@ -2989,834 +3192,6 @@ class FileReader:
 
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
-
-
-@addlogger
-class Frequency:
-    """
-    ATTRIBUTES
-    :data: Data - contains frequencies, intensities, and normal mode vectors
-    :imaginary_frequencies: list(float)
-    :real_frequencies: list(float)
-    :lowest_frequency: float
-    :by_frequency: dict keyed by frequency containing intensities and vectors
-        {freq: {intensity: float, vector: np.array}}
-    :is_TS: bool - true if len(imaginary_frequencies) == 1, else False
-    """
-
-    LOG = None
-
-    class Data:
-        """
-        ATTRIBUTES
-        :frequency: float
-        :intensity: float
-        :vector: (2D array) normal mode vectors
-        :forcek: float
-        :symmetry: str
-        """
-
-        def __init__(
-            self,
-            frequency,
-            intensity=None,
-            vector=None,
-            forcek=None,
-            symmetry=None,
-        ):
-            if vector is None:
-                vector = []
-
-            self.frequency = frequency
-            self.intensity = intensity
-            self.symmetry = symmetry
-            self.vector = np.array(vector)
-            self.forcek = forcek
-
-    class AnharmonicData:
-        """
-        ATTRIBUTES
-        :frequency: float
-        :harmonic: Data() or None
-        :intensity: float
-        :overtones: list(AnharmonicData)
-        :combinations: dict(int: AnharmonicData)
-        """
-
-        def __init__(
-            self,
-            frequency,
-            intensity,
-            harmonic,
-        ):
-            self.frequency = frequency
-            self.harmonic = harmonic
-            if harmonic:
-                self.delta_anh = frequency - harmonic.frequency
-            self.intensity = intensity
-            self.overtones = []
-            self.combinations = dict()
-
-        def __lt__(self, other):
-            return self.frequency < other.frequency
-
-        @property
-        def harmonic_frequency(self):
-            return self.harmonic.frequency
-
-        @property
-        def harmonic_intensity(self):
-            return self.harmonic.intensity
-
-    def __init__(self, data, hpmodes=None, style="log", harmonic=True):
-        """
-        :data: should either be a str containing the lines of the output file
-            with frequency information, or a list of Data objects
-        :hpmodes: required when data is a string
-        :form:    required when data is a string; denotes file format (log, out, ...)
-        :harmonic: bool, data is for anharmonic frequencies
-        """
-        self.data = []
-        self.anharm_data = None
-        self.imaginary_frequencies = None
-        self.real_frequencies = None
-        self.lowest_frequency = None
-        self.by_frequency = {}
-        self.is_TS = None
-
-        if data and isinstance(data[0], Frequency.Data):
-            self.data = data
-            self.sort_frequencies()
-            return
-        elif data:
-            if hpmodes is None:
-                raise TypeError(
-                    "hpmode argument required when data is a string"
-                )
-        else:
-            return
-
-        lines = data.splitlines()
-        num_head = 0
-        for line in lines:
-            if "Harmonic frequencies" in line:
-                num_head += 1
-        if hpmodes and num_head != 2:
-            self.LOG.warning("Log file damaged, cannot get frequencies")
-            return
-
-        if harmonic:
-            if style == "log":
-                self.parse_gaussian_lines(lines, hpmodes)
-            elif style == "out":
-                self.parse_orca_lines(lines, hpmodes)
-            elif style == "dat":
-                self.parse_psi4_lines(lines, hpmodes)
-            else:
-                raise RuntimeError(
-                    "no harmonic frequency parser for %s files" % style
-                )
-        else:
-            if style == "log":
-                self.parse_gaussian_anharm(lines)
-            else:
-                raise RuntimeError(
-                    "no anharmonic frequency parser for %s files" % style
-                )
-
-        self.sort_frequencies()
-        return
-
-    def parse_psi4_lines(self, lines, hpmodes):
-        """parse lines of psi4 output related to frequencies
-        hpmodes is not used"""
-        # normal mode info appears in blocks, with up to 3 modes per block
-        # at the top is the index of the normal mode
-        # next is the frequency in wavenumbers (cm^-1)
-        # after a line of '-----' are the normal displacements
-        read_displacement = False
-        modes = []
-        for n, line in enumerate(lines):
-            if len(line.strip()) == 0:
-                read_displacement = False
-                for i, data in enumerate(self.data[-nmodes:]):
-                    data.vector = np.array(modes[i])
-
-            elif read_displacement:
-                info = [float(x) for x in line.split()[2:]]
-                for i, mode in enumerate(modes):
-                    mode.append(info[3 * i : 3 * (i + 1)])
-
-            elif line.strip().startswith("Vibration"):
-                nmodes = len(line.split()) - 1
-
-            elif line.strip().startswith("Freq"):
-                freqs = [float(x) for x in line.split()[2:]]
-                for freq in freqs:
-                    self.data.append(Frequency.Data(float(freq)))
-
-            elif line.strip().startswith("Force const"):
-                force_consts = [float(x) for x in line.split()[3:]]
-                for i, data in enumerate(self.data[-nmodes:]):
-                    data.forcek = force_consts[i]
-
-            elif line.strip().startswith("Irrep"):
-                # sometimes psi4 doesn't identify the irrep of a mode, so we can't
-                # use line.split()
-                symm = [
-                    x.strip() if x.strip() else None
-                    for x in [line[31:40], line[51:60], line[71:80]]
-                ]
-                for i, data in enumerate(self.data[-nmodes:]):
-                    data.symmetry = symm[i]
-
-            elif line.strip().startswith("----"):
-                read_displacement = True
-                modes = [[] for i in range(0, nmodes)]
-
-    def parse_orca_lines(self, lines, hpmodes):
-        """parse lines of orca output related to frequency
-        hpmodes is not currently used"""
-        # vibrational frequencies appear as a list, one per line
-        # block column 0 is the index of the mode
-        # block column 1 is the frequency in 1/cm
-        # skip line one b/c its just "VIBRATIONAL FREQUENCIES" with the way we got the lines
-        for n, line in enumerate(lines[1:]):
-            if line == "NORMAL MODES":
-                break
-
-            freq = line.split()[1]
-            self.data += [Frequency.Data(float(freq))]
-
-        # all 3N modes are printed with six modes in each block
-        # each column corresponds to one mode
-        # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
-        displacements = np.zeros((len(self.data), len(self.data)))
-        carryover = 0
-        start = 0
-        stop = 6
-        for i, line in enumerate(lines[n + 2 :]):
-            if "IR SPECTRUM" in line:
-                break
-
-            if i % (len(self.data) + 1) == 0:
-                carryover = i // (len(self.data) + 1)
-                start = 6 * carryover
-                stop = start + 6
-                continue
-
-            ndx = (i % (len(self.data) + 1)) - 1
-            mode_info = line.split()[1:]
-
-            displacements[ndx][start:stop] = [float(x) for x in mode_info]
-
-        # reshape columns into Nx3 arrays
-        for k, data in enumerate(self.data):
-            data.vector = np.reshape(
-                displacements[:, k], (len(self.data) // 3, 3)
-            )
-
-        # purge rotational and translational modes
-        n_data = len(self.data)
-        k = 0
-        while k < n_data:
-            if self.data[k].frequency == 0:
-                del self.data[k]
-                n_data -= 1
-            else:
-                k += 1
-
-        for k, line in enumerate(lines):
-            if line.strip() == "IR SPECTRUM":
-                order = lines[k + 1].split()
-                if "Int" in order:
-                    ndx = order.index("Int")
-                else:
-                    ndx = order.index("T**2") - 1
-                intensity_start = k + 2
-
-        # IR intensities are only printed for vibrational
-        # the first column is the index of the mode
-        # the second column is the frequency
-        # the third is the intensity, which we read next
-        t = 0
-        for line in lines[intensity_start:]:
-            if not re.match("\s*\d+:", line):
-                continue
-            ir_info = line.split()
-            inten = float(ir_info[ndx])
-            self.data[t].intensity = inten
-            t += 1
-
-    def parse_gaussian_lines(self, lines, hpmodes):
-        num_head = 0
-        idx = -1
-        modes = []
-        for k, line in enumerate(lines):
-            if "Harmonic frequencies" in line:
-                num_head += 1
-                if hpmodes and num_head == 2:
-                    # if hpmodes, want just the first set of freqs
-                    break
-                continue
-            if "Frequencies" in line and (
-                (hpmodes and "---" in line) or ("--" in line and not hpmodes)
-            ):
-                for i, symm in zip(
-                    float_num.findall(line), lines[k - 1].split()
-                ):
-                    self.data += [Frequency.Data(float(i), symmetry=symm)]
-                    modes += [[]]
-                    idx += 1
-                continue
-
-            if ("Force constants" in line and "---" in line and hpmodes) or (
-                "Frc consts" in line and "--" in line and not hpmodes
-            ):
-                force_constants = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
-                    self.data[i].forcek = float(force_constants[i])
-                continue
-
-            if "IR Inten" in line and (
-                (hpmodes and "---" in line) or (not hpmodes and "--" in line)
-            ):
-                intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
-                    self.data[i].intensity = float(intensities[i])
-                continue
-
-            if hpmodes:
-                match = re.search(
-                    "^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line
-                )
-                if match is None:
-                    continue
-                values = float_num.findall(line)
-                coord = int(values[0]) - 1
-                atom = int(values[1]) - 1
-                moves = values[3:]
-                for i, m in enumerate(moves):
-                    tmp = len(moves) - i
-                    mode = modes[-tmp]
-                    try:
-                        vector = mode[atom]
-                    except IndexError:
-                        vector = [0, 0, 0]
-                        modes[-tmp] += [[]]
-                    vector[coord] = m
-                    modes[-tmp][atom] = vector
-            else:
-                match = re.search("^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
-                if match is None:
-                    continue
-                values = float_num.findall(line)
-                atom = int(values[0]) - 1
-                moves = np.array(values[2:], dtype=np.float)
-                n_moves = len(moves) // 3
-                for i in range(-n_moves, 0):
-                    modes[i].append(
-                        moves[3 * n_moves + 3 * i : 4 * n_moves + 3 * i]
-                    )
-
-        for mode, data in zip(modes, self.data):
-            data.vector = np.array(mode, dtype=np.float64)
-        return
-
-    def parse_gaussian_anharm(self, lines):
-        reading_combinations = False
-        reading_overtones = False
-        reading_fundamentals = False
-
-        combinations = []
-        overtones = []
-        fundamentals = []
-
-        mode_re = re.compile("(\d+)\((\d+)\)")
-
-        for line in lines:
-            if "---" in line or "Mode" in line or not line.strip():
-                continue
-            if "Fundamental Bands" in line:
-                reading_fundamentals = True
-                continue
-            if "Overtones" in line:
-                reading_overtones = True
-                continue
-            if "Combination Bands" in line:
-                reading_combinations = True
-                continue
-
-            if reading_combinations:
-                info = line.split()
-                mode1 = mode_re.search(info[0])
-                mode2 = mode_re.search(info[1])
-                ndx_1 = int(mode1.group(1))
-                exp_1 = int(mode1.group(2))
-                ndx_2 = int(mode2.group(1))
-                exp_2 = int(mode2.group(2))
-                harm_freq = float(info[2])
-                anharm_freq = float(info[3])
-                anharm_inten = float(info[4])
-                harm_inten = 0
-                combinations.append(
-                    (
-                        ndx_1,
-                        ndx_2,
-                        exp_1,
-                        exp_2,
-                        anharm_freq,
-                        anharm_inten,
-                        harm_freq,
-                        harm_inten,
-                    )
-                )
-            elif reading_overtones:
-                info = line.split()
-                mode = mode_re.search(info[0])
-                ndx = int(mode.group(1))
-                exp = int(mode.group(2))
-                harm_freq = float(info[1])
-                anharm_freq = float(info[2])
-                anharm_inten = float(info[3])
-                harm_inten = 0
-                overtones.append(
-                    (
-                        ndx,
-                        exp,
-                        anharm_freq,
-                        anharm_inten,
-                        harm_freq,
-                        harm_inten,
-                    )
-                )
-            elif reading_fundamentals:
-                info = line.split()
-                harm_freq = float(info[1])
-                anharm_freq = float(info[2])
-                anharm_inten = float(info[4])
-                harm_inten = float(info[3])
-                fundamentals.append(
-                    (anharm_freq, anharm_inten, harm_freq, harm_inten)
-                )
-
-        self.anharm_data = []
-        for i, mode in enumerate(
-            sorted(fundamentals, key=lambda pair: pair[2])
-        ):
-            self.anharm_data.append(
-                self.AnharmonicData(mode[0], mode[1], harmonic=self.data[i])
-            )
-        for overtone in overtones:
-            ndx = len(fundamentals) - overtone[0]
-            data = self.anharm_data[ndx]
-            harm_data = self.Data(overtone[4], intensity=overtone[5])
-            data.overtones.append(
-                self.AnharmonicData(
-                    overtone[2], overtone[3], harmonic=harm_data
-                )
-            )
-        for combo in combinations:
-            ndx1 = len(fundamentals) - combo[0]
-            ndx2 = len(fundamentals) - combo[1]
-            data = self.anharm_data[ndx1]
-            harm_data = self.Data(combo[6], intensity=combo[7])
-            data.combinations[ndx2] = [
-                self.AnharmonicData(combo[4], combo[5], harmonic=harm_data)
-            ]
-
-    def sort_frequencies(self):
-        self.imaginary_frequencies = []
-        self.real_frequencies = []
-        for i, data in enumerate(self.data):
-            freq = data.frequency
-            if freq < 0:
-                self.imaginary_frequencies += [freq]
-            elif freq > 0:
-                self.real_frequencies += [freq]
-            self.by_frequency[freq] = {
-                "intensity": data.intensity,
-                "vector": data.vector,
-            }
-        if len(self.data) > 0:
-            self.lowest_frequency = self.data[0].frequency
-        else:
-            self.lowest_frequency = None
-        self.is_TS = True if len(self.imaginary_frequencies) == 1 else False
-
-    @property
-    def real_anharmonic_frequencies(self):
-        return [
-            mode.frequency for mode in self.anharm_data if mode.frequency > 0
-        ]
-
-    def get_ir_data(
-        self,
-        point_spacing=None,
-        fwhm=15.0,
-        plot_type="transmittance",
-        peak_type="pseudo-voigt",
-        voigt_mixing=0.5,
-        linear_scale=0.0,
-        quadratic_scale=0.0,
-        anharmonic=False,
-    ):
-        """
-        returns arrays of x_values, y_values for an IR plot
-        point_spacing - spacing between points, default is higher resolution around
-                        each peak (i.e. not uniform)
-                        this is pointless if peak_type == delta
-        fwhm - full width at half max in 1/cm
-        plot_type - transmittance or absorbance
-        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
-        voigt_mixing - fraction of pseudo-voigt that is gaussian
-        linear_scale - subtract linear_scale * frequency off each mode
-        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
-        """
-        # scale frequencies
-        if anharmonic and self.anharm_data:
-            frequencies = []
-            intensities = []
-            for data in self.anharm_data:
-                frequencies.append(data.frequency)
-                intensities.append(data.intensity)
-                for overtone in data.overtones:
-                    frequencies.append(overtone.frequency)
-                    intensities.append(overtone.intensity)
-                for key in data.combinations:
-                    for combo in data.combinations[key]:
-                        frequencies.append(combo.frequency)
-                        intensities.append(combo.intensity)
-            frequencies = np.array(frequencies)
-            intensities = np.array(intensities)
-        else:
-            if anharmonic:
-                self.LOG.warning(
-                    "plot of anharmonic frequencies requested but no anharmonic data"
-                    "is present"
-                )
-            frequencies = np.array(
-                [freq.frequency for freq in self.data if freq.frequency > 0]
-            )
-            intensities = [
-                freq.intensity for freq in self.data if freq.frequency > 0
-            ]
-
-        frequencies -= (
-            linear_scale * frequencies + quadratic_scale * frequencies ** 2
-        )
-
-        if point_spacing:
-            x_values = []
-            x = -point_spacing
-            stop = max(frequencies)
-            if peak_type.lower() != "delta":
-                stop += 5 * fwhm
-            while x < stop:
-                x += point_spacing
-                x_values.append(x)
-
-            x_values = np.array(x_values)
-
-        e_factor = -4 * np.log(2) / fwhm ** 2
-
-        if peak_type.lower() != "delta":
-            # get a list of functions
-            # we'll evaluate these at each x point later
-            functions = []
-            if not point_spacing:
-                x_values = np.linspace(
-                    0, max(frequencies) - 10 * fwhm, num=100
-                ).tolist()
-
-            for freq, intensity in zip(frequencies, intensities):
-                if intensity is not None:
-                    if not point_spacing:
-                        x_values.extend(
-                            np.linspace(
-                                max(freq - (3.5 * fwhm), 0),
-                                freq + (3.5 * fwhm),
-                                num=65,
-                            ).tolist()
-                        )
-                        x_values.append(freq)
-
-                    if peak_type.lower() == "gaussian":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
-                            * np.exp(e_factor * (x - x0) ** 2)
-                        )
-
-                    elif peak_type.lower() == "lorentzian":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
-                            * 0.5
-                            * (
-                                0.5
-                                * fwhm
-                                / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
-                            )
-                        )
-
-                    elif peak_type.lower() == "pseudo-voigt":
-                        functions.append(
-                            lambda x, x0=freq, inten=intensity: inten
-                            * (
-                                (1 - voigt_mixing)
-                                * 0.5
-                                * (
-                                    0.5
-                                    * fwhm
-                                    / ((x - x0) ** 2 + (0.5 * fwhm) ** 2)
-                                )
-                                + voigt_mixing
-                                * np.exp(e_factor * (x - x0) ** 2)
-                            )
-                        )
-
-            if not point_spacing:
-                x_values = np.array(list(set(x_values)))
-                x_values.sort()
-
-            y_values = np.sum([f(x_values) for f in functions], axis=0)
-
-        else:
-            x_values = []
-            y_values = []
-
-            for freq, intensity in zip(frequencies, intensities):
-                if intensity is not None:
-                    y_values.append(intensity)
-                    x_values.append(freq)
-
-            y_values = np.array(y_values)
-
-        if len(y_values) == 0:
-            self.LOG.warning("nothing to plot")
-            return None
-
-        y_values /= np.amax(y_values)
-
-        if plot_type.lower() == "transmittance":
-            y_values = np.array([10 ** (2 - y) for y in y_values])
-
-        return x_values, y_values
-
-    def plot_ir(
-        self,
-        figure,
-        centers=None,
-        widths=None,
-        exp_data=None,
-        plot_type="transmittance",
-        peak_type="pseudo-voigt",
-        reverse_x=True,
-        **kwargs,
-    ):
-        """
-        plot IR data on figure
-        figure - matplotlib figure
-        centers - array-like of float, plot is split into sections centered
-                  on the frequency specified by centers
-                  default is to not split into sections
-        widths - array-like of float, defines the width of each section
-        exp_data - other data to plot
-                   should be a list of (x_data, y_data, color)
-        reverse_x - if True, 0 cm^-1 will be on the right
-        plot_type - see Frequency.get_ir_data
-        peak_type - any value allowed by Frequency.get_ir_data
-        kwargs - keywords for Frequency.get_ir_data
-        """
-
-        data = self.get_ir_data(
-            plot_type=plot_type, peak_type=peak_type, **kwargs
-        )
-        if data is None:
-            return
-
-        x_values, y_values = data
-
-        if not centers:
-            # if no centers were specified, pretend they were so we
-            # can do everything the same way
-            axes = [figure.subplots(nrows=1, ncols=1)]
-            widths = [max(x_values)]
-            centers = [max(x_values) / 2]
-        else:
-            n_sections = len(centers)
-            figure.subplots_adjust(wspace=0.05)
-            # sort the sections so we don't jump around
-            widths = [
-                x
-                for _, x in sorted(
-                    zip(centers, widths),
-                    key=lambda p: p[0],
-                    reverse=reverse_x,
-                )
-            ]
-            centers = sorted(centers, reverse=reverse_x)
-
-            axes = figure.subplots(
-                nrows=1,
-                ncols=n_sections,
-                sharey=True,
-                gridspec_kw={"width_ratios": widths},
-            )
-            if not hasattr(axes, "__iter__"):
-                # only one section was specified (e.g. zooming in on a peak)
-                # make sure axes is iterable
-                axes = [axes]
-
-        for i, ax in enumerate(axes):
-            if i == 0:
-                if plot_type.lower() == "transmittance":
-                    ax.set_ylabel("Transmittance (%)")
-                else:
-                    ax.set_ylabel("Absorbance (arb.)")
-
-                # need to split plot into sections
-                # put a / on the border at the top and bottom borders
-                # of the plot
-                if len(axes) > 1:
-                    ax.spines["right"].set_visible(False)
-                    ax.tick_params(labelright=False, right=False)
-                    ax.plot(
-                        [1, 1],
-                        [0, 1],
-                        marker=((-1, -1), (1, 1)),
-                        markersize=5,
-                        linestyle="none",
-                        color="k",
-                        mec="k",
-                        mew=1,
-                        clip_on=False,
-                        transform=ax.transAxes,
-                    )
-
-            elif i == len(axes) - 1 and len(axes) > 1:
-                # last section needs a set of / too, but on the left side
-                ax.spines["left"].set_visible(False)
-                ax.tick_params(labelleft=False, left=False)
-                ax.plot(
-                    [0, 0],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    linestyle="none",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-
-            elif len(axes) > 1:
-                # middle sections need two sets of /
-                ax.spines["right"].set_visible(False)
-                ax.spines["left"].set_visible(False)
-                ax.tick_params(
-                    labelleft=False, labelright=False, left=False, right=False
-                )
-                ax.plot(
-                    [0, 0],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    linestyle="none",
-                    label="Silence Between Two Subplots",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-                ax.plot(
-                    [1, 1],
-                    [0, 1],
-                    marker=((-1, -1), (1, 1)),
-                    markersize=5,
-                    label="Silence Between Two Subplots",
-                    linestyle="none",
-                    color="k",
-                    mec="k",
-                    mew=1,
-                    clip_on=False,
-                    transform=ax.transAxes,
-                )
-
-            if peak_type.lower() != "delta":
-                ax.plot(
-                    x_values,
-                    y_values,
-                    color="k",
-                    linewidth=0.5,
-                    label="computed",
-                )
-
-            else:
-                if plot_type.lower() == "transmittance":
-                    ax.vlines(
-                        x_values,
-                        y_values,
-                        [100 for y in y_values],
-                        linewidth=0.5,
-                        colors=["k" for x in x_values],
-                        label="computed",
-                    )
-                    ax.hlines(
-                        100,
-                        0,
-                        max(4000, *x_values),
-                        linewidth=0.5,
-                        colors=["k" for y in y_values],
-                        label="computed",
-                    )
-
-                else:
-                    ax.vlines(
-                        x_values,
-                        [0 for y in y_values],
-                        y_values,
-                        linewidth=0.5,
-                        colors=["k" for x in x_values],
-                        label="computed",
-                    )
-                    ax.hlines(
-                        0,
-                        0,
-                        max(4000, *x_values),
-                        linewidth=0.5,
-                        colors=["k" for y in y_values],
-                        label="computed",
-                    )
-
-            if exp_data:
-                for x, y, color in exp_data:
-                    ax.plot(
-                        x,
-                        y,
-                        color=color,
-                        zorder=-1,
-                        linewidth=0.5,
-                        label="observed",
-                    )
-
-            center = centers[i]
-            width = widths[i]
-            high = center + width / 2
-            low = center - width / 2
-            if reverse_x:
-                ax.set_xlim(high, low)
-            else:
-                ax.set_xlim(low, high)
-
-        # b/c we're doing things in sections, we can't add an x-axis label
-        # well we could, but which section would be put it one?
-        # it wouldn't be centered
-        # so instead the x-axis label is this
-        figure.text(
-            0.5, 0.0, r"wavenumber (cm$^{-1}$)", ha="center", va="bottom"
-        )
 
 
 @addlogger
@@ -4484,6 +3859,8 @@ class Orbitals:
                 filereader.other["Beta MO coefficients"],
                 (self.n_mos, self.n_mos),
             )
+        else:
+            self.beta_coefficients = None
         self.n_alpha = filereader.other["Number of alpha electrons"]
         if "Number of beta electrons" in filereader.other:
             self.n_beta = filereader.other["Number of beta electrons"]
@@ -5197,6 +4574,58 @@ class Orbitals:
             self.n_alpha = filereader.other["n_alpha"]
             self.n_beta = filereader.other["n_beta"]
 
+    def _get_value(self, coords, arr):
+        """returns value for the MO coefficients in arr"""
+        ao = 0
+        prev_center = None
+        if coords.ndim == 1:
+            val = 0
+        else:
+            val = np.zeros(len(coords))
+        for coord, shell, n_func, shell_type in zip(
+            self.shell_coords,
+            self.basis_functions,
+            self.funcs_per_shell,
+            self.shell_types,
+        ):
+            # don't calculate distances until we find an AO
+            # in this shell that has a non-zero MO coefficient
+            if not np.count_nonzero(arr[ao : ao + n_func]):
+                ao += n_func
+                continue
+            # print(shell_type, arr[ao : ao + n_func])
+            # don't recalculate distances unless this shell's coordinates
+            # differ from the previous
+            if (
+                prev_center is None
+                or np.linalg.norm(coord - prev_center) > 1e-13
+            ):
+                prev_center = coord
+                d_coord = (coords - coord) / UNIT.A0_TO_BOHR
+                if coords.ndim == 1:
+                    r2 = np.dot(d_coord, d_coord)
+                else:
+                    r2 = np.sum(d_coord * d_coord, axis=1)
+            if coords.ndim == 1:
+                res = shell(
+                    r2,
+                    d_coord[0],
+                    d_coord[1],
+                    d_coord[2],
+                    arr[ao : ao + n_func],
+                )
+            else:
+                res = shell(
+                    r2,
+                    d_coord[:, 0],
+                    d_coord[:, 1],
+                    d_coord[:, 2],
+                    arr[ao : ao + n_func],
+                )
+            val += res
+            ao += n_func
+        return val
+
     def mo_value(self, mo, coords, alpha=True, n_jobs=1):
         """
         get the MO evaluated at the specified coords
@@ -5221,58 +4650,6 @@ class Orbitals:
 
         # calculate AO values for each shell at each point
         # multiply by the MO coefficient and add to val
-        def get_value(arr):
-            """returns value for the MO coefficients in arr"""
-            ao = 0
-            prev_center = None
-            if coords.ndim == 1:
-                val = 0
-            else:
-                val = np.zeros(len(coords))
-            for coord, shell, n_func, shell_type in zip(
-                self.shell_coords,
-                self.basis_functions,
-                self.funcs_per_shell,
-                self.shell_types,
-            ):
-                # don't calculate distances until we find an AO
-                # in this shell that has a non-zero MO coefficient
-                if not np.count_nonzero(arr[ao : ao + n_func]):
-                    ao += n_func
-                    continue
-                # print(shell_type, arr[ao : ao + n_func])
-                # don't recalculate distances unless this shell's coordinates
-                # differ from the previous
-                if (
-                    prev_center is None
-                    or np.linalg.norm(coord - prev_center) > 1e-13
-                ):
-                    prev_center = coord
-                    d_coord = (coords - coord) / UNIT.A0_TO_BOHR
-                    if coords.ndim == 1:
-                        r2 = np.dot(d_coord, d_coord)
-                    else:
-                        r2 = np.sum(d_coord * d_coord, axis=1)
-                if coords.ndim == 1:
-                    res = shell(
-                        r2,
-                        d_coord[0],
-                        d_coord[1],
-                        d_coord[2],
-                        arr[ao : ao + n_func],
-                    )
-                else:
-                    res = shell(
-                        r2,
-                        d_coord[:, 0],
-                        d_coord[:, 1],
-                        d_coord[:, 2],
-                        arr[ao : ao + n_func],
-                    )
-                val += res
-                ao += n_func
-            return val
-
         if n_jobs > 1:
             # get all shells grouped by coordinates
             # this reduces the number of times we will need to
@@ -5299,7 +4676,279 @@ class Orbitals:
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=n_jobs
             ) as executor:
-                out = [executor.submit(get_value, arr) for arr in arrays]
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
             return sum([shells.result() for shells in out])
-        val = get_value(coeff)
+        val = self._get_value(coords, coeff)
         return val
+
+    def density_value(
+        self,
+        coords,
+        n_jobs=1,
+        alpha_occ=None,
+        beta_occ=None,
+        low_mem=False,
+    ):
+        """
+        returns the eletron density
+        coords - coordinates to calculate e density at
+        n_jobs - number of concurrent threads to use in calculation
+        alpha_occ - array of alpha occupancies
+                    if not specified, defaults to lowest self.n_alpha
+                    orbitals
+        beta_occ - same at alpha_occ, but for beta electrons
+        """
+        if low_mem:
+            return self._low_mem_density_value(
+                coords,
+                n_jobs=n_jobs,
+                alpha_occ=alpha_occ,
+                beta_occ=beta_occ,
+            )
+        
+        # set default occupancy
+        if alpha_occ is None:
+            if not self.n_alpha:
+                self.LOG.warning("number of alpha electrons was not read")
+            alpha_occ = np.zeros(self.n_mos, dtype=int)
+            alpha_occ[0:self.n_alpha] = 1
+        if beta_occ is None:
+            beta_occ = np.zeros(self.n_mos, dtype=int)
+            beta_occ[0:self.n_beta] = 1
+        
+        # val is output data
+        # func_vals is the value of each basis function
+        # at all coordinates
+        if coords.ndim == 1:
+            val = 0
+            func_vals = np.zeros(
+                sum(len(f) for f in self.basis_functions), dtype="float32"
+            )
+        else:
+            val = np.zeros(len(coords))
+            func_vals = np.zeros(
+                (self.n_mos, *coords.shape,)
+            )
+
+        # get values of basis functions at all points
+        arrays = np.eye(self.n_mos)
+        if n_jobs > 1:
+            # get all shells grouped by coordinates
+            # this reduces the number of times we will need to
+            # calculate the distance from all the coords to
+            # a shell's center
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
+            data = np.array([shells.result() for shells in out])
+
+        else:
+            data = np.array([
+                self._get_value(coords, arr) for arr in arrays
+            ])
+
+        # multiply values by orbital coefficients and square
+        for i, occ in enumerate(alpha_occ):
+            if occ == 0:
+                continue
+            val += occ * np.dot(data.T, self.alpha_coefficients[i]) ** 2
+        
+        if self.beta_coefficients is not None:
+            for i, occ in enumerate(beta_occ):
+                if occ == 0:
+                    continue
+                val += occ * np.dot(data.T, self.beta_coefficients[i]) ** 2
+        else:
+            val *= 2
+
+        return val
+
+    def _low_mem_density_value(
+        self,
+        coords,
+        n_jobs=1,
+        alpha_occ=None,
+        beta_occ=None
+    ):
+        """
+        returns the eletron density
+        same at self.density_value, but uses less memory at
+        the cost of performance
+        """
+        # set initial occupancies
+        if alpha_occ is None:
+            if not self.n_alpha:
+                self.LOG.warning("number of alpha electrons was not read")
+            alpha_occ = np.zeros(self.n_mos, dtype=int)
+            alpha_occ[0:self.n_alpha] = 1
+        if beta_occ is None:
+            beta_occ = np.zeros(self.n_mos, dtype=int)
+            beta_occ[0:self.n_beta] = 1
+
+        # val is output array
+        if coords.ndim == 1:
+            val = 0
+        else:
+            val = np.zeros(len(coords), dtype="float32")
+
+        # calculate each occupied orbital
+        # square it can add to output
+        if n_jobs > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
+                out = [
+                    executor.submit(self.mo_value, i, coords, n_jobs=1)
+                    for i, occ in enumerate(alpha_occ) if occ != 0
+                ]
+            val += sum([occ * orbit.result() ** 2 for orbit, occ in zip(out, alpha_occ)])
+            
+            if self.beta_coefficients is not None:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=n_jobs
+                ) as executor:
+                    out = [
+                        executor.submit(self.mo_value, i, coords, alpha=False, n_jobs=1)
+                        for i, occ in enumerate(beta_occ) if occ != 0
+                    ]
+                val += sum([occ * orbit.result() ** 2 for orbit, occ in zip(out, beta_occ)])
+            else:
+                val *= 2
+        
+        else:
+            for i in range(0, self.n_alpha):
+                val += self.mo_value(i, coords) ** 2
+            
+            if self.beta_coefficients is not None:
+                for i in range(0, self.n_beta):
+                    val += self.mo_value(i, coords, alpha=False) ** 2
+            else:
+                val *= 2
+
+        return val
+
+    def fukui_donor_value(self, coords, delta=0.1, **kwargs):
+        """
+        orbital-weighted fukui donor function
+        electron density change for removing an electron
+        orbital weighting from DOI 10.1002/jcc.24699 accounts
+        for nearly degenerate orbitals
+        coords - coordinate to evaluate function at
+        delta - parameter for weighting
+        kwargs - passed to density_value
+        """
+        CITATION = "doi:10.1002/jcc.24699"
+        self.LOG.citation(CITATION)
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            minus_e = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                minus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            minus_e /= sum(minus_e)
+            minus_density = self.density_value(
+                coords, alpha_occ=minus_e, beta_occ=None, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = beta_occ = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(0, self.n_beta):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ /= sum(alpha_occ)
+            beta_occ /= sum(beta_occ)
+            minus_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return minus_density
+    
+    def fukui_acceptor_value(self, coords, delta=0.1, **kwargs):
+        """
+        orbital-weighted fukui acceptor function
+        electron density change for removing an electron
+        orbital weighting from DOI 10.1021/acs.jpca.9b07516 accounts
+        for nearly degenerate orbitals
+        coords - coordinate to evaluate function at
+        delta - parameter for weighting
+        kwargs - passed to density_value
+        """
+        CITATION = "doi:10.1021/acs.jpca.9b07516"
+        self.LOG.citation(CITATION)
+        
+        alpha_occ = np.zeros(self.n_mos)
+        alpha_occ[self.n_alpha - 1] = 1
+        beta_occ = None
+        if self.beta_coefficients is not None:
+            beta_occ = np.zeros(self.n_mos)
+            beta_occ[self.n_beta - 1] = 1
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            plus_e = np.zeros(self.n_mos)
+            for i in range(self.n_alpha, self.n_mos):
+                plus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            plus_e /= sum(plus_e)
+            plus_density = self.density_value(
+                coords, alpha_occ=plus_e, beta_occ=beta_occ, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = np.zeros(self.n_mos)
+            beta_occ = np.zeros(self.n_mos)
+            for i in range(self.n_alpha, self.n_mos):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(self.n_beta, self.n_mos):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ /= sum(alpha_occ)
+            beta_occ /= sum(beta_occ)
+            plus_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return plus_density
+
+    def fukui_dual_value(self, *args, **kwargs):
+        return self.fukui_acceptor_value(*args, **kwargs) - self.fukui_donor_value(*args, **kwargs)

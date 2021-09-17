@@ -3,7 +3,9 @@
 import argparse
 import sys
 
+from AaronTools.comp_output import CompOutput
 from AaronTools.fileIO import FileReader
+from AaronTools.spectra import Frequency
 from AaronTools.utils.utils import get_filename, glob_files
 
 from matplotlib import rcParams
@@ -16,7 +18,7 @@ rcParams["savefig.dpi"] = 300
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
 plot_types = ["transmittance", "absorbance", "vcd", "raman"]
-
+weight_types = ["electronic", "zero-point", "enthalpy", "free", "quasi-rrho", "quasi-harmonic"]
 
 def peak_type(x):
     out = [y for y in peak_types if y.startswith(x)]
@@ -38,9 +40,19 @@ def plot_type(x):
         )
     )
 
+def weight_type(x):
+    out = [y for y in weight_types if y.startswith(x)]
+    if len(out) == 1:
+        return out[0]
+    raise TypeError(
+        "weight type must be one of: %s" % ", ".join(
+            weight_types
+        )
+    )
+
 
 ir_parser = argparse.ArgumentParser(
-    description="plot IR spectrum",
+    description="plot a Boltzmann-averaged IR spectrum",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -56,7 +68,9 @@ ir_parser.add_argument(
     type=str,
     default=None,
     dest="outfile",
-    help="output destination\nDefault: show plot",
+    help="output destination\n"
+    "if the file extension is .csv, a CSV file will be written\n"
+    "Default: show plot",
 )
 
 ir_parser.add_argument(
@@ -115,6 +129,7 @@ ir_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
+
 scale_options = ir_parser.add_argument_group("scale frequencies")
 scale_options.add_argument(
     "-l", "--linear-scale",
@@ -157,7 +172,7 @@ center_centric.add_argument(
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
     default=None,
-    help="width of each section specified by -c/--centers\n"
+    help="width of each section specified by -sc/--section-centers\n"
     "should be separated by commas, with one for each section"
 )
 
@@ -191,6 +206,46 @@ ir_parser.add_argument(
     dest="exp_data",
     help="CSV file containing observed spectrum data, which will be plotted on top\n"
     "frequency job files should not come directly after this flag"
+)
+
+energy_options = ir_parser.add_argument_group("energy weighting")
+energy_options.add_argument(
+    "-w", "--weighting-energy",
+    type=weight_type,
+    dest="weighting",
+    default="quasi-rrho",
+    choices=weight_types,
+    help="type of energy to use for Boltzmann weighting\n"
+    "Default: quasi-rrho",
+)
+
+energy_options.add_argument(
+    "-sp", "--single-point-files",
+    type=str,
+    nargs="+",
+    default=None,
+    required=False,
+    dest="sp_files",
+    help="single point energies to use for thermochem\n"
+    "Default: energies from INFILES"
+)
+
+energy_options.add_argument(
+    "-temp", "--temperature",
+    type=float,
+    dest="temperature",
+    default=298.15,
+    help="temperature (K) to use for weighting\n"
+    "Default: 298.15",
+)
+
+energy_options.add_argument(
+    "-w0", "--frequency-cutoff",
+    type=float,
+    dest="w0",
+    default=100,
+    help="cutoff frequency for quasi free energy corrections (1/cm)\n" +
+    "Default: 100 cm^-1",
 )
 
 ir_parser.add_argument(
@@ -229,19 +284,75 @@ if args.exp_data:
     exp_data = []
     for f in args.exp_data:
         data = np.loadtxt(f, delimiter=",")
-        
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
+compouts = []
 for f in glob_files(args.infiles, parser=ir_parser):
     fr = FileReader(f, just_geom=False)
+    co = CompOutput(fr)
+    compouts.append(co)
 
-    freq = fr.other["frequency"]
+sp_cos = compouts
+if args.sp_files:
+    sp_cos = []
+    for f in glob_files(args.sp_files, parser=ir_parser):
+        fr = FileReader(f, just_geom=False)
+        co = CompOutput(fr)
+        sp_cos.append(co)
 
+if args.weighting == "electronic":
+    weighting = CompOutput.ELECTRONIC_ENERGY
+elif args.weighting == "zero-point":
+    weighting = CompOutput.ZEROPOINT_ENERGY
+elif args.weighting == "enthalpy":
+    weighting = CompOutput.RRHO_ENTHALPY
+elif args.weighting == "free":
+    weighting = CompOutput.RRHO
+elif args.weighting == "quasi-rrho":
+    weighting = CompOutput.QUASI_RRHO
+elif args.weighting == "quasi-harmonic":
+    weighting = CompOutput.QUASI_HARMONIC
+
+for i, (freq, sp) in enumerate(zip(compouts, sp_cos)):
+    rmsd = freq.geometry.RMSD(sp.geometry, sort=True)
+    if rmsd > 1e-2:
+        print(
+            "single point energy structure might not match frequency file:\n"
+            "%s %s RMSD = %.2f" % (sp.geometry.name,  freq.geometry.name, rmsd)
+        )
+    for freq2 in compouts[:i]:
+        rmsd = freq.geometry.RMSD(freq2.geometry, sort=True)
+        if rmsd < 1e-2:
+            print(
+                "two frequency files appear to be identical:\n"
+                "%s %s RMSD = %.2f" % (freq2.geometry.name,  freq.geometry.name, rmsd)
+            )
+
+weights = CompOutput.boltzmann_weights(
+    compouts,
+    nrg_cos=sp_cos,
+    temperature=args.temperature,
+    weighting=weighting,
+    v0=args.w0,
+)
+
+data_attr = "data"
+if all(co.frequency.anharm_data for co in compouts) and args.anharmonic:
+    data_attr = "anharm_data"
+
+
+mixed_freq = Frequency.get_mixed_signals(
+    [co.frequency for co in compouts],
+    weights=weights,
+    data_attr=data_attr,
+)
+
+if not args.outfile or not args.outfile.lower().endswith("csv"):
     fig = plt.gcf()
     fig.clear()
-
-    freq.plot_ir(
+    
+    mixed_freq.plot_ir(
         fig,
         centers=centers,
         widths=widths,
@@ -254,18 +365,63 @@ for f in glob_files(args.infiles, parser=ir_parser):
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
-        anharmonic=freq.anharm_data and args.anharmonic,
+        anharmonic=mixed_freq.anharm_data and args.anharmonic,
         rotate_x_ticks=args.rotate_x_ticks,
     )
-
+    
     if args.fig_width:
         fig.set_figwidth(args.fig_width)
-
+    
     if args.fig_height:
         fig.set_figheight(args.fig_height)
-
+    
     if args.outfile:
-        outfile_name = args.outfile.replace("$INFILE", get_filename(f))
-        plt.savefig(outfile_name, dpi=300)
+        plt.savefig(args.outfile, dpi=300)
+
     else:
         plt.show()
+
+else:
+    intensity_attr = "intensity"
+    if args.plot_type.lower() == "vcd":
+        intensity_attr = "rotation"
+    if args.plot_type.lower() == "raman":
+        intensity_attr = "raman_activity"
+
+    funcs, x_positions, intensities = mixed_freq.get_spectrum_functions(
+        fwhm=args.fwhm,
+        peak_type=args.peak_type,
+        voigt_mixing=args.voigt_mixing,
+        linear_scale=args.linear_scale,
+        quadratic_scale=args.quadratic_scale,
+        data_attr="anharm_data" if mixed_freq.anharm_data and args.anharmonic else "data",
+        intensity_attr=intensity_attr,
+    )
+
+    x_values, y_values, _ = mixed_freq.get_plot_data(
+        funcs,
+        x_positions,
+        point_spacing=args.point_spacing,
+        transmittance=args.plot_type == "transmittance",
+        peak_type=args.peak_type,
+        fwhm=args.fwhm,
+    )
+
+    if args.plot_type.lower() == "transmittance":
+        y_label = "Transmittance (%)"
+    elif args.plot_type.lower() == "absorbance":
+        y_label = "Absorbance (arb.)"
+    elif args.plot_type.lower() == "vcd":
+        y_label = "delta_Absorbance (arb.)"
+    elif args.plot_type.lower() == "raman":
+        y_label = "Activity (arb.)"
+
+
+    with open(args.outfile, "w") as f:
+        s = ",".join(["frequency (cm^-1)", y_label])
+        s += "\n"
+        for x, y in zip(x_values, y_values):
+            s += ",".join(["%.4f" % z for z in [x, y]])
+            s += "\n"
+        f.write(s)
+

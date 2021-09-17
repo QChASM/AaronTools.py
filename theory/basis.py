@@ -5,6 +5,7 @@ used for specifying basis information for a Theory()
 import os
 from warnings import warn
 
+from AaronTools import addlogger
 from AaronTools.const import ELEMENTS
 from AaronTools.finders import (
     AnyNonTransitionMetal,
@@ -22,6 +23,7 @@ from AaronTools.theory import (
 )
 
 
+@addlogger
 class Basis:
     """
     has attributes:
@@ -40,6 +42,8 @@ class Basis:
                     updated with Bases.refresh_atoms
     default_notany_atoms - finder for atoms that are not in the given layer
     """
+
+    LOG = None
 
     default_elements = [AnyTransitionMetal(), AnyNonTransitionMetal()]
 
@@ -204,6 +208,26 @@ class Basis:
                         return False
 
         return True
+
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
 
     def refresh_elements(self, geometry):
         """sets self's elements for the geometry"""
@@ -405,8 +429,11 @@ class ECP(Basis):
         return warning
 
 
+@addlogger
 class BasisSet:
     """used to more easily get basis set info for writing input files"""
+
+    LOG = None
 
     ORCA_AUX = ["C", "J", "JK", "CABS", "OptRI CABS"]
     PSI4_AUX = [
@@ -573,6 +600,26 @@ class BasisSet:
                 return False
 
         return True
+    
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
 
     def add_ecp(self, ecp):
         """add ecp to this BasisSet

@@ -34,7 +34,7 @@ info = cube_parser.add_mutually_exclusive_group(required=False)
 info.add_argument(
     "-mo", "--molecular-orbital",
     dest="mo_ndx",
-    default=None,
+    default="homo",
     help="index of molecular orbital to print (0-indexed)\n"
     "can also give 'homo' or 'lumo' for highest occupied or\n"
     "lowest unoccupied molecular orbital\n"
@@ -44,8 +44,51 @@ info.add_argument(
     "-ao", "--atomic-orbital",
     dest="ao_ndx",
     default=None,
-    type=int,
     help="index of atomic orbital to print (0-indexed)"
+)
+
+info.add_argument(
+    "-ed", "--electron-density",
+    dest="density",
+    default=False,
+    action="store_true",
+    help="print electron density"
+)
+
+info.add_argument(
+    "-fd", "--fukui-donor",
+    dest="fukui_donor",
+    default=False,
+    action="store_true",
+    help="print Fukui donor values\n"
+    "see DOI 10.1002/jcc.24699 for weighting method"
+)
+
+info.add_argument(
+    "-fa", "--fukui-acceptor",
+    dest="fukui_acceptor",
+    default=False,
+    action="store_true",
+    help="print Fukui acceptor values\n"
+    "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
+)
+
+info.add_argument(
+    "-f2", "--fukui-dual",
+    dest="fukui_dual",
+    default=False,
+    action="store_true",
+    help="print Fukui dual values\n"
+    "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
+)
+
+cube_parser.add_argument(
+    "-d", "--delta",
+    type=float,
+    dest="delta",
+    default=0.1,
+    help="delta parameter for weighting orbitals in Fukui functions\n"
+    "Default: 0.1 Hartree",
 )
 
 cube_parser.add_argument(
@@ -96,15 +139,43 @@ cube_parser.add_argument(
     "ignored unless input file is a *.47 file"
 )
 
+cube_parser.add_argument(
+    "-m", "--max-array",
+    type=int,
+    default=10000000,
+    dest="max_length",
+    help="max. array size to read from FCHK files\n"
+    "a reasonable size for setting parsing orbital data\n"
+    "can improve performance when reading large FCHK files\n"
+    "too small of a value will prevent orbital data from\n"
+    "being parsed\n"
+    "Default: 10000000",
+)
+
 
 args = cube_parser.parse_args()
 
-if args.mo_ndx and args.mo_ndx.isnumeric():
-    args.mo_ndx = int(args.mo_ndx)
+kind = args.mo_ndx
+
+if args.density:
+    kind = "density"
+elif args.fukui_donor:
+    kind = "fukui donor"
+elif args.fukui_acceptor:
+    kind = "fukui acceptor"
+elif args.fukui_dual:
+    kind = "fukui dual"
+elif args.ao_ndx:
+    kind = "AO %s" % args.ao_ndx
+elif args.mo_ndx.isdigit():
+    kind = "MO %s" % args.mo_ndx
+
 
 for f in glob_files(args.infile, parser=cube_parser):
     if isinstance(f, str):
-        infile = FileReader(f, just_geom=False, nbo_name=args.nbo_name)
+        infile = FileReader(
+            f, just_geom=False, nbo_name=args.nbo_name, max_length=args.max_length
+        )
     elif len(sys.argv) >= 1:
         infile = FileReader(
             ("from stdin", "fchk", f),
@@ -118,11 +189,11 @@ for f in glob_files(args.infile, parser=cube_parser):
         outfile=False,
         orbitals=infile.other["orbitals"],
         padding=args.padding,
-        mo=args.mo_ndx,
-        ao=args.ao_ndx,
+        kind=kind,
         spacing=args.spacing,
         style="cube",
         xyz=args.xyz,
+        delta=args.delta,
         n_jobs=args.n_jobs,
     )
     

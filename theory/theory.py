@@ -1,6 +1,7 @@
 """for constructing headers and footers for input files"""
 import re
 
+from AaronTools import addlogger
 from AaronTools.const import ELEMENTS, UNIT
 from AaronTools.theory import (
     GAUSSIAN_COMMENT,
@@ -31,14 +32,14 @@ from AaronTools.theory import (
     SQM_QMMM,
 )
 from AaronTools.utils.utils import combine_dicts
+from AaronTools.theory.basis import ECP, Basis, BasisSet
+from AaronTools.theory.emp_dispersion import EmpiricalDispersion
+from AaronTools.theory.grid import IntegrationGrid
+from AaronTools.theory.job_types import JobType, SinglePointJob
+from AaronTools.theory.method import KNOWN_SEMI_EMPIRICAL, KNOWN_MM, Method, SAPTMethod
 
-from .basis import ECP, Basis, BasisSet
-from .emp_dispersion import EmpiricalDispersion
-from .grid import IntegrationGrid
-from .job_types import JobType, SinglePointJob
-from .method import KNOWN_SEMI_EMPIRICAL, KNOWN_MM, Method, SAPTMethod
 
-
+@addlogger
 class Theory:
     """
     A Theory object can be used to create an input file for different QM software.
@@ -107,6 +108,8 @@ class Theory:
         "dft_radial_points",
         "dft_spherical_points",
     ]
+    
+    LOG = None
 
     def __init__(
         self,
@@ -404,6 +407,26 @@ class Theory:
 
         return True
 
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
+ 
     def make_header(
         self,
         geom=None,
@@ -1223,6 +1246,8 @@ class Theory:
 
             if GAUSSIAN_GEN_ECP in basis_info:
                 out_str += basis_info[GAUSSIAN_GEN_ECP]
+
+                out_str += "\n"
 
         # post info e.g. for NBOREAD
         if GAUSSIAN_POST in other_kw_dict:

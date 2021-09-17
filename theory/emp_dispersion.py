@@ -1,9 +1,14 @@
 """used for specifying emperical dispersion for Theory() instances"""
 
+from AaronTools import addlogger
 from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE
 
+@addlogger
 class EmpiricalDispersion:
     """try to keep emerpical dispersion keywords and settings consistent across file types"""
+    
+    LOG = None
+    
     def __init__(self, name):
         """name can be (availability may vary):
             Grimme D2 (or D2, -D2, GD2)
@@ -43,6 +48,26 @@ class EmpiricalDispersion:
                 return True
         
         return False
+
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
 
     def get_gaussian(self):
         """Acceptable dispersion methods for Gaussian are:

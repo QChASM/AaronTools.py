@@ -71,7 +71,7 @@ cone_parser.add_argument(
     default="exact",
     dest="method",
     help="cone angle type\n" +
-    "Tolman: Tolman's method for asymmetric mono- and bidentate ligands\n" +
+    "Tolman: Tolman's method for unsymmetric mono- and bidentate ligands\n" +
     "        see J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI:\n" +
     "        10.1021/ja00808a009)\n" +
     "Exact: (Default) Allen's method for an all-encompassing cone\n" +

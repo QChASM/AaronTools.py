@@ -610,6 +610,16 @@ class Substituent(Geometry):
         angle = np.arccos(np.dot(bond, x_axis))
         self.rotate(rot_axis, angle)
 
+    def align_to_x_axis(self):
+        bond = self.bond(self.end, self.atoms[0])
+        x_axis = np.array([1.0, 0.0, 0.0])
+        rot_axis = np.cross(bond, x_axis)
+        if np.linalg.norm(rot_axis) > 1e-4:
+            bond /= np.linalg.norm(bond)
+            rot_axis /= np.linalg.norm(rot_axis)
+            angle = np.arccos(np.dot(bond, x_axis))
+            self.rotate(rot_axis, angle, center=self.end.coords)
+
     def sub_rotate(self, angle=None, reverse=False):
         """
         rotates substituent about bond w/ rest of geometry

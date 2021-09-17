@@ -3,6 +3,7 @@ used for specifying integration grids for DFT calculations
 """
 
 import re
+from AaronTools import addlogger
 from AaronTools.theory import GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS
 
 
@@ -11,6 +12,9 @@ class IntegrationGrid:
     used to try to keep integration grid settings more
     easily when writing different input files
     """
+    
+    LOG = None
+    
     def __init__(self, name):
         """
         name: str, Gaussian keyword (e.g. SuperFineGrid),
@@ -28,8 +32,28 @@ class IntegrationGrid:
             return False
         if self.name == other.name:
             return True
-        return self.get_gaussian[0] == other.get_gaussian[0]
+        return self.get_gaussian()[0] == other.get_gaussian()[0]
 
+    def copy(self):
+        new_dict = dict()
+        for key, value in self.__dict__.items():
+            try:
+                new_dict[key] = value.copy()
+            except AttributeError:
+                new_dict[key] = value
+                # ignore chimerax objects so seqcrow doesn't print a
+                # warning when a geometry is copied
+                if "chimerax" in value.__class__.__module__:
+                    continue
+                if value.__class__.__module__ != "builtins":
+                    self.LOG.warning(
+                        "No copy method for {}: in-place changes may occur".format(
+                            type(value)
+                        )
+                    )
+        
+        return self.__class__(**new_dict)
+ 
     def get_gaussian(self):
         """
         gets gaussian integration grid info and a warning as tuple(dict, str or None)

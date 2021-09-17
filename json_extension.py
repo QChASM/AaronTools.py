@@ -7,8 +7,14 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
-from AaronTools.fileIO import Frequency
-from AaronTools.finders import AnyNonTransitionMetal, AnyTransitionMetal, NotAny
+from AaronTools.spectra import Frequency, HarmonicVibration
+from AaronTools.finders import (
+    Finder,
+    AnyNonTransitionMetal,
+    AnyTransitionMetal,
+    NotAny,
+    get_class,
+)
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
 from AaronTools.theory import (
@@ -40,6 +46,8 @@ class ATEncoder(json.JSONEncoder):
             return self._encode_frequency(obj)
         elif isinstance(obj, Theory):
             return self._encode_theory(obj)
+        elif isinstance(obj, Finder):
+            return self._encode_finder(obj)
         else:
             super().default(obj)
 
@@ -148,7 +156,7 @@ class ATEncoder(json.JSONEncoder):
         if obj.empirical_dispersion:
             rv["disp"] = obj.empirical_dispersion.name
         if obj.solvent:
-            rv["solvent model"] = obj.solvent.name
+            rv["solvent model"] = obj.solvent.solvent_model
             rv["solvent"] = obj.solvent.solvent
         if obj.processors:
             rv["nproc"] = obj.processors
@@ -227,6 +235,15 @@ class ATEncoder(json.JSONEncoder):
 
         return rv
 
+    def _encode_finder(self, obj):
+        rv = {"_type": "Finder"}
+        rv["_spec_type"] = obj.__class__.__name__
+        rv["kwargs"] = obj.__dict__
+        for kw in rv["kwargs"]:
+            if isinstance(rv["kwargs"][kw], np.ndarray):
+                rv["kwargs"][kw] = rv["kwargs"][kw].tolist()
+        return rv
+
 
 class ATDecoder(json.JSONDecoder):
     with_progress = False
@@ -251,6 +268,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_comp_output(obj)
         if obj["_type"] == "Theory":
             return self._decode_theory(obj)
+        if obj["_type"] == "Finder":
+            return self._decode_finder(obj)
 
     def _decode_atom(self, obj):
         kwargs = {}
@@ -290,8 +309,10 @@ class ATDecoder(json.JSONDecoder):
     def _decode_frequency(self, obj):
         data = []
         for d in obj["data"]:
+            kw = {k:v for k, v in d.items()}
+            freq = kw.pop("frequency")
             data += [
-                Frequency.Data(d["frequency"], d["intensity"], d["vector"])
+                HarmonicVibration(freq, **kw)
             ]
         return Frequency(data)
 
@@ -396,3 +417,17 @@ class ATDecoder(json.JSONDecoder):
             rv.kwargs = obj["other"]
         
         return rv
+
+    def _decode_finder(self, obj):
+        specific_type = obj["_spec_type"]
+        kwargs = obj["kwargs"]
+        cls = get_class(specific_type)
+        args = []
+        sig = signature(cls.__init__)
+        for param in sig.parameters.values():
+            if param.name in kwargs and (
+                param.kind == param.POSITIONAL_ONLY or
+                param.kind == param.POSITIONAL_OR_KEYWORD
+            ):
+                args.append(kwargs.pop(param.name))
+        return cls(*args, **kwargs)

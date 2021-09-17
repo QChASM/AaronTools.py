@@ -769,5 +769,6 @@ for f in glob_files(args.infile, parser=theory_parser):
         )
         print(out)
     
-    for warning in warnings:
-        Geometry.LOG.warning(warning)
+    if warnings:
+        for warning in warnings:
+            Geometry.LOG.warning(warning)

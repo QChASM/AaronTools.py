@@ -2,7 +2,7 @@ import collections.abc
 import os
 import re
 from collections import OrderedDict
-from math import acos, sin, cos
+from math import acos, sin, cos, sqrt
 
 import AaronTools.atoms as Atoms
 import numpy as np
@@ -539,19 +539,14 @@ def fibonacci_sphere(radius=1, center=np.zeros(3), num=500):
     """
     # generate a grid of points on the unit sphere
     grid = np.zeros((num, 3))
-    d_theta = np.pi * (3.0 - np.sqrt(5.0))
-    dy = 2.0 / (num - 1)
-
-    for i in range(0, num):
-        y = 1 - i * dy
-        r = np.sqrt(1 - y ** 2)
-
-        theta = i * d_theta
-
-        x = np.cos(theta) * r
-        z = np.sin(theta) * r
-
-        grid[i] = np.array([x, y, z])
+    
+    i = np.arange(0, num) + 0.5
+    phi = np.arccos(1 - 2 * i / num)
+    ratio = (1 + sqrt(5.)) / 2
+    theta = 2 * np.pi * i / ratio
+    grid[:, 0] = np.cos(theta) * np.sin(phi)
+    grid[:, 1] = np.sin(theta) * np.sin(phi)
+    grid[:, 2] = np.cos(phi)
 
     # scale the points to the specified radius and move the center
     grid *= radius
@@ -625,17 +620,13 @@ def perp_vector(vec):
     """
     vec = np.squeeze(vec)
     if vec.ndim == 1:
-        out_vec = np.zeros(len(vec))
-        for k in range(0, len(vec)):
-            if vec[k] != 0:
-                if k == 0:
-                    out_vec[1] = vec[k]
-                    out_vec[0] = vec[1]
-                else:
-                    out_vec[0] = vec[k]
-                    out_vec[1] = vec[0]
-                break
-        else:
+        out_vec = np.roll(vec, 1)
+        if all(x == vec[0] for x in vec):
+            for k in range(0, len(vec)):
+                if out_vec[k] != 0:
+                    out_vec[k] *= -1
+                    break
+        if np.linalg.norm(vec) == 0:
             # a zero-vector was given
             return np.ones(len(vec)) / len(vec)
 
@@ -737,3 +728,20 @@ def angle_between_vectors(v1, v2, renormalize=True):
 
     # math.acos is faster than numpy.arccos for non-arrays
     return acos(t)
+
+
+def is_alpha(test):
+    rv = re.search("^[a-zA-Z]+$", test)
+    return bool(rv)
+
+
+def is_int(test):
+    rv = re.search("^[+-]?\d+$", test)
+    return bool(rv)
+
+
+def is_num(test):
+    rv = re.search("^[+-]?\d+\.?\d*", test)
+    return bool(rv)
+
+float_num = re.compile("[-+]?\d+\.?\d*")

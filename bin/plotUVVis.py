@@ -15,7 +15,7 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = ["transmittance", "absorbance", "vcd", "raman"]
+plot_types = ["transmittance", "transmittance-velocity", "uv-vis", "uv-vis-velocity", "ecd", "ecd-velocity"]
 
 
 def peak_type(x):
@@ -39,19 +39,19 @@ def plot_type(x):
     )
 
 
-ir_parser = argparse.ArgumentParser(
-    description="plot IR spectrum",
+uvvis_parser = argparse.ArgumentParser(
+    description="plot UV/vis spectrum",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "infiles", metavar="files",
     type=str,
     nargs="+",
-    help="frequency job output file(s)"
+    help="TD-DFT or EOM job output file(s)"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-o", "--output",
     type=str,
     default=None,
@@ -59,35 +59,32 @@ ir_parser.add_argument(
     help="output destination\nDefault: show plot",
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-t", "--plot-type",
     type=plot_type,
     choices=plot_types,
-    default="transmittance",
+    default="uv-vis-velocity",
     dest="plot_type",
-    help="type of plot\nDefault: transmittance",
+    help="type of plot\nDefault: uv-vis-velocity (absorbance)",
+)
+
+uvvis_parser.add_argument(
+    "-ev", "--electron-volt",
+    action="store_true",
+    default=False,
+    dest="ev_unit",
+    help="use eV on x axis instead of nm",
 )
 
 
-# TODO: figure out more anharmonic options
-# anharmonic_options = ir_parser.add_argument_group("anharmonic options")
-ir_parser.add_argument(
-    "-na", "--harmonic",
-    action="store_false",
-    default=True,
-    dest="anharmonic",
-    help="force to use harmonic frequencies when anharmonic data is in the file",
-)
-
-
-peak_options = ir_parser.add_argument_group("peak options")
+peak_options = uvvis_parser.add_argument_group("peak options")
 peak_options.add_argument(
     "-p", "--peak-type",
     type=peak_type,
     choices=peak_types,
-    default="pseudo-voigt",
+    default="gaussian",
     dest="peak_type",
-    help="function for peaks\nDefault: pseudo-voigt",
+    help="function for peaks\nDefault: gaussian",
 )
 
 peak_options.add_argument(
@@ -101,12 +98,12 @@ peak_options.add_argument(
 peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
-    default=15.0,
+    default=0.5,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 15 cm^-1",
+    help="full width at half max. of peaks\nDefault: 0.5 eV",
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-s", "--point-spacing",
     default=None,
     type=float,
@@ -115,13 +112,23 @@ ir_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
-scale_options = ir_parser.add_argument_group("scale frequencies")
+
+scale_options = uvvis_parser.add_argument_group("scale energies (in eV)")
+scale_options.add_argument(
+    "-ss", "--scalar-shift",
+    type=float,
+    default=0.0,
+    dest="scalar_scale",
+    help="subtract scalar shift from each excitation\n"
+    "Default: 0 (no shift)",
+)
+
 scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
     default=0.0,
     dest="linear_scale",
-    help="subtract linear_scale * frequency from each mode (i.e. this is 1 - λ)\n"
+    help="subtract linear_scale * energy from each excitation\n"
     "Default: 0 (no scaling)",
 )
 
@@ -130,19 +137,11 @@ scale_options.add_argument(
     type=float,
     default=0.0,
     dest="quadratic_scale",
-    help="subtract quadratic_scale * frequency^2 from each mode\n"
+    help="subtract quadratic_scale * energy^2 from each excitation\n"
     "Default: 0 (no scaling)",
 )
 
-ir_parser.add_argument(
-    "-nr", "--no-reverse",
-    action="store_false",
-    default=True,
-    dest="reverse_x",
-    help="do not reverse x-axis",
-)
-
-center_centric = ir_parser.add_argument_group("x-centered interruptions")
+center_centric = uvvis_parser.add_argument_group("x-centered interruptions")
 center_centric.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
@@ -161,30 +160,30 @@ center_centric.add_argument(
     "should be separated by commas, with one for each section"
 )
 
-minmax_centric = ir_parser.add_argument_group("x-range interruptions")
+minmax_centric = uvvis_parser.add_argument_group("x-range interruptions")
 minmax_centric.add_argument(
     "-r", "--ranges",
     type=lambda x: [[float(v) for v in r.split("-")] for r in x.split(",")],
     dest="ranges",
     default=None,
-    help="split plot into sections (e.g. 0-1900,2900-3300)"
+    help="split plot into sections (e.g. 200-350,400-650)"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-fw", "--figure-width",
     type=float,
     dest="fig_width",
     help="width of figure in inches"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-fh", "--figure-height",
     type=float,
     dest="fig_height",
     help="height of figure in inches"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-csv", "--experimental-csv",
     type=str,
     nargs="+",
@@ -193,7 +192,7 @@ ir_parser.add_argument(
     "frequency job files should not come directly after this flag"
 )
 
-ir_parser.add_argument(
+uvvis_parser.add_argument(
     "-rx", "--rotate-x-ticks",
     action="store_true",
     dest="rotate_x_ticks",
@@ -201,7 +200,8 @@ ir_parser.add_argument(
     help="rotate x-axis tick labels by 45 degrees"
 )
 
-args = ir_parser.parse_args()
+args = uvvis_parser.parse_args()
+
 
 if bool(args.centers) != bool(args.widths):
     sys.stderr.write(
@@ -214,7 +214,7 @@ if args.ranges and bool(args.ranges) == bool(args.widths):
         "cannot use -r/--ranges with -sw/--section-widths"
     )
     sys.exit(2)
-    
+   
 centers = args.centers
 widths = args.widths
 if args.ranges:
@@ -223,6 +223,10 @@ if args.ranges:
     for (xmin, xmax) in args.ranges:
         centers.append((xmin + xmax) / 2)
         widths.append(abs(xmax - xmin))
+
+units = "nm"
+if args.ev_unit:
+    units = "eV"
 
 exp_data = None
 if args.exp_data:
@@ -233,28 +237,28 @@ if args.exp_data:
         for i in range(1, data.shape[1]):
             exp_data.append((data[:,0], data[:,i], None))
 
-for f in glob_files(args.infiles, parser=ir_parser):
+for f in glob_files(args.infiles, parser=uvvis_parser):
     fr = FileReader(f, just_geom=False)
 
-    freq = fr.other["frequency"]
+    uv_vis = fr.other["uv_vis"]
 
     fig = plt.gcf()
     fig.clear()
 
-    freq.plot_ir(
+    uv_vis.plot_uv_vis(
         fig,
         centers=centers,
         widths=widths,
         plot_type=args.plot_type,
         peak_type=args.peak_type,
-        reverse_x=args.reverse_x,
         fwhm=args.fwhm,
         point_spacing=args.point_spacing,
         voigt_mixing=args.voigt_mixing,
+        scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
         quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
-        anharmonic=freq.anharm_data and args.anharmonic,
+        units=units,
         rotate_x_ticks=args.rotate_x_ticks,
     )
 

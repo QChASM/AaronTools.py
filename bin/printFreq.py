@@ -113,7 +113,7 @@ if __name__ == "__main__":
         "Some info may not be available for certain file formats",
         choices=["intensity", "vector", "forcek",
         "symmetry", "delta_anh", "harmonic_frequency",
-        "harmonic_intensity"],
+        "harmonic_intensity", "rotation", "raman_activity"],
         default=[],
     )
     parser.add_argument(

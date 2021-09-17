@@ -94,7 +94,7 @@ class TestComponent(TestWithTimer):
         geom.substitute(Substituent("tBu"), "12")
         geom.substitute(Substituent("Ph"), "10")
         geom.substitute(Substituent("OH"), "7")
-        geom.minimize_sub_torsion()
+        geom.minimize_sub_torsion(allow_planar=True)
         self.assertTrue(validate(geom, ref, heavy_only=True))
 
     def test_sub_rotate(self):

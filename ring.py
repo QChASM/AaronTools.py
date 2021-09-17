@@ -29,6 +29,7 @@ class Ring(Geometry):
         """
 
         super().__init__()
+        self.end = end
         if isinstance(frag, (Geometry, list)):
             # we can create ring object from a geometry
             if isinstance(frag, Ring):
@@ -134,7 +135,7 @@ class Ring(Geometry):
     def copy(self):
         dup = super().copy()
         dup.end = dup.find([atom.name for atom in self.end])
-        return dup
+        return Ring(dup, end=dup.end)
 
     def find_end(self, path_length, start=[]):
         """finds a path around self that is path_length long and starts with start"""

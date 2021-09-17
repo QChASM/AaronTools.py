@@ -47,6 +47,9 @@ class CompOutput:
         gradient, E_ZPVE, ZPVE
     """
 
+    ELECTRONIC_ENERGY = "NRG"
+    ZEROPOINT_ENERGY = "ZPE"
+    RRHO_ENTHALPY = "ENTHALPY"
     QUASI_HARMONIC = "QHARM"
     QUASI_RRHO = "QRRHO"
     RRHO = "RRHO"
@@ -117,7 +120,7 @@ class CompOutput:
 
         if from_file.atoms:
             self.geometry = Geometry(
-                from_file.atoms, comment=from_file.comment
+                from_file.atoms, comment=from_file.comment, name=from_file.name,
             )
         if from_file.all_geom:
             self.opts = []
@@ -144,6 +147,72 @@ class CompOutput:
             # might be slightly different
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
+
+    @staticmethod
+    def boltzmann_weights(
+        thermo_cos,
+        nrg_cos=None,
+        weighting="RRHO",
+        temperature=298.15,
+        v0=100,
+    ):
+        """
+        returns boltzmann weights
+        thermo_cos - list of CompOutput instances for thermochem corrections
+        nrg_cos - list of CompOutput to take the electronic energy from
+            order should correspond to thermo_cos
+            if not given, the energies from thermo_cos are used
+        weighting - type of energy to use for weighting
+            can be:
+                "NRG"
+                "ZPE"
+                "ENTHALPY"
+                "QHARM"
+                "QRRHO"
+                "RRHO"
+        temperature - temperature in K
+        v0 - parameter for quasi free energy corrections
+        """
+        if not nrg_cos:
+            nrg_cos = thermo_cos
+        energies = np.array([co.energy for co in nrg_cos])
+        corr = None
+        if weighting == CompOutput.ZEROPOINT_ENERGY:
+            corr = np.array([co.ZPVE for co in thermo_cos])
+        elif weighting == CompOutput.RRHO_ENTHALPY:
+            corr = np.array([
+                co.therm_corr(temperature=temperature, v0=v0)[1] for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.QUASI_HARMONIC:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.QUASI_RRHO:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        elif weighting == CompOutput.RRHO:
+            corr = np.array([
+                co.calc_G_corr(temperature=temperature, v0=v0, method=weighting) for
+                co in thermo_cos
+            ])
+        if corr is not None:
+            try:
+                energies += corr
+            except ValueError:
+                raise RuntimeError(
+                    "number of single point energies (%i) "
+                    "does not match number of thermochemical "
+                    "corrections (%i)" % (len(energies), len(corr))
+                )
+        relative = energies - min(energies)
+        w = np.exp(
+            -relative * UNIT.HART_TO_KCAL / (PHYSICAL.R * temperature)
+        )
+        return w / sum(w)
 
     def to_dict(self, skip_attrs=None):
         return obj_to_dict(self, skip_attrs=skip_attrs)
