@@ -408,82 +408,6 @@ class FileWriter:
         return
 
     @classmethod
-    def write_oniom_com(cls, geom, step, theory, outfile=None, **kwargs):
-        has_frozen = False
-        fmt1 = "{:>3s}" + " {:> 12.6f}" * 3 + " {:2s}" + "\n"
-        fmt2 = "{:>3s}" + " {:> 12.6f}" * 3 + " {:2s}" + " {:>2s}" + " {:>2d}" "\n"
-        fmt3 = "{:>3s}-{:<}-{:<8.6f}" + " {:> 12.6f}" * 3 + " {:2s}" + "\n"
-        fmt4 = "{:>3s}-{:<}-{:<8.6f}" + " {:> 12.6f}" * 3 + " {:2s}" + " {:>3s}-{:<}-{:<8.6f}" + " {:>2d}" "\n" 
-        for atom in geom.atoms:
-            if atom.flag:
-                fmt1 = "{:>3s}  {:> 2d}" + " {:> 12.6f}" * 3 + " {:2s}" + "\n"
-                fmt2 = "{:>3s}  {:> 2d}" + " {:> 12.6f}" * 3 + " {:2s}" + " {:>2s}" + " {:>2d}" "\n"
-                fmt3 = "{:>3s}-{:<}-{:<8.6f}  {:> 2d}" + " {:> 12.6f}" * 3 + " {:2s}" + "\n"
-                fmt4 = "{:>3s}-{:<}-{:<8.6f}  {:> 2d}" + " {:> 12.6f}" * 3 + " {:2s}" + " {:>3s}-{:<}-{:<8.6f}" + " {:>2d}" "\n" 
-                has_frozen = True
-                break
-        charge = kwargs["charge"]
-        mult = kwargs["mult"]
-        s = "# opt oniom({}:{}) \n \n".format(theory, kwargs["theory2"])
-        s += "{} {} \n \n".format(step, "test")
-        s += "{} {} {} {} {} {} \n".format(charge, mult, charge, mult, charge, mult)
-        #s = "%i\n" % len(geom.atoms)
-        #s = theory.make_header(geom, step, **kwargs)
-        footer = str()
-        for a in geom.atoms:
-            match = LAH_bonded_to.search(str(a.tags))
-            match3 = LA_atom_type.search(str(a.tags))
-            match4 = LA_charge.search(str(a.tags))
-            if has_frozen:
-                if match is not None:
-                    match2 = str("LA " + a.name)
-                    geom.sub_links().add_links()
-                    for b in geom.atoms:
-                        if match2 in str(b.tags) and match3 is not None and match4 is not None:
-                            index = int(b.name) - 1
-                            geom.atoms[index].atomtype = match3.group(0)
-                            geom.atoms[index].charge = float(match4.group(0))
-                        elif match2 in str(b.tags):
-                            index = int(b.name) - 1
-                    try:
-                        s += fmt4.format(a.element, a.atomtype, a.charge, -a.flag, *a.coords, a.layer, geom.atoms[index].element, geom.atoms[index].atomtype, geom.atoms[index].charge, int(match.group(2)))
-                    except AttributeError:
-                        s += fmt2.format(a.element, -a.flag, *a.coords, a.layer, geom.atoms[index].element, int(match.group(2)))
-                else:
-                    try:
-                        s += fmt3.format(a.element, a.atomtype, a.charge, -a.flag, *a.coords, a.layer)
-                    except AttributeError:
-                        s += fmt1.format(a.element, -a.flag, *a.coords, a.layer)
-            else:
-                if match is not None:
-                    match2 = str("LA " + a.name)
-                    geom.sub_links().add_links().update_names()
-                    for b in geom.atoms:
-                        if match2 in str(b.tags) and match3 is not None and match4 is not None:
-                            index = int(b.name) - 1
-                            geom.atoms[index].atomtype = match3.group(0)
-                            geom.atoms[index].charge = float(match4.group(0))
-                        elif match2 in str(b.tags):
-                            index = int(b.name) - 1
-                    #if index:
-                        #raise ValueError("atom tag information incorrect, check geom.add_links()")
-                    try:
-                    # a bunch of attributes need to be replaced when I figure out how to do it - link atom info
-                        s += fmt4.format(a.element, a.atomtype, a.charge, *a.coords, a.layer, geom.atoms[index].element, geom.atoms[index].atomtype, geom.atoms[index].charge, int(match.group(2)))
-                    except AttributeError:
-                        s += fmt2.format(a.element, *a.coords, a.layer, geom.atoms[index].element, int(match.group(2)))
-                else:
-                    try:
-                        s += fmt3.format(a.element, a.atomtype, a.charge, *a.coords, a.layer)
-                    except AttributeError:
-                        s += fmt1.format(a.element, *a.coords, a.layer)
-            geom.sub_links()
-#            if a.constraint:
-#                constrained_to = atom(a.constraint)
-            #s += theory.make_footer(geom, step)
-        s += "\n\n\n\n"
-
-    @classmethod
     def write_inp(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
@@ -957,7 +881,7 @@ class FileReader:
 
     def read_file(
         self, get_all=False, just_geom=True,
-        freq_name=None, conf_name=None, nbo_name=None, oniome=False,
+        freq_name=None, conf_name=None, nbo_name=None, oniom=False,
         max_length=10000000,
     ):
         """
@@ -2584,33 +2508,31 @@ class FileReader:
                     atoms += [a]
             elif is_oniom:
                 if len(line) > 0 and len(line[0].split("-")) > 0 and len(nums) > 2:
-                    if len(line[0].split("-")) > 2:
-                        has_charge = True
-                        charge = nums[0]
-                        atomtype = line[0].split("-")[1]
-                    if len(line[0].split("-")) > 1:
-                        if not is_alpha(line[0].split("-")[1]):
-                            has_charge = True
+                    if len(line[0].split("-")) == 2:
+                        if not is_alpha(line[0].split("-")[1][0]):
                             charge = nums[0]
-                        if is_alpha(line[0].split("-")[1]):
+                        elif is_alpha(line[0].split("-")[1][0]):
                             atomtype = line[0].split("-")[1]
+                    if len(line[0].split("-")) == 4:
+                        atomtype = line[0].split("-")[1]
+                        charge = str(-1 * float(line[0].split("-")[3]))
+                    if len(line[0].split("-")) == 3:
+                        if not is_alpha(line[0].split("-")[1][0]):
+                            charge = nums[0]
+                        elif is_alpha(line[0].split("-")[1][0]):
+                            atomtype = line[0].split("-")[1]
+                            charge = line[0].split("-")[2]
                     if len(line)%2 == 0:
                         has_flag = True
-                        for num in nums:
-                            if is_int(num):
-                                flag = num 
-                                break
+                        flag = line[1]
+                        coords = line[2:5]
+                    if not has_flag:
+                        coords = line[1:4]
                     if len(line) > 6:
                         tags.append(line[len(line)-2:])
                         layer = line[len(line)-3]
                     if len(line) < 7:
                         layer = line[len(line)-1]
-                    if has_charge ^ has_flag:
-                        coords = nums[1:4]
-                    if has_charge and has_flag:
-                        coords = nums[2:5]
-                    if not has_charge and not has_flag:
-                        coords = nums[0:3]
                     a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,tags=tags)
                     atoms += [a] 
         for i, a in enumerate(atoms):
