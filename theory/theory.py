@@ -1116,18 +1116,20 @@ class Theory:
                 if lac:
                     lac_name = int(lac.group(1))
                     lac_index = int(lac.group(1))-1
-                    if geometry.atoms[lac_index].atomtype == "ca":
+                    if self.geometry.atoms[lac_index].atomtype.lower() == "ca":
                         link_type = "ha"
-                    elif geometry.atoms[lac_index].atomtype.startswith("c"):
+                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("c"):
                         link_type = "hc"
-                    elif geometry.atoms[lac_index].atomtype.startswith("n"):
+                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("n"):
                         link_type = "hn"
-                    elif geometry.atoms[lac_index].atomtype.startswith("o"):
+                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("o"):
                         link_type = "ho"
-                    elif geometry.atoms[lac_index].atomtype.startswith("s"):
+                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("s"):
                         link_type = "hs"
-                    elif geometry.atoms[lac_index].atomtype.startswith("p"):
+                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("p"):
                         link_type = "hp"
+                    else:
+                        link_type = ""
                     s += " H-%s-%f  %i" % (link_type, atom.charge, lac_name)
                     scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
                     if scale_fax:
@@ -1229,7 +1231,7 @@ class Theory:
             param_path = str(other_kw_dict[GAUSSIAN_MM_PARAMS][0])
             #param_path_list = param_path.split("/")
             #param_file = param_path_list[len(param_path_list)-1]
-            out_str += param_path
+            out_str += "@%s" % param_path
             if GAUSSIAN_GEN_BASIS in basis_info:
                 raise NotImplementedError("basis=gen cannot be used with paramater files")
             elif GAUSSIAN_GEN_ECP in basis_info:

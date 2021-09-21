@@ -240,10 +240,7 @@ class FileWriter:
                 raise TypeError(
                     "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
-            if "oniom" in kwargs:
-                out = cls.write_oniom_com(geom, theory, outfile, **kwargs)
-            elif "oniom" not in kwargs:
-                out = cls.write_com(geom, theory, outfile, **kwargs)
+            out = cls.write_com(geom, theory, outfile, **kwargs)
         elif style.lower() == "inp":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -965,25 +962,40 @@ class FileReader:
                 self.atoms = []
             except ValueError:
                 line = line.split()
-                try: 
-                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4], atomtype=line[5], charge=line[6], tags=line[7:])]
-                except IndexError:
-                    try:
-                        self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4], atomtype=line[5], charge=line[6])]
-                    except IndexError:
-                        try:
-                            self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4], atomtype=line[5])]
-                        except IndexError:
-                            try:
-                                if line[4] in ['H', 'M', 'L']:
-                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4], layer=line[4])]
-                                else:
-                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4], atomtype=line[4])]
-                            except IndexError:
-                                if oniom==True:
-                                    self.atoms += [OniomAtom(element=line[0], coords=line[1:4])]
-                                else:
-                                    self.atoms += [Atom(element=line[0], coords=line[1:4])]
+                element = line[0]
+                coords = line[1:4]
+                layer = ""
+                atomtype = ""
+                charge = ""
+                tags = ""
+                if len(line) > 4:
+                    layer = line[4]
+                    oniom = True
+                    if len(line) == 11:
+                        atomtype = line[5]
+                        charge = line[6]
+                        tags=line[7:]
+                    if len(line) == 9:
+                        tags = line[6:]
+                        if is_alpha(line[5][0]):
+                            atomtype = line[5]
+                        else:
+                            charge = line[5]
+                    if len(line) == 7:
+                        if line[6].isdigit():
+                            tags = line[5:]
+                        else:
+                            atomtype = line[5]
+                            charge = line[6]
+                    if len(line) == 6:
+                        if is_alpha(line[5][0]):
+                            atomtype = line[5]
+                        else:
+                            charge = line[5]
+                if oniom == True:
+                    self.atoms += [OniomAtom(element=element, coords=coords, layer=layer, atomtype=atomtype, charge=charge, tags=tags)]
+                else:
+                    self.atoms += [Atom(element=line[0], coords=line[1:4])]
                 for i, a in enumerate(self.atoms):
                     a.name = str(i + 1)
         # if get_all:
