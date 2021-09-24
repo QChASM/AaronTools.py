@@ -208,7 +208,7 @@ class HasAttribute(Finder):
 
 class VSEPR(Finder):
     """atoms with the specified VSEPR geometry
-    see Atom.get_shape for a list of valid vsepr_geometry strings"""
+    see Atom.get_shape for a list of valid vsepr strings"""
     def __init__(self, vsepr, cutoff=0.5):
         super().__init__()
         

@@ -658,7 +658,7 @@ class Signals:
 class HarmonicVibration(Signal):
     x_attr = "frequency"
     required_attrs = (
-        "intensity", "vector", "symmetry", "rotation", "raman_activity",
+        "intensity", "vector", "symmetry", "rotation", "raman_activity", "forcek",
     )
 
 

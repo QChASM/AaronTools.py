@@ -180,7 +180,8 @@ for f in glob_files(args.infile, parser=cube_parser):
         infile = FileReader(
             ("from stdin", "fchk", f),
             just_geom=False,
-            nbo_name=args.nbo_name
+            nbo_name=args.nbo_name,
+            max_length=args.max_length,
         )
 
     geom = Geometry(infile, refresh_connected=False, refresh_ranks=False)
