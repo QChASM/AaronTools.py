@@ -4920,7 +4920,8 @@ class Orbitals:
             func = self.density_value
         
         target = geom.find(target)[0]
-        
+        target_ndx = geom.atoms.index(target)
+
         radius_list = []
         radii_dict = None
         if isinstance(radii, dict):
@@ -4943,7 +4944,7 @@ class Orbitals:
         radius_list = np.array(radius_list)
 
         if rmax is None:
-            rmax = 5 * target._vdw
+            rmax = 5 * radius_list[target_ndx]
 
         rgrid, rweights = gauss_legendre_grid(
             start=0, stop=rmax, num=rpoints
@@ -4969,7 +4970,6 @@ class Orbitals:
         # than any other
         dist_mat = distance_matrix(geom.coords, all_points) ** 2
         dist_mat = np.transpose(dist_mat.T - radius_list ** 2)
-        target_ndx = geom.atoms.index(target)
         atom_ndx = geom.atoms.index(target)
         mask = np.argmin(dist_mat, axis=0) == atom_ndx
         
