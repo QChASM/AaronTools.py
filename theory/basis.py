@@ -237,7 +237,7 @@ class Basis:
 
     def refresh_atoms(self, geometry):
         """sets self's atoms for the geometry"""
-        exclude = []
+        excluded = []
         atoms = geometry.find(self.atom_selection, NotAny(*self.not_anys)) 
         for atom_exclude in NotAny(ONIOMLayer(layers=self.oniom_layer)):
             for atom in atoms:
