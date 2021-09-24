@@ -5301,6 +5301,7 @@ class Geometry:
         # if there are not two fragments not in a ring,
         # this is a spiro center
         # find a spiro ring and rotate that
+        a2 = None
         if len(fragments) < 2:
             for a1 in target.connected:
                 targets = self.get_fragment(
@@ -5310,6 +5311,10 @@ class Geometry:
                 if a2:
                     a2 = a2[0]
                     break
+            if not a2:
+                raise RuntimeError(
+                    "could not find suitable groups to swap on %s" % target
+                )
             v1 = target.bond(a1)
             v1 /= np.linalg.norm(v1)
             v2 = target.bond(a2)

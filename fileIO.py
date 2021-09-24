@@ -13,7 +13,7 @@ from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
-from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
+from AaronTools.const import ELEMENTS, PHYSICAL, UNIT, VDW_RADII, BONDI_RADII
 from AaronTools.spectra import Frequency, ValenceExcitations
 from AaronTools.theory import *
 from AaronTools.utils.utils import (
@@ -659,7 +659,6 @@ class FileWriter:
         # get values for this MO
         if kind.lower() == "density":
             val = orbitals.density_value(coords, n_jobs=n_jobs)
-            # val = orbitals.low_mem_density_value(coords, n_jobs=n_jobs)
         elif kind.lower() == "fukui donor":
             val = orbitals.fukui_donor_value(
                 coords, n_jobs=n_jobs, delta=delta
@@ -935,6 +934,13 @@ class FileReader:
 
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
+                
+                self.other["charge"] = 0
+                for line in lines[i + natoms + nbonds:]:
+                    if "CHG" in line:
+                        self.other["charge"] += int(line.split()[-1])
+                    if "$$$$" in line:
+                        break
 
     def read_mol2(self, f, get_all=False):
         """
@@ -1549,14 +1555,14 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     self.other["basis_set_by_ele"] = dict()
-                    while "--" not in line:
+                    while "--" not in line and line != "":
                         new_gto = re.search("NewGTO\s+(\S+)", line)
                         if new_gto:
                             ele = new_gto.group(1)
                             line = f.readline()
                             n += 1
                             primitives = []
-                            while "end" not in line:
+                            while "end" not in line and line != "":
                                 shell_type, n_prim = line.split()
                                 n_prim = int(n_prim)
                                 exponents = []
@@ -1593,7 +1599,8 @@ class FileReader:
                         if (
                             "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
                             re.search("TDM done", line) or
-                            "TIMINGS" in line
+                            "TIMINGS" in line or
+                            line == ""
                         ):
                             done = True
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
@@ -3062,6 +3069,7 @@ class Orbitals:
         self.exponents = filereader.other["Primitive exponents"]
         self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
         self.alpha_nrgs = filereader.other["Alpha Orbital Energies"]
+        self.scf_density = filereader.other["Total SCF Density"]
         self.beta_nrgs = None
         if "Beta Orbital Energies" in filereader.other:
             self.beta_nrgs = filereader.other["Beta Orbital Energies"]
@@ -4743,5 +4751,303 @@ class Orbitals:
 
         return plus_density
 
-    def fukui_dual_value(self, *args, **kwargs):
-        return self.fukui_acceptor_value(*args, **kwargs) - self.fukui_donor_value(*args, **kwargs)
+    def fukui_dual_value(self, coords, delta=0.1, **kwargs):
+        CITATION = "doi:10.1021/acs.jpca.9b07516"
+        self.LOG.citation(CITATION)
+        
+        alpha_occ = np.zeros(self.n_mos)
+        alpha_occ[self.n_alpha - 1] = 1
+        beta_occ = None
+        if self.beta_coefficients is not None:
+            beta_occ = np.zeros(self.n_mos)
+            beta_occ[self.n_beta - 1] = 1
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            plus_e = np.zeros(self.n_mos)
+            minus_e = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                minus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            for i in range(self.n_alpha, self.n_mos):
+                plus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            minus_e /= sum(minus_e)
+            plus_e /= sum(plus_e)
+            dual_density = self.density_value(
+                coords, alpha_occ=plus_e - minus_e, beta_occ=beta_occ, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = np.zeros(self.n_mos)
+            beta_occ = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                alpha_occ[i] = -np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(0, self.n_beta):
+                beta_occ[i] = -np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            for i in range(self.n_alpha, self.n_mos):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(self.n_beta, self.n_mos):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ[self.n_alpha:] /= abs(sum(alpha_occ[self.n_alpha:]))
+            beta_occ[self.n_beta:] /= abs(sum(beta_occ[self.n_beta:]))
+            alpha_occ[:self.n_alpha] /= sum(alpha_occ[:self.n_alpha])
+            beta_occ[:self.n_beta] /= sum(beta_occ[:self.n_beta])
+            dual_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return dual_density
+
+    def voronoi_integral(
+        self,
+        target,
+        geom,
+        *args,
+        rpoints=32,
+        apoints=1454,
+        func=None,
+        rmax=None,
+        **kwargs,
+    ):
+        """
+        integrates func in the Voronoi cell of the specified target
+        geom - Geometry() target belongs to
+        args - passed to func
+        rpoints - radial points used for Gauss-Legendre integral
+        apoints - angular points for Lebedev integral
+        func - function to evaluate
+        kwargs - passed to func
+        """
+        
+        atom = geom.find(target)[0]
+    
+        if rmax is None:
+            rmax = 10 * atom._vdw
+
+        rgrid, rweights = gauss_legendre_grid(
+            start=0, stop=rmax, num=rpoints
+        )
+        # grab Lebedev grid for unit sphere at origin
+        agrid, aweights = lebedev_sphere(
+            radius=1, center=np.zeros(3), num=apoints
+        )
+
+        # TODO: switch to np.zeros((n_ang * n_rad, 3))
+        # this eliminates appending
+        # build a list of points and weights around the atom
+        all_points = np.empty((0, 3))
+        weights = np.empty(0)
+        
+        for rvalue, rweight in zip(rgrid, rweights):
+            agrid_r = agrid * rvalue
+            agrid_r += atom.coords
+            all_points = np.append(all_points, agrid_r, axis=0)
+            weights = np.append(weights, rweight * aweights)
+        
+        # find points that are closest to this atom
+        # than any other
+        dist_mat = distance_matrix(geom.coords, all_points)
+        atom_ndx = geom.atoms.index(atom)
+        mask = np.argmin(dist_mat, axis=0) == atom_ndx
+        
+        voronoi_points = all_points[mask]
+        voronoi_weights = weights[mask]
+        
+        # evaluate function
+        vals = func(voronoi_points, *args, **kwargs)
+        
+        # multiply values by weights, add them up, and return the sum
+        return np.dot(vals, voronoi_weights)
+
+    def power_integral(
+        self,
+        target,
+        geom,
+        *args,
+        radii="umn",
+        rpoints=32,
+        apoints=1454,
+        func=None,
+        rmax=None,
+        **kwargs,
+    ):
+        """
+        integrates func in the power cell of the specified target
+        power diagrams are a form of weighted Voronoi diagrams
+        that form cells based on the smallest d^2 - r^2
+        see wikipedia article: https://en.wikipedia.org/wiki/Power_diagram
+        radii - "bondi" - Bondi vdW radii
+                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+                dict()  - radii are values and elements are keys
+                list()  - list of radii corresponding to targets
+        geom - Geometry() target belongs to
+        args - passed to func
+        rpoints - radial points used for Gauss-Legendre integral
+        apoints - angular points for Lebedev integral
+        func - function to evaluate
+        kwargs - passed to func
+        """
+        
+        if func is None:
+            func = self.density_value
+        
+        target = geom.find(target)[0]
+        
+        radius_list = []
+        radii_dict = None
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif isinstance(radii, list):
+            radius_list = radii
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        else:
+            raise TypeError(
+                "radii must be list, dict, \"UMN\", or \"BONDI\": %s" % radii
+            )
+
+        if not radius_list:
+            for atom in geom.atoms:
+                radius_list.append(radii_dict[atom.element])
+
+        radius_list = np.array(radius_list)
+
+        if rmax is None:
+            rmax = 5 * target._vdw
+
+        rgrid, rweights = gauss_legendre_grid(
+            start=0, stop=rmax, num=rpoints
+        )
+        # grab Lebedev grid for unit sphere at origin
+        agrid, aweights = lebedev_sphere(
+            radius=1, center=np.zeros(3), num=apoints
+        )
+
+        # TODO: switch to np.zeros((n_ang * n_rad, 3))
+        # this eliminates appending
+        # build a list of points and weights around the atom
+        all_points = np.empty((0, 3))
+        weights = np.empty(0)
+        
+        for rvalue, rweight in zip(rgrid, rweights):
+            agrid_r = agrid * rvalue
+            agrid_r += target.coords
+            all_points = np.append(all_points, agrid_r, axis=0)
+            weights = np.append(weights, rweight * aweights)
+        
+        # find points that are closest to this atom's vdw sphere
+        # than any other
+        dist_mat = distance_matrix(geom.coords, all_points) ** 2
+        dist_mat = np.transpose(dist_mat.T - radius_list ** 2)
+        target_ndx = geom.atoms.index(target)
+        atom_ndx = geom.atoms.index(target)
+        mask = np.argmin(dist_mat, axis=0) == atom_ndx
+        
+        power_points = all_points[mask]
+        power_weights = weights[mask]
+        
+        # with open("test_%s.bild" % target.name, "w") as f:
+        #     s = ""
+        #     for p in van_alsenoy_points:
+        #         s += ".sphere %.4f %.4f %.4f 0.05\n" % tuple(p)
+        #     f.write(s)
+        
+        # evaluate function
+        vals = func(power_points, *args, **kwargs)
+        
+        # multiply values by weights, add them up, and return the sum
+        return np.dot(vals, power_weights)
+
+    def condensed_fukui_donor_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        uses power_integral to integrate the fukui_donor_value
+        for all atoms in geom
+        values are normalized so they sum to 1
+        geom - Geometry()
+        args and kwargs are passed to power_integral
+        returns array for each atom's condensed Fukui donor values
+        """
+        out = np.zeros(len(geom.atoms))
+        for i, atom in enumerate(geom.atoms):
+            out[i] = self.power_integral(
+                atom, geom, *args, func=self.fukui_donor_value, **kwargs,
+            )
+        
+        out /= sum(out)
+        return out
+
+    def condensed_fukui_acceptor_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        uses power_integral to integrate the fukui_acceptor_value
+        for all atoms in geom
+        values are normalized so they sum to 1
+        geom - Geometry()
+        args and kwargs are passed to power_integral
+        returns array for each atom's condensed Fukui acceptor values
+        """
+        out = np.zeros(len(geom.atoms))
+        for i, atom in enumerate(geom.atoms):
+            out[i] = self.power_integral(
+                atom, geom, *args, func=self.fukui_acceptor_value, **kwargs,
+            )
+        
+        out /= sum(out)
+        return out
+
+    def condensed_fukui_dual_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        returns the difference between condensed_fukui_acceptor_values
+        and condensed_fukui_donor_values
+        """
+        out = self.condensed_fukui_acceptor_values(
+            geom, *args, **kwargs,
+        ) - self.condensed_fukui_donor_values(
+            geom, *args, **kwargs,
+        )
+        
+        return out
