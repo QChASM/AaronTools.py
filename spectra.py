@@ -740,6 +740,14 @@ class Frequency(Signals):
                     self.data[i].forcek = float(force_constants[i])
                 continue
 
+            if ("Reduced masses" in line and "---" in line and hpmodes) or (
+                "Red. masses" in line and "--" in line and not hpmodes
+            ):
+                red_masses = float_num.findall(line)
+                for i in range(-len(red_masses), 0, 1):
+                    self.data[i].red_mass = float(red_masses[i])
+                continue
+
             if ("Rot. strength" in line and "---" in line and hpmodes) or (
                 "Rot. str." in line and "--" in line and not hpmodes
             ):
