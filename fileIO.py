@@ -13,7 +13,7 @@ from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
-from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
+from AaronTools.const import ELEMENTS, PHYSICAL, UNIT, VDW_RADII, BONDI_RADII
 from AaronTools.spectra import Frequency, ValenceExcitations
 from AaronTools.theory import *
 from AaronTools.utils.utils import (
@@ -519,73 +519,12 @@ class FileWriter:
                 "no Orbitals() instance given to FileWriter.write_cube"
             )
 
-        def get_standard_axis():
-            """returns info to set up a grid along the x, y, and z axes"""
-            geom_coords = geom.coords
-
-            # get range of geom's coordinates
-            x_min = np.min(geom_coords[:, 0])
-            x_max = np.max(geom_coords[:, 0])
-            y_min = np.min(geom_coords[:, 1])
-            y_max = np.max(geom_coords[:, 1])
-            z_min = np.min(geom_coords[:, 2])
-            z_max = np.max(geom_coords[:, 2])
-
-            # add padding, figure out vectors
-            r1 = 2 * padding + x_max - x_min
-            n_pts1 = int(r1 // spacing) + 1
-            d1 = r1 / (n_pts1 - 1)
-            v1 = np.array((d1, 0., 0.))
-            r2 = 2 * padding + y_max - y_min
-            n_pts2 = int(r2 // spacing) + 1
-            d2 = r2 / (n_pts2 - 1)
-            v2 = np.array((0., d2, 0.))
-            r3 = 2 * padding + z_max - z_min
-            n_pts3 = int(r3 // spacing) + 1
-            d3 = r3 / (n_pts3 - 1)
-            v3 = np.array((0., 0., d3))
-            com = np.array([x_min, y_min, z_min]) - padding
-            return n_pts1, n_pts2, n_pts3, v1, v2, v3, com
-
-        if xyz:
-            n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
-        else:
-            test_coords = geom.coords - geom.COM()
-            covar = np.dot(test_coords.T, test_coords)
-            try:
-                # use SVD on the coordinate covariance matrix
-                # this decreases the volume of the box we're making
-                # that means less work for higher resolution
-                # for many structures, this only decreases the volume
-                # by like 5%
-                u, s, vh = np.linalg.svd(covar)
-                v1 = u[:, 0]
-                v2 = u[:, 1]
-                v3 = u[:, 2]
-                # change basis of coordinates to the singular vectors
-                # this is how we determine the range + padding
-                new_coords = np.dot(test_coords, u)
-                xr_max = np.max(new_coords[:, 0])
-                xr_min = np.min(new_coords[:, 0])
-                yr_max = np.max(new_coords[:, 1])
-                yr_min = np.min(new_coords[:, 1])
-                zr_max = np.max(new_coords[:, 2])
-                zr_min = np.min(new_coords[:, 2])
-                com = np.array([xr_min, yr_min, zr_min]) - padding
-                # move the COM back to the xyz space of the original molecule
-                com = np.dot(u, com)
-                com += geom.COM()
-                r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
-                r2 = 2 * padding + np.linalg.norm(yr_max - yr_min)
-                r3 = 2 * padding + np.linalg.norm(zr_max - zr_min)
-                n_pts1 = int(r1 // spacing) + 1
-                n_pts2 = int(r2 // spacing) + 1
-                n_pts3 = int(r3 // spacing) + 1
-                v1 *= r1 / (n_pts1 - 1)
-                v2 *= r2 / (n_pts2 - 1)
-                v3 *= r3 / (n_pts3 - 1)
-            except np.linalg.LinAlgError:
-                n_pts1, n_pts2, n_pts3, v1, v2, v3, com = get_standard_axis()
+        n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u = orbitals.get_cube_array(
+            geom,
+            standard_axes=xyz,
+            spacing=spacing,
+            padding=padding,
+        )
 
         mo = None
         if kind.lower() == "homo":
@@ -596,7 +535,7 @@ class FileWriter:
             mo = int(kind.split()[-1])
         elif kind.lower().startswith("ao"):
             mo = np.zeros(orbitals.n_mos)
-            mo = mo[int(kind.split()[-1])] = 1
+            mo[int(kind.split()[-1])] = 1
         
         s = ""
         s += " %s\n" % geom.comment
@@ -606,7 +545,7 @@ class FileWriter:
         # MO info so there's an extra data entry between the molecule
         # and the function values
         bohr_com = com / UNIT.A0_TO_BOHR
-        if mo:
+        if isinstance(mo, int):
             s += " -"
         else:
             s += "  "
@@ -618,9 +557,6 @@ class FileWriter:
         # spacing between points along that axis
         # or maybe it's the number of points?
         # we use the first one
-        arr = []
-        v_list = []
-        n_list = []
         for n, v in sorted(
             zip([n_pts1, n_pts2, n_pts3], [v1, v2, v3]),
             key=lambda p: np.linalg.norm(p[1]),
@@ -629,18 +565,10 @@ class FileWriter:
             s += " %5i %13.5f %13.5f %13.5f\n" % (
                 n, *bohr_v
             )
-            arr.append(np.linspace(0, n - 1, num=n, dtype=int))
-            v_list.append(v)
-            n_list.append(n)
         # contruct an array of points for the grid
-        ndx = (
-            np.vstack(np.mgrid[0 : n_list[0], 0 : n_list[1], 0 : n_list[2]])
-            .reshape(3, np.prod(n_list))
-            .T
+        coords, n_list = orbitals.get_cube_points(
+            n_pts1, n_pts2, n_pts3, v1, v2, v3, com
         )
-        coords = np.matmul(ndx, v_list)
-        del ndx
-        coords += com
 
         # write the structure in bohr
         for atom in geom.atoms:
@@ -659,7 +587,6 @@ class FileWriter:
         # get values for this MO
         if kind.lower() == "density":
             val = orbitals.density_value(coords, n_jobs=n_jobs)
-            # val = orbitals.low_mem_density_value(coords, n_jobs=n_jobs)
         elif kind.lower() == "fukui donor":
             val = orbitals.fukui_donor_value(
                 coords, n_jobs=n_jobs, delta=delta
@@ -935,6 +862,13 @@ class FileReader:
 
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
+                
+                self.other["charge"] = 0
+                for line in lines[i + natoms + nbonds:]:
+                    if "CHG" in line:
+                        self.other["charge"] += int(line.split()[-1])
+                    if "$$$$" in line:
+                        break
 
     def read_mol2(self, f, get_all=False):
         """
@@ -1549,14 +1483,14 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     self.other["basis_set_by_ele"] = dict()
-                    while "--" not in line:
+                    while "--" not in line and line != "":
                         new_gto = re.search("NewGTO\s+(\S+)", line)
                         if new_gto:
                             ele = new_gto.group(1)
                             line = f.readline()
                             n += 1
                             primitives = []
-                            while "end" not in line:
+                            while "end" not in line and line != "":
                                 shell_type, n_prim = line.split()
                                 n_prim = int(n_prim)
                                 exponents = []
@@ -1593,7 +1527,8 @@ class FileReader:
                         if (
                             "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
                             re.search("TDM done", line) or
-                            "TIMINGS" in line
+                            "TIMINGS" in line or
+                            line == ""
                         ):
                             done = True
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
@@ -3141,6 +3076,7 @@ class Orbitals:
         self.exponents = filereader.other["Primitive exponents"]
         self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
         self.alpha_nrgs = filereader.other["Alpha Orbital Energies"]
+        self.scf_density = filereader.other["Total SCF Density"]
         self.beta_nrgs = None
         if "Beta Orbital Energies" in filereader.other:
             self.beta_nrgs = filereader.other["Beta Orbital Energies"]
@@ -4251,6 +4187,9 @@ class Orbitals:
         p_norm = lambda a, l=1: gau_norm(a, l)
         d_norm = lambda a, l=2: gau_norm(a, l)
         f_norm = lambda a, l=3: gau_norm(a, l)
+        g_norm = lambda a, l=4: gau_norm(a, l)
+        h_norm = lambda a, l=5: gau_norm(a, l)
+        i_norm = lambda a, l=6: gau_norm(a, l)
 
         # ORCA order differs from FCHK in a few places:
         # pz, px, py instead of ox, py, pz
@@ -4429,6 +4368,158 @@ class Orbitals:
                         return res * s_val
 
                     self.basis_functions.append(f_shell)
+                
+                elif shell_type.lower() == "g":
+                    self.shell_types.append("9g")
+                    self.funcs_per_shell.append(9)
+                    self.n_aos += 9
+                    norms = g_norm(exponents)
+                    def g_shell(
+                        r2, x, y, z, mo_coeffs,
+                        alpha=exponents, con_coeffs=con_coeff, norms=norms
+                    ):
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        res = np.zeros(len(r2))
+                        if mo_coeffs[0] != 0:
+                            z4 = (35 * (z ** 4) - 30 * (r2 * z ** 2) + 3 * r2 ** 2) / 8
+                            res += mo_coeffs[0] * z4
+                        if mo_coeffs[1] != 0:
+                            z3x = np.sqrt(10) * (x * z * (7 * z ** 2 - 3 * r2)) / 4
+                            res += mo_coeffs[1] * z3x
+                        if mo_coeffs[2] != 0:
+                            z3y = np.sqrt(10) * (y * z * (7 * z ** 2 - 3 * r2)) / 4
+                            res += mo_coeffs[2] * z3y
+                        if mo_coeffs[3] != 0:
+                            z2x2y2 = np.sqrt(5) * (x ** 2 - y ** 2) * (7 * z ** 2 - r2) / 4
+                            res += mo_coeffs[3] * z2x2y2
+                        if mo_coeffs[4] != 0:
+                            z2xy = np.sqrt(5) * x * y * (7 * z ** 2 - r2) / 2
+                            res += mo_coeffs[4] * z2xy
+                        if mo_coeffs[5] != 0:
+                            zx3 = -np.sqrt(70) * x * z * (x ** 2 - 3 * y ** 2) / 4
+                            res += mo_coeffs[5] * zx3
+                        if mo_coeffs[6] != 0:
+                            zy3 = -np.sqrt(70) * z * y * (3 * x ** 2 - y ** 2) / 4
+                            res += mo_coeffs[6] * zy3
+                        if mo_coeffs[7] != 0:
+                            x2 = x ** 2
+                            y2 = y ** 2
+                            x4y4 = -np.sqrt(35) * (x2 * (x2 - 3 * y2) - y2 * (3 * x2 - y2)) / 8
+                            res += mo_coeffs[7] * x4y4
+                        if mo_coeffs[8] != 0:
+                            xyx2y2 = -np.sqrt(35) * x * y * (x ** 2 - y ** 2) / 2
+                            res += mo_coeffs[8] * xyx2y2
+
+                        return res * s_val
+                    self.basis_functions.append(g_shell)
+
+                elif shell_type.lower() == "h":
+                    self.shell_types.append("11h")
+                    self.funcs_per_shell.append(11)
+                    self.n_aos += 11
+                    norms = h_norm(exponents)
+                    def h_shell(
+                        r2, x, y, z, mo_coeffs,
+                        alpha=exponents, con_coeffs=con_coeff, norms=norms
+                    ):
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        res = np.zeros(len(r2))
+                        z2 = z ** 2
+                        if mo_coeffs[0] != 0:
+                            z5z3r2zr4 = z * (63 * z2 ** 2 - 70 * z2 * r2 + 15 * r2 ** 2) / 8
+                            res += mo_coeffs[0] * z5z3r2zr4
+                        if mo_coeffs[1] != 0:
+                            xz4xz2r2xr4 = np.sqrt(15) * x * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                            res += mo_coeffs[1] * xz4xz2r2xr4
+                        if mo_coeffs[2] != 0:
+                            yz4yz2r2yr4 = np.sqrt(15) * y * (21 * z2 ** 2 - 14 * z2 * r2 + r2 ** 2) / 8
+                            res += mo_coeffs[2] * yz4yz2r2yr4
+                        if mo_coeffs[3] != 0:
+                            x2y3z3zr2 = np.sqrt(105) * (x ** 2 - y ** 2) * (3 * z2 - r2) * z / 4
+                            res += mo_coeffs[3] * x2y3z3zr2
+                        if mo_coeffs[4] != 0:
+                            xyz3zr2 = np.sqrt(105) * x * y * z * (3 * z2 - r2) / 2
+                            res += mo_coeffs[4] * xyz3zr2
+                        if mo_coeffs[5] != 0:
+                            xx2y2z2r2 = -35 * x * (x ** 2 - 3 * y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                            res += mo_coeffs[5] * xx2y2z2r2
+                        if mo_coeffs[6] != 0:
+                            yx2y2z2r2 = -35 * y * (3 * x ** 2 - y ** 2) * (9 * z2 - r2) / (8 * np.sqrt(70))
+                            res += mo_coeffs[6] * yx2y2z2r2
+                        if mo_coeffs[7] != 0:
+                            zx4x2y2y4 = -105 * z * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(35))
+                            res += mo_coeffs[7] * zx4x2y2y4
+                        if mo_coeffs[8] != 0:
+                            zx3yxy3 = -105 * x * y * z * (4 * x ** 2 - 4 * y ** 2) / (8 * np.sqrt(35))
+                            res += mo_coeffs[8] * zx3yxy3
+                        if mo_coeffs[9] != 0:
+                            xx4y2x2y4 = 21 * x * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(14))
+                            res += mo_coeffs[9] * xx4y2x2y4
+                        if mo_coeffs[10] != 0:
+                            yx4y2x2y4 = 21 * y * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(14))
+                            res += mo_coeffs[10] * yx4y2x2y4
+    
+                        return res * s_val
+                    self.basis_functions.append(h_shell)
+
+                elif shell_type.lower() == "i":
+                    self.shell_types.append("13i")
+                    self.funcs_per_shell.append(13)
+                    self.n_aos += 13
+                    norms = i_norm(exponents)
+                    def i_shell(
+                        r2, x, y, z, mo_coeffs,
+                        alpha=exponents, con_coeffs=con_coeff, norms=norms
+                    ):
+                        e_r2 = np.exp(np.outer(-alpha, r2))
+                        s_val = np.dot(con_coeff * norms, e_r2)
+                        res = np.zeros(len(r2))
+                        z2 = z ** 2
+                        if mo_coeffs[0] != 0:
+                            z6z4r2z2r4r6 = (231 * z2 * z2 ** 2 - 315 * z2 ** 2 * r2 + 105 * z2 * r2 ** 2 - 5 * r2 * r2 ** 2) / 16
+                            res += mo_coeffs[0] * z6z4r2z2r4r6
+                        if mo_coeffs[1] != 0:
+                            xz5z3r2zr4 = np.sqrt(21) * x * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                            res += mo_coeffs[1] * xz5z3r2zr4
+                        if mo_coeffs[2] != 0:
+                            yz5z3r2zr4 = np.sqrt(21) * y * z * (33 * z2 ** 2 - 30 * z2 * r2 + 5 * r2 ** 2) / 8
+                            res += mo_coeffs[2] * yz5z3r2zr4
+                        if mo_coeffs[3] != 0:
+                            x2y2z4z2r2r3 = 105 * (x ** 2 - y ** 2) * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (16 * np.sqrt(210))
+                            res += mo_coeffs[3] * x2y2z4z2r2r3
+                        if mo_coeffs[4] != 0:
+                            xyz4z2r2r4 = 105 * x * y * (33 * z2 ** 2 - 18 * z2 * r2 + r2 ** 2) / (8 * np.sqrt(210))
+                            res += mo_coeffs[4] * xyz4z2r2r4
+                        if mo_coeffs[5] != 0:
+                            xx2y2z3zr2 = -105 * x * z * (x ** 2 - 3 * y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                            res += mo_coeffs[5] * xx2y2z3zr2
+                        if mo_coeffs[6] != 0:
+                            yx2y2z3zr2 = -105 * y * z * (3 * x ** 2 - y ** 2) * (11 * z2 - 3 * r2) / (8 * np.sqrt(210))
+                            res += mo_coeffs[6] * yx2y2z3zr2
+                        if mo_coeffs[7] != 0:
+                            x4x2y2y4z2r2 = -np.sqrt(63) * ((x ** 2) ** 2 - 6 * (x * y) ** 2 + (y ** 2) ** 2) * (11 * z2 - r2) / 16
+                            res += mo_coeffs[7] * x4x2y2y4z2r2
+                        if mo_coeffs[8] != 0:
+                            xyx2y2z2r2 = -np.sqrt(63) * x * y * (x ** 2 - y ** 2) * (11 * z2 - r2) / 4
+                            res += mo_coeffs[8] * xyx2y2z2r2
+                        if mo_coeffs[9] != 0:
+                            xzx4x2y2y4 = 231 * x * z * ((x ** 2) ** 2 - 10 * (x * y) ** 2 + 5 * (y ** 2) ** 2) / (8 * np.sqrt(154))
+                            res += mo_coeffs[9] * xzx4x2y2y4
+                        if mo_coeffs[10] != 0:
+                            yzx4x2y2y4 = 231 * y * z * (5 * (x ** 2) ** 2 - 10 * (x * y) ** 2 + (y ** 2) ** 2) / (8 * np.sqrt(154))
+                            res += mo_coeffs[10] * yzx4x2y2y4
+                        if mo_coeffs[11] != 0:
+                            x6x4y2x2y4y6 = 231 * ((x * x ** 2) ** 2 - 15 * (x ** 2 * y) ** 2 + 15 * (x * y ** 2) ** 2 - (y * y ** 2) ** 2) / (16 * np.sqrt(462))
+                            res += mo_coeffs[11] * x6x4y2x2y4y6
+                        if mo_coeffs[12] != 0:
+                            yx5x3y3xy5 = 231 * x * y * (6 * (x ** 2) ** 2 - 20 * (x * y) ** 2 + 6 * (y ** 2) ** 2) / (16 * np.sqrt(462))
+                            res += mo_coeffs[12] * yx5x3y3xy5
+    
+                        return res * s_val
+                    self.basis_functions.append(i_shell)
+
                 else:
                     self.LOG.warning(
                         "cannot handle shell of type %s" % shell_type
@@ -4594,7 +4685,7 @@ class Orbitals:
         if coords.ndim == 1:
             val = 0
             func_vals = np.zeros(
-                sum(len(f) for f in self.basis_functions), dtype="float32"
+                len(self.basis_functions), dtype="float32"
             )
         else:
             val = np.zeros(len(coords))
@@ -4822,5 +4913,494 @@ class Orbitals:
 
         return plus_density
 
-    def fukui_dual_value(self, *args, **kwargs):
-        return self.fukui_acceptor_value(*args, **kwargs) - self.fukui_donor_value(*args, **kwargs)
+    def fukui_dual_value(self, coords, delta=0.1, **kwargs):
+        CITATION = "doi:10.1021/acs.jpca.9b07516"
+        self.LOG.citation(CITATION)
+        
+        alpha_occ = np.zeros(self.n_mos)
+        alpha_occ[self.n_alpha - 1] = 1
+        beta_occ = None
+        if self.beta_coefficients is not None:
+            beta_occ = np.zeros(self.n_mos)
+            beta_occ[self.n_beta - 1] = 1
+
+        if self.beta_coefficients is None:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            plus_e = np.zeros(self.n_mos)
+            minus_e = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                minus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            for i in range(self.n_alpha, self.n_mos):
+                plus_e[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+
+            minus_e /= sum(minus_e)
+            plus_e /= sum(plus_e)
+            dual_density = self.density_value(
+                coords, alpha_occ=plus_e - minus_e, beta_occ=beta_occ, **kwargs
+            )
+        
+        else:
+            homo_nrg = self.alpha_nrgs[self.n_alpha - 1]
+            if self.n_beta > self.n_alpha:
+                homo_nrg = self.beta_nrgs[self.n_beta - 1]
+            
+            lumo_nrg = self.alpha_nrgs[self.n_alpha]
+            if self.n_beta > self.n_alpha:
+                lumo_nrg = self.beta_nrgs[self.n_beta]
+
+            chem_pot = 0.5 * (lumo_nrg + homo_nrg)
+            alpha_occ = np.zeros(self.n_mos)
+            beta_occ = np.zeros(self.n_mos)
+            for i in range(0, self.n_alpha):
+                alpha_occ[i] = -np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(0, self.n_beta):
+                beta_occ[i] = -np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            for i in range(self.n_alpha, self.n_mos):
+                alpha_occ[i] = np.exp(
+                    -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
+                )
+            
+            for i in range(self.n_beta, self.n_mos):
+                beta_occ[i] = np.exp(
+                    -((chem_pot - self.beta_nrgs[i]) / delta) ** 2
+                )
+
+            alpha_occ[self.n_alpha:] /= abs(sum(alpha_occ[self.n_alpha:]))
+            beta_occ[self.n_beta:] /= abs(sum(beta_occ[self.n_beta:]))
+            alpha_occ[:self.n_alpha] /= sum(alpha_occ[:self.n_alpha])
+            beta_occ[:self.n_beta] /= sum(beta_occ[:self.n_beta])
+            dual_density = self.density_value(
+                coords, alpha_occ=alpha_occ, beta_occ=beta_occ, **kwargs
+            )
+
+        return dual_density
+
+    @staticmethod
+    def get_cube_array(
+        geom,
+        padding=4,
+        spacing=0.2,
+        standard_axes=False,
+    ):
+        """returns n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
+        n_pts1 is the number of points along the first axis
+        n_pts2 ... second axis
+        n_pts3 ... third axis
+        v1 is the vector for the first axis, norm should be close to spacing
+        v2 ... second axis
+        v3 ... third axis
+        com is the center of the cube
+        u is a rotation matrix for the v1, v2, v3 axes relative to xyz
+        geom - Geometry() used to define the cube
+        padding - extra space around atoms in angstrom
+        spacing - distance between adjacent points in angstrom
+        standard_axes - True to use x, y, and z axes
+            by default, the cube will be oriented to fit
+            the geom and have the smallest volume possible
+        """
+
+        def get_standard_axis():
+            """returns info to set up a grid along the x, y, and z axes"""
+            geom_coords = geom.coords
+
+            # get range of geom's coordinates
+            x_min = np.min(geom_coords[:, 0])
+            x_max = np.max(geom_coords[:, 0])
+            y_min = np.min(geom_coords[:, 1])
+            y_max = np.max(geom_coords[:, 1])
+            z_min = np.min(geom_coords[:, 2])
+            z_max = np.max(geom_coords[:, 2])
+
+            # add padding, figure out vectors
+            r1 = 2 * padding + x_max - x_min
+            n_pts1 = int(r1 // spacing) + 1
+            d1 = r1 / (n_pts1 - 1)
+            v1 = np.array((d1, 0., 0.))
+            r2 = 2 * padding + y_max - y_min
+            n_pts2 = int(r2 // spacing) + 1
+            d2 = r2 / (n_pts2 - 1)
+            v2 = np.array((0., d2, 0.))
+            r3 = 2 * padding + z_max - z_min
+            n_pts3 = int(r3 // spacing) + 1
+            d3 = r3 / (n_pts3 - 1)
+            v3 = np.array((0., 0., d3))
+            com = np.array([x_min, y_min, z_min]) - padding
+            u = np.eye(3)
+            return n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
+
+        if standard_axes:
+            n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u = get_standard_axis()
+        else:
+            test_coords = geom.coords - geom.COM()
+            covar = np.dot(test_coords.T, test_coords)
+            try:
+                # use SVD on the coordinate covariance matrix
+                # this decreases the volume of the box we're making
+                # that means less work for higher resolution
+                # for many structures, this only decreases the volume
+                # by like 5%
+                u, s, vh = np.linalg.svd(covar)
+                v1 = u[:, 0]
+                v2 = u[:, 1]
+                v3 = u[:, 2]
+                # change basis of coordinates to the singular vectors
+                # this is how we determine the range + padding
+                new_coords = np.dot(test_coords, u)
+                xr_max = np.max(new_coords[:, 0])
+                xr_min = np.min(new_coords[:, 0])
+                yr_max = np.max(new_coords[:, 1])
+                yr_min = np.min(new_coords[:, 1])
+                zr_max = np.max(new_coords[:, 2])
+                zr_min = np.min(new_coords[:, 2])
+                com = np.array([xr_min, yr_min, zr_min]) - padding
+                # move the COM back to the xyz space of the original molecule
+                com = np.dot(u, com)
+                com += geom.COM()
+                r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
+                r2 = 2 * padding + np.linalg.norm(yr_max - yr_min)
+                r3 = 2 * padding + np.linalg.norm(zr_max - zr_min)
+                n_pts1 = int(r1 // spacing) + 1
+                n_pts2 = int(r2 // spacing) + 1
+                n_pts3 = int(r3 // spacing) + 1
+                v1 = v1 * r1 / (n_pts1 - 1)
+                v2 = v2 * r2 / (n_pts2 - 1)
+                v3 = v3 * r3 / (n_pts3 - 1)
+            except np.linalg.LinAlgError:
+                n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u = get_standard_axis()
+        
+        return n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
+
+    @staticmethod
+    def get_cube_points(
+        n_pts1, n_pts2, n_pts3, v1, v2, v3, com, sort=True
+    ):
+        """
+        returns coords, n_list
+        coords is an array of points in the cube
+        n_list specifies where each point is along the axes
+        e.g. 5th point along v1, 4th point along v2, 0th point along v3
+        """
+        v_list = [v1, v2, v3]
+        n_list = [n_pts1, n_pts2, n_pts3]
+
+        if sort:
+            v_list = []
+            n_list = []
+            for n, v in sorted(
+                zip([n_pts1, n_pts2, n_pts3], [v1, v2, v3]),
+                key=lambda p: np.linalg.norm(p[1]),
+            ):
+                v_list.append(v)
+                n_list.append(n)
+            
+        ndx = (
+            np.vstack(
+                np.mgrid[
+                    0 : n_list[0],
+                    0 : n_list[1],
+                    0 : n_list[2],
+                ]
+            )
+            .reshape(3, np.prod(n_list))
+            .T
+        )
+        coords = np.matmul(ndx, v_list)
+        del ndx
+        coords += com
+
+        return coords, n_list
+
+    def memory_estimate(
+        self,
+        func_name,
+        n_points=None,
+        low_mem=False,
+        n_jobs=1,
+        apoints=None,
+        rpoints=None,
+        n_atoms=None,
+    ):
+        """
+        returns the estimated memory use (in GB) for calling the
+        specified function on the specified number of points
+        if func_name is a condensed fukui function, apoints,
+        and rpoints must be given
+        otherwise, n_points must be given
+        """
+        test_array = np.ones(1)
+        if test_array.dtype == np.float64:
+            # bytes - 8 bits per byte
+            num_size = 8
+        else:
+            # hopefully float32
+            num_size = 4
+        
+        size = n_points
+        if any(func_name == x for x in [
+                "density_value",
+                "fukui_acceptor_value",
+                "fukui_donor_value",
+                "fukui_dual_value",
+            ]
+        ):
+            size *= num_size * 4 * max(n_jobs, n_atoms)
+            if not low_mem:
+                size *= self.n_mos / (2 * max(n_jobs, n_atoms))
+        elif func_name == "mo_value":
+            size *= num_size * (4 * n_jobs + max(n_atoms - n_jobs, 0))
+        elif any(func_name == x for x in [
+                "condensed_fukui_acceptor_values",
+                "condensed_fukui_donor_values",
+                "condensed_fukui_dual_values",
+            ]
+        ):
+            density_size = self.memory_estimate(
+                "density_value",
+                n_points=apoints * rpoints,
+                n_jobs=n_jobs,
+                n_atoms=n_atoms,
+                low_mem=low_mem,
+            )
+            mat_size = num_size * n_atoms * rpoints * apoints
+            size = max(density_size, mat_size)
+        
+        return size * 1e-9
+
+    def voronoi_integral(
+        self,
+        target,
+        geom,
+        *args,
+        rpoints=32,
+        apoints=1454,
+        func=None,
+        rmax=None,
+        **kwargs,
+    ):
+        """
+        integrates func in the Voronoi cell of the specified target
+        geom - Geometry() target belongs to
+        args - passed to func
+        rpoints - radial points used for Gauss-Legendre integral
+        apoints - angular points for Lebedev integral
+        func - function to evaluate
+        kwargs - passed to func
+        """
+        
+        atom = geom.find(target)[0]
+    
+        if rmax is None:
+            rmax = 10 * atom._vdw
+
+        rgrid, rweights = gauss_legendre_grid(
+            start=0, stop=rmax, num=rpoints
+        )
+        # grab Lebedev grid for unit sphere at origin
+        agrid, aweights = lebedev_sphere(
+            radius=1, center=np.zeros(3), num=apoints
+        )
+
+        # TODO: switch to np.zeros((n_ang * n_rad, 3))
+        # this eliminates appending
+        # build a list of points and weights around the atom
+        all_points = np.empty((0, 3))
+        weights = np.empty(0)
+        
+        for rvalue, rweight in zip(rgrid, rweights):
+            agrid_r = agrid * rvalue
+            agrid_r += atom.coords
+            all_points = np.append(all_points, agrid_r, axis=0)
+            weights = np.append(weights, rweight * aweights)
+        
+        # find points that are closest to this atom
+        # than any other
+        dist_mat = distance_matrix(geom.coords, all_points)
+        atom_ndx = geom.atoms.index(atom)
+        mask = np.argmin(dist_mat, axis=0) == atom_ndx
+        
+        voronoi_points = all_points[mask]
+        voronoi_weights = weights[mask]
+        
+        # evaluate function
+        vals = func(voronoi_points, *args, **kwargs)
+        
+        # multiply values by weights, add them up, and return the sum
+        return np.dot(vals, voronoi_weights)
+
+    def power_integral(
+        self,
+        target,
+        geom,
+        *args,
+        radii="umn",
+        rpoints=32,
+        apoints=1454,
+        func=None,
+        rmax=None,
+        **kwargs,
+    ):
+        """
+        integrates func in the power cell of the specified target
+        power diagrams are a form of weighted Voronoi diagrams
+        that form cells based on the smallest d^2 - r^2
+        see wikipedia article: https://en.wikipedia.org/wiki/Power_diagram
+        radii - "bondi" - Bondi vdW radii
+                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+                dict()  - radii are values and elements are keys
+                list()  - list of radii corresponding to targets
+        geom - Geometry() target belongs to
+        args - passed to func
+        rpoints - radial points used for Gauss-Legendre integral
+        apoints - angular points for Lebedev integral
+        func - function to evaluate
+        kwargs - passed to func
+        """
+        
+        if func is None:
+            func = self.density_value
+        
+        target = geom.find(target)[0]
+        target_ndx = geom.atoms.index(target)
+
+        radius_list = []
+        radii_dict = None
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif isinstance(radii, list):
+            radius_list = radii
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        else:
+            raise TypeError(
+                "radii must be list, dict, \"UMN\", or \"BONDI\": %s" % radii
+            )
+
+        if not radius_list:
+            for atom in geom.atoms:
+                radius_list.append(radii_dict[atom.element])
+
+        radius_list = np.array(radius_list)
+
+        if rmax is None:
+            rmax = 5 * radius_list[target_ndx]
+
+        rgrid, rweights = gauss_legendre_grid(
+            start=0, stop=rmax, num=rpoints
+        )
+        # grab Lebedev grid for unit sphere at origin
+        agrid, aweights = lebedev_sphere(
+            radius=1, center=np.zeros(3), num=apoints
+        )
+
+        # TODO: switch to np.zeros((n_ang * n_rad, 3))
+        # this eliminates appending
+        # build a list of points and weights around the atom
+        all_points = np.empty((0, 3))
+        weights = np.empty(0)
+        
+        for rvalue, rweight in zip(rgrid, rweights):
+            agrid_r = agrid * rvalue
+            agrid_r += target.coords
+            all_points = np.append(all_points, agrid_r, axis=0)
+            weights = np.append(weights, rweight * aweights)
+        
+        # find points that are closest to this atom's vdw sphere
+        # than any other
+        dist_mat = distance_matrix(geom.coords, all_points) ** 2
+        dist_mat = np.transpose(dist_mat.T - radius_list ** 2)
+        atom_ndx = geom.atoms.index(target)
+        mask = np.argmin(dist_mat, axis=0) == atom_ndx
+        
+        power_points = all_points[mask]
+        power_weights = weights[mask]
+        
+        # with open("test_%s.bild" % target.name, "w") as f:
+        #     s = ""
+        #     for p in power_points:
+        #         s += ".sphere %.4f %.4f %.4f 0.05\n" % tuple(p)
+        #     f.write(s)
+        
+        # evaluate function
+        vals = func(power_points, *args, **kwargs)
+        
+        # multiply values by weights, add them up, and return the sum
+        return np.dot(vals, power_weights)
+
+    def condensed_fukui_donor_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        uses power_integral to integrate the fukui_donor_value
+        for all atoms in geom
+        values are normalized so they sum to 1
+        geom - Geometry()
+        args and kwargs are passed to power_integral
+        returns array for each atom's condensed Fukui donor values
+        """
+        out = np.zeros(len(geom.atoms))
+        for i, atom in enumerate(geom.atoms):
+            out[i] = self.power_integral(
+                atom, geom, *args, func=self.fukui_donor_value, **kwargs,
+            )
+        
+        out /= sum(out)
+        return out
+
+    def condensed_fukui_acceptor_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        uses power_integral to integrate the fukui_acceptor_value
+        for all atoms in geom
+        values are normalized so they sum to 1
+        geom - Geometry()
+        args and kwargs are passed to power_integral
+        returns array for each atom's condensed Fukui acceptor values
+        """
+        out = np.zeros(len(geom.atoms))
+        for i, atom in enumerate(geom.atoms):
+            out[i] = self.power_integral(
+                atom, geom, *args, func=self.fukui_acceptor_value, **kwargs,
+            )
+        
+        out /= sum(out)
+        return out
+
+    def condensed_fukui_dual_values(
+        self,
+        geom,
+        *args,
+        **kwargs,
+    ):
+        """
+        returns the difference between condensed_fukui_acceptor_values
+        and condensed_fukui_donor_values
+        """
+        out = self.condensed_fukui_acceptor_values(
+            geom, *args, **kwargs,
+        ) - self.condensed_fukui_donor_values(
+            geom, *args, **kwargs,
+        )
+        
+        return out

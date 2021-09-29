@@ -3,6 +3,7 @@ used for specifying basis information for a Theory()
 """
 
 import os
+import re
 from warnings import warn
 
 from AaronTools import addlogger
@@ -256,7 +257,7 @@ class Basis:
         returns the ORCA name of the basis set
         currently just adds hyphen to Karlsruhe basis if it isn't there
         """
-        if name.startswith("def2") and not name.startswith("def2-"):
+        if name.startswith("def2") and not re.match("def2(?:-|$)", name):
             return name.replace("def2", "def2-", 1)
 
         return name
