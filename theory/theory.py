@@ -27,6 +27,10 @@ from AaronTools.theory import (
     PSI4_SETTINGS,
     SQM_COMMENT,
     SQM_QMMM,
+    QCHEM_MOLECULE,
+    QCHEM_REM,
+    QCHEM_COMMENT,
+    QCHEM_SETTINGS,
 )
 from AaronTools.utils.utils import combine_dicts
 
@@ -294,7 +298,7 @@ class Theory:
         sanity_check_method: bool, check if method is available in recent version
                              of the target software package (Psi4 checks when its
                              footer is created)
-        kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
         """
         if geom is None:
             geom = self.geometry
@@ -315,6 +319,7 @@ class Theory:
                 keyword.startswith("PSI4_")
                 or keyword.startswith("ORCA_")
                 or keyword.startswith("GAUSSIAN_")
+                or keyword.startswith("QCHEM_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -364,6 +369,11 @@ class Theory:
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
+        elif style == "qchem":
+            return self.get_qchem_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
         raise NotImplementedError("no get_header method for style: %s" % style)
 
     def make_molecule(
@@ -377,7 +387,7 @@ class Theory:
         geom: Geometry()
         style: gaussian, psi4, or sqm
         conditional_kwargs: dict() of keyword: value pairs
-        kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
         """
         if geom is None:
             geom = self.geometry
@@ -396,6 +406,7 @@ class Theory:
                 keyword.startswith("PSI4_")
                 or keyword.startswith("ORCA_")
                 or keyword.startswith("GAUSSIAN_")
+                or keyword.startswith("QCHEM_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -437,6 +448,11 @@ class Theory:
 
         elif style == "sqm":
             return self.get_sqm_molecule(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "qchem":
+            return self.get_qchem_molecule(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
@@ -1825,3 +1841,229 @@ class Theory:
             )
         
         return s.rstrip(), warnings
+
+    def get_qchem_header(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+        """
+        write QChem input file header (up to charge mult)
+        other_kw_dict is a dictionary with file positions (using QCHEM_*)
+        corresponding to options/keywords
+        returns warnings if a certain feature is not available in QChem
+        """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for i, job in enumerate(self.job_type[::-1]):
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_qchem()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                if i > 0:
+                    raise NotImplementedError(
+                        "cannot specify multiple job types in the same QChem header"
+                    )
+
+        if (
+            QCHEM_COMMENT not in other_kw_dict
+            or not other_kw_dict[QCHEM_COMMENT]
+        ):
+            if self.geometry.comment:
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.name]
+
+        if QCHEM_SETTINGS in other_kw_dict:
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {QCHEM_SETTINGS: {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}},
+            )
+        else:
+            other_kw_dict = {QCHEM_SETTINGS: {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}}
+
+        # add EmpiricalDispersion info
+        if self.empirical_dispersion is not None:
+            disp, warning = self.empirical_dispersion.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, disp)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add Integral(grid=X)
+        if self.grid is not None:
+            grid, warning = self.grid.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, grid)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_qchem()
+            if warning is not None:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        if self.method is not None:
+            func, warning = self.method.get_qchem()
+            if warning is not None:
+                warnings.append(warning)
+
+            # warning = self.method.sanity_check_method(func, "qchem")
+            if warning:
+                warnings.append(warning)
+            if not self.method.is_semiempirical and self.basis is not None:
+                (
+                    basis_info,
+                    basis_warnings,
+                ) = self.basis.get_qchem_basis_info(self.geometry)
+                warnings.extend(basis_warnings)
+                # check basis elements to make sure no element is
+                # in two basis sets or left out of any
+                other_kw_dict = combine_dicts(
+                    other_kw_dict,
+                    basis_info,
+                )
+                if self.geometry is not None:
+                    basis_warning = self.basis.check_for_elements(
+                        self.geometry
+                    )
+                    if basis_warning is not None:
+                        warnings.append(basis_warning)
+
+            other_kw_dict = combine_dicts(
+                other_kw_dict, {QCHEM_REM: {"METHOD": func}},
+            )
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        out_str = ""
+
+        if QCHEM_REM in other_kw_dict:
+            out_str += "$rem\n"
+            for opt, setting in other_kw_dict[QCHEM_REM].items():
+                if opt:
+                    if isinstance(opt, str):
+                        val = setting
+                    else:
+                        if len(opt) == 1:
+                            val = setting[0]
+                        else:
+                            raise NotImplementedError("cannot use arrays in QCHEM_REM")
+
+                    out_str += "    %-20s    %s\n" % (opt, val)
+
+            out_str += "$end\n\n"
+        else:
+            warnings.append("no REM section")
+    
+        if QCHEM_SETTINGS in other_kw_dict:
+            for section in other_kw_dict[QCHEM_SETTINGS]:
+                settings = other_kw_dict[QCHEM_SETTINGS][section]
+                out_str += "$%s\n" % section
+                for setting in settings:
+                    if not settings:
+                        continue
+                    if isinstance(setting, dict):
+                        opt = settings[setting]
+                        if isinstance(opt, str):
+                            val = opt
+                        else:
+                            if len(opt) == 1:
+                                val = opt[0]
+                            else:
+                                raise NotImplementedError("cannot use arrays in QCHEM_REM")
+
+                        out_str += "    %-20s    %s\n" % (setting, val)
+    
+                    elif hasattr(opt, "__iter__") and not isinstance(opt, str):
+                        for val in opt:
+                            out_str += "    %s\n" % val
+                    
+                    else:
+                        out_str += "    %s\n" % setting
+    
+                out_str += "$end\n\n"
+        
+        return out_str, warnings
+    
+    def get_qchem_molecule(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_qchem()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        if (
+            GAUSSIAN_COMMENT not in other_kw_dict
+            or not other_kw_dict[GAUSSIAN_COMMENT]
+        ):
+            if self.geometry.comment:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
+
+        # add EmpiricalDispersion info
+        if self.empirical_dispersion is not None:
+            disp, warning = self.empirical_dispersion.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, disp)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add Integral(grid=X)
+        if self.grid is not None:
+            grid, warning = self.grid.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, grid)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_qchem()
+            if warning is not None:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        out_str = "$molecule\n    %i %i\n" % (
+            self.charge, self.multiplicity
+        )
+
+        if QCHEM_MOLECULE in other_kw_dict:
+            for line in other_kw_dict[QCHEM_MOLECULE]:
+                out_str += "    %-20s\n" % line
+        elif not self.geometry:
+            warnings.append("no molecule")
+        
+        for atom in self.geometry.atoms:
+            out_str += "    %-2s" % atom.element
+            out_str += "   %9.5f    %9.5f    %9.5f\n" % tuple(atom.coords)
+
+        out_str += "$end\n"
+        
+        return out_str, warnings
+
+    
+    

@@ -43,7 +43,7 @@ read_types = [
     "47",
     "31",
 ]
-write_types = ["xyz", "com", "inp", "in", "sqmin", "cube"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
@@ -155,6 +155,8 @@ def expected_inp_ext(exec_type):
         return ".in"
     if exec_type.lower() == "sqm":
         return ".mdin"
+    if exec_type.lower() == "qchem":
+        return ".inq"
 
 def expected_out_ext(exec_type):
     """
@@ -208,6 +210,8 @@ class FileWriter:
                 style = "in"
             elif style.lower() == "sqm":
                 style = "sqmin"
+            elif style.lower() == "qchem":
+                style = "inq"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -254,6 +258,15 @@ class FileWriter:
             else:
                 raise TypeError(
                     "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "inq":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_inq(geom, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'inq' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
@@ -344,7 +357,7 @@ class FileWriter:
         geom - Geometry()
         theory - Theory()
         outfile - None, False, or str
-                  None - geom.name + ".com" is used as output destination
+                  None - geom.name + ".inp" is used as output destination
                   False - return contents of the input file as a str
                   str - output destination
         return_warnings - True to return a list of warnings (e.g. basis
@@ -363,9 +376,9 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
+                outfile = "{}.{}.inp".format(geom.name, step2str(kwargs["step"]))
             else:
-                outfile = "{}.com".format(geom.name)
+                outfile = "{}.inp".format(geom.name)
         if outfile is False:
             if return_warnings:
                 return s, warnings
@@ -377,6 +390,54 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
+
+    @classmethod
+    def write_inq(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
+        """
+        write QChem input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".inq" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
+        fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
+        header, header_warnings = theory.make_header(
+            geom, style="qchem", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="qchem", return_warnings=True, **kwargs
+        )
+
+        out = header + mol
+        warnings = header_warnings + mol_warnings
+        
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            if "step" in kwargs:
+                outfile = "{}.{}.inq".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = "{}.inq".format(geom.name)
+        if outfile is False:
+            if return_warnings:
+                return out, warnings
+            return out
+        else:
+            fname = os.path.basename(outfile)
+            name, ext = os.path.splitext(fname)
+            # could use jinja, but it's one thing...
+            out = out.replace("{ name }", name)
+            with open(outfile, "w") as f:
+                f.write(out)
         
         if return_warnings:
             return warnings
@@ -2391,12 +2452,12 @@ class FileReader:
 
         other = {}
 
-        int_info = re.compile("([\S\s]+?)\s*I\s*([N=]*)\s*(-?\d+)")
+        int_info = re.compile("([\S\s]+?)\s*I\s*(N=)?\s*(-?\d+)")
         real_info = re.compile(
-            "([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+            "([\S\s]+?)\s*R\s*(N=)\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
         )
         char_info = re.compile(
-            "([\S\s]+?)\s*C\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+            "([\S\s]+?)\s*C\s*(N=)?\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
         )
 
         theory = Theory()

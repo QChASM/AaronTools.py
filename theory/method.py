@@ -1,4 +1,6 @@
 """methods (e.g. DFT functionals, coupled-cluster methods) for Theory()"""
+import re
+
 from AaronTools import addlogger
 
 KNOWN_SEMI_EMPIRICAL = [
@@ -56,7 +58,6 @@ class Method:
         program, str, gaussian, orca or psi4
         """
         import os.path
-        from re import match, IGNORECASE
         from difflib import SequenceMatcher as seqmatch
         from numpy import argsort, loadtxt
         from AaronTools.const import AARONTOOLS
@@ -78,8 +79,8 @@ class Method:
         
         if not any(
             # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
-            match(
-                "%s%s$" % (prefix, method.replace("(", "\(").replace(")", "\)").replace("+", "\+")), name, flags=IGNORECASE
+            re.match(
+                "%s%s$" % (prefix, method.replace("(", "\(").replace(")", "\)").replace("+", "\+")), name, flags=re.IGNORECASE
             ) for method in valid
         ):
             warning = "method '%s' may not be available in %s\n" % (name, program) + \
@@ -188,6 +189,29 @@ class Method:
     def get_sqm(self):
         """get method name that is appropriate for sqm"""
         return self.name
+
+    def get_qchem(self):
+        """maps proper functional name to one Psi4 accepts"""
+        if re.search("[wω]b97x?-[A-Za-z]", self.name.lower()):
+            name = re.search("([wω]?)wb97(x)([A-Za-z]+)", self.name.lower())
+            return "%sB97X%s" % (
+                name.group(1) if name.group(1) else "",
+                name.group(2) if name.group(2) else "",
+                name.group(3)
+            ),
+            None
+        elif self.name.upper() == 'B97D':
+            return ("B97-D", None)
+        elif self.name.upper() == "M062X":
+            return ("M06-2X", None)
+        elif self.name.upper() == "M06L":
+            return ("M06-L", None)
+
+        # the functionals havent been combined with dispersion yet, so
+        # we aren't checking if the method is available
+
+        return self.name.replace('ω', 'w'), None
+
 
 class SAPTMethod(Method):
     """

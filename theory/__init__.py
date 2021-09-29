@@ -59,6 +59,11 @@ GAUSSIAN_COMMENT = "comments" #comment line after the route
 SQM_COMMENT = "comments"
 SQM_QMMM = "qmmm"
 
+QCHEM_MOLECULE = "molecule" # $molecule
+QCHEM_REM = "job" # $rem
+QCHEM_COMMENT = "comment" # $comment
+QCHEM_SETTINGS = "settings" # $*
+
 from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.implicit_solvent import ImplicitSolvent

@@ -1,4 +1,6 @@
 """various job types for Theory() instances"""
+import numpy as np
+
 from AaronTools import addlogger
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
@@ -12,6 +14,8 @@ from AaronTools.theory import (
     PSI4_OPTKING,
     PSI4_SETTINGS,
     SQM_QMMM,
+    QCHEM_REM,
+    QCHEM_SETTINGS,
 )
 from AaronTools.utils.utils import range_list
 
@@ -44,6 +48,10 @@ class JobType:
     
     def get_sqm(self):
         """overwrite to return a dict with SQM_* keys"""
+        pass
+    
+    def get_qchem(self):
+        """overwrite to return a dict with QCHEM_* keys"""
         pass
 
 @addlogger
@@ -703,6 +711,127 @@ class OptimizationJob(JobType):
         
         return dict(), warnings
 
+    def get_qchem(self):
+        if self.transition_state:
+            out = {QCHEM_REM: {"JOB_TYPE": "TS"}}
+        else:
+            out = {QCHEM_REM: {"JOB_TYPE": "OPT"}}
+        
+        # constraints
+        if self.constraints is not None and any(
+            [self.constraints[key] for key in self.constraints.keys()]
+        ):
+            out[QCHEM_SETTINGS] = {"opt": []}
+            constraints = None
+            fixed = None
+
+            x_atoms = []
+            y_atoms = []
+            z_atoms = []
+            xyz_atoms = []
+
+            if "x" in self.constraints:
+                x_atoms = self.geometry.find(self.constraints["x"])
+
+
+            if "y" in self.constraints:
+                y_atoms = self.geometry.find(self.constraints["y"])
+
+
+            if "z" in self.constraints:
+                z_atoms = self.geometry.find(self.constraints["z"])
+
+            if "atoms" in self.constraints:
+                xyz_atoms = self.geometry.find(self.constraints["atoms"])
+
+            if any([x_atoms, y_atoms, z_atoms, xyz_atoms]):
+                fixed = "FIXED"
+                for atom in x_atoms:
+                    fixed += "\n        %i X" % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "YZ"
+                        continue
+                    if atom in y_atoms:
+                        fixed += "Y"
+                    if atom in z_atoms:
+                        fixed += "Z"
+                
+                for atom in y_atoms:
+                    if atom in x_atoms:
+                        continue
+                    fixed += "\n        %i " % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "XYZ"
+                        continue
+                    fixed += "Y"
+                    if atom in z_atoms:
+                        fixed += "Z"
+                
+                for atom in y_atoms:
+                    if atom in x_atoms or atom in y_atoms:
+                        continue
+                    fixed += "\n        %i " % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "XYZ"
+                        continue
+                    fixed += "Z"
+
+                for atom in xyz_atoms:
+                    if any(atom in l for l in [x_atoms, y_atoms, z_atoms]):
+                        continue
+                    fixed += "\n        %i XYZ" % (self.geometry.atoms.index(atom) + 1)
+
+            if "bonds" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for bond in self.constraints["bonds"]:
+                    atom1, atom2 = self.geometry.find(bond)
+                    constraints += "        STRE %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        atom1.dist(atom2),
+                    )
+            
+            if "angles" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for angle in self.constraints["angles"]:
+                    atom1, atom2, atom3 = self.geometry.find(angle)
+                    constraints += "        STRE %2i %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        self.geometry.atoms.index(atom3) + 1,
+                        np.rad2deg(atom2.angle(atom1, atom3)),
+                    )
+            
+            if "torsions" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for angle in self.constraints["torsions"]:
+                    atom1, atom2, atom3, atom4 = self.geometry.find(angle)
+                    constraints += "        TORS %2i %2i %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        self.geometry.atoms.index(atom3) + 1,
+                        self.geometry.atoms.index(atom4) + 1,
+                        np.rad2deg(
+                            self.geometry.dihedral(
+                                atom1, atom2, atom3, atom4,
+                            )
+                        ),
+                    )
+            
+            
+            if fixed:
+                fixed += "\n    ENDFIXED"
+                out[QCHEM_SETTINGS]["opt"].append(fixed)
+
+            if constraints:
+                constraints += "    ENDCONSTRAINT"
+                out[QCHEM_SETTINGS]["opt"].append(constraints)
+        
+        return out
+
 class FrequencyJob(JobType):
     """frequnecy job"""
 
@@ -751,6 +880,17 @@ class FrequencyJob(JobType):
 
     def get_sqm(self):
         raise NotImplementedError("cannot build frequnecy job input for sqm")
+
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "Frequnecy"}}
+        if self.numerical:
+            out[QCHEM_REM] = {"FD_DERIVATIVE_TYPE": "1"}
+        out[QCHEM_SETTINGS] = {"isotopes": [
+            "1 1",
+            "0 %.2f" % self.temperature,
+        ]}
+        
+        return out
 
 class SinglePointJob(JobType):
     """single point energy"""

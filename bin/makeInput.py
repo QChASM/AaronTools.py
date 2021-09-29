@@ -10,7 +10,7 @@ from AaronTools.theory import *
 from AaronTools.utils.utils import combine_dicts, get_filename, glob_files
 
 theory_parser = argparse.ArgumentParser(
-    description="print Gaussian, ORCA, Psi4, or SQM input file",
+    description="print Gaussian, ORCA, Psi4, SQM, or QChem input file",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
@@ -47,7 +47,7 @@ theory_parser.add_argument(
     type=str,
     default=None,
     dest="out_format",
-    choices=["gaussian", "orca", "psi4", "sqm"],
+    choices=["gaussian", "orca", "psi4", "sqm", "qchem"],
     help="file format of output",
 )
 
