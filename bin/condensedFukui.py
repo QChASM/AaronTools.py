@@ -8,7 +8,7 @@ from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename, glob_files
 
 fukui_parser = argparse.ArgumentParser(
-    description="print a cube file for a molecular orbital",
+    description="integrate weighted Fukui functions around atoms",
     formatter_class=argparse.RawTextHelpFormatter
 )
 

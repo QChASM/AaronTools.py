@@ -105,6 +105,11 @@ class Theory:
         "dft_spherical_points",
     ]
     
+    # some blocks need to go after the molecule
+    # because they refer to atom indices, so orca needs
+    # to read the structure first
+    ORCA_BLOCKS_AFTER_MOL = ["eprnmr"]
+    
     LOG = None
 
     def __init__(
@@ -147,6 +152,7 @@ class Theory:
                 self.__setattr__(key, None)
 
         self.kwargs = kwargs
+        print("theory init", kwargs)
 
         if isinstance(self.processors, str):
             processors = re.search(r"(\d+)", self.processors)
@@ -258,9 +264,13 @@ class Theory:
 
     def copy(self):
         new_dict = dict()
+        new_kwargs = dict()
         for key, value in self.__dict__.items():
             try:
-                new_dict[key] = value.copy()
+                if key == "kwargs":
+                    new_kwargs = value.copy()
+                else:
+                    new_dict[key] = value.copy()
             except AttributeError:
                 new_dict[key] = value
                 # ignore chimerax objects so seqcrow doesn't print a
@@ -274,7 +284,7 @@ class Theory:
                         )
                     )
         
-        return self.__class__(**new_dict)
+        return self.__class__(**new_dict, **new_kwargs)
  
     def make_header(
         self,
@@ -527,6 +537,11 @@ class Theory:
 
         elif style == "psi4":
             return self.get_psi4_footer(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "orca":
+            return self.get_orca_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
@@ -997,6 +1012,8 @@ class Theory:
         # add other blocks
         if ORCA_BLOCKS in other_kw_dict:
             for keyword in other_kw_dict[ORCA_BLOCKS]:
+                if any(keyword.lower() == name for name in self.ORCA_BLOCKS_AFTER_MOL):
+                    continue
                 if any(other_kw_dict[ORCA_BLOCKS][keyword]):
                     if keyword == "base":
                         out_str += "%%%s " % keyword
@@ -1021,6 +1038,113 @@ class Theory:
 
         # start of coordinate section - end of header
         out_str += "*xyz %i %i\n" % (self.charge, self.multiplicity)
+
+        if return_warnings:
+            return out_str, warnings
+        return out_str
+
+    def get_orca_footer(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+        """
+        get ORCA input file header
+        other_kw_dict is a dictionary with file positions (using ORCA_*)
+        corresponding to options/keywords
+        returns file content and warnings e.g. if a certain feature is not available in ORCA
+        returns str of header content
+        if return_warnings, returns str, list(warning)
+        """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_orca()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        warnings = []
+
+        # if method isn't semi-empirical, get basis info to write later
+        if not self.method.is_semiempirical and self.basis is not None:
+            basis_info, basis_warnings = self.basis.get_orca_basis_info()
+            warnings.extend(basis_warnings)
+            if self.geometry is not None:
+                warning = self.basis.check_for_elements(self.geometry)
+                if warning is not None:
+                    warnings.append(warning)
+
+        else:
+            basis_info = {}
+
+        other_kw_dict = combine_dicts(basis_info, other_kw_dict)
+
+        # get grid info
+        if self.grid is not None:
+            grid_info, warning = self.grid.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+
+            if any(
+                "finalgrid" in x.lower() for x in other_kw_dict[ORCA_ROUTE]
+            ):
+                grid_info[ORCA_ROUTE].pop(1)
+
+            other_kw_dict = combine_dicts(grid_info, other_kw_dict)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_orca()
+            warnings.extend(warning)
+            other_kw_dict = combine_dicts(solvent_info, other_kw_dict)
+
+        # dispersion
+        if self.empirical_dispersion is not None:
+            dispersion, warning = self.empirical_dispersion.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+
+            other_kw_dict = combine_dicts(dispersion, other_kw_dict)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        # start building input file header
+        out_str = "\n"
+
+        # add other blocks
+        if ORCA_BLOCKS in other_kw_dict:
+            for keyword in other_kw_dict[ORCA_BLOCKS]:
+                if not any(keyword.lower() == name for name in self.ORCA_BLOCKS_AFTER_MOL):
+                    continue
+                if any(other_kw_dict[ORCA_BLOCKS][keyword]):
+                    if keyword == "base":
+                        out_str += "%%%s " % keyword
+                        if isinstance(
+                            other_kw_dict[ORCA_BLOCKS][keyword], str
+                        ):
+                            out_str += (
+                                '"%s"\n' % other_kw_dict[ORCA_BLOCKS][keyword]
+                            )
+                        else:
+                            out_str += (
+                                '"%s"\n'
+                                % other_kw_dict[ORCA_BLOCKS][keyword][0]
+                            )
+                    else:
+                        out_str += "%%%s\n" % keyword
+                        for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
+                            out_str += "    %s\n" % opt
+                        out_str += "end\n"
+
+            out_str += "\n"
 
         if return_warnings:
             return out_str, warnings

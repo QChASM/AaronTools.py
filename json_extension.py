@@ -413,6 +413,8 @@ class ATDecoder(json.JSONDecoder):
                     )
                 )
         
+        print("decode", obj)
+
         if "other" in obj:
             rv.kwargs = obj["other"]
         

@@ -365,14 +365,20 @@ class FileWriter:
         kwargs - passed to Theory methods (make_header, make_molecule, etc.)
         """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
-        s, warnings = theory.make_header(
+        header, warnings = theory.make_header(
             geom, style="orca", return_warnings=True, **kwargs
         )
+        footer = theory.make_footer(
+            geom, style="orca", return_warnings=False, **kwargs
+        )
+        s = header
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
         s += "*\n"
 
+        s += footer
+        
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
@@ -1005,6 +1011,13 @@ class FileReader:
                 return self.read_orca_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
+
+            if "A Quantum Leap Into The Future Of Chemistry" in line:
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+
             if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
@@ -1319,6 +1332,16 @@ class FileReader:
                 return self.read_psi4_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
+            
+            if (
+                "A Quantum Leap Into The Future Of Chemistry"
+                in line
+            ):
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
@@ -1694,6 +1717,168 @@ class FileReader:
                 and "basis_set_by_ele" in self.other
             ):
                 self.other["orbitals"] = Orbitals(self)
+
+    def read_qchem_out(self, f, get_all=False, just_geom=True):
+        """read qchem output file"""
+        def get_atoms(f, n):
+            """parse atom info"""
+            rv = []
+            self.skip_lines(f, 2)
+            n += 1
+            line = f.readline()
+            i = 0
+            while "--" not in line:
+                i += 1
+                line = line.strip()
+                atom_info = line.split()
+                element = atom_info[1]
+                coords = np.array([float(x) for x in atom_info[2:5]])
+                rv += [Atom(element=element, coords=coords, name=str(i))]
+
+                line = f.readline()
+                n += 1
+
+            return rv, n
+
+        def add_grad(grad, name, line):
+            grad[name] = {}
+            grad[name]["value"] = line.split()[-3]
+            grad[name]["converged"] = line.split()[-1] == "YES"
+
+        line = f.readline()
+        n = 1
+        while line != "":
+            if (
+                "Psi4: An Open-Source Ab Initio Electronic Structure Package"
+                in line
+            ):
+                self.file_type = "dat"
+                return self.read_psi4_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            if "* O   R   C   A *" in line:
+                self.file_type = "out"
+                return self.read_orca_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            
+            if (
+                "A Quantum Leap Into The Future Of Chemistry"
+                in line
+            ):
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            if "Standard Nuclear Orientation (Angstroms)" in line:
+                if get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                self.atoms, n = get_atoms(f, n)
+
+            if just_geom:
+                line = f.readline()
+                n += 1
+                continue
+            else:
+                if "energy in the final basis set" in line:
+                    self.other["energy"] = float(line.split()[-1])
+                    if "SCF" in line:
+                        self.other["scf_energy"] = self.other["energy"]
+
+                if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
+                    info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
+                    kind = info.group(1)
+                    val = float(info.group(2))
+                    if "correlation" not in kind:
+                        self.other["E(%s)" % kind.split()[0]] = val
+                        self.other["energy"] = val
+                    else:
+                        self.other["E(corr)(%s)" % kind.split()[0]] = val
+
+                if "Molecular Point Group" in line:
+                    self.other["full_point_group"] = line.split()[3]
+                
+                if "Largest Abelian Subgroup" in line:
+                    self.other["abelian_subgroup"] = line.split()[3]
+                
+                if "Ground-State Mulliken Net Atomic Charges" in line:
+                    charges = []
+                    self.skip_lines(f, 3)
+                    n += 2
+                    line = f.readline()
+                    while "--" not in line:
+                        charge = float(line.split()[-1])
+                        charges.append(charge)
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["Mulliken Charges"] = charges
+
+                if "Cnvgd?" in line:
+                    grad = {}
+                    line = f.readline()
+                    while line and re.search("\w", line):
+                        if re.search("Energy\schange", line):
+                            add_grad(grad, "Delta E", line)
+                        elif re.search("Displacement", line):
+                            add_grad(grad, "Disp", line)
+                        elif re.search("Gradient", line):
+                            add_grad(grad, "Max Disp", line)
+
+                        line = f.readline()
+                        n += 1
+
+                    self.other["gradient"] = grad
+            
+                if "VIBRATIONAL ANALYSIS" in line:
+                    freq_str = ""
+                    self.skip_lines(f, 10)
+                    n += 9
+                    line = f.readline()
+                    while "STANDARD THERMODYNAMIC QUANTITIES" not in line:
+                        n += 1
+                        freq_str += line
+                        line = f.readline()
+                    self.other["frequency"] = Frequency(
+                        freq_str, style="qchem",
+                    )
+                    self.other["temperature"] = float(line.split()[4])
+    
+                if "Rotational Symmetry Number is" in line:
+                    self.other["rotational_symmetry_number"] = int(line.split()[-1])
+    
+                if "Molecular Mass:" in line:
+                    self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
+    
+                if "Principal axes and moments of inertia" in line:
+                    self.skip_lines(f, 1)
+                    line = f.readline()
+                    rot_consts = np.array([
+                        float(x) for x in line.split()[2:]
+                    ])
+                    rot_consts *= UNIT.AMU_TO_KG
+                    rot_consts *= UNIT.A0_TO_BOHR ** 2
+                    rot_consts *= 1e-20
+                    rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
+            
+                    self.other["rotational_temperature"] = rot_consts
+                
+                if line.startswith("Mult"):
+                    self.other["multiplicity"] = int(line.split()[1])
+                
+                if "Thank you very much for using Q-Chem" in line:
+                    self.other["finished"] = True
+                
+                line = f.readline()
+                n += 1
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -2654,7 +2839,7 @@ class FileReader:
                 self.other["wiberg_nao"] = bond_orders
 
             line = f.readline()
-                
+
     def read_crest(self, f, conf_name=None):
         """
         conf_name = False to skip conformer loading (doesn't get written until crest job is done)

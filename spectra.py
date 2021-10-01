@@ -53,6 +53,8 @@ class Signals:
             self.parse_orca_lines(lines, *args, **kwargs)
         elif lines and style == "psi4":
             self.parse_psi4_lines(lines, *args, **kwargs)
+        elif lines and style == "qchem":
+            self.parse_qchem_lines(lines, *args, **kwargs)
         else:
             raise NotImplementedError("cannot parse data for %s" % style)
 
@@ -74,6 +76,13 @@ class Signals:
         """parse data from Psi4 output files related to this spectrum"""
         raise NotImplementedError(
             "parse_psi4_lines not implemented by %s" %
+            self.__class__.__name__
+        )
+
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        """parse data from Q-Chem output files related to this spectrum"""
+        raise NotImplementedError(
+            "parse_qchem_lines not implemented by %s" %
             self.__class__.__name__
         )
 
@@ -912,6 +921,56 @@ class Frequency(Signals):
             data.combinations[ndx2] = [
                 AnharmonicVibration(combo[4], intensity=combo[5], harmonic=harm_data)
             ]
+    
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        num_head = 0
+        modes = []
+        for k, line in enumerate(lines):
+            if "Frequency:" in line:
+                ndx = 0
+                for i in float_num.findall(line):
+                    self.data += [HarmonicVibration(float(i))]
+                    modes += [[]]
+                continue
+
+            if "Force Cnst:" in line:
+                force_constants = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].forcek = float(force_constants[i])
+                continue
+
+            if "Red. Mass:" in line:
+                red_masses = float_num.findall(line)
+                for i in range(-len(red_masses), 0, 1):
+                    self.data[i].red_mass = float(red_masses[i])
+                continue
+
+            if "IR Intens:" in line:
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].intensity = float(intensities[i])
+                continue
+
+            if "Raman Intens:" in line:
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].raman_activity = float(intensities[i])
+                continue
+
+            match = re.search(r"^\s?[A-Z][a-z]?\s+(\s+[+-]?\d+\.\d+)+$", line)
+            if match is None:
+                continue
+            ndx += 1
+            values = float_num.findall(line)
+            moves = np.array(values, dtype=np.float)
+            n_moves = len(moves) // 3
+            for i in range(-n_moves, 0):
+                modes[i].append(
+                    moves[3 * n_moves + 3 * i : 4 * n_moves + 3 * i]
+                )
+
+        for mode, data in zip(modes, self.data):
+            data.vector = np.array(mode, dtype=np.float64)
 
     def parse_orca_lines(self, lines, *args, **kwargs):
         """parse lines of orca output related to frequency
