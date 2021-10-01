@@ -152,7 +152,6 @@ class Theory:
                 self.__setattr__(key, None)
 
         self.kwargs = kwargs
-        print("theory init", kwargs)
 
         if isinstance(self.processors, str):
             processors = re.search(r"(\d+)", self.processors)

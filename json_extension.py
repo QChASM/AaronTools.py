@@ -412,8 +412,6 @@ class ATDecoder(json.JSONDecoder):
                         user_defined=file,
                     )
                 )
-        
-        print("decode", obj)
 
         if "other" in obj:
             rv.kwargs = obj["other"]
