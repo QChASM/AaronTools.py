@@ -1122,7 +1122,6 @@ class BasisSet:
             if (
                 all([basis == self.basis[0] for basis in self.basis])
                 and not self.basis[0].user_defined
-                and not self.ecp
             ):
                 basis_name = Basis.get_qchem(self.basis[0].name)
                 # warning = self.basis[0].sanity_check_basis(
@@ -1139,7 +1138,6 @@ class BasisSet:
             if any(x == info[QCHEM_REM]["BASIS"] for x in ["MIXED", "General"]):
                 out_str = ""
                 for basis in self.basis:
-                    print(basis)
                     if basis.elements and not basis.user_defined:
                         if info[QCHEM_REM]["BASIS"] == "General":
                             out_str += " ".join([ele for ele in basis.elements])

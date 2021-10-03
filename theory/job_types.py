@@ -911,6 +911,11 @@ class SinglePointJob(JobType):
         """returns a dict with keys: SQM_QMMM"""
         return {SQM_QMMM: {"maxcyc": ["0"]}}
 
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "SP"}}
+        
+        return out
+
 
 class ForceJob(JobType):
     """force/gradient job"""

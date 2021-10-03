@@ -1982,17 +1982,18 @@ class Theory:
             conditional_kwargs = {}
 
         warnings = []
+        job_type_count = 0
         if self.job_type is not None:
             for i, job in enumerate(self.job_type[::-1]):
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
                 job_dict = job.get_qchem()
+                if QCHEM_REM in job_dict and any(key.lower() == "job_type" for key in job_dict[QCHEM_REM]):
+                    job_type_count += 1
+                if job_type_count > 1:
+                    raise NotImplementedError("cannot put multiple JOB_TYPE entries in one Q-Chem header")
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
-                if i > 0:
-                    raise NotImplementedError(
-                        "cannot specify multiple job types in the same QChem header"
-                    )
 
         if (
             QCHEM_COMMENT not in other_kw_dict
@@ -2009,7 +2010,7 @@ class Theory:
                 {QCHEM_SETTINGS: {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}},
             )
         else:
-            other_kw_dict = {QCHEM_SETTINGS: {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}}
+            other_kw_dict[QCHEM_SETTINGS] = {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -2069,42 +2070,52 @@ class Theory:
 
         out_str = ""
 
-        if QCHEM_REM in other_kw_dict:
-            out_str += "$rem\n"
-            for opt, setting in other_kw_dict[QCHEM_REM].items():
-                if opt:
-                    if isinstance(opt, str):
-                        val = setting
-                    else:
-                        if len(opt) == 1:
-                            val = setting[0]
-                        else:
-                            raise NotImplementedError("cannot use arrays in QCHEM_REM")
-
-                    out_str += "    %-20s    %s\n" % (opt, val)
-
-            out_str += "$end\n\n"
+        if QCHEM_REM in other_kw_dict and QCHEM_SETTINGS in other_kw_dict:
+            other_kw_dict[QCHEM_SETTINGS] = combine_dicts(
+                {"rem": other_kw_dict[QCHEM_REM]}, other_kw_dict[QCHEM_SETTINGS],
+            )
+        
+        elif QCHEM_REM in other_kw_dict:
+            other_kw_dict[QCHEM_SETTINGS] = {"rem": other_kw_dict[QCHEM_REM]}
+        #     out_str += "$rem\n"
+        #     for opt, setting in other_kw_dict[QCHEM_REM].items():
+        #         if opt:
+        #             if isinstance(opt, str):
+        #                 val = setting
+        #             else:
+        #                 if len(opt) == 1:
+        #                     val = setting[0]
+        #                 else:
+        #                     raise NotImplementedError("cannot use arrays in QCHEM_REM")
+        # 
+        #             out_str += "    %-20s    %s\n" % (opt, val)
+        # 
+        #     out_str += "$end\n\n"
         else:
             warnings.append("no REM section")
-    
+
         if QCHEM_SETTINGS in other_kw_dict:
             for section in other_kw_dict[QCHEM_SETTINGS]:
                 settings = other_kw_dict[QCHEM_SETTINGS][section]
                 out_str += "$%s\n" % section
                 for setting in settings:
-                    if not settings:
+                    if not setting:
                         continue
-                    if isinstance(setting, dict):
+                    if isinstance(settings, dict):
                         opt = settings[setting]
                         if isinstance(opt, str):
                             val = opt
+                            out_str += "    %-20s    %s\n" % (setting, val)
+                        elif isinstance(opt, dict):
+                            for s, v in opt.items():
+                                out_str += "    %-20s    %s\n" % (s, v)
                         else:
                             if len(opt) == 1:
                                 val = opt[0]
+                                out_str += "    %-20s    %s\n" % (setting, val)
                             else:
                                 raise NotImplementedError("cannot use arrays in QCHEM_REM")
 
-                        out_str += "    %-20s    %s\n" % (setting, val)
     
                     elif hasattr(opt, "__iter__") and not isinstance(opt, str):
                         for val in opt:

@@ -209,16 +209,15 @@ class ATEncoder(json.JSONEncoder):
                 rv["ecp"] = {"name": [], "elements":[], "file":[]}
                 for basis in obj.basis.ecp:
                     rv["ecp"]["name"].append(basis.name)
+                    rv["ecp"]["elements"].append([])
                     for ele in basis.ele_selection:
                         if isinstance(ele, str):
-                            rv["ecp"]["elements"].append(ele)
+                            rv["ecp"]["elements"][-1].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
-                            rv["ecp"]["elements"].append("tm")
+                            rv["ecp"]["elements"][-1].append("tm")
                         elif isinstance(ele, AnyNonTransitionMetal):
-                            rv["ecp"]["elements"].append("!tm")
-                        else:
-                            rv["ecp"]["elements"].append([])
-                            
+                            rv["ecp"]["elements"][-1].append("!tm")
+
                     if basis.not_anys:
                         for ele in basis.not_anys:
                             if isinstance(ele, str):
@@ -226,7 +225,7 @@ class ATEncoder(json.JSONEncoder):
                             elif isinstance(ele, AnyTransitionMetal):
                                 rv["ecp"]["elements"][-1].append("!tm")
                             elif isinstance(ele, AnyNonTransitionMetal):
-                                rv["ecp"]["elements"][-1].append("tm")
+                                rv["ecp"]["elements"][-1].append("!!tm")
     
                     rv["ecp"]["file"].append(basis.user_defined)
 
