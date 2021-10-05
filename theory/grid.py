@@ -4,7 +4,9 @@ used for specifying integration grids for DFT calculations
 
 import re
 from AaronTools import addlogger
-from AaronTools.theory import GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS
+from AaronTools.theory import (
+    GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS, QCHEM_REM
+)
 
 
 class IntegrationGrid:
@@ -335,7 +337,7 @@ class IntegrationGrid:
         )
 
     def get_qchem(self):
-        if self.name.lower() == "SG-1":
+        if self.name.lower() == "sg-1":
             out_dict = {
                 QCHEM_REM: {
                     "XC_GRID": "1",
@@ -343,7 +345,7 @@ class IntegrationGrid:
             }
             return (out_dict, None)
         
-        elif self.name.lower() == "SG-2":
+        elif self.name.lower() == "sg-2":
             out_dict = {
                 QCHEM_REM: {
                     "XC_GRID": "2",
@@ -351,7 +353,7 @@ class IntegrationGrid:
             }
             return (out_dict, None)
         
-        elif self.name.lower() == "SG-3":
+        elif self.name.lower() == "sg-3":
             out_dict = {
                 QCHEM_REM: {
                     "XC_GRID": "3",

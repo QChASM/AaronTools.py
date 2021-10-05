@@ -268,7 +268,7 @@ opt_type.add_argument(
     default=None,
     dest="x",
     help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the x coordinate of\n" +
-    "available for Gaussian and Psi4",
+    "available for Gaussian, Psi4, and Q-Chem",
 )
 
 opt_type.add_argument(
@@ -279,7 +279,7 @@ opt_type.add_argument(
     default=None,
     dest="y",
     help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the y coordinate of\n" +
-    "available for Gaussian and Psi4",
+    "available for Gaussian, Psi4, and Q-Chem",
 )
 
 opt_type.add_argument(
@@ -290,7 +290,7 @@ opt_type.add_argument(
     default=None,
     dest="z",
     help="comma- or hyphen-separated list of atoms (1-indexed) to constrain the z coordinate of\n" +
-    "available for Gaussian and Psi4",
+    "available for Gaussian, Psi4, and Q-Chem",
 )
 
 opt_type.add_argument(
@@ -314,7 +314,7 @@ opt_type.add_argument(
     dest="ygroup",
     metavar=("atoms", "value"),
     help="comma- or hyphen-separated list of atoms (1-indexed) to keep in the same xz plane\n" +
-    "available for Gaussian and Psi4",
+    "available for Gaussian, Psi4",
 )
 
 opt_type.add_argument(
@@ -346,6 +346,30 @@ freq_type.add_argument(
     help="temperature for calculated thermochemical corrections\nDefault: 298.15",
 )
 
+qchem_options = theory_parser.add_argument_group("Q-Chem-specific options")
+qchem_options.add_argument(
+    "--rem",
+    action="append",
+    nargs="+",
+    default=[],
+    dest=QCHEM_REM,
+    metavar=("KEYWORD", "OPTION"),
+    help="REM options\nexample: --rem MAX_SCF_CYCLES 300\n" +
+    "input file(s) should not be right after --rem",
+)
+
+qchem_options.add_argument(
+    "--section",
+    nargs="+",
+    action="append",
+    default=[],
+    dest=QCHEM_SETTINGS,
+    metavar=("SECTION_NAME", "TEXT"),
+    help="add text to a section"
+    "input file(s) should not be right after --section",
+)
+
+
 orca_options = theory_parser.add_argument_group("ORCA-specific options")
 orca_options.add_argument(
     "--simple",
@@ -364,6 +388,7 @@ orca_options.add_argument(
     metavar=("BLOCK", "OPTION", "VALUE"),
     help="blocks and block options\nexample: --block scf maxiter 500",
 )
+
 
 psi4_options = theory_parser.add_argument_group("Psi4-specific options")
 psi4_options.add_argument(
@@ -417,6 +442,17 @@ psi4_options.add_argument(
 )
 
 psi4_options.add_argument(
+    "--pcm-solver",
+    action="append",
+    nargs="+",
+    default=[],
+    dest=PSI4_SOLVENT,
+    metavar=("SETTING", "VALUE"),
+    help="settings\nexample: --pcm-solver Cavity 'RadiiSet = UFF' 'Area = 0.3'" +
+    "\ninput file(s) should not be right after --pcm-solver",
+)
+
+psi4_options.add_argument(
     "--optking",
     action="append",
     nargs=2,
@@ -436,6 +472,7 @@ psi4_options.add_argument(
     help="options to add to the molecule section\n" +
     "example: --molecule units bohr\ninput file(s) should not be right after --molecule",
 )
+
 
 gaussian_options = theory_parser.add_argument_group("Gaussian-specific options")
 gaussian_options.add_argument(
@@ -469,6 +506,7 @@ gaussian_options.add_argument(
     help="line to add to the end of the file (e.g. for NBORead)",
 )
 
+
 args = theory_parser.parse_args()
 
 if not args.method and not args.use_prev:
@@ -488,8 +526,8 @@ if blocks:
         kwargs[ORCA_BLOCKS][block_name].append("\t".join(block[1:]))
 
 for pos in [
-        PSI4_SETTINGS, PSI4_MOLECULE, PSI4_JOB, PSI4_OPTKING,
-        GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE
+        PSI4_SETTINGS, PSI4_MOLECULE, PSI4_JOB, PSI4_OPTKING, PSI4_SOLVENT,
+        GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, QCHEM_REM, QCHEM_SETTINGS,
     ]:
     opts = getattr(args, pos)
     if opts:
@@ -498,6 +536,9 @@ for pos in [
 
         for opt in opts:
             setting = opt.pop(0)
+            if setting.lower() == "rem" and pos == QCHEM_SETTINGS:
+                s = " ".join(["'%s'" % val if " " in val else val for val in opt])
+                raise TypeError("use --rem %s instead of --section rem %s" % (s, s))
             if setting not in kwargs[pos]:
                 kwargs[pos][setting] = []
 

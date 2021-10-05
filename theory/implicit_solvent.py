@@ -1,6 +1,8 @@
 """used to specify implicit solvent info for Theory()"""
 from AaronTools import addlogger
-from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE
+from AaronTools.theory import (
+    GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE, PSI4_SETTINGS, PSI4_SOLVENT
+)
 
 
 class ImplicitSolvent:
@@ -416,6 +418,32 @@ class ImplicitSolvent:
 
     KNOWN_ORCA_MODELS = ["SMD", "CPCM", "C-PCM", "PCM"]
 
+    KNOWN_PSI4_SOLVENTS = [
+        "water",
+        "propylene carbonate",
+        "dimethylsolfoxide",
+        "nitromethane",
+        "aceotonitrile",
+        "methanol",
+        "ethanol",
+        "acetone",
+        "1,2-dichloroethane",
+        "methylenechloride",
+        "CH2Cl2",
+        "tetrahydrofuran",
+        "aniline",
+        "chlorobenzene",
+        "chloroform",
+        "toluene",
+        "1,4-dioxane",
+        "benzene",
+        "carbon tetrachloride",
+        "cyclohexane",
+        "n-heptane",
+    ]
+    
+    KNOWN_PSI4_MODELS = ["CPCM", "IEFPCM"]
+
     LOG = None
 
     def __init__(self, solvent_model, solvent):
@@ -562,9 +590,53 @@ class ImplicitSolvent:
     def get_psi4(self):
         """returns dict() with solvent information for psi4 input files"""
 
-        if self.solvent.lower() == "gas":
-            return (dict(), [])
+        warnings = []
 
-        raise NotImplementedError(
-            "ImplicitSolvent cannot generate Psi4 solvent settings yet"
-        )
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
+
+        if not any(
+                self.solvent_model.upper() == model for model in self.KNOWN_ORCA_MODELS
+        ):
+            warnings.append(
+                "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
+                % self.solvent_model
+            )
+
+        out = {}
+        # route option: CPCM(solvent name)
+        # if using smd, add block %cpcm smd true end
+        out[PSI4_SETTINGS] = {"pcm": "true"}
+
+        solvent = self.solvent
+        # orca has different solvents for cpcm and smd...
+        # check both lists, might be able to switch a gaussian keyword to the correct orca one
+        if solvent.lower() == "dichloromethane":
+            solvent = "CH2Cl2"
+        elif solvent.lower() == "carbontetrachloride":
+            solvent = "carbon tetrachloride"
+        elif solvent.lower() == "thf":
+            solvent = "tetrahydrofuran"
+        else:
+            if not any(
+                    solvent.lower() == orca_sol.lower()
+                    for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS
+            ):
+                warnings.append(
+                    "solvent may be unknown to Psi4: %s\n" % solvent +
+                    "see AaronTools.theory.implicit_solvent.KNOWN_PSI4_SOLVENTS"
+                )
+
+        out[PSI4_SOLVENT] = {
+            "Units": "Angstrom",
+            "Medium":
+                [
+                    "SolverType = %s" % self.solvent_model,
+                    "Solvent = %s" % solvent,
+                ],
+            "Mode": "Implicit"
+        }
+
+        return (out, warnings)
+

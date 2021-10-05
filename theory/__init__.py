@@ -46,6 +46,7 @@ PSI4_COORDINATES = "coordinates" # coordinate variables
 PSI4_JOB = "job" #energy, optimize, etc
 PSI4_OPTKING = "optking" #constraints go here
 PSI4_BEFORE_JOB = "before_job" #before job stuff - e.g. auto_fragments
+PSI4_SOLVENT = "pcm_solver" # psi4 interface to pcmsolver
 
 GAUSSIAN_PRE_ROUTE = "link0" #can be used for things like %chk=some.chk
 GAUSSIAN_ROUTE = "route" #route specifies most options, e.g. #n B3LYP/3-21G opt
@@ -60,9 +61,9 @@ SQM_COMMENT = "comments"
 SQM_QMMM = "qmmm"
 
 QCHEM_MOLECULE = "molecule" # $molecule
-QCHEM_REM = "job" # $rem
-QCHEM_COMMENT = "comment" # $comment
-QCHEM_SETTINGS = "settings" # $*
+QCHEM_REM = "rem" # $rem
+QCHEM_COMMENT = "comments" # $comment
+QCHEM_SETTINGS = "section" # $*
 
 from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion

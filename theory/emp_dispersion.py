@@ -1,7 +1,7 @@
 """used for specifying emperical dispersion for Theory() instances"""
 
 from AaronTools import addlogger
-from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE
+from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE, QCHEM_REM
 
 @addlogger
 class EmpiricalDispersion:
@@ -241,7 +241,6 @@ class EmpiricalDispersion:
 
     def get_qchem(self):
         """Acceptable keywords for QChem are:
-        Grimme D1
         Grimme D2
         Modified Zero-damped Grimme D3
         Zero-damped Grimme D3

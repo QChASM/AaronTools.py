@@ -19,7 +19,11 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = ["transmittance", "transmittance-velocity", "uv-vis", "uv-vis-velocity", "ecd", "ecd-velocity"]
+plot_types = [
+    "transmittance", "transmittance-velocity",
+    "uv-vis", "uv-vis-velocity",
+    "ecd", "ecd-velocity"
+]
 weight_types = ["electronic", "zero-point", "enthalpy", "free", "quasi-rrho", "quasi-harmonic"]
 
 def peak_type(x):
@@ -82,6 +86,13 @@ uvvis_parser.add_argument(
     default="uv-vis-velocity",
     dest="plot_type",
     help="type of plot\nDefault: uv-vis-velocity",
+)
+
+uvvis_parser.add_argument(
+    "-u", "--transient",
+    action="store_true",
+    dest="transient",
+    help="use transient excitation data",
 )
 
 uvvis_parser.add_argument(
@@ -364,9 +375,15 @@ weights = CompOutput.boltzmann_weights(
     v0=args.w0,
 )
 
+
+data_attr = "data"
+if all(fr.other["uv_vis"].transient_data for fr in filereaders) and args.transient:
+    data_attr = "transient_data"
+
 mixed_uvvis = ValenceExcitations.get_mixed_signals(
     [fr.other["uv_vis"] for fr in filereaders],
     weights=weights,
+    data_attr=data_attr,
 )
 
 if not args.outfile or not args.outfile.lower().endswith("csv"):

@@ -25,6 +25,7 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    PSI4_SOLVENT,
     SQM_COMMENT,
     SQM_QMMM,
     QCHEM_MOLECULE,
@@ -103,6 +104,26 @@ class Theory:
         "opt_type",
         "dft_radial_points",
         "dft_spherical_points",
+    ]
+    
+    FORCED_PSI4_SOLVENT_SINGLE = [
+        "units",
+        "codata",
+        "type",
+        "npzfile",
+        "area",
+        "scaling",
+        "raddiset",
+        "minradius",
+        "mode",
+        "nonequilibrium",
+        "solvent",
+        "solvertype",
+        "matrixsymm",
+        "correction",
+        "diagonalintegrator",
+        "diagonalscaling",
+        "proberadius",
     ]
     
     # some blocks need to go after the molecule
@@ -1613,6 +1634,33 @@ class Theory:
 
             out_str += "}\n\n"
 
+
+        if PSI4_SOLVENT in other_kw_dict:
+            out_str += "pcm = {\n"
+            for setting in other_kw_dict[PSI4_SOLVENT]:
+                if other_kw_dict[PSI4_SOLVENT][setting]:
+                    if isinstance(other_kw_dict[PSI4_SOLVENT][setting], str):
+                        val = other_kw_dict[PSI4_SOLVENT][setting]
+                        out_str += "    %s = %s\n" % (setting, val)
+                    else:
+                        if any(
+                            single_setting == setting.strip().lower()
+                            for single_setting in self.FORCED_PSI4_SOLVENT_SINGLE
+                        ):
+                            val = other_kw_dict[PSI4_SOLVENT][setting][0]
+                            out_str += "    %s = %s\n" % (setting, val)
+                        else:
+                            # array of values
+                            if not out_str.endswith("\n\n") and not out_str.endswith("{\n"):
+                                out_str += "\n"
+                            out_str += "    %s {\n" % setting
+                            for val in other_kw_dict[PSI4_SOLVENT][setting]:
+                                out_str += "        %s\n" % val
+                            out_str += "    }\n\n"
+
+            out_str += "}\n\n"
+
+
         if PSI4_OPTKING in other_kw_dict and any(
             other_kw_dict[PSI4_OPTKING][setting]
             for setting in other_kw_dict[PSI4_OPTKING]
@@ -2077,20 +2125,7 @@ class Theory:
         
         elif QCHEM_REM in other_kw_dict:
             other_kw_dict[QCHEM_SETTINGS] = {"rem": other_kw_dict[QCHEM_REM]}
-        #     out_str += "$rem\n"
-        #     for opt, setting in other_kw_dict[QCHEM_REM].items():
-        #         if opt:
-        #             if isinstance(opt, str):
-        #                 val = setting
-        #             else:
-        #                 if len(opt) == 1:
-        #                     val = setting[0]
-        #                 else:
-        #                     raise NotImplementedError("cannot use arrays in QCHEM_REM")
-        # 
-        #             out_str += "    %-20s    %s\n" % (opt, val)
-        # 
-        #     out_str += "$end\n\n"
+        
         else:
             warnings.append("no REM section")
 
@@ -2113,12 +2148,14 @@ class Theory:
                             if len(opt) == 1:
                                 val = opt[0]
                                 out_str += "    %-20s    %s\n" % (setting, val)
+                            elif not opt:
+                                out_str += "    %-20s\n" % setting
                             else:
-                                raise NotImplementedError("cannot use arrays in QCHEM_REM")
+                                out_str += "    %-20s    %s\n" % (setting, ", ".join(opt))
 
     
-                    elif hasattr(opt, "__iter__") and not isinstance(opt, str):
-                        for val in opt:
+                    elif hasattr(setting, "__iter__") and not isinstance(setting, str):
+                        for val in setting:
                             out_str += "    %s\n" % val
                     
                     else:
