@@ -80,6 +80,7 @@ class Atom:
         flag            bool            true if frozen, false if relaxed
         name            str             form of \d+(\.\d+)*
         tags            set
+        charge          float
         connected       set(Atom)
         constraint      set(Atom)       for determining constrained bonds
         _rank
@@ -93,7 +94,7 @@ class Atom:
     _bo = BondOrder()
 
     def __init__(
-        self, element="", coords=None, flag=False, name="", tags=None
+        self, element="", coords=None, flag=False, name="", tags=None, charge=""
     ):
         super().__setattr__("_hashed", False)
         if coords is None:
@@ -123,6 +124,12 @@ class Atom:
             self.tags = set(tags)
         else:
             self.tags = set([tags])
+
+        charge = str(charge).strip()
+        if charge == "":
+            pass
+        else:
+            self.charge = float(charge)
 
         self.connected = set([])
         self.constraint = set([])

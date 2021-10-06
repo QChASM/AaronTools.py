@@ -1764,6 +1764,23 @@ class FileReader:
             elif found_archive:
                 self.other["archive"] += line.strip()
 
+            #Pseudopotential info
+            if "Pseudopotential Parameters" in line:
+                self.other["ECP"] = []
+                self.skip_lines(f, 4)
+                n += 5
+                line = f.readline()
+                while "=====" not in line:
+                    line = line.split()
+                    if line[0].isdigit() and line[1].isdigit():
+                        ele = line[1]
+                        n += 1
+                        line = f.readline().split()
+                        if line[0] != "No":
+                            self.other["ECP"].append(ELEMENTS[int(ele)])
+                    n += 1
+                    line = f.readline()
+
             # geometry
             if re.search("(Standard|Input) orientation:", line):
                 if get_all and len(self.atoms) > 0:
@@ -2080,6 +2097,7 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
+                    self.atoms[i].charge = float(line.split()[2])
                 self.other[charge_match.group(1) + " Charges"] = charges
 
             # capture errors
@@ -2241,6 +2259,7 @@ class FileReader:
                             grid=grid,
                             solvent=solvent,
                         )
+                        theory.kwargs = self.other["other_kwargs"]
                         self.other["theory"] = theory
                     except KeyError:
                         # if there is a serious error, too little info may be available
