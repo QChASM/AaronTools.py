@@ -1954,6 +1954,23 @@ class FileReader:
             if route is not None and "oniom" in route.lower():
                 oniom=True
 
+            #Pseudopotential info
+            if "Pseudopotential Parameters" in line:
+                self.other["ECP"] = []
+                self.skip_lines(f, 4)
+                n += 5
+                line = f.readline()
+                while "=====" not in line:
+                    line = line.split()
+                    if line[0].isdigit() and line[1].isdigit():
+                        ele = line[1]
+                        n += 1
+                        line = f.readline().split()
+                        if line[0] != "No":
+                            self.other["ECP"].append(ELEMENTS[int(ele)])
+                    n += 1
+                    line = f.readline()
+
             # geometry
             if re.search("(Standard|Input) orientation:", line) and not oniom:
                 if get_all and len(self.atoms) > 0:
@@ -2284,6 +2301,10 @@ class FileReader:
 
                 self.other["forces"] = gradient
 
+            # nbo stuff
+            if "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
+                self.read_nbo(f)
+
             # atomic charges
             charge_match = re.search("(\S+) charges:\s*$", line)
             if charge_match:
@@ -2294,6 +2315,7 @@ class FileReader:
                     line = f.readline()
                     n += 1
                     charges.append(float(line.split()[2]))
+                    self.atoms[i].charge = float(line.split()[2])
                 self.other[charge_match.group(1) + " Charges"] = charges
 
             # capture errors
@@ -2875,6 +2897,81 @@ class FileReader:
                         "size of %s is > %i: %i" % (key, max_length, self.other[key])
                     )
 
+    def read_nbo(self, f):
+        """
+        read nbo data
+        """
+        line = f.readline()
+        while line:
+            if "natural bond orbitals (summary):" in line.lower():
+                break
+
+            if "NATURAL POPULATIONS:" in line:
+                self.skip_lines(f, 3)
+                ao_types = []
+                ao_atom_ndx = []
+                nao_types = []
+                occ = []
+                nrg = []
+                blank_lines = 0
+                while blank_lines <= 1:
+                    match = re.search(
+                        "\d+\s+[A-Z][a-z]?\s+(\d+)\s+(\S+)\s+([\S\s]+?)(-?\d+\.\d+)\s+(-?\d+\.\d+)",
+                        line
+                    )
+                    if match:
+                        ao_atom_ndx.append(int(match.group(1)) - 1)
+                        ao_types.append(match.group(2))
+                        nao_types.append(match.group(3))
+                        occ.append(float(match.group(4)))
+                        nrg.append(float(match.group(5)))
+                        blank_lines = 0
+                    else:
+                        blank_lines += 1
+                    line = f.readline()
+                self.other["ao_types"] = ao_types
+                self.other["ao_atom_ndx"] = ao_atom_ndx
+                self.other["nao_type"] = nao_types
+                self.other["ao_occ"] = occ
+                self.other["ao_nrg"] = nrg
+
+            if "Summary of Natural Population Analysis:" in line:
+                self.skip_lines(f, 5)
+                core_occ = []
+                val_occ = []
+                rydberg_occ = []
+                nat_q = []
+                line = f.readline()
+                while "==" not in line:
+                    info = line.split()
+                    core_occ.append(float(info[3]))
+                    val_occ.append(float(info[4]))
+                    rydberg_occ.append(float(info[5]))
+                    nat_q.append(float(info[2]))
+                    line = f.readline()
+                self.other["Natural Charges"] = nat_q
+                self.other["core_occ"] = core_occ
+                self.other["valence_occ"] = val_occ
+                self.other["rydberg_occ"] = rydberg_occ
+
+            if "Wiberg bond index matrix in the NAO basis" in line:
+                dim = len(self.other["Natural Charges"])
+                bond_orders = np.zeros((dim, dim))
+                done = False
+                j = 0
+                for block in range(0, ceil(dim / 9)):
+                    offset = 9 * j
+                    self.skip_lines(f, 3)
+                    for i in range(0, dim):
+                        line = f.readline()
+                        for k, bo in enumerate(line.split()[2:]):
+                            bo = float(bo)
+                            bond_orders[i][offset + k] = bo
+                    j += 1
+                self.other["wiberg_nao"] = bond_orders
+
+            line = f.readline()
+                
     def read_crest(self, f, conf_name=None):
         """
         conf_name = False to skip conformer loading (doesn't get written until crest job is done)

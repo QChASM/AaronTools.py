@@ -438,17 +438,18 @@ else:
         fwhm=args.fwhm,
     )
 
-    y_label = "Absorbance (arb.)"
-    if y_label is None and plot_type.lower() == "transmittance":
+    if "transmittance" in args.plot_type.lower():
         y_label = "Transmittance (%)"
-    elif y_label is None and plot_type.lower() == "uv-vis":
+    elif args.plot_type.lower() == "uv-vis":
         y_label = "Absorbance (arb.)"
-    elif y_label is None and plot_type.lower() == "uv-vis-veloctiy":
+    elif args.plot_type.lower() == "uv-vis-velocity":
         y_label = "Absorbance (arb.)"
-    elif y_label is None and plot_type.lower() == "ecd":
+    elif args.plot_type.lower() == "ecd":
         y_label = "delta_Absorbance (arb.)"
-    elif y_label is None and plot_type.lower() == "ecd-velocity":
+    elif args.plot_type.lower() == "ecd-velocity":
         y_label = "delta_Absorbance (arb.)"
+    else:
+        y_label = "Absorbance (arb.)"
 
     with open(args.outfile, "w") as f:
         s = ",".join([x_label, y_label])

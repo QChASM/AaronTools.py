@@ -48,7 +48,7 @@ info.add_argument(
     default=False,
     action="store_true",
     help="print Fukui acceptor values\n"
-    "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
+    "see DOI 10.1021/acs.jpca.9b07516 for weighting method\n"
     "for details on how the function is condensed, see the GitHub wiki:\n"
     "https://github.com/QChASM/AaronTools.py/wiki/Structure-Analysis-and-Descriptor-Implementation#condensed-fukui"
 )
@@ -59,7 +59,7 @@ info.add_argument(
     default=False,
     action="store_true",
     help="print Fukui dual values\n"
-    "see DOI 10.1021/acs.jpca.9b07516 for weighting method"
+    "see DOI 10.1021/acs.jpca.9b07516 for weighting method\n"
     "for details on how the function is condensed, see the GitHub wiki:\n"
     "https://github.com/QChASM/AaronTools.py/wiki/Structure-Analysis-and-Descriptor-Implementation#condensed-fukui"
 )
@@ -78,7 +78,7 @@ fukui_parser.add_argument(
     type=int,
     default=1,
     dest="n_jobs",
-    help="number of threads to use when evaluating basis functions"
+    help="number of threads to use when evaluating basis functions\n"
     "this is on top of NumPy's multithreading,\n"
     "so if NumPy uses 8 threads and n_jobs=2, you can\n"
     "expect to see 16 threads in use\n"
