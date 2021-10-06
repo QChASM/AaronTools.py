@@ -2072,22 +2072,6 @@ class FileReader:
                     freq_str, hpmodes=self.other["hpmodes"]
                 )
 
-            if "Pseudopotential Parameters" in line:
-                self.other["ECP"] = []
-                self.skip_lines(f, 4)
-                n += 5
-                line = f.readline()
-                while "=====" not in line:
-                    line = line.split()
-                    if line[0].isdigit() and line[1].isdigit():
-                        ele = line[1]
-                        n += 1
-                        line = f.readline().split()
-                        if line[0] != "No":
-                            self.other["ECP"].append(ELEMENTS[int(ele)])
-                    n +=1
-                    line = f.readline()
-
             if "Anharmonic Infrared Spectroscopy" in line:
                 self.skip_lines(f, 5)
                 n += 5
@@ -2544,8 +2528,8 @@ class FileReader:
 
                     self.other["other_kwargs"] = other_kwargs
                     if oniom == True:
-#                        try:
-                        theory = Theory(
+                        try:
+                            theory = Theory(
                                 charge=self.other["charge"],
                                 multiplicity=self.other["multiplicity"],
                                 job_type=job_type,
@@ -2557,17 +2541,17 @@ class FileReader:
                                 low_basis=low_basis,
                                 grid=grid,
                                 solvent=solvent,
-                        )
-                        theory.kwargs = self.other["other_kwargs"]
-                        self.other["theory"] = theory
-                        #except KeyError:
-                        #    print(high_method)
-                        #    print(high_basis)
-                        #    if medium_method is not None: print(medium_method)
-                        #    if medium_basis is not None: print(medium_basis)
-                        #    print(low_method)
-                        #    if low_basis is not None: print(low_basis)
-                        #    print(solvent)
+                            )
+                            theory.kwargs = self.other["other_kwargs"]
+                            self.other["theory"] = theory
+                        except KeyError:
+                            print(high_method)
+                            print(high_basis)
+                            if medium_method is not None: print(medium_method)
+                            if medium_basis is not None: print(medium_basis)
+                            print(low_method)
+                            if low_basis is not None: print(low_basis)
+                            print(solvent)
                     elif oniom == False:
                         try:
                             theory = Theory(
