@@ -128,15 +128,31 @@ class Theory:
         low_basis=None,
         **kwargs,
     ):
-        if len(str(charge).split()) == 1:
-            self.charge = int(charge)
-        else:
+        if isinstance(charge,list):
+            self.charge=charge
+        elif isinstance(charge,int):
             self.charge = charge
+        elif isinstance(charge,str):
+            if len(charge.split()) == 1:
+                self.charge = int(charge)
+            elif len(charge.split()) > 1:
+                charge = charge.split()
+                for x in charge:
+                    x = int(x)
+                self.charge = charge
 
-        if len(str(multiplicity).split()) == 1:
-            self.multiplicity = int(multiplicity)
-        else:
+        if isinstance(multiplicity,list):
+            self.multiplicity=multiplicity
+        elif isinstance(multiplicity,int):
             self.multiplicity = multiplicity
+        elif isinstance(multiplicity,str):
+            if len(multiplicity.split()) == 1:
+                self.multiplicity = int(multiplicity)
+            elif len(multiplicity.split()) > 1:
+                multiplicity = multiplicity.split()
+                for x in multiplicity:
+                    x = int(x)
+                self.multiplicity = multiplicity
 
         self.method = None
         self.basis = None
@@ -185,7 +201,7 @@ class Theory:
 
         if high_method is not None:
             if not isinstance(high_method, Method):
-                if high_method in KNOWN_SEMI_EMPIRICAL:
+                if high_method.upper() in KNOWN_SEMI_EMPIRICAL:
                     self.high_method = Method(
                         high_method, is_semiempirical=True, is_oniom=True, oniom_layer = "H", is_mm=False
                     )
@@ -844,7 +860,7 @@ class Theory:
                 methods = list((self.high_method, self.medium_method, self.low_method))
             elif self.high_method is not None and self.medium_method is None and self.low_method is not None:
                 methods = list((self.high_method, self.low_method))
-            elif self.high_method is None and any((self.medium_method is None, self.low_methdo is None)):
+            elif self.high_method is not None and self.medium_method is None and self.low_method is None:
                 raise ValueError("must have more than one method defined for ONIOM")
             n_layers = len(methods)
             #layers_written = 0
@@ -910,11 +926,10 @@ class Theory:
                                 for x in other_kw_dict[GAUSSIAN_MM][option]:
                                     if x not in known_opts:
                                         if known_opts:
-                                            out_str += ", "
+                                            out_str += ","
                                         known_opts.append(x)
                                         out_str += x
                                 out_str += ")"
-                #layers_written+=1
                 if i < n_layers:
                     out_str += ":"
                 elif i == n_layers:
@@ -926,7 +941,7 @@ class Theory:
                 for x in other_kw_dict[GAUSSIAN_ONIOM]:
                     if x not in known_opts:
                         if known_opts:
-                            out_str += ", "
+                            out_str += ","
                         known_opts.append(x)
                         out_str += x
             out_str += " "
@@ -1001,8 +1016,14 @@ class Theory:
 
         # charge mult
         if layered_charge_mult == True:
-            charge_list = str(self.charge).split()
-            mult_list = str(self.multiplicity).split()
+            if isinstance(self.charge, list):
+                charge_list = self.charge
+            elif isinstance(self.charge, int):
+                charge_list = list(self.charge)
+            if isinstance(self.multiplicity, list):
+                mult_list = self.multiplicity
+            elif isinstance(self.multiplicity, int):
+                mult_list = list(self.multiplicity)
             if len(charge_list) > 1 and len(charge_list) != len(mult_list):
                 raise ValueError("Charge and multiplicty must match in length. see gaussian.com/oniom/")
             elif len(charge_list) > 1 and len(charge_list) == len(mult_list):

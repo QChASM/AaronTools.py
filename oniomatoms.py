@@ -27,7 +27,7 @@ class OniomAtom(Atom):
             pass
 
         if hasattr(tags, "__iter__") and not isinstance(tags, str):
-            self.tags = set(tags)
+            self.tags = tags
         else:
             self.tags = set([tags])
 

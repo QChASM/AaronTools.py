@@ -1760,6 +1760,84 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def get_oniom_atoms(f, n):
+            rv = self.atoms
+            self.skip_lines(f, 4)
+            line = f.readline()
+            n += 5
+            atnum = 0
+            while "--" not in line:
+                line = line.strip()
+                line = line.split()
+                for l in line:
+                    try:
+                        float(l)
+                    except ValueError:
+                        msg = "Error detected with log file on line {}"
+                        raise IOError(msg.format(n))
+                rv[atnum].coords = np.array(line[3:], dtype=float)
+                atnum += 1
+                line = f.readline()
+                n += 1
+            return rv, n
+
+        def get_oniom_info(f, n):
+            rv = []
+            line = f.readline()
+            n += 1
+            charge = []
+            multiplicity = []
+            while "Charge" in line:
+                match = re.search(
+                    "Charge\s*=\s*(-?\d+)\s*Multiplicity\s*=\s*(\d+)", line
+                )
+                if match is not None:
+                    charge.append(int(match.group(1)))
+                    multiplicity.append(int(match.group(2)))
+                line = f.readline()
+                n += 1
+            self.other["charge"] = charge
+            self.other["multiplicity"] = multiplicity
+            while len(line.split()) > 0:
+                nums = float_num.findall(line)
+                line = line.split()
+                is_oniom = False
+                flag = ""
+                atomtype = ""
+                charge = ""
+                tags = []
+                has_flag = False
+                if len(line[0].split("-")) == 2:
+                    if not is_alpha(line[0].split("-")[1][0]):
+                        charge = nums[0]
+                    elif is_alpha(line[0].split("-")[1][0]):
+                        atomtype = line[0].split("-")[1]
+                if len(line[0].split("-")) == 4:
+                    atomtype = line[0].split("-")[1]
+                    charge = str(-1 * float(line[0].split("-")[3]))
+                if len(line[0].split("-")) == 3:
+                    if not is_alpha(line[0].split("-")[1][0]):
+                        charge = nums[0]
+                    elif is_alpha(line[0].split("-")[1][0]):
+                        atomtype = line[0].split("-")[1]
+                        charge = line[0].split("-")[2]
+                if len(line)%2 == 0:
+                    has_flag = True
+                    flag = line[1]
+                    coords = line[2:5]
+                if not has_flag:
+                    coords = line[1:4]
+                if len(line) > 6:
+                    tags.append(line[len(line)-2:])
+                    layer = line[len(line)-3]
+                if len(line) < 7:
+                    layer = line[len(line)-1]
+                a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,tags=tags)
+                rv += [a] 
+                line = f.readline()
+                n += 1
+            return rv, n
+
         def get_params(f, n):
             rv = []
             self.skip_lines(f, 2)
@@ -1847,7 +1925,12 @@ class FileReader:
         found_archive = False
         n = 1
         route = None
+        oniom = False
+        has_params = False
         while line != "":
+            if line.strip().startswith("AtFile"):
+                parameters = line.split()[1]
+                has_params = True
             # route
             # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
             # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
@@ -1868,14 +1951,29 @@ class FileReader:
             elif found_archive:
                 self.other["archive"] += line.strip()
 
+            if route is not None and "oniom" in route.lower():
+                oniom=True
+
             # geometry
-            if re.search("(Standard|Input) orientation:", line):
+            if re.search("(Standard|Input) orientation:", line) and not oniom:
                 if get_all and len(self.atoms) > 0:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
                 self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
+
+            if re.search("(Standard|Input) orientation:", line) and oniom == True:
+                 if get_all and len(self.atoms) > 0:
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+                 self.atoms, n = get_oniom_atoms(f, n)
+                 self.other["opt_steps"] += 1
+
+            #oniom atom types and input charges
+            if oniom == True and re.search("Symbolic Z-matrix", line):
+                self.atoms, n = get_oniom_info(f, n)
 
             if re.search(
                 "The following ModRedundant input section has been read:", line
@@ -1956,6 +2054,22 @@ class FileReader:
                 self.other["frequency"] = Frequency(
                     freq_str, hpmodes=self.other["hpmodes"]
                 )
+
+            if "Pseudopotential Parameters" in line:
+                self.other["ECP"] = []
+                self.skip_lines(f, 4)
+                n += 5
+                line = f.readline()
+                while "=====" not in line:
+                    line = line.split()
+                    if line[0].isdigit() and line[1].isdigit():
+                        ele = line[1]
+                        n += 1
+                        line = f.readline().split()
+                        if line[0] != "No":
+                            self.other["ECP"].append(ELEMENTS[int(ele)])
+                    n +=1
+                    line = f.readline()
 
             if "Anharmonic Infrared Spectroscopy" in line:
                 self.skip_lines(f, 5)
@@ -2198,20 +2312,94 @@ class FileReader:
             if route is not None:
                 other_kwargs = {GAUSSIAN_ROUTE: {}}
                 route_spec = re.compile("(\w+)=?\((.*)\)")
-                method_and_basis = re.search(
-                    "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
-                )
+                if oniom == False:
+                    method_and_basis = re.search(
+                        "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
+                    )
+                if oniom == True:
+                    method_and_basis = re.search(
+                        "#(?:[NnPpTt]*\s+?)(?:[OoNnIiMm]*\()(\S+?)(?::)([A-z0-9\/\(\)-]*)(?:=\()?([A-z,]*)?(?:\))?(?::)?([A-z-\(\)0-9]*)?(?:=\()?([A-z,]*)(?:\)*=)?([A-z,]*)?"
+                    , route)
                 if method_and_basis is not None:
-                    if method_and_basis.group(2):
-                        method_info = method_and_basis.group(2).split("/")
-                    else:
-                        method_info = method_and_basis.group(1).split("/")
+                    if oniom == False:
+                        if method_and_basis.group(2):
+                            method_info = method_and_basis.group(2).split("/")
+                        else:
+                            method_info = method_and_basis.group(1).split("/")
 
-                    method = method_info[0]
-                    if len(method_info) > 1:
-                        basis = method_info[1]
-                    else:
+                        method = method_info[0]
+                        if len(method_info) > 1:
+                            basis = method_info[1]
+                        else:
+                            basis = None
+                    if oniom == True:
+                        method = None
                         basis = None
+                        medium_info = None
+                        mm_options = {}
+                        oniom_options = []
+                        high_info = method_and_basis.group(1).split("/")
+                        if method_and_basis.group(4) and len(method_and_basis.group(4)) > 1:
+                            medium_info = method_and_basis.group(2).split("/")
+                            low_info = method_and_basis.group(4).split("/")
+                        if (method_and_basis.group(4) and len(method_and_basis.group(4)) <= 1) or not method_and_basis.group(4):
+                            low_info = method_and_basis.group(2).split("/")
+                        if method_and_basis.group(6):
+                            oniom_options = method_and_basis.group(6).split(",")
+                        high_method = high_info[0]
+                        try:
+                            high_basis = high_info[1]
+                        except IndexError:
+                            high_basis = None
+                        if medium_info is not None:
+                            medium_method = medium_info[0]
+                            try:
+                                medium_basis = medium_info[1]
+                            except IndexError:
+                                medium_basis = None
+                        low_method = low_info[0]
+                        try:
+                            low_basis = low_info[1]
+                        except IndexError:
+                            low_basis = None
+                        if medium_info is None:
+                            medium_method = None
+                            medium_basis = None
+                        def fix_paren(string):
+                            if ")" in string:
+                                if "(" not in string:
+                                    string = string.split(")")[0]
+                                if "(" in string:
+                                    left = 0
+                                    right = 0
+                                    for x in string:
+                                        if x == "(":
+                                            left += 1
+                                        if x == ")":
+                                            right += 1
+                                    if left < right:
+                                        string = string[:-1]
+                            else:
+                                pass
+                            return string
+                        if low_basis is None:
+                            low_method = fix_paren(low_method)
+                        elif low_basis is not None:
+                            low_basis = fix_paren(low_basis)
+                        if method_and_basis.group(3) and not method_and_basis.group(5):
+                            mm_options[low_method] = method_and_basis.group(3).split(",")
+                        if method_and_basis.group(5) and not method_and_basis.group(3):
+                            mm_options[low_method] = method_and_basis.group(5).split(",")
+                        if method_and_basis.group(5) and method_and_basis.group(3):
+                            mm_options[low_method] = method_and_basis.group(5).split(",")
+                            mm_options[medium_method] = method_and_basis.group(3).split(",")
+                        if mm_options != {}:
+                            other_kwargs["mm"] = mm_options
+                        if oniom_options != []:
+                            other_kwargs["oniom"] = oniom_options
+
+                    if has_params:
+                        other_kwargs["parameters"] = parameters
 
                     route_options = route.split()
                     job_type = []
@@ -2220,8 +2408,10 @@ class FileReader:
                     for option in route_options:
                         if option.startswith("#"):
                             continue
-                        elif option.startswith(method):
-                            continue
+                        if method is not None and option.startswith(method):
+                                continue
+                        if option.lower().startswith("oniom"):
+                                continue
 
                         option_lower = option.lower()
                         if option_lower.startswith("opt"):
@@ -2331,21 +2521,51 @@ class FileReader:
                                 continue
 
                     self.other["other_kwargs"] = other_kwargs
-                    try:
+                    if oniom == True:
+#                        try:
                         theory = Theory(
-                            charge=self.other["charge"],
-                            multiplicity=self.other["multiplicity"],
-                            job_type=job_type,
-                            basis=basis,
-                            method=method,
-                            grid=grid,
-                            solvent=solvent,
+                                charge=self.other["charge"],
+                                multiplicity=self.other["multiplicity"],
+                                job_type=job_type,
+                                high_method=high_method,
+                                medium_method=medium_method,
+                                low_method=low_method,
+                                high_basis=high_basis,
+                                medium_basis=medium_basis,
+                                low_basis=low_basis,
+                                grid=grid,
+                                solvent=solvent,
                         )
+                        theory.kwargs = self.other["other_kwargs"]
                         self.other["theory"] = theory
-                    except KeyError:
-                        # if there is a serious error, too little info may be available
-                        # to properly create the theory object
-                        pass
+                        #except KeyError:
+                        #    print(high_method)
+                        #    print(high_basis)
+                        #    if medium_method is not None: print(medium_method)
+                        #    if medium_basis is not None: print(medium_basis)
+                        #    print(low_method)
+                        #    if low_basis is not None: print(low_basis)
+                        #    print(solvent)
+                    elif oniom == False:
+                        try:
+                            theory = Theory(
+                                charge=self.other["charge"],
+                                multiplicity=self.other["multiplicity"],
+                                job_type=job_type,
+                                basis=basis,
+                                method=method,
+                                grid=grid,
+                                solvent=solvent,
+                            )
+                            theory.kwargs = self.other["other_kwargs"]
+                            self.other["theory"] = theory
+                        except KeyError:
+                            # if there is a serious error, too little info may be available
+                            # to properly create the theory object
+                            #pass
+                            print(method)
+                            print(basis)
+                            print(solvent)
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -2440,7 +2660,6 @@ class FileReader:
             atomtype = ""
             charge = ""
             tags = []
-            has_charge = False
             has_flag = False
             if "oniom" in other["method"].lower():
                 is_oniom = True
