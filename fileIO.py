@@ -1858,6 +1858,16 @@ class FileReader:
                 if "Molecular Mass:" in line:
                     self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
     
+                if "$molecule" in line.lower():
+                    line = f.readline()
+                    while "$end" not in line.lower() and line:
+                        if re.search("\d+\s+\d+", line):
+                            match = re.search("^\s*(\d+)\s+(\d+)\s*$", line)
+                            self.other["charge"] = int(match.group(1))
+                            self.other["multiplicity"] = int(match.group(2))
+                            break
+                        line = f.readline()
+    
                 if "Principal axes and moments of inertia" in line:
                     self.skip_lines(f, 1)
                     line = f.readline()

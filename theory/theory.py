@@ -32,6 +32,7 @@ from AaronTools.theory import (
     QCHEM_REM,
     QCHEM_COMMENT,
     QCHEM_SETTINGS,
+    FrequencyJob,
 )
 from AaronTools.utils.utils import combine_dicts
 
@@ -2037,6 +2038,14 @@ class Theory:
                     job.geometry = self.geometry
 
                 job_dict = job.get_qchem()
+                if isinstance(job, FrequencyJob) and job.temperature != 298.15:
+                    warnings.append(
+                        "thermochemistry data in the output file will be for 298.15 K\n"
+                        "in spite of the user setting %.2f K\n" % (job.temperature) + \
+                        "free energy corrections can be calculated at different\n"
+                        "temperatures using AaronTools grabThermo.py script or\n"
+                        "SEQCROW's Procress QM Thermochemistry tool"
+                    )
                 if QCHEM_REM in job_dict and any(key.lower() == "job_type" for key in job_dict[QCHEM_REM]):
                     job_type_count += 1
                 if job_type_count > 1:
@@ -2089,7 +2098,10 @@ class Theory:
             # warning = self.method.sanity_check_method(func, "qchem")
             if warning:
                 warnings.append(warning)
-            if not self.method.is_semiempirical and self.basis is not None:
+            
+            # Q-Chem seems to still require a basis set for HF-3c
+            # if not self.method.is_semiempirical and self.basis is not None:
+            if self.basis is not None:
                 (
                     basis_info,
                     basis_warnings,
@@ -2129,6 +2141,12 @@ class Theory:
         else:
             warnings.append("no REM section")
 
+        if self.memory:
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {"rem": {"MEM_TOTAL": "%i" % (1000 * self.memory)}}
+            )
+
         if QCHEM_SETTINGS in other_kw_dict:
             for section in other_kw_dict[QCHEM_SETTINGS]:
                 settings = other_kw_dict[QCHEM_SETTINGS][section]
@@ -2138,20 +2156,26 @@ class Theory:
                         continue
                     if isinstance(settings, dict):
                         opt = settings[setting]
+                        if not opt:
+                            continue
                         if isinstance(opt, str):
                             val = opt
-                            out_str += "    %-20s    %s\n" % (setting, val)
+                            out_str += "    %-20s =   %s\n" % (setting, val)
                         elif isinstance(opt, dict):
                             for s, v in opt.items():
-                                out_str += "    %-20s    %s\n" % (s, v)
+                                out_str += "    %-20s =   %s\n" % (s, v)
                         else:
                             if len(opt) == 1:
                                 val = opt[0]
-                                out_str += "    %-20s    %s\n" % (setting, val)
+                                out_str += "    %-20s =   %s\n" % (setting, val)
                             elif not opt:
                                 out_str += "    %-20s\n" % setting
                             else:
-                                out_str += "    %-20s    %s\n" % (setting, ", ".join(opt))
+                                if section.lower() == "rem" and setting.lower() == "job_type":
+                                    raise NotImplementedError(
+                                        "cannot put multiple JOB_TYPE entries in one Q-Chem header"
+                                    )
+                                out_str += "    %-20s =   %s\n" % (setting, ", ".join(opt))
 
     
                     elif hasattr(setting, "__iter__") and not isinstance(setting, str):

@@ -882,15 +882,12 @@ class FrequencyJob(JobType):
         raise NotImplementedError("cannot build frequnecy job input for sqm")
 
     def get_qchem(self):
-        out = {QCHEM_REM: {"JOB_TYPE": "Frequnecy"}}
+        out = {QCHEM_REM: {"JOB_TYPE": "Freq"}}
         if self.numerical:
-            out[QCHEM_REM] = {"FD_DERIVATIVE_TYPE": "1"}
-        out[QCHEM_SETTINGS] = {"isotopes": [
-            "1 1",
-            "0 %.2f" % self.temperature,
-        ]}
-        
+            out[QCHEM_REM]["FD_DERIVATIVE_TYPE"] = "1"
+
         return out
+
 
 class SinglePointJob(JobType):
     """single point energy"""
@@ -940,4 +937,9 @@ class ForceJob(JobType):
         out = {PSI4_JOB: {"gradient": []}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
+        return out
+
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "Force"}}
+        
         return out

@@ -1140,21 +1140,8 @@ class BasisSet:
                 for basis in self.basis:
                     if basis.elements and not basis.user_defined:
                         if info[QCHEM_REM]["BASIS"] == "General":
-                            out_str += " ".join([ele for ele in basis.elements])
-                            out_str += " 0\n"
-                            basis_name = Basis.get_qchem(basis.name)
-                            # warning = basis.sanity_check_basis(
-                            #     basis_name, "qchem"
-                            # )
-                            # if warning:
-                            #     warnings.append(warning)
-                            out_str += basis_name
-                            out_str += "\n****\n"
-
-                        else:
-                            atoms = geom.find(element)
-                            for atom in atoms:
-                                out_str += "%s %i\n" % (atom.element, geom.atoms.index(atom) + 1)
+                            for ele in basis.elements:
+                                out_str += "%-2s 0\n    " % ele
                                 basis_name = Basis.get_qchem(basis.name)
                                 # warning = basis.sanity_check_basis(
                                 #     basis_name, "qchem"
@@ -1162,7 +1149,20 @@ class BasisSet:
                                 # if warning:
                                 #     warnings.append(warning)
                                 out_str += basis_name
-                                out_str += "\n****\n"
+                                out_str += "\n    ****\n    "
+
+                        else:
+                            atoms = geom.find(element)
+                            for atom in atoms:
+                                out_str += "%s %i\n    " % (atom.element, geom.atoms.index(atom) + 1)
+                                basis_name = Basis.get_qchem(basis.name)
+                                # warning = basis.sanity_check_basis(
+                                #     basis_name, "qchem"
+                                # )
+                                # if warning:
+                                #     warnings.append(warning)
+                                out_str += basis_name
+                                out_str += "\n    ****\n    "
 
                 for basis in self.basis:
                     if basis.elements and basis.user_defined:
@@ -1199,7 +1199,7 @@ class BasisSet:
                                 else:
                                     warnings.append("file not found: %s" % basis.user_defined)
 
-                info[QCHEM_SETTINGS] = {"basis": [out_str]}
+                info[QCHEM_SETTINGS] = {"basis": [out_str.strip()]}
 
         if self.ecp is not None:
             # check if we need to use gen:
