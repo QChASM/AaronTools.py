@@ -54,6 +54,66 @@ class JobType:
         """overwrite to return a dict with QCHEM_* keys"""
         pass
 
+    @staticmethod
+    def resolve_error(error, theory, exec_type, **kwargs):
+        """returns a copy of theory or modifies theory to attempt
+        to resolve an error
+        theory will be modified if it is not possible for the current theory
+        to work for any job
+        if the error is specific to the molecule and settings, theory will
+        be copied, modified, and returned
+        raises NotImplementedError if this job type has no fix for
+        the error code
+        error: error code (e.g. SCF_CONV; see fileIO ERROR)
+        theory: Theory() instance
+        exec_type: software program (i.e. gaussian, orca, etc.)
+        
+        optional kwargs:
+        geometry: Geometry(), structure might be adjusted slightly if
+            there are close contacts
+        """
+
+        if error.upper() == "CLASH":
+            # if there is a clash, rotate substituents to mitigate clashing
+            if "geometry" in kwargs:
+                geom = kwargs["geometry"]
+                geom_copy = geom.copy()
+                bad_subs = geom_copy.remove_clash()
+                if not bad_subs:
+                    geom.update_structure(geom_copy.coords)
+                    return None
+
+        if exec_type.lower() == "gaussian":
+            if error.upper() == "SCF_CONV":
+                # SCF convergence issue, try different SCF algorithm
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {
+                        GAUSSIAN_ROUTE: {"scf": ["xqc"]}
+                    },
+                    out_theory.kwargs
+                )
+                return out_theory
+
+        if exec_type.lower() == "orca":
+            if error.upper() == "SCF_CONV":
+                # SCF convergence issue, orca recommends ! SlowConv
+                # and increasing SCF iterations
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {
+                        ORCA_ROUTE: ["SlowConv"],
+                        ORCA_BLOCKS: {"scf": ["MaxIter 500"]}
+                    },
+                    out_theory.kwargs
+                )
+                return out_theory
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
+
 @addlogger
 class OptimizationJob(JobType):
     """optimization job"""
@@ -832,6 +892,67 @@ class OptimizationJob(JobType):
         
         return out
 
+    @staticmethod
+    def resolve_error(error, theory, exec_type, **kwargs):
+        """
+        resolves optimization-specific errors
+        errors resolved by JobType take priority
+
+        optional kwargs:
+        geometry: Geometry(), structure might be adjusted slightly if
+            the software had an issue with generating internal coordinates
+        """
+        try:
+            return super(OptimizationJob, OptimizationJob).resolve_error(
+                error, theory, exec_type
+            )
+        except NotImplementedError:
+            pass
+        
+        if exec_type.lower() == "gaussian":
+            if error.upper() == "CONV_LINK":
+                # optimization out of steps, add more steps
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {GAUSSIAN_ROUTE: {"opt": ["MaxCycles=300"]}}, out_theory.kwargs,
+                )
+                return out_theory
+            
+            if error.upper() == "FBX":
+                # FormBX error, just restart the job
+                # adjusting the geometry slightly can help
+                if "geometry" in kwargs:
+                    geom = kwargs["geometry"]
+                    coords = geom.coords
+                    scale = 1e-3
+                    coords += scale * np.random.random_sample - scale / 2
+                    geom.update_structure(coords)
+                return None
+            
+            if error.upper() == "REDUND":
+                # internal coordinate error, just restart the job
+                if "geometry" in kwargs:
+                    geom = kwargs["geometry"]
+                    coords = geom.coords
+                    scale = 1e-3
+                    coords += scale * np.random.random_sample - scale / 2
+                    geom.update_structure(coords)
+                return None                
+        
+        if exec_type.lower() == "orca":
+            if error.upper() == "OPT_CONV":
+                # optimization out of steps, add more steps
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {ORCA_BLOCKS: {"geom": ["MaxIter 300"]}}, out_theory.kwargs,
+                )
+                return out_theory
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
+
 class FrequencyJob(JobType):
     """frequnecy job"""
 
@@ -887,6 +1008,31 @@ class FrequencyJob(JobType):
             out[QCHEM_REM]["FD_DERIVATIVE_TYPE"] = "1"
 
         return out
+
+    @staticmethod
+    def resolve_error(error, theory, exec_type, **kwargs):
+        """
+        resolves frequnecy-specific errors
+        errors resolved by JobType take priority
+        """
+        try:
+            return super(OptimizationJob, OptimizationJob).resolve_error(
+                error, theory, exec_type
+            )
+        except NotImplementedError:
+            pass
+        
+        if exec_type.lower() == "orca":
+            if error.upper() == "NUMFREQ":
+                # analytical derivatives are not available
+                for job in theory.job_type:
+                    if isinstance(job, FrequencyJob):
+                        job.numerical = True
+                return
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
 
 
 class SinglePointJob(JobType):

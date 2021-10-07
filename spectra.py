@@ -1525,6 +1525,73 @@ class ValenceExcitations(Signals):
                 )
             )
 
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        multiplicity = []
+        energy = []
+        oscillator_str = []
+        symmetry = []
+        rotation_str = []
+        rotation_str_vel = []
+        for line in lines:
+            if re.search("Excited state\s+\d+: excitation energy", line):
+                energy.append(float(line.split()[-1]))
+            
+            if re.search("Multiplicity:", line):
+                multiplicity.append(line.split()[-1])
+            
+            if re.search("Strength", line):
+                oscillator_str.append(float(line.split()[-1]))
+                
+            if re.search("Excited state\s+\d+\s*\(", line):
+                info = re.search("\((\S+), (\S+)\)", line)
+                multiplicity.append(info.group(1).capitalize())
+                symmetry.append(info.group(2))
+            
+            if re.search("Excitation energy:", line):
+                if len(energy) > len(oscillator_str):
+                    oscillator_str.append(0)
+                energy.append(float(line.split()[-2]))
+
+            if re.search("Osc. strength:", line):
+                oscillator_str.append(float(line.split()[-1]))
+            
+            if re.search("State B:", line):
+                symmetry.append(line.split("/")[-1])
+            
+            if re.search("Oscillator strength", line):
+                oscillator_str.append(float(line.split()[-1]))
+
+            if re.search("Energy GAP", line):
+                energy.append(float(line.split()[-2]))
+
+            if re.search("Rotatory strength, length gauge", line):
+                rotation_str.append(float(line.split()[-1]))
+
+            if re.search("Rotatory strength, velocity gauge", line):
+                rotation_str_vel.append(float(line.split()[-1]))
+        
+        lists = [
+            symmetry, energy, oscillator_str, multiplicity,
+            rotation_str, rotation_str_vel,
+        ]
+        max_list = max(lists, key=len)
+        
+        for l in lists:
+            while len(l) < len(max_list):
+                l.append(None)
+
+        for nrg, mult, osc, symm, rot, rot_vel in zip(
+            energy, multiplicity, oscillator_str, symmetry,
+            rotation_str, rotation_str_vel,
+        ):
+            self.data.append(
+                ValenceExcitation(
+                    nrg, multiplicity=mult, dipole_str=osc, symmetry=symm,
+                    rotatory_str_len=rot, rotatory_str_vel=rot_vel,
+                )
+            )
+
+
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
@@ -1624,7 +1691,7 @@ class ValenceExcitations(Signals):
             change_x_unit_func = None
             x_label = r"$h\nu$ (eV)"
 
-        functions, frequencies, intensities = self.get_spectrum_functions(
+        functions, energies, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
             fwhm=fwhm,
             data_attr=data_attr,
@@ -1639,7 +1706,7 @@ class ValenceExcitations(Signals):
 
         data = self.get_plot_data(
             functions,
-            frequencies,
+            energies,
             fwhm=fwhm,
             transmittance=plot_type.lower().startswith("transmittance"),
             peak_type=peak_type,

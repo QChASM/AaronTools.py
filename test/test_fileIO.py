@@ -231,15 +231,15 @@ def2TZVP
 
         ref = """#comment line 1
 #comment line 2
-! PBE0 D3BJ CPCM(dichloromethane) def2-SVP Freq Opt
-%cpcm
-    smd    true
+! PBE0 Opt Freq def2-SVP CPCM(dichloromethane) D3BJ
+%freq
+    Temp    298.15
 end
 %basis
     newGTO            C  "def2-TZVP" end
 end
-%freq
-    Temp    298.15
+%cpcm
+    smd    true
 end
 
 *xyz 0 1

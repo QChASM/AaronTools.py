@@ -144,6 +144,7 @@ def expected_inp_ext(exec_type):
     ORCA - .inp
     Psi4 - .in
     SQM - .mdin
+    qchem - .inp
     """
     if exec_type.lower() == "gaussian":
         if sys.platform.startswith("win"):
@@ -156,7 +157,7 @@ def expected_inp_ext(exec_type):
     if exec_type.lower() == "sqm":
         return ".mdin"
     if exec_type.lower() == "qchem":
-        return ".inq"
+        return ".inp"
 
 def expected_out_ext(exec_type):
     """
@@ -165,6 +166,7 @@ def expected_out_ext(exec_type):
     ORCA - .out
     Psi4 - .out
     SQM - .mdout
+    qchem - .out
     """
     if exec_type.lower() == "gaussian":
         return ".log"
@@ -174,6 +176,8 @@ def expected_out_ext(exec_type):
         return ".out"
     if exec_type.lower() == "sqm":
         return ".mdout"
+    if exec_type.lower() == "qchem":
+        return ".out"
 
 
 class FileWriter:
@@ -1883,6 +1887,50 @@ class FileReader:
                 
                 if line.startswith("Mult"):
                     self.other["multiplicity"] = int(line.split()[1])
+                
+                # TD-DFT excitations
+                if re.search("TDDFT.* Excitation Energies", line):
+                    excite_s = ""
+                    self.skip_lines(f, 2)
+                    line = f.readline()
+                    n += 3
+                    while "---" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
+
+                # ADC excitations
+                if re.search("Excited State Summary", line):
+                    excite_s = ""
+                    self.skip_lines(f, 2)
+                    line = f.readline()
+                    n += 3
+                    while "===" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
+                
+                # EOM excitations
+                if re.search("Start computing the transition properties", line):
+                    excite_s = ""
+                    line = f.readline()
+                    n += 1
+                    while "All requested transition properties have been computed" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
                 
                 if "Thank you very much for using Q-Chem" in line:
                     self.other["finished"] = True

@@ -938,7 +938,7 @@ class Theory:
                     job.geometry = self.geometry
 
                 job_dict = job.get_orca()
-                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
 
         warnings = []
 
@@ -954,7 +954,7 @@ class Theory:
         else:
             basis_info = {}
 
-        other_kw_dict = combine_dicts(basis_info, other_kw_dict)
+        other_kw_dict = combine_dicts(other_kw_dict, basis_info)
 
         # get grid info
         if self.grid is not None:
@@ -967,13 +967,13 @@ class Theory:
             ):
                 grid_info[ORCA_ROUTE].pop(1)
 
-            other_kw_dict = combine_dicts(grid_info, other_kw_dict)
+            other_kw_dict = combine_dicts(other_kw_dict, grid_info)
 
         # add implicit solvent
         if self.solvent is not None:
             solvent_info, warning = self.solvent.get_orca()
             warnings.extend(warning)
-            other_kw_dict = combine_dicts(solvent_info, other_kw_dict)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
 
         # dispersion
         if self.empirical_dispersion is not None:
@@ -981,7 +981,7 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
-            other_kw_dict = combine_dicts(dispersion, other_kw_dict)
+            other_kw_dict = combine_dicts(other_kw_dict, dispersion)
 
         other_kw_dict = combine_dicts(
             other_kw_dict, conditional_kwargs, dict2_conditional=True
@@ -1016,7 +1016,12 @@ class Theory:
             if not out_str.endswith(" "):
                 out_str += " "
 
-            out_str += " ".join(other_kw_dict[ORCA_ROUTE])
+            used_keywords = []
+            for kw in other_kw_dict[ORCA_ROUTE]:
+                if any(kw.lower() == used_kw for used_kw in used_keywords):
+                    continue
+                used_keywords.append(kw.lower())
+                out_str += " %s" % kw
 
         out_str += "\n"
 
@@ -1036,6 +1041,7 @@ class Theory:
                 if any(keyword.lower() == name for name in self.ORCA_BLOCKS_AFTER_MOL):
                     continue
                 if any(other_kw_dict[ORCA_BLOCKS][keyword]):
+                    used_settings = []
                     if keyword == "base":
                         out_str += "%%%s " % keyword
                         if isinstance(
@@ -1052,6 +1058,15 @@ class Theory:
                     else:
                         out_str += "%%%s\n" % keyword
                         for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
+                            if any(
+                                keyword.lower() == block_name for block_name in [
+                                    "freq", "geom",
+                                ]
+                            ) and any(
+                                opt.split()[0].lower() == prev_opt for prev_opt in used_settings
+                            ):
+                                continue
+                            used_settings.append(opt.split()[0].lower())
                             out_str += "    %s\n" % opt
                         out_str += "end\n"
 
