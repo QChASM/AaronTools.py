@@ -55,7 +55,7 @@ class Method:
         """
         check to see if method is available in the specified program
         name - str, name of method
-        program, str, gaussian, orca or psi4
+        program, str, gaussian, orca, psi4, or qchem
         """
         import os.path
         from difflib import SequenceMatcher as seqmatch
@@ -74,6 +74,8 @@ class Method:
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "psi4.txt"), dtype=str)
         elif program.lower() == "sqm":
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "sqm.txt"), dtype=str)
+        elif program.lower() == "qchem":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "qchem.txt"), dtype=str)
         else:
             raise NotImplementedError("cannot validate method names for %s" % program)
         
@@ -192,14 +194,15 @@ class Method:
 
     def get_qchem(self):
         """maps proper functional name to one Psi4 accepts"""
-        if re.search("[wω]b97x?-[A-Za-z]", self.name.lower()):
-            name = re.search("([wω]?)wb97(x)([A-Za-z]+)", self.name.lower())
-            return "%sB97X%s" % (
-                name.group(1) if name.group(1) else "",
-                name.group(2) if name.group(2) else "",
-                name.group(3)
-            ),
-            None
+        if re.match("[wω]b97[xm]?[^-xm]", self.name.lower()) and self.name.lower() != "wb97m(2)":
+            name = re.match("([wω]?)b97([xm]?)([\S]+)", self.name.lower())
+            return ("%sB97%s%s" % (
+                    name.group(1) if name.group(1) else "",
+                    name.group(2).upper() if name.group(2) else "",
+                    "-%s" % name.group(3).upper() if name.group(3) else "",
+                ),
+                None
+            )
         elif self.name.upper() == 'B97D':
             return ("B97-D", None)
         elif self.name.upper() == "M062X":

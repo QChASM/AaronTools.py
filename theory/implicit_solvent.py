@@ -595,7 +595,6 @@ class ImplicitSolvent:
         if self.solvent.lower() == "gas":
             return (dict(), warnings)
 
-
         if not any(
                 self.solvent_model.upper() == model for model in self.KNOWN_ORCA_MODELS
         ):
@@ -640,3 +639,15 @@ class ImplicitSolvent:
 
         return (out, warnings)
 
+
+    def get_qchem(self):
+        """returns dict() with solvent information for qchem input files"""
+
+        warnings = []
+
+        if self.solvent.lower() == "gas":
+            return (dict(), warnings)
+
+        raise NotImplementedError(
+            "cannot create solvent info for Q-Chem input files"
+        )

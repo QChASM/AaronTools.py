@@ -2110,7 +2110,7 @@ class Theory:
             if warning is not None:
                 warnings.append(warning)
 
-            # warning = self.method.sanity_check_method(func, "qchem")
+            warning = self.method.sanity_check_method(func, "qchem")
             if warning:
                 warnings.append(warning)
             

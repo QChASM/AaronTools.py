@@ -55,7 +55,7 @@ class JobType:
         pass
 
     @staticmethod
-    def resolve_error(error, theory, exec_type, **kwargs):
+    def resolve_error(error, theory, exec_type, geometry=None):
         """returns a copy of theory or modifies theory to attempt
         to resolve an error
         theory will be modified if it is not possible for the current theory
@@ -75,12 +75,11 @@ class JobType:
 
         if error.upper() == "CLASH":
             # if there is a clash, rotate substituents to mitigate clashing
-            if "geometry" in kwargs:
-                geom = kwargs["geometry"]
-                geom_copy = geom.copy()
+            if geometry:
+                geom_copy = geometry.copy()
                 bad_subs = geom_copy.remove_clash()
                 if not bad_subs:
-                    geom.update_structure(geom_copy.coords)
+                    geometry.update_structure(geom_copy.coords)
                     return None
 
         if exec_type.lower() == "gaussian":
@@ -893,7 +892,7 @@ class OptimizationJob(JobType):
         return out
 
     @staticmethod
-    def resolve_error(error, theory, exec_type, **kwargs):
+    def resolve_error(error, theory, exec_type, geometry=None):
         """
         resolves optimization-specific errors
         errors resolved by JobType take priority
@@ -904,7 +903,7 @@ class OptimizationJob(JobType):
         """
         try:
             return super(OptimizationJob, OptimizationJob).resolve_error(
-                error, theory, exec_type
+                error, theory, exec_type, geometry=geometry
             )
         except NotImplementedError:
             pass
@@ -921,22 +920,20 @@ class OptimizationJob(JobType):
             if error.upper() == "FBX":
                 # FormBX error, just restart the job
                 # adjusting the geometry slightly can help
-                if "geometry" in kwargs:
-                    geom = kwargs["geometry"]
-                    coords = geom.coords
+                if geometry:
+                    coords = geometry.coords
                     scale = 1e-3
                     coords += scale * np.random.random_sample - scale / 2
-                    geom.update_structure(coords)
+                    geometry.update_structure(coords)
                 return None
             
             if error.upper() == "REDUND":
                 # internal coordinate error, just restart the job
-                if "geometry" in kwargs:
-                    geom = kwargs["geometry"]
-                    coords = geom.coords
+                if geometry:
+                    coords = geometry.coords
                     scale = 1e-3
                     coords += scale * np.random.random_sample - scale / 2
-                    geom.update_structure(coords)
+                    geometry.update_structure(coords)
                 return None                
         
         if exec_type.lower() == "orca":
@@ -1010,14 +1007,14 @@ class FrequencyJob(JobType):
         return out
 
     @staticmethod
-    def resolve_error(error, theory, exec_type, **kwargs):
+    def resolve_error(error, theory, exec_type, geometry=None):
         """
         resolves frequnecy-specific errors
         errors resolved by JobType take priority
         """
         try:
-            return super(OptimizationJob, OptimizationJob).resolve_error(
-                error, theory, exec_type
+            return super(FrequencyJob, FrequencyJob).resolve_error(
+                error, theory, exec_type, geometry=geometry
             )
         except NotImplementedError:
             pass
@@ -1028,7 +1025,7 @@ class FrequencyJob(JobType):
                 for job in theory.job_type:
                     if isinstance(job, FrequencyJob):
                         job.numerical = True
-                return
+                return None
         
         raise NotImplementedError(
             "cannot fix %s errors for %s; check your input" % (error, exec_type)

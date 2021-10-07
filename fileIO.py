@@ -1800,12 +1800,21 @@ class FileReader:
                 if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
                     info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
                     kind = info.group(1)
-                    val = float(info.group(2))
-                    if "correlation" not in kind:
-                        self.other["E(%s)" % kind.split()[0]] = val
-                        self.other["energy"] = val
-                    else:
-                        self.other["E(corr)(%s)" % kind.split()[0]] = val
+                    if len(kind.split()) <= 2:
+                        val = float(info.group(2))
+                        if "correlation" not in kind and len(kind.split()) <= 2:
+                            self.other["E(%s)" % kind.split()[0]] = val
+                            self.other["energy"] = val
+                        else:
+                            self.other["E(corr)(%s)" % kind.split()[0]] = val
+
+                if "Total energy:" in line:
+                    self.other["energy"] = float(line.split()[-2])
+
+                #MPn energy is printed as EMPn(SDQ)
+                if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
+                    self.other["energy"] = float(line.split()[-1])
+                    self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
 
                 if "Molecular Point Group" in line:
                     self.other["full_point_group"] = line.split()[3]

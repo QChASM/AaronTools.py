@@ -207,6 +207,13 @@ class Basis:
                 ),
                 dtype=str,
             )
+        elif program.lower() == "qchem":
+            valid = loadtxt(
+                os.path.join(
+                    AARONTOOLS, "theory", "valid_basis_sets", "qchem.txt"
+                ),
+                dtype=str,
+            )
         else:
             raise NotImplementedError(
                 "cannot validate basis names for %s" % program
@@ -289,11 +296,6 @@ class Basis:
         if name.startswith("def2") and not name.startswith("def2-"):
             return name.replace("def2", "def2-", 1)
 
-        # pople basis sets don't have commas
-        # e.g. 6-31G(d,p) -> 6-31G(d_p)
-        if name.startswith("6-31") or name.startswith("3-21"):
-            name = name.replace(",", "_")
-
         return name
 
 
@@ -336,6 +338,13 @@ class ECP(Basis):
             valid = loadtxt(
                 os.path.join(
                     AARONTOOLS, "theory", "valid_basis_sets", "orca_ecp.txt"
+                ),
+                dtype=str,
+            )
+        elif program.lower() == "qchem":
+            valid = loadtxt(
+                os.path.join(
+                    AARONTOOLS, "theory", "valid_basis_sets", "qchem_ecp.txt"
                 ),
                 dtype=str,
             )
@@ -1124,11 +1133,11 @@ class BasisSet:
                 and not self.basis[0].user_defined
             ):
                 basis_name = Basis.get_qchem(self.basis[0].name)
-                # warning = self.basis[0].sanity_check_basis(
-                #     basis_name, "qchem"
-                # )
-                # if warning:
-                #     warnings.append(warning)
+                warning = self.basis[0].sanity_check_basis(
+                    basis_name, "qchem"
+                )
+                if warning:
+                    warnings.append(warning)
                 info[QCHEM_REM] = {"BASIS": "%s" % basis_name}
             elif not any(basis.user_defined for basis in self.basis):
                 info[QCHEM_REM] = {"BASIS": "General"}
@@ -1143,11 +1152,11 @@ class BasisSet:
                             for ele in basis.elements:
                                 out_str += "%-2s 0\n    " % ele
                                 basis_name = Basis.get_qchem(basis.name)
-                                # warning = basis.sanity_check_basis(
-                                #     basis_name, "qchem"
-                                # )
-                                # if warning:
-                                #     warnings.append(warning)
+                                warning = basis.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
                                 out_str += basis_name
                                 out_str += "\n    ****\n    "
 
@@ -1156,11 +1165,11 @@ class BasisSet:
                             for atom in atoms:
                                 out_str += "%s %i\n    " % (atom.element, geom.atoms.index(atom) + 1)
                                 basis_name = Basis.get_qchem(basis.name)
-                                # warning = basis.sanity_check_basis(
-                                #     basis_name, "qchem"
-                                # )
-                                # if warning:
-                                #     warnings.append(warning)
+                                warning = basis.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
                                 out_str += basis_name
                                 out_str += "\n    ****\n    "
 
@@ -1209,11 +1218,11 @@ class BasisSet:
                 and not self.ecp[0].user_defined
             ):
                 basis_name = ECP.get_qchem(self.ecp[0].name)
-                # warning = self.basis[0].sanity_check_basis(
-                #     basis_name, "qchem"
-                # )
-                # if warning:
-                #     warnings.append(warning)
+                warning = self.basis[0].sanity_check_basis(
+                    basis_name, "qchem"
+                )
+                if warning:
+                    warnings.append(warning)
                 if QCHEM_REM not in info:
                     info[QCHEM_REM] = {"ECP": "%s" % basis_name}
                 else:
@@ -1233,11 +1242,11 @@ class BasisSet:
                             for atom in atoms:
                                 out_str += "%s %i\n" % (atom.element, geom.atoms.index(atom) + 1)
                                 basis_name = ECP.get_qchem(ecp.name)
-                                # warning = ecp.sanity_check_basis(
-                                #     basis_name, "qchem"
-                                # )
-                                # if warning:
-                                #     warnings.append(warning)
+                                warning = ecp.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
                                 out_str += basis_name
                                 out_str += "\n****\n"
 
