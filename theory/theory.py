@@ -2130,7 +2130,7 @@ class Theory:
                 )
                 if self.geometry is not None:
                     basis_warning = self.basis.check_for_elements(
-                        self.geometry
+                        self.geometry,
                     )
                     if basis_warning is not None:
                         warnings.append(basis_warning)

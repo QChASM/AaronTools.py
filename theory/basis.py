@@ -350,7 +350,7 @@ class ECP(Basis):
             )
         else:
             raise NotImplementedError(
-                "cannot validate basis names for %s" % program
+                "cannot validate ECP names for %s" % program
             )
 
         if not any(
@@ -366,7 +366,7 @@ class ECP(Basis):
             for basis in valid
         ):
             warning = (
-                "basis '%s' may not be available in %s\n" % (name, program)
+                "ECP '%s' may not be available in %s\n" % (name, program)
                 + "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
             )
 
@@ -1074,7 +1074,7 @@ class BasisSet:
 
         return info, warnings
 
-    def check_for_elements(self, geometry):
+    def check_for_elements(self, geometry, count_ecps=False):
         """checks to make sure each element is in a basis set"""
         warning = ""
         # assume all elements aren't in a basis set, remove from the list if they have a basis
@@ -1091,6 +1091,16 @@ class BasisSet:
                 for element in basis.elements:
                     if element in elements_without_basis[basis.aux_type]:
                         elements_without_basis[basis.aux_type].remove(element)
+
+            if count_ecps and self.ecp:
+                for basis in self.basis:
+                    if basis.aux_type != None and basis.aux_type != "no":
+                        continue
+                    for ecp in self.ecp:
+                        for element in ecp.elements:
+                            print("removing", element)
+                            if element in elements_without_basis[basis.aux_type]:
+                                elements_without_basis[basis.aux_type].remove(element)
 
             if any(
                 elements_without_basis[aux]
@@ -1150,6 +1160,7 @@ class BasisSet:
                     if basis.elements and not basis.user_defined:
                         if info[QCHEM_REM]["BASIS"] == "General":
                             for ele in basis.elements:
+
                                 out_str += "%-2s 0\n    " % ele
                                 basis_name = Basis.get_qchem(basis.name)
                                 warning = basis.sanity_check_basis(
@@ -1216,9 +1227,10 @@ class BasisSet:
             if (
                 all([ecp == self.ecp[0] for ecp in self.ecp])
                 and not self.ecp[0].user_defined
+                and not self.basis
             ):
                 basis_name = ECP.get_qchem(self.ecp[0].name)
-                warning = self.basis[0].sanity_check_basis(
+                warning = self.ecp[0].sanity_check_basis(
                     basis_name, "qchem"
                 )
                 if warning:
@@ -1228,27 +1240,45 @@ class BasisSet:
                 else:
                     info[QCHEM_REM]["ECP"] = "%s" % basis_name
 
+            elif not any(basis.user_defined for basis in self.basis):
+                if QCHEM_REM not in info:
+                    info[QCHEM_REM] = {"ECP": "General"}
+                else:
+                    info[QCHEM_REM]["ECP"] = "General"
             else:
                 if QCHEM_REM not in info:
-                    info[QCHEM_REM] = {"ECP": "GEN"}
+                    info[QCHEM_REM] = {"ECP": "MIXED"}
                 else:
-                    info[QCHEM_REM]["ECP"] = "GEN"
+                    info[QCHEM_REM]["ECP"] = "MIXED"
 
+            if any(x == info[QCHEM_REM]["ECP"] for x in ["MIXED", "General"]):
                 out_str = ""
-                for ecp in self.ecp:
-                    if ecp.elements and not ecp.user_defined:
-                        for element in ecp.elements:
-                            atoms = geom.find(element)
-                            for atom in atoms:
-                                out_str += "%s %i\n" % (atom.element, geom.atoms.index(atom) + 1)
-                                basis_name = ECP.get_qchem(ecp.name)
-                                warning = ecp.sanity_check_basis(
+                for basis in self.ecp:
+                    if basis.elements and not basis.user_defined:
+                        if info[QCHEM_REM]["ECP"] == "General":
+                            for ele in basis.elements:
+                                out_str += "%-2s 0\n    " % ele
+                                basis_name = ECP.get_qchem(basis.name)
+                                warning = basis.sanity_check_basis(
                                     basis_name, "qchem"
                                 )
                                 if warning:
                                     warnings.append(warning)
                                 out_str += basis_name
-                                out_str += "\n****\n"
+                                out_str += "\n    ****\n    "
+
+                        else:
+                            atoms = geom.find(element)
+                            for atom in atoms:
+                                out_str += "%s %i\n    " % (atom.element, geom.atoms.index(atom) + 1)
+                                basis_name = ECP.get_qchem(basis.name)
+                                warning = basis.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
+                                out_str += basis_name
+                                out_str += "\n    ****\n    "
 
                 for ecp in self.ecp:
                     if ecp.elements:
@@ -1285,7 +1315,11 @@ class BasisSet:
                             # if the file does not exists, just insert the path as an @ file
                             else:
                                 warnings.append("file not found: %s" % ecp.user_defined)
+                
+                if QCHEM_SETTINGS not in info:
+                    info[QCHEM_SETTINGS] = {"ecp": [out_str.strip()]}
+                else:
+                    info[QCHEM_SETTINGS]["ecp"] = [out_str.strip()]
 
-                info[QCHEM_SETTINGS] = {"ecp": [out_str]}
 
         return info, warnings
