@@ -42,6 +42,7 @@ read_types = [
     "sqmout",
     "47",
     "31",
+    "qout",
 ]
 write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
@@ -802,6 +803,8 @@ class FileReader:
                 self.read_nbo_47(f, nbo_name=nbo_name)
             elif self.file_type == "31":
                 self.read_nbo_31(f, nbo_name=nbo_name)
+            elif self.file_type == "qout":
+                self.read_qchem_out(f, get_all, just_geom)
 
     def read_file(
         self, get_all=False, just_geom=True,
@@ -859,6 +862,8 @@ class FileReader:
             self.read_nbo_47(f, nbo_name=nbo_name)
         elif self.file_type == "31":
             self.read_nbo_31(f, nbo_name=nbo_name)
+        elif self.file_type == "qout":
+            self.read_qchem_out(f, get_all, just_geom)
 
         f.close()
         return
@@ -1946,6 +1951,9 @@ class FileReader:
                 
                 line = f.readline()
                 n += 1
+        
+        if not just_geom and "finished" not in self.other:
+            self.other["finished"] = False
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -2813,7 +2821,7 @@ class FileReader:
 
         try:
             self.other["orbitals"] = Orbitals(self)
-        except NotImplementedError:
+        except (NotImplementedError, KeyError):
             pass
         except (TypeError, ValueError) as err:
             self.LOG.warning(

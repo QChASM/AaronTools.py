@@ -1000,7 +1000,7 @@ class Theory:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
 
-        out_str += "!"
+        out_str += "! "
         # method
         if self.method is not None:
             func, warning = self.method.get_orca()
@@ -1009,13 +1009,10 @@ class Theory:
             warning = self.method.sanity_check_method(func, "orca")
             if warning:
                 warnings.append(warning)
-            out_str += " %s" % func
+            out_str += "%s" % func
 
         # add other route options
         if ORCA_ROUTE in other_kw_dict:
-            if not out_str.endswith(" "):
-                out_str += " "
-
             used_keywords = []
             for kw in other_kw_dict[ORCA_ROUTE]:
                 if any(kw.lower() == used_kw for used_kw in used_keywords):

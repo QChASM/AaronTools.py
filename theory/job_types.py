@@ -13,11 +13,12 @@ from AaronTools.theory import (
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    PSI4_BEFORE_JOB,
     SQM_QMMM,
     QCHEM_REM,
     QCHEM_SETTINGS,
 )
-from AaronTools.utils.utils import range_list
+from AaronTools.utils.utils import range_list, combine_dicts
 
 
 class JobType:
@@ -82,8 +83,8 @@ class JobType:
                     geometry.update_structure(geom_copy.coords)
                     return None
 
-        if exec_type.lower() == "gaussian":
-            if error.upper() == "SCF_CONV":
+        if error.upper() == "SCF_CONV":
+            if exec_type.lower() == "gaussian":
                 # SCF convergence issue, try different SCF algorithm
                 out_theory = theory.copy()
                 out_theory.kwargs = combine_dicts(
@@ -94,8 +95,7 @@ class JobType:
                 )
                 return out_theory
 
-        if exec_type.lower() == "orca":
-            if error.upper() == "SCF_CONV":
+            if exec_type.lower() == "orca":
                 # SCF convergence issue, orca recommends ! SlowConv
                 # and increasing SCF iterations
                 out_theory = theory.copy()
@@ -107,6 +107,37 @@ class JobType:
                     out_theory.kwargs
                 )
                 return out_theory
+        
+            if exec_type.lower() == "psi4":
+                out_theory = theory.copy()
+                # if theory.charge < 0:
+                #     # if the charge is negative, try adding two electrons
+                #     # to get a guess that might work
+                #     # as well as HF with a small basis set
+                #     out_theory.kwargs = combine_dicts(
+                #         {
+                #             PSI4_BEFORE_JOB: {
+                #                 [
+                #                     "mol = get_active_molecule()",
+                #                     "mol.set_molecular_charge(%i)" % (theory.charge + 2),
+                #                     "nrg = energy($METHOD)",
+                #                     "mol.set_molecular_charge(%i)" % theory.charge,
+                #                 ]
+                #             }
+                #         },
+                #         out_theory.kwargs,
+                #     )
+                # ^ this doesn't seem to help in general
+                # do 500 iterations and dampen
+                out_theory.kwargs = combine_dicts(
+                    {
+                        PSI4_SETTINGS: {
+                            "damping_percentage": "15",
+                            "maxiter": "500",
+                        },
+                    },
+                    out_theory.kwargs,
+                )
         
         raise NotImplementedError(
             "cannot fix %s errors for %s; check your input" % (error, exec_type)
@@ -856,7 +887,7 @@ class OptimizationJob(JobType):
                     constraints = "CONSTRAINT\n"
                 for angle in self.constraints["angles"]:
                     atom1, atom2, atom3 = self.geometry.find(angle)
-                    constraints += "        STRE %2i %2i %2i %9.5f\n" % (
+                    constraints += "        BEND %2i %2i %2i %9.5f\n" % (
                         self.geometry.atoms.index(atom1) + 1,
                         self.geometry.atoms.index(atom2) + 1,
                         self.geometry.atoms.index(atom3) + 1,
