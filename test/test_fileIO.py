@@ -266,14 +266,14 @@ O    -3.96579  -3.59263   0.00134
             multiplicity=1,
             method="PBE0",
             basis=BasisSet(
-                [Basis("def2-SVP", ["H"]), Basis("def2-TZVP", ["C"])]
+                [Basis("def2-SVP", ["!C"]), Basis("def2-TZVP", ["C"])]
             ),
             empirical_dispersion=EmpiricalDispersion("D3BJ"),
             solvent=ImplicitSolvent("SMD", "dichloromethane"),
             job_type=[FrequencyJob(), OptimizationJob()],
         )
 
-        kw_dict = {ORCA_COMMENT: ["comment line 1", "comment line 2"]}
+        kw_dict = {QCHEM_COMMENT: ["comment line 1", "comment line 2"]}
 
         test = FileWriter.write_inp(
             geom, theory=theory, outfile=False, **kw_dict
@@ -338,6 +338,81 @@ nrg, wfn = optimize('PBE0-d3bj', return_wfn=True)
         }
 
         test = FileWriter.write_in(
+            geom, theory=theory, outfile=False, **kw_dict
+        )
+
+        for line1, line2 in zip(test.splitlines(), ref.splitlines()):
+            self.assertEqual(line1.strip(), line2.strip())
+
+    def test_write_inq(self):
+        """write q-chem input file"""
+        # like gaussian input files, this compares exact output
+
+        geom = Geometry(self.small_mol)
+
+        ref = """$rem
+    JOB_TYPE             =   OPT
+    DFT_D                =   D3_BJ
+    BASIS                =   General
+    METHOD               =   PBE0
+$end
+
+$comments
+    comment line 1
+    comment line 2
+$end
+
+$basis
+    H  0
+    cc-pVDZ
+    ****
+    C  0
+    aug-cc-pVDZ
+    ****
+    Cl 0
+    aug-cc-pVDZ
+    ****
+    N  0
+    aug-cc-pVDZ
+    ****
+    O  0
+    aug-cc-pVDZ
+    ****
+$end
+
+$molecule
+    0 1
+    C     -1.97696     -2.32718      0.00126
+    C     -2.36814     -1.29554      0.85518
+    C     -1.67136     -0.08735      0.85440
+    C     -0.58210      0.08919      0.00026
+    C     -0.19077     -0.94241     -0.85309
+    C     -0.88848     -2.15056     -0.85289
+    H     -3.22679     -1.43483      1.52790
+    H     -1.98002      0.72606      1.52699
+    H      0.66766     -0.80358     -1.52636
+    H     -0.57992     -2.96360     -1.52585
+    Cl     0.29699      1.61392     -0.00037
+    N     -2.73689     -3.64357      0.00188
+    O     -2.07823     -4.68230      0.00289
+    O     -3.96579     -3.59263      0.00134
+$end
+"""
+
+        theory = Theory(
+            charge=0,
+            multiplicity=1,
+            method="PBE0",
+            basis=BasisSet(
+                [Basis("cc-pVDZ", ["H"]), Basis("aug-cc-pVDZ", ["!H"])]
+            ),
+            empirical_dispersion=EmpiricalDispersion("D3BJ"),
+            job_type=[OptimizationJob()],
+        )
+
+        kw_dict = {ORCA_COMMENT: ["comment line 1", "comment line 2"]}
+
+        test = FileWriter.write_inq(
             geom, theory=theory, outfile=False, **kw_dict
         )
 
