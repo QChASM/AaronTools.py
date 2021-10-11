@@ -1,7 +1,7 @@
 """used for specifying emperical dispersion for Theory() instances"""
 
 from AaronTools import addlogger
-from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE
+from AaronTools.theory import GAUSSIAN_ROUTE, ORCA_ROUTE, QCHEM_REM
 
 @addlogger
 class EmpiricalDispersion:
@@ -236,5 +236,75 @@ class EmpiricalDispersion:
                 ]
         ):
             return ("(ccd)dmp2", None)
+        else:
+            return (self.name, "unrecognized emperical dispersion: %s" % self.name)
+
+    def get_qchem(self):
+        """Acceptable keywords for QChem are:
+        Grimme D2
+        Modified Zero-damped Grimme D3
+        Zero-damped Grimme D3
+        Becke-Johnson damped Grimme D3
+        Becke-Johnson damped modified Grimme D3
+        Chai & Head-Gordon
+        """
+        if any(
+                self.name.upper() == name for name in [
+                    "GRIMME D2", "GD2", "D2", "-D2", "EMPIRICAL_GRIMME",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "EMPIRICAL_GRIMME"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "ZERO-DAMPED GRIMME D3", "GRIMME D3", "GD3", "D3",
+                    "-D3", "D3ZERO", "D3_ZERO",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D3_ZERO"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "MODIFIED ZERO-DAMPED GRIMME D3", "D3_ZEROM",
+                ]
+        ):
+            # Smith et. al. modified D3
+            return ({QCHEM_REM: {"DFT_D": "D3_ZEROM"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "C6 ONLY GRIMME D3", "C<SUB>6</SUB> ONLY GRIMME D3", "D3_CSO",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D3_CSO"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "OPTIMIZED POWER GRIMME D3", "D3_OP",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D3_OP"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "BECKE-JOHNSON DAMPED GRIMME D3", "GD3BJ", "D3BJ",
+                    "-D3BJ", "B3BJ",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D3_BJ"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "BECKE-JOHNSON DAMPED MODIFIED GRIMME D3", "GD3MBJ",
+                    "D3MBJ", "-D3MBJ", "D3_BJM",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D3_BJM"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "CHAI & HEAD-GORDON", "CHG", "-CHG", "EMPIRICAL_CHG"
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "EMPIRICAL_CHG"}}, None)
+        elif any(
+                self.name.upper() == name for name in [
+                    "CALDEWEYHER ET. AL. D4", "D4",
+                ]
+        ):
+            return ({QCHEM_REM: {"DFT_D": "D4"}}, None)
         else:
             return (self.name, "unrecognized emperical dispersion: %s" % self.name)

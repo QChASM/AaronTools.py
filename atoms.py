@@ -264,8 +264,12 @@ class Atom:
                 )
         return
 
+    @property
+    def is_dummy(self):
+        return re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element)
+
     def reset(self):
-        if re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element):
+        if self.is_dummy:
             self._vdw = 0
             self._connectivity = 1000
             self._saturation = 0

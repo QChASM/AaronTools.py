@@ -20,6 +20,8 @@ from AaronTools.theory import (
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
+    QCHEM_REM,
+    QCHEM_SETTINGS,
 )
 
 
@@ -205,6 +207,13 @@ class Basis:
                 ),
                 dtype=str,
             )
+        elif program.lower() == "qchem":
+            valid = loadtxt(
+                os.path.join(
+                    AARONTOOLS, "theory", "valid_basis_sets", "qchem.txt"
+                ),
+                dtype=str,
+            )
         else:
             raise NotImplementedError(
                 "cannot validate basis names for %s" % program
@@ -278,11 +287,22 @@ class Basis:
 
         return name
 
+    @staticmethod
+    def get_qchem(name):
+        """
+        returns the Psi4 name of the basis set
+        currently just adds hyphen to Karlsruhe basis if it isn't there
+        """
+        if name.startswith("def2") and not name.startswith("def2-"):
+            return name.replace("def2", "def2-", 1)
+
+        return name
+
 
 class ECP(Basis):
     """ECP - aux info will be ignored"""
 
-    default_elements = AnyTransitionMetal()
+    default_elements = (AnyTransitionMetal(), )
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
@@ -321,9 +341,16 @@ class ECP(Basis):
                 ),
                 dtype=str,
             )
+        elif program.lower() == "qchem":
+            valid = loadtxt(
+                os.path.join(
+                    AARONTOOLS, "theory", "valid_basis_sets", "qchem_ecp.txt"
+                ),
+                dtype=str,
+            )
         else:
             raise NotImplementedError(
-                "cannot validate basis names for %s" % program
+                "cannot validate ECP names for %s" % program
             )
 
         if not any(
@@ -339,7 +366,7 @@ class ECP(Basis):
             for basis in valid
         ):
             warning = (
-                "basis '%s' may not be available in %s\n" % (name, program)
+                "ECP '%s' may not be available in %s\n" % (name, program)
                 + "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
             )
 
@@ -368,6 +395,7 @@ class BasisSet:
         "JK", "RI", "DF SCF", "DF SAPT", "DF GUESS", "DF SAD", "DF MP2",
         "DF CC", "DF DCT", "DF MCSCF", "DF ELST"
     ]
+    QCHEM_AUX = ["RI", "J", "K", "corr"]
 
     def __init__(self, basis=None, ecp=None):
         """
@@ -1047,14 +1075,14 @@ class BasisSet:
 
         return info, warnings
 
-    def check_for_elements(self, geometry):
+    def check_for_elements(self, geometry, count_ecps=False):
         """checks to make sure each element is in a basis set"""
         warning = ""
         # assume all elements aren't in a basis set, remove from the list if they have a basis
         # need to check each type of aux basis
         elements = list(set([str(atom.element) for atom in geometry.atoms]))
         if self.basis is not None:
-            elements_without_basis = {}
+            elements_without_basis = {None: elements.copy()}
             for basis in self.basis:
                 if basis.aux_type not in elements_without_basis:
                     elements_without_basis[basis.aux_type] = [
@@ -1064,6 +1092,16 @@ class BasisSet:
                 for element in basis.elements:
                     if element in elements_without_basis[basis.aux_type]:
                         elements_without_basis[basis.aux_type].remove(element)
+
+            if count_ecps and self.ecp:
+                for basis in self.basis:
+                    if basis.aux_type != None and basis.aux_type != "no":
+                        continue
+                    for ecp in self.ecp:
+                        for element in ecp.elements:
+                            print("removing", element)
+                            if element in elements_without_basis[basis.aux_type]:
+                                elements_without_basis[basis.aux_type].remove(element)
 
             if any(
                 elements_without_basis[aux]
@@ -1091,3 +1129,216 @@ class BasisSet:
                 return warning.strip("; ")
 
             return None
+
+    def get_qchem_basis_info(self, geom):
+        """returns dict used by get_qchem_header with basis info"""
+        info = {QCHEM_REM: dict(), QCHEM_SETTINGS: dict()}
+        warnings = []
+        
+        if self.basis:
+            no_aux_basis = [basis for basis in self.basis if not basis.aux_type]
+            other_basis = [basis for basis in self.basis if basis not in no_aux_basis]
+            aux_j_basis = [basis for basis in other_basis if basis.aux_type.lower() == "j"]
+            aux_k_basis = [basis for basis in other_basis if basis.aux_type.lower() == "k"]
+            aux_corr_basis = [basis for basis in other_basis if basis.aux_type.lower() == "corr"]
+            aux_ri_basis = [basis for basis in other_basis if basis.aux_type.lower() == "ri"]
+        else:
+            no_aux_basis = []
+            aux_j_basis = []
+            aux_k_basis = []
+            aux_corr_basis = []
+            aux_ri_basis = []
+
+        for basis_list, label in zip(
+            [no_aux_basis, aux_j_basis, aux_k_basis, aux_corr_basis, aux_ri_basis],
+            ["BASIS", "AUX_BASIS_J", "AUX_BASIS_K", "AUX_BASIS_CORR", "AUX_BASIS"],
+        ):
+            if basis_list:
+                # check if we need to use gen or mixed:
+                #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
+                #    -multiple basis sets
+                if (
+                    all([basis == basis_list[0] for basis in basis_list])
+                    and not basis_list[0].user_defined
+                ):
+                    basis_name = Basis.get_qchem(basis_list[0].name)
+                    warning = basis_list[0].sanity_check_basis(
+                        basis_name, "qchem"
+                    )
+                    if warning:
+                        warnings.append(warning)
+                    info[QCHEM_REM][label] = "%s" % basis_name
+                elif not any(basis.user_defined for basis in basis_list):
+                    info[QCHEM_REM][label] = "General"
+                else:
+                    info[QCHEM_REM][label] = "MIXED"
+    
+                if any(x == info[QCHEM_REM][label] for x in ["MIXED", "General"]):
+                    out_str = ""
+                    for basis in basis_list:
+                        if basis.elements and not basis.user_defined:
+                            if info[QCHEM_REM][label] == "General":
+                                for ele in basis.elements:
+    
+                                    out_str += "%-2s 0\n    " % ele
+                                    basis_name = Basis.get_qchem(basis.name)
+                                    warning = basis.sanity_check_basis(
+                                        basis_name, "qchem"
+                                    )
+                                    if warning:
+                                        warnings.append(warning)
+                                    out_str += basis_name
+                                    out_str += "\n    ****\n    "
+    
+                            else:
+                                atoms = geom.find(ele)
+                                for atom in atoms:
+                                    out_str += "%s %i\n    " % (atom.element, geom.atoms.index(atom) + 1)
+                                    basis_name = Basis.get_qchem(basis.name)
+                                    warning = basis.sanity_check_basis(
+                                        basis_name, "qchem"
+                                    )
+                                    if warning:
+                                        warnings.append(warning)
+                                    out_str += basis_name
+                                    out_str += "\n    ****\n    "
+    
+                    for basis in basis_list:
+                        if basis.elements and basis.user_defined:
+                            if os.path.exists(basis.user_defined):
+                                with open(basis.user_defined, "r") as f:
+                                    lines = f.readlines()
+                            
+                                for element in basis.elements:
+                                    atoms = geom.find(element)
+                                    for atom in atoms:
+                                        i = 0
+                                        while i < len(lines):
+                                            test = lines[i].strip()
+                                            if not test or test.startswith("!") or test.startswith("$"):
+                                                i += 1
+                                                continue
+            
+                                            ele = test.split()[0]
+                                            if ele == atom.element:
+                                                out_str += "%s %i\n" % (ele, geom.atoms.index(atom))
+                                                i += 1
+                                                while i < len(lines):
+                                                    if ele == atom.element:
+                                                        out_str += lines[i]
+                
+                                                    if lines[i].startswith("****"):
+                                                        break
+                
+                                                    i += 1
+            
+                                            i += 1
+            
+                                    # if the file does not exists, just insert the path as an @ file
+                                    else:
+                                        warnings.append("file not found: %s" % basis.user_defined)
+    
+                    info[QCHEM_SETTINGS][label.lower()] = [out_str.strip()]
+
+        if self.ecp is not None and any(ecp.elements for ecp in self.ecp):
+            # check if we need to use gen:
+            #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
+            if (
+                all([ecp == self.ecp[0] for ecp in self.ecp])
+                and not self.ecp[0].user_defined
+                and not self.basis
+            ):
+                basis_name = ECP.get_qchem(self.ecp[0].name)
+                warning = self.ecp[0].sanity_check_basis(
+                    basis_name, "qchem"
+                )
+                if warning:
+                    warnings.append(warning)
+                if QCHEM_REM not in info:
+                    info[QCHEM_REM] = {"ECP": "%s" % basis_name}
+                else:
+                    info[QCHEM_REM]["ECP"] = "%s" % basis_name
+
+            elif not any(basis.user_defined for basis in self.basis):
+                if QCHEM_REM not in info:
+                    info[QCHEM_REM] = {"ECP": "General"}
+                else:
+                    info[QCHEM_REM]["ECP"] = "General"
+            else:
+                if QCHEM_REM not in info:
+                    info[QCHEM_REM] = {"ECP": "MIXED"}
+                else:
+                    info[QCHEM_REM]["ECP"] = "MIXED"
+
+            if any(x == info[QCHEM_REM]["ECP"] for x in ["MIXED", "General"]):
+                out_str = ""
+                for basis in self.ecp:
+                    if basis.elements and not basis.user_defined:
+                        if info[QCHEM_REM]["ECP"] == "General":
+                            for ele in basis.elements:
+                                out_str += "%-2s 0\n    " % ele
+                                basis_name = ECP.get_qchem(basis.name)
+                                warning = basis.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
+                                out_str += basis_name
+                                out_str += "\n    ****\n    "
+
+                        else:
+                            atoms = geom.find(element)
+                            for atom in atoms:
+                                out_str += "%s %i\n    " % (atom.element, geom.atoms.index(atom) + 1)
+                                basis_name = ECP.get_qchem(basis.name)
+                                warning = basis.sanity_check_basis(
+                                    basis_name, "qchem"
+                                )
+                                if warning:
+                                    warnings.append(warning)
+                                out_str += basis_name
+                                out_str += "\n    ****\n    "
+
+                for ecp in self.ecp:
+                    if ecp.elements:
+                        if ecp.user_defined:
+                            if os.path.exists(ecp.user_defined):
+                                with open(ecp.user_defined, "r") as f:
+                                    lines = f.readlines()
+                        
+                                for element in ecp.elements:
+                                    atoms = geom.find(element)
+                                    for atom in atoms:
+                                        i = 0
+                                        while i < len(lines):
+                                            test = lines[i].strip()
+                                            if not test or test.startswith("!") or test.startswith("$"):
+                                                i += 1
+                                                continue
+        
+                                            ele = test.split()[0]
+                                            if ele == atom.element:
+                                                out_str += "%s %i\n" % (ele, geom.atoms.index(atom))
+                                                i += 1
+                                                while i < len(lines):
+                                                    if ele == atom.element:
+                                                        out_str += lines[i]
+            
+                                                    if lines[i].startswith("****"):
+                                                        break
+            
+                                                    i += 1
+        
+                                            i += 1
+        
+                            # if the file does not exists, just insert the path as an @ file
+                            else:
+                                warnings.append("file not found: %s" % ecp.user_defined)
+                
+                if QCHEM_SETTINGS not in info:
+                    info[QCHEM_SETTINGS] = {"ecp": [out_str.strip()]}
+                else:
+                    info[QCHEM_SETTINGS]["ecp"] = [out_str.strip()]
+
+
+        return info, warnings

@@ -1,3 +1,8 @@
+"""
+NEW_FILEIO IS UNUSED
+please use fileIO instead
+"""
+
 import re
 
 import cclib

@@ -53,6 +53,8 @@ class Signals:
             self.parse_orca_lines(lines, *args, **kwargs)
         elif lines and style == "psi4":
             self.parse_psi4_lines(lines, *args, **kwargs)
+        elif lines and style == "qchem":
+            self.parse_qchem_lines(lines, *args, **kwargs)
         else:
             raise NotImplementedError("cannot parse data for %s" % style)
 
@@ -74,6 +76,13 @@ class Signals:
         """parse data from Psi4 output files related to this spectrum"""
         raise NotImplementedError(
             "parse_psi4_lines not implemented by %s" %
+            self.__class__.__name__
+        )
+
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        """parse data from Q-Chem output files related to this spectrum"""
+        raise NotImplementedError(
+            "parse_qchem_lines not implemented by %s" %
             self.__class__.__name__
         )
 
@@ -912,6 +921,56 @@ class Frequency(Signals):
             data.combinations[ndx2] = [
                 AnharmonicVibration(combo[4], intensity=combo[5], harmonic=harm_data)
             ]
+    
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        num_head = 0
+        modes = []
+        for k, line in enumerate(lines):
+            if "Frequency:" in line:
+                ndx = 0
+                for i in float_num.findall(line):
+                    self.data += [HarmonicVibration(float(i))]
+                    modes += [[]]
+                continue
+
+            if "Force Cnst:" in line:
+                force_constants = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].forcek = float(force_constants[i])
+                continue
+
+            if "Red. Mass:" in line:
+                red_masses = float_num.findall(line)
+                for i in range(-len(red_masses), 0, 1):
+                    self.data[i].red_mass = float(red_masses[i])
+                continue
+
+            if "IR Intens:" in line:
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].intensity = float(intensities[i])
+                continue
+
+            if "Raman Intens:" in line:
+                intensities = float_num.findall(line)
+                for i in range(-len(force_constants), 0, 1):
+                    self.data[i].raman_activity = float(intensities[i])
+                continue
+
+            match = re.search(r"^\s?[A-Z][a-z]?\s+(\s+[+-]?\d+\.\d+)+$", line)
+            if match is None:
+                continue
+            ndx += 1
+            values = float_num.findall(line)
+            moves = np.array(values, dtype=np.float)
+            n_moves = len(moves) // 3
+            for i in range(-n_moves, 0):
+                modes[i].append(
+                    moves[3 * n_moves + 3 * i : 4 * n_moves + 3 * i]
+                )
+
+        for mode, data in zip(modes, self.data):
+            data.vector = np.array(mode, dtype=np.float64)
 
     def parse_orca_lines(self, lines, *args, **kwargs):
         """parse lines of orca output related to frequency
@@ -1186,7 +1245,21 @@ class ValenceExcitation(Signal):
     )
 
 
+class TransientExcitation(ValenceExcitation):
+    x_attr = "excitation_energy"
+    required_attrs = (
+        "rotatory_str_len", "rotatory_str_vel", "dipole_str",
+        "dipole_vel", "symmetry", "multiplicity",
+    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class ValenceExcitations(Signals):
+    def __init__(self, *args, **kwargs):
+        self.transient_data = None
+        super().__init__(*args, **kwargs)
+
     def parse_gaussian_lines(self, lines, *args, **kwargs):
         i = 0
         nrgs = []
@@ -1260,6 +1333,12 @@ class ValenceExcitations(Signals):
         dipole_vel = []
         multiplicity = []
         mult = "Singlet"
+        
+        transient_dipole_str = []
+        transient_dipole_vel = []
+        transient_rot_str = []
+        transient_nrg = []
+        
         while i < len(lines):
             line = lines[i]
             if "SINGLETS" in line:
@@ -1277,7 +1356,7 @@ class ValenceExcitations(Signals):
                 nrgs.append(float(info.group(1)))
                 multiplicity.append(mult)
                 i += 1
-            elif "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+            elif "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
                 i += 5
                 line = lines[i]
                 while line.strip():
@@ -1285,7 +1364,7 @@ class ValenceExcitations(Signals):
                     dipole_str.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+            elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
                 i += 5
                 line = lines[i]
                 while line.strip():
@@ -1293,7 +1372,7 @@ class ValenceExcitations(Signals):
                     dipole_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif line.endswith("CD SPECTRUM"):
+            elif line.endswith("CD SPECTRUM") and "TRANSIENT" not in line:
                 i += 5
                 line = lines[i]
                 while line.strip():
@@ -1301,12 +1380,37 @@ class ValenceExcitations(Signals):
                     rotatory_str_len.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+            elif "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
                     rotatory_str_vel.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    transient_dipole_str.append(float(info[3]))
+                    transient_nrg.append(self.nm_to_ev(float(info[2])))
+                    i += 1
+                    line = lines[i]
+            elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    transient_dipole_vel.append(float(info[3]))
+                    i += 1
+                    line = lines[i]
+            elif "TRANSIENT CD SPECTRUM" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    transient_rot_str.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "CALCULATED SOLVENT SHIFTS" in line:
@@ -1343,6 +1447,23 @@ class ValenceExcitations(Signals):
                     nrg, rotatory_str_len=rot_len,
                     rotatory_str_vel=rot_vel, dipole_str=dip_len,
                     dipole_vel=dip_vel, multiplicity=mult,
+                )
+            )
+
+        for nrg, rot_len, dip_len, dip_vel in zip(
+            transient_nrg,
+            transient_rot_str,
+            transient_dipole_str,
+            transient_dipole_vel,
+        ):
+            if not hasattr(self, "transient_data") or not self.transient_data:
+                self.transient_data = []
+            self.transient_data.append(
+                TransientExcitation(
+                    nrg,
+                    rotatory_str_len=rot_len,
+                    dipole_str=dip_len,
+                    dipole_vel=dip_vel,
                 )
             )
 
@@ -1404,6 +1525,73 @@ class ValenceExcitations(Signals):
                 )
             )
 
+    def parse_qchem_lines(self, lines, *args, **kwargs):
+        multiplicity = []
+        energy = []
+        oscillator_str = []
+        symmetry = []
+        rotation_str = []
+        rotation_str_vel = []
+        for line in lines:
+            if re.search("Excited state\s+\d+: excitation energy", line):
+                energy.append(float(line.split()[-1]))
+            
+            if re.search("Multiplicity:", line):
+                multiplicity.append(line.split()[-1])
+            
+            if re.search("Strength", line):
+                oscillator_str.append(float(line.split()[-1]))
+                
+            if re.search("Excited state\s+\d+\s*\(", line):
+                info = re.search("\((\S+), (\S+)\)", line)
+                multiplicity.append(info.group(1).capitalize())
+                symmetry.append(info.group(2))
+            
+            if re.search("Excitation energy:", line):
+                if len(energy) > len(oscillator_str):
+                    oscillator_str.append(0)
+                energy.append(float(line.split()[-2]))
+
+            if re.search("Osc. strength:", line):
+                oscillator_str.append(float(line.split()[-1]))
+            
+            if re.search("State B:", line):
+                symmetry.append(line.split("/")[-1])
+            
+            if re.search("Oscillator strength", line):
+                oscillator_str.append(float(line.split()[-1]))
+
+            if re.search("Energy GAP", line):
+                energy.append(float(line.split()[-2]))
+
+            if re.search("Rotatory strength, length gauge", line):
+                rotation_str.append(float(line.split()[-1]))
+
+            if re.search("Rotatory strength, velocity gauge", line):
+                rotation_str_vel.append(float(line.split()[-1]))
+        
+        lists = [
+            symmetry, energy, oscillator_str, multiplicity,
+            rotation_str, rotation_str_vel,
+        ]
+        max_list = max(lists, key=len)
+        
+        for l in lists:
+            while len(l) < len(max_list):
+                l.append(None)
+
+        for nrg, mult, osc, symm, rot, rot_vel in zip(
+            energy, multiplicity, oscillator_str, symmetry,
+            rotation_str, rotation_str_vel,
+        ):
+            self.data.append(
+                ValenceExcitation(
+                    nrg, multiplicity=mult, dipole_str=osc, symmetry=symm,
+                    rotatory_str_len=rot, rotatory_str_vel=rot_vel,
+                )
+            )
+
+
     @staticmethod
     def nm_to_ev(x):
         """convert x nm to eV"""
@@ -1440,6 +1628,7 @@ class ValenceExcitations(Signals):
         units="nm",
         rotate_x_ticks=False,
         show_functions=None,
+        transient=False,
         **kwargs,
     ):
         """
@@ -1457,10 +1646,10 @@ class ValenceExcitations(Signals):
         kwargs - keywords for Frequency.get_spectrum_functions
         """
 
-        if not centers and units == "nm":
-            centers = [225]
-            widths = [350]
-
+        data_attr = "data"
+        if transient:
+            data_attr = "transient_data"
+        
         if "intensity_attr" not in kwargs:
             intensity_attr = "dipole_str"
             if plot_type.lower() == "uv-vis-velocity":
@@ -1482,6 +1671,19 @@ class ValenceExcitations(Signals):
         if getattr(self.data[0], kwargs["intensity_attr"]) is None:
             raise RuntimeError("no data was parsed for %s" % kwargs["intensity_attr"])
 
+        if not centers and units == "nm":
+            data_list = getattr(self, data_attr)
+            data_min = None
+            data_max = None
+            for data in data_list:
+                wavelength = self.ev_to_nm(data.excitation_energy)
+                if data_min is None or wavelength < data_min:
+                    data_min = wavelength
+                if data_max is None or wavelength > data_max:
+                    data_max = wavelength
+            centers = [(data_min + data_max) / 2]
+            widths = [1.5 * (data_max - data_min)]
+
         change_x_unit_func = None
         x_label = "wavelength (nm)"
         change_x_unit_func = self.ev_to_nm
@@ -1489,9 +1691,10 @@ class ValenceExcitations(Signals):
             change_x_unit_func = None
             x_label = r"$h\nu$ (eV)"
 
-        functions, frequencies, intensities = self.get_spectrum_functions(
+        functions, energies, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
             fwhm=fwhm,
+            data_attr=data_attr,
             **kwargs,
         )
 
@@ -1503,7 +1706,7 @@ class ValenceExcitations(Signals):
 
         data = self.get_plot_data(
             functions,
-            frequencies,
+            energies,
             fwhm=fwhm,
             transmittance=plot_type.lower().startswith("transmittance"),
             peak_type=peak_type,
@@ -1519,13 +1722,9 @@ class ValenceExcitations(Signals):
 
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
-        elif y_label is None and plot_type.lower() == "uv-vis":
+        elif y_label is None and "uv-vis" in plot_type.lower():
             y_label = "Absorbance (arb.)"
-        elif y_label is None and plot_type.lower() == "uv-vis-velocity":
-            y_label = "Absorbance (arb.)"
-        elif y_label is None and plot_type.lower() == "ecd":
-            y_label = "ΔAbsorbance (arb.)"
-        elif y_label is None and plot_type.lower() == "ecd-velocity":
+        elif y_label is None and "ecd" in plot_type.lower():
             y_label = "ΔAbsorbance (arb.)"
 
         self.plot_spectrum(
