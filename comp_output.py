@@ -135,6 +135,8 @@ class CompOutput:
         for k in keys:
             if k in from_file.other:
                 setattr(self, k, from_file.other[k])
+            else:
+                setattr(self, k, None)
         
         self.other = {k:v for k, v in from_file.other.items() if k not in keys}
 

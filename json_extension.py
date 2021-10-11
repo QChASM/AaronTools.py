@@ -64,6 +64,7 @@ class ATEncoder(json.JSONEncoder):
         rv["flag"] = obj.flag
         rv["name"] = obj.name
         rv["tags"] = list(sorted(obj.tags))
+        rv["charge"] = obj.charge
         rv["_rank"] = obj._rank
         return rv
 
@@ -272,7 +273,7 @@ class ATDecoder(json.JSONDecoder):
 
     def _decode_atom(self, obj):
         kwargs = {}
-        for key in ["element", "coords", "flag", "name", "tags"]:
+        for key in ["element", "coords", "flag", "name", "tags", "charge"]:
             kwargs[key] = obj[key]
         rv = Atom(**kwargs)
         rv._rank = obj["_rank"]
