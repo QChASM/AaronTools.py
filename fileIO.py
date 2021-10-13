@@ -1636,10 +1636,11 @@ class FileReader:
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
-            rv = []
+            rv = self.atoms
             self.skip_lines(f, 4)
             line = f.readline()
             n += 5
+            atnum = 0
             while "--" not in line:
                 line = line.strip()
                 line = line.split()
@@ -1649,9 +1650,35 @@ class FileReader:
                     except ValueError:
                         msg = "Error detected with log file on line {}"
                         raise IOError(msg.format(n))
-                elem = ELEMENTS[int(line[1])]
-                flag = not bool(line[2])
-                rv += [Atom(element=elem, flag=flag, coords=line[3:])]
+                try:
+                    rv[atnum].coords = np.array(line[3:], dtype=float)
+                except IndexError:
+                    pass
+                    #print(atnum)
+                atnum += 1
+                line = f.readline()
+                n += 1
+            return rv, n
+
+        def get_input(f, n):
+            rv = []
+            line = f.readline()
+            n += 1
+            match = re.search(
+                "Charge\s*=\s*(-?\d+)\s*Multiplicity\s*=\s*(\d+)", line
+            )
+            if match is not None:
+                self.other["charge"] = int(match.group(1))
+                self.other["multiplicity"] = int(match.group(2))
+            line = f.readline()
+            n += 1
+            while len(line.split()) > 1:
+                line  = line.split()
+                if len(line) == 5:
+                    flag = not(bool(line[1]))
+                    rv += [Atom(element=line[0],flag=flag,coords=line[2:])]
+                elif len(line) == 4:
+                    rv += [Atom(element=line[0],coords=line[1:])]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -1764,6 +1791,10 @@ class FileReader:
             elif found_archive:
                 self.other["archive"] += line.strip()
 
+            # input atom specs and charge/mult
+            if "Symbolic Z-matrix:" in line:
+                self.atoms, n = get_input(f, n)
+
             #Pseudopotential info
             if "Pseudopotential Parameters" in line:
                 self.other["ECP"] = []
@@ -1802,16 +1833,11 @@ class FileReader:
                 # z-matrix parameters
             if re.search("Optimized Parameters", line):
                 self.other["params"], n = get_params(f, n)
-            if "Symbolic Z-matrix:" in line:
-                line = f.readline()
-                n += 1
-                match = re.search(
-                    "Charge\s*=\s*(-?\d+)\s*Multiplicity\s*=\s*(\d+)", line
-                )
-                if match is not None:
-                    self.other["charge"] = int(match.group(1))
-                    self.other["multiplicity"] = int(match.group(2))
 
+            # input atom specs and charge/mult
+            if "Symbolic Z-matrix:" in line:
+                self.atoms, n = get_input(f, n)
+ 
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
