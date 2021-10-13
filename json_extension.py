@@ -64,6 +64,7 @@ class ATEncoder(json.JSONEncoder):
         rv["flag"] = obj.flag
         rv["name"] = obj.name
         rv["tags"] = list(sorted(obj.tags))
+        rv["charge"] = obj.charge
         rv["_rank"] = obj._rank
         return rv
 
@@ -209,16 +210,15 @@ class ATEncoder(json.JSONEncoder):
                 rv["ecp"] = {"name": [], "elements":[], "file":[]}
                 for basis in obj.basis.ecp:
                     rv["ecp"]["name"].append(basis.name)
+                    rv["ecp"]["elements"].append([])
                     for ele in basis.ele_selection:
                         if isinstance(ele, str):
-                            rv["ecp"]["elements"].append(ele)
+                            rv["ecp"]["elements"][-1].append(ele)
                         elif isinstance(ele, AnyTransitionMetal):
-                            rv["ecp"]["elements"].append("tm")
+                            rv["ecp"]["elements"][-1].append("tm")
                         elif isinstance(ele, AnyNonTransitionMetal):
-                            rv["ecp"]["elements"].append("!tm")
-                        else:
-                            rv["ecp"]["elements"].append([])
-                            
+                            rv["ecp"]["elements"][-1].append("!tm")
+
                     if basis.not_anys:
                         for ele in basis.not_anys:
                             if isinstance(ele, str):
@@ -226,7 +226,7 @@ class ATEncoder(json.JSONEncoder):
                             elif isinstance(ele, AnyTransitionMetal):
                                 rv["ecp"]["elements"][-1].append("!tm")
                             elif isinstance(ele, AnyNonTransitionMetal):
-                                rv["ecp"]["elements"][-1].append("tm")
+                                rv["ecp"]["elements"][-1].append("!!tm")
     
                     rv["ecp"]["file"].append(basis.user_defined)
 
@@ -273,7 +273,7 @@ class ATDecoder(json.JSONDecoder):
 
     def _decode_atom(self, obj):
         kwargs = {}
-        for key in ["element", "coords", "flag", "name", "tags"]:
+        for key in ["element", "coords", "flag", "name", "tags", "charge"]:
             kwargs[key] = obj[key]
         rv = Atom(**kwargs)
         rv._rank = obj["_rank"]
@@ -412,7 +412,7 @@ class ATDecoder(json.JSONDecoder):
                         user_defined=file,
                     )
                 )
-        
+
         if "other" in obj:
             rv.kwargs = obj["other"]
         

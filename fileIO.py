@@ -42,8 +42,9 @@ read_types = [
     "sqmout",
     "47",
     "31",
+    "qout",
 ]
-write_types = ["xyz", "com", "inp", "in", "sqmin", "cube"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
@@ -144,6 +145,7 @@ def expected_inp_ext(exec_type):
     ORCA - .inp
     Psi4 - .in
     SQM - .mdin
+    qchem - .inp
     """
     if exec_type.lower() == "gaussian":
         if sys.platform.startswith("win"):
@@ -155,6 +157,8 @@ def expected_inp_ext(exec_type):
         return ".in"
     if exec_type.lower() == "sqm":
         return ".mdin"
+    if exec_type.lower() == "qchem":
+        return ".inp"
 
 def expected_out_ext(exec_type):
     """
@@ -163,6 +167,7 @@ def expected_out_ext(exec_type):
     ORCA - .out
     Psi4 - .out
     SQM - .mdout
+    qchem - .out
     """
     if exec_type.lower() == "gaussian":
         return ".log"
@@ -172,6 +177,8 @@ def expected_out_ext(exec_type):
         return ".out"
     if exec_type.lower() == "sqm":
         return ".mdout"
+    if exec_type.lower() == "qchem":
+        return ".out"
 
 
 class FileWriter:
@@ -208,6 +215,8 @@ class FileWriter:
                 style = "in"
             elif style.lower() == "sqm":
                 style = "sqmin"
+            elif style.lower() == "qchem":
+                style = "inq"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -254,6 +263,15 @@ class FileWriter:
             else:
                 raise TypeError(
                     "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "inq":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_inq(geom, theory, outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'inq' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
@@ -344,7 +362,7 @@ class FileWriter:
         geom - Geometry()
         theory - Theory()
         outfile - None, False, or str
-                  None - geom.name + ".com" is used as output destination
+                  None - geom.name + ".inp" is used as output destination
                   False - return contents of the input file as a str
                   str - output destination
         return_warnings - True to return a list of warnings (e.g. basis
@@ -352,20 +370,26 @@ class FileWriter:
         kwargs - passed to Theory methods (make_header, make_molecule, etc.)
         """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
-        s, warnings = theory.make_header(
+        header, warnings = theory.make_header(
             geom, style="orca", return_warnings=True, **kwargs
         )
+        footer = theory.make_footer(
+            geom, style="orca", return_warnings=False, **kwargs
+        )
+        s = header
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 
         s += "*\n"
 
+        s += footer
+        
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(geom.name, step2str(kwargs["step"]))
+                outfile = "{}.{}.inp".format(geom.name, step2str(kwargs["step"]))
             else:
-                outfile = "{}.com".format(geom.name)
+                outfile = "{}.inp".format(geom.name)
         if outfile is False:
             if return_warnings:
                 return s, warnings
@@ -377,6 +401,54 @@ class FileWriter:
             s = s.replace("{ name }", name)
             with open(outfile, "w") as f:
                 f.write(s)
+        
+        if return_warnings:
+            return warnings
+
+    @classmethod
+    def write_inq(
+        cls, geom, theory, outfile=None, return_warnings=False, **kwargs
+    ):
+        """
+        write QChem input file for the given Theory() and Geometry()
+        geom - Geometry()
+        theory - Theory()
+        outfile - None, False, or str
+                  None - geom.name + ".inq" is used as output destination
+                  False - return contents of the input file as a str
+                  str - output destination
+        return_warnings - True to return a list of warnings (e.g. basis
+                          set might be misspelled
+        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        """
+        fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
+        header, header_warnings = theory.make_header(
+            geom, style="qchem", return_warnings=True, **kwargs
+        )
+        mol, mol_warnings = theory.make_molecule(
+            geom, style="qchem", return_warnings=True, **kwargs
+        )
+
+        out = header + mol
+        warnings = header_warnings + mol_warnings
+        
+        if outfile is None:
+            # if outfile is not specified, name file in Aaron format
+            if "step" in kwargs:
+                outfile = "{}.{}.inq".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = "{}.inq".format(geom.name)
+        if outfile is False:
+            if return_warnings:
+                return out, warnings
+            return out
+        else:
+            fname = os.path.basename(outfile)
+            name, ext = os.path.splitext(fname)
+            # could use jinja, but it's one thing...
+            out = out.replace("{ name }", name)
+            with open(outfile, "w") as f:
+                f.write(out)
         
         if return_warnings:
             return warnings
@@ -731,6 +803,8 @@ class FileReader:
                 self.read_nbo_47(f, nbo_name=nbo_name)
             elif self.file_type == "31":
                 self.read_nbo_31(f, nbo_name=nbo_name)
+            elif self.file_type == "qout":
+                self.read_qchem_out(f, get_all, just_geom)
 
     def read_file(
         self, get_all=False, just_geom=True,
@@ -788,6 +862,8 @@ class FileReader:
             self.read_nbo_47(f, nbo_name=nbo_name)
         elif self.file_type == "31":
             self.read_nbo_31(f, nbo_name=nbo_name)
+        elif self.file_type == "qout":
+            self.read_qchem_out(f, get_all, just_geom)
 
         f.close()
         return
@@ -944,6 +1020,13 @@ class FileReader:
                 return self.read_orca_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
+
+            if "A Quantum Leap Into The Future Of Chemistry" in line:
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+
             if line.startswith("    Geometry (in Angstrom), charge"):
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
@@ -1258,6 +1341,16 @@ class FileReader:
                 return self.read_psi4_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
+            
+            if (
+                "A Quantum Leap Into The Future Of Chemistry"
+                in line
+            ):
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
@@ -1633,6 +1726,234 @@ class FileReader:
                 and "basis_set_by_ele" in self.other
             ):
                 self.other["orbitals"] = Orbitals(self)
+
+    def read_qchem_out(self, f, get_all=False, just_geom=True):
+        """read qchem output file"""
+        def get_atoms(f, n):
+            """parse atom info"""
+            rv = []
+            self.skip_lines(f, 2)
+            n += 1
+            line = f.readline()
+            i = 0
+            while "--" not in line:
+                i += 1
+                line = line.strip()
+                atom_info = line.split()
+                element = atom_info[1]
+                coords = np.array([float(x) for x in atom_info[2:5]])
+                rv += [Atom(element=element, coords=coords, name=str(i))]
+
+                line = f.readline()
+                n += 1
+
+            return rv, n
+
+        def add_grad(grad, name, line):
+            grad[name] = {}
+            grad[name]["value"] = line.split()[-3]
+            grad[name]["converged"] = line.split()[-1] == "YES"
+
+        line = f.readline()
+        n = 1
+        while line != "":
+            if (
+                "Psi4: An Open-Source Ab Initio Electronic Structure Package"
+                in line
+            ):
+                self.file_type = "dat"
+                return self.read_psi4_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            if "* O   R   C   A *" in line:
+                self.file_type = "out"
+                return self.read_orca_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            
+            if (
+                "A Quantum Leap Into The Future Of Chemistry"
+                in line
+            ):
+                self.file_type = "qout"
+                return self.read_qchem_out(
+                    f, get_all=get_all, just_geom=just_geom
+                )
+            
+            if "Standard Nuclear Orientation (Angstroms)" in line:
+                if get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                self.atoms, n = get_atoms(f, n)
+
+            if just_geom:
+                line = f.readline()
+                n += 1
+                continue
+            else:
+                if "energy in the final basis set" in line:
+                    self.other["energy"] = float(line.split()[-1])
+                    if "SCF" in line:
+                        self.other["scf_energy"] = self.other["energy"]
+
+                if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
+                    info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
+                    kind = info.group(1)
+                    if len(kind.split()) <= 2:
+                        val = float(info.group(2))
+                        if "correlation" not in kind and len(kind.split()) <= 2:
+                            self.other["E(%s)" % kind.split()[0]] = val
+                            self.other["energy"] = val
+                        else:
+                            self.other["E(corr)(%s)" % kind.split()[0]] = val
+
+                if "Total energy:" in line:
+                    self.other["energy"] = float(line.split()[-2])
+
+                #MPn energy is printed as EMPn(SDQ)
+                if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
+                    self.other["energy"] = float(line.split()[-1])
+                    self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
+
+                if "Molecular Point Group" in line:
+                    self.other["full_point_group"] = line.split()[3]
+                
+                if "Largest Abelian Subgroup" in line:
+                    self.other["abelian_subgroup"] = line.split()[3]
+                
+                if "Ground-State Mulliken Net Atomic Charges" in line:
+                    charges = []
+                    self.skip_lines(f, 3)
+                    n += 2
+                    line = f.readline()
+                    while "--" not in line:
+                        charge = float(line.split()[-1])
+                        charges.append(charge)
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["Mulliken Charges"] = charges
+
+                if "Cnvgd?" in line:
+                    grad = {}
+                    line = f.readline()
+                    while line and re.search("\w", line):
+                        if re.search("Energy\schange", line):
+                            add_grad(grad, "Delta E", line)
+                        elif re.search("Displacement", line):
+                            add_grad(grad, "Disp", line)
+                        elif re.search("Gradient", line):
+                            add_grad(grad, "Max Disp", line)
+
+                        line = f.readline()
+                        n += 1
+
+                    self.other["gradient"] = grad
+            
+                if "VIBRATIONAL ANALYSIS" in line:
+                    freq_str = ""
+                    self.skip_lines(f, 10)
+                    n += 9
+                    line = f.readline()
+                    while "STANDARD THERMODYNAMIC QUANTITIES" not in line:
+                        n += 1
+                        freq_str += line
+                        line = f.readline()
+                    self.other["frequency"] = Frequency(
+                        freq_str, style="qchem",
+                    )
+                    self.other["temperature"] = float(line.split()[4])
+    
+                if "Rotational Symmetry Number is" in line:
+                    self.other["rotational_symmetry_number"] = int(line.split()[-1])
+    
+                if "Molecular Mass:" in line:
+                    self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
+    
+                if "$molecule" in line.lower():
+                    line = f.readline()
+                    while "$end" not in line.lower() and line:
+                        if re.search("\d+\s+\d+", line):
+                            match = re.search("^\s*(\d+)\s+(\d+)\s*$", line)
+                            self.other["charge"] = int(match.group(1))
+                            self.other["multiplicity"] = int(match.group(2))
+                            break
+                        line = f.readline()
+    
+                if "Principal axes and moments of inertia" in line:
+                    self.skip_lines(f, 1)
+                    line = f.readline()
+                    rot_consts = np.array([
+                        float(x) for x in line.split()[2:]
+                    ])
+                    rot_consts *= UNIT.AMU_TO_KG
+                    rot_consts *= UNIT.A0_TO_BOHR ** 2
+                    rot_consts *= 1e-20
+                    rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
+            
+                    self.other["rotational_temperature"] = rot_consts
+                
+                if line.startswith("Mult"):
+                    self.other["multiplicity"] = int(line.split()[1])
+                
+                # TD-DFT excitations
+                if re.search("TDDFT.* Excitation Energies", line):
+                    excite_s = ""
+                    self.skip_lines(f, 2)
+                    line = f.readline()
+                    n += 3
+                    while "---" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
+
+                # ADC excitations
+                if re.search("Excited State Summary", line):
+                    excite_s = ""
+                    self.skip_lines(f, 2)
+                    line = f.readline()
+                    n += 3
+                    while "===" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
+                
+                # EOM excitations
+                if re.search("Start computing the transition properties", line):
+                    excite_s = ""
+                    line = f.readline()
+                    n += 1
+                    while "All requested transition properties have been computed" not in line and line:
+                        excite_s += line
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["uv_vis"] = ValenceExcitations(
+                        excite_s, style="qchem",
+                    )
+                
+                if "Thank you very much for using Q-Chem" in line:
+                    self.other["finished"] = True
+                
+                line = f.readline()
+                n += 1
+        
+        if not just_geom and "finished" not in self.other:
+            self.other["finished"] = False
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -2440,12 +2761,12 @@ class FileReader:
 
         other = {}
 
-        int_info = re.compile("([\S\s]+?)\s*I\s*([N=]*)\s*(-?\d+)")
+        int_info = re.compile("([\S\s]+?)\s*I\s*(N=)?\s*(-?\d+)")
         real_info = re.compile(
-            "([\S\s]+?)\s*R\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+            "([\S\s]+?)\s*R\s*(N=)\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
         )
         char_info = re.compile(
-            "([\S\s]+?)\s*C\s*([N=])*\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
+            "([\S\s]+?)\s*C\s*(N=)?\s*(-?\d+\.?\d*[Ee]?[+-]?\d*)"
         )
 
         theory = Theory()
@@ -2545,7 +2866,7 @@ class FileReader:
 
         try:
             self.other["orbitals"] = Orbitals(self)
-        except NotImplementedError:
+        except (NotImplementedError, KeyError):
             pass
         except (TypeError, ValueError) as err:
             self.LOG.warning(
@@ -2638,7 +2959,7 @@ class FileReader:
                 self.other["wiberg_nao"] = bond_orders
 
             line = f.readline()
-                
+
     def read_crest(self, f, conf_name=None):
         """
         conf_name = False to skip conformer loading (doesn't get written until crest job is done)

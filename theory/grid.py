@@ -4,7 +4,9 @@ used for specifying integration grids for DFT calculations
 
 import re
 from AaronTools import addlogger
-from AaronTools.theory import GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS
+from AaronTools.theory import (
+    GAUSSIAN_ROUTE, PSI4_SETTINGS, ORCA_ROUTE, ORCA_BLOCKS, QCHEM_REM
+)
 
 
 class IntegrationGrid:
@@ -332,4 +334,70 @@ class IntegrationGrid:
 
         raise RuntimeError(
             "could not determine acceptable Psi4 grid settings for %s" % self.name
+        )
+
+    def get_qchem(self):
+        if self.name.lower() == "sg-1":
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "1",
+                }
+            }
+            return (out_dict, None)
+        
+        elif self.name.lower() == "sg-2":
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "2",
+                }
+            }
+            return (out_dict, None)
+        
+        elif self.name.lower() == "sg-3":
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "3",
+                }
+            }
+            return (out_dict, None)
+        
+        elif self.name.lower() == "ultrafine":
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "%2i%06i" % (99, 590),
+                }
+            }
+            return (out_dict, None)
+
+        elif self.name.lower() == "finegrid":
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "%2i%06i" % (75, 302),
+                }
+            }
+            return (out_dict, None)
+
+        elif self.name.lower() == "superfinegrid":
+            # radial is 175 for 1st row, 250 for later rows
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "%2i%06i" % (250, 974),
+                }
+            }
+            return (out_dict, "Approximating Gaussian SuperFineGrid")
+
+        # grid format may be "(int, int)"
+        match = re.match(r"\(\s*?(\d+)\s*?,\s*?(\d+)?\s*\)", self.name)
+        if match:
+            r_pts = int(match.group(1))
+            a_pts = int(match.group(2))
+            out_dict = {
+                QCHEM_REM: {
+                    "XC_GRID": "%2i%06i" % (r_pts, a_pts),
+                }
+            }
+            return (out_dict, None)
+
+        raise RuntimeError(
+            "could not determine acceptable QChem grid settings for %s" % self.name
         )

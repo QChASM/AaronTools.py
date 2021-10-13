@@ -69,6 +69,13 @@ uvvis_parser.add_argument(
 )
 
 uvvis_parser.add_argument(
+    "-u", "--transient",
+    action="store_true",
+    dest="transient",
+    help="use transient excitation data",
+)
+
+uvvis_parser.add_argument(
     "-ev", "--electron-volt",
     action="store_true",
     default=False,
@@ -260,6 +267,7 @@ for f in glob_files(args.infiles, parser=uvvis_parser):
         exp_data=exp_data,
         units=units,
         rotate_x_ticks=args.rotate_x_ticks,
+        transient=args.transient,
     )
 
     if args.fig_width:

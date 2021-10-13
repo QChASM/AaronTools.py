@@ -94,7 +94,7 @@ class Atom:
     _bo = BondOrder()
 
     def __init__(
-        self, element="", coords=None, flag=False, name="", tags=None, charge=""
+        self, element="", coords=None, flag=False, name="", tags=None, charge=None
     ):
         super().__setattr__("_hashed", False)
         if coords is None:
@@ -125,10 +125,8 @@ class Atom:
         else:
             self.tags = set([tags])
 
-        charge = str(charge).strip()
-        if charge == "":
-            pass
-        else:
+        self.charge = charge
+        if charge:
             self.charge = float(charge)
 
         self.connected = set([])
@@ -264,8 +262,12 @@ class Atom:
                 )
         return
 
+    @property
+    def is_dummy(self):
+        return re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element)
+
     def reset(self):
-        if re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element):
+        if self.is_dummy:
             self._vdw = 0
             self._connectivity = 1000
             self._saturation = 0

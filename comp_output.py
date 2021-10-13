@@ -135,6 +135,8 @@ class CompOutput:
         for k in keys:
             if k in from_file.other:
                 setattr(self, k, from_file.other[k])
+            else:
+                setattr(self, k, None)
         
         self.other = {k:v for k, v in from_file.other.items() if k not in keys}
 
@@ -246,13 +248,14 @@ class CompOutput:
             zpve = 0.5 * hc * vib
         return zpve
 
-    def therm_corr(self, temperature=None, v0=100, method="RRHO"):
+    def therm_corr(self, temperature=None, v0=100, method="RRHO", pressure=1):
         """
         returns thermal correction to energy, enthalpy correction to energy, and entropy
         for the specified cutoff frequency and temperature
         in that order (Hartrees for corrections, Eh/K for entropy)
 
         temperature: float, temperature in K- None will use self.temperature
+        pressure: float, pressure in atm
         v0: float, cutoff/damping parameter for quasi G corrections
         method: str - type of quasi treatment:
                 RRHO  - no quasi treatment
@@ -273,6 +276,11 @@ class CompOutput:
         T = temperature if temperature is not None else self.temperature
         if T == 0:
             return 0, 0, 0
+
+        if pressure is None:
+            pressure = PHYSICAL.STANDARD_PRESSURE
+        else:
+            pressure *= UNIT.ATM_TO_PASCAL
 
         mass = self.mass
         sigmar = self.rotational_symmetry_number
@@ -306,7 +314,7 @@ class CompOutput:
         # Translational
         qt = 2 * np.pi * mass * PHYSICAL.KB * T / (PHYSICAL.PLANCK ** 2)
         qt = qt ** (3 / 2)
-        qt *= PHYSICAL.KB * T / PHYSICAL.STANDARD_PRESSURE
+        qt *= PHYSICAL.KB * T / pressure
         St = PHYSICAL.GAS_CONSTANT * (np.log(qt) + (5 / 2))
         Et = 3 * PHYSICAL.GAS_CONSTANT * T / 2
 
