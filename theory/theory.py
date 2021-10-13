@@ -28,8 +28,14 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    PSI4_SOLVENT,
     SQM_COMMENT,
     SQM_QMMM,
+    QCHEM_MOLECULE,
+    QCHEM_REM,
+    QCHEM_COMMENT,
+    QCHEM_SETTINGS,
+    FrequencyJob,
 )
 from AaronTools.utils.utils import combine_dicts
 from AaronTools.theory.basis import ECP, Basis, BasisSet
@@ -108,6 +114,31 @@ class Theory:
         "dft_radial_points",
         "dft_spherical_points",
     ]
+    
+    FORCED_PSI4_SOLVENT_SINGLE = [
+        "units",
+        "codata",
+        "type",
+        "npzfile",
+        "area",
+        "scaling",
+        "raddiset",
+        "minradius",
+        "mode",
+        "nonequilibrium",
+        "solvent",
+        "solvertype",
+        "matrixsymm",
+        "correction",
+        "diagonalintegrator",
+        "diagonalscaling",
+        "proberadius",
+    ]
+    
+    # some blocks need to go after the molecule
+    # because they refer to atom indices, so orca needs
+    # to read the structure first
+    ORCA_BLOCKS_AFTER_MOL = ["eprnmr"]
     
     LOG = None
 
@@ -425,9 +456,13 @@ class Theory:
 
     def copy(self):
         new_dict = dict()
+        new_kwargs = dict()
         for key, value in self.__dict__.items():
             try:
-                new_dict[key] = value.copy()
+                if key == "kwargs":
+                    new_kwargs = value.copy()
+                else:
+                    new_dict[key] = value.copy()
             except AttributeError:
                 new_dict[key] = value
                 # ignore chimerax objects so seqcrow doesn't print a
@@ -441,7 +476,7 @@ class Theory:
                         )
                     )
         
-        return self.__class__(**new_dict)
+        return self.__class__(**new_dict, **new_kwargs)
  
     def make_header(
         self,
@@ -465,7 +500,7 @@ class Theory:
         sanity_check_method: bool, check if method is available in recent version
                              of the target software package (Psi4 checks when its
                              footer is created)
-        kwargs: keywords are ORCA_*, PSI4_*, or GAUSSIAN_*
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
         """
         if geom is None:
             geom = self.geometry
@@ -487,6 +522,7 @@ class Theory:
                 keyword.startswith("PSI4_")
                 or keyword.startswith("ORCA_")
                 or keyword.startswith("GAUSSIAN_")
+                or keyword.startswith("QCHEM_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -554,6 +590,11 @@ class Theory:
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
+        elif style == "qchem":
+            return self.get_qchem_header(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
         raise NotImplementedError("no get_header method for style: %s" % style)
 
     def make_molecule(
@@ -567,7 +608,7 @@ class Theory:
         geom: Geometry()
         style: gaussian, psi4, or sqm
         conditional_kwargs: dict() of keyword: value pairs
-        kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
+        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
         """
         if geom is None:
             geom = self.geometry
@@ -587,6 +628,7 @@ class Theory:
                 keyword.startswith("PSI4_")
                 or keyword.startswith("ORCA_")
                 or keyword.startswith("GAUSSIAN_")
+                or keyword.startswith("QCHEM_")
             ):
                 new_kw = eval(keyword)
                 other_kw_dict[new_kw] = kwargs[keyword]
@@ -646,6 +688,11 @@ class Theory:
 
         elif style == "sqm":
             return self.get_sqm_molecule(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "qchem":
+            return self.get_qchem_molecule(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
@@ -738,6 +785,11 @@ class Theory:
 
         elif style == "psi4":
             return self.get_psi4_footer(
+                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            )
+
+        elif style == "orca":
+            return self.get_orca_footer(
                 conditional_kwargs=conditional_kwargs, **other_kw_dict
             )
 
@@ -1113,7 +1165,7 @@ class Theory:
             if has_type:
                 s += "-%s" % atom.atomtype
                 spec += "-%s" % atom.atomtype
-            if has_charge:
+            if oniom and has_charge:
                 s += "-%f" % atom.charge
                 spec += "-%f" % atom.charge
             if oniom:
@@ -1313,6 +1365,168 @@ class Theory:
                     job.geometry = self.geometry
 
                 job_dict = job.get_orca()
+                other_kw_dict = combine_dicts(other_kw_dict, job_dict)
+
+        warnings = []
+
+        # if method isn't semi-empirical, get basis info to write later
+        if not self.method.is_semiempirical and self.basis is not None:
+            basis_info, basis_warnings = self.basis.get_orca_basis_info()
+            warnings.extend(basis_warnings)
+            if self.geometry is not None:
+                warning = self.basis.check_for_elements(self.geometry)
+                if warning is not None:
+                    warnings.append(warning)
+
+        else:
+            basis_info = {}
+
+        other_kw_dict = combine_dicts(other_kw_dict, basis_info)
+
+        # get grid info
+        if self.grid is not None:
+            grid_info, warning = self.grid.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+
+            if any(
+                "finalgrid" in x.lower() for x in other_kw_dict[ORCA_ROUTE]
+            ):
+                grid_info[ORCA_ROUTE].pop(1)
+
+            other_kw_dict = combine_dicts(other_kw_dict, grid_info)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_orca()
+            warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        # dispersion
+        if self.empirical_dispersion is not None:
+            dispersion, warning = self.empirical_dispersion.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+
+            other_kw_dict = combine_dicts(other_kw_dict, dispersion)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        # start building input file header
+        out_str = ""
+
+        # comment
+        if ORCA_COMMENT not in other_kw_dict:
+            if self.geometry.comment:
+                other_kw_dict[ORCA_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[ORCA_COMMENT] = [self.geometry.name]
+        for comment in other_kw_dict[ORCA_COMMENT]:
+            for line in comment.split("\n"):
+                out_str += "#%s\n" % line
+
+        out_str += "! "
+        # method
+        if self.method is not None:
+            func, warning = self.method.get_orca()
+            if warning is not None:
+                warnings.append(warning)
+            warning = self.method.sanity_check_method(func, "orca")
+            if warning:
+                warnings.append(warning)
+            out_str += "%s" % func
+
+        # add other route options
+        if ORCA_ROUTE in other_kw_dict:
+            used_keywords = []
+            for kw in other_kw_dict[ORCA_ROUTE]:
+                if any(kw.lower() == used_kw for used_kw in used_keywords):
+                    continue
+                used_keywords.append(kw.lower())
+                out_str += " %s" % kw
+
+        out_str += "\n"
+
+        # procs
+        if self.processors is not None:
+            out_str += "%%pal\n    nprocs %i\nend\n" % self.processors
+
+            # orca memory is per core, so only specify it if processors are specified
+            if self.memory is not None:
+                out_str += "%%MaxCore %i\n" % (
+                    int(1000 * self.memory / self.processors)
+                )
+
+        # add other blocks
+        if ORCA_BLOCKS in other_kw_dict:
+            for keyword in other_kw_dict[ORCA_BLOCKS]:
+                if any(keyword.lower() == name for name in self.ORCA_BLOCKS_AFTER_MOL):
+                    continue
+                if any(other_kw_dict[ORCA_BLOCKS][keyword]):
+                    used_settings = []
+                    if keyword == "base":
+                        out_str += "%%%s " % keyword
+                        if isinstance(
+                            other_kw_dict[ORCA_BLOCKS][keyword], str
+                        ):
+                            out_str += (
+                                '"%s"\n' % other_kw_dict[ORCA_BLOCKS][keyword]
+                            )
+                        else:
+                            out_str += (
+                                '"%s"\n'
+                                % other_kw_dict[ORCA_BLOCKS][keyword][0]
+                            )
+                    else:
+                        out_str += "%%%s\n" % keyword
+                        for opt in other_kw_dict[ORCA_BLOCKS][keyword]:
+                            if any(
+                                keyword.lower() == block_name for block_name in [
+                                    "freq", "geom",
+                                ]
+                            ) and any(
+                                opt.split()[0].lower() == prev_opt for prev_opt in used_settings
+                            ):
+                                continue
+                            used_settings.append(opt.split()[0].lower())
+                            out_str += "    %s\n" % opt
+                        out_str += "end\n"
+
+            out_str += "\n"
+
+        # start of coordinate section - end of header
+        out_str += "*xyz %i %i\n" % (self.charge, self.multiplicity)
+
+        if return_warnings:
+            return out_str, warnings
+        return out_str
+
+    def get_orca_footer(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+        """
+        get ORCA input file header
+        other_kw_dict is a dictionary with file positions (using ORCA_*)
+        corresponding to options/keywords
+        returns file content and warnings e.g. if a certain feature is not available in ORCA
+        returns str of header content
+        if return_warnings, returns str, list(warning)
+        """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_orca()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         warnings = []
@@ -1363,51 +1577,13 @@ class Theory:
         )
 
         # start building input file header
-        out_str = ""
-
-        # comment
-        if ORCA_COMMENT not in other_kw_dict:
-            if self.geometry.comment:
-                other_kw_dict[ORCA_COMMENT] = [self.geometry.comment]
-            else:
-                other_kw_dict[ORCA_COMMENT] = [self.geometry.name]
-        for comment in other_kw_dict[ORCA_COMMENT]:
-            for line in comment.split("\n"):
-                out_str += "#%s\n" % line
-
-        out_str += "!"
-        # method
-        if self.method is not None:
-            func, warning = self.method.get_orca()
-            if warning is not None:
-                warnings.append(warning)
-            warning = self.method.sanity_check_method(func, "orca")
-            if warning:
-                warnings.append(warning)
-            out_str += " %s" % func
-
-        # add other route options
-        if ORCA_ROUTE in other_kw_dict:
-            if not out_str.endswith(" "):
-                out_str += " "
-
-            out_str += " ".join(other_kw_dict[ORCA_ROUTE])
-
-        out_str += "\n"
-
-        # procs
-        if self.processors is not None:
-            out_str += "%%pal\n    nprocs %i\nend\n" % self.processors
-
-            # orca memory is per core, so only specify it if processors are specified
-            if self.memory is not None:
-                out_str += "%%MaxCore %i\n" % (
-                    int(1000 * self.memory / self.processors)
-                )
+        out_str = "\n"
 
         # add other blocks
         if ORCA_BLOCKS in other_kw_dict:
             for keyword in other_kw_dict[ORCA_BLOCKS]:
+                if not any(keyword.lower() == name for name in self.ORCA_BLOCKS_AFTER_MOL):
+                    continue
                 if any(other_kw_dict[ORCA_BLOCKS][keyword]):
                     if keyword == "base":
                         out_str += "%%%s " % keyword
@@ -1429,9 +1605,6 @@ class Theory:
                         out_str += "end\n"
 
             out_str += "\n"
-
-        # start of coordinate section - end of header
-        out_str += "*xyz %i %i\n" % (self.charge, self.multiplicity)
 
         if return_warnings:
             return out_str, warnings
@@ -1901,6 +2074,33 @@ class Theory:
 
             out_str += "}\n\n"
 
+
+        if PSI4_SOLVENT in other_kw_dict:
+            out_str += "pcm = {\n"
+            for setting in other_kw_dict[PSI4_SOLVENT]:
+                if other_kw_dict[PSI4_SOLVENT][setting]:
+                    if isinstance(other_kw_dict[PSI4_SOLVENT][setting], str):
+                        val = other_kw_dict[PSI4_SOLVENT][setting]
+                        out_str += "    %s = %s\n" % (setting, val)
+                    else:
+                        if any(
+                            single_setting == setting.strip().lower()
+                            for single_setting in self.FORCED_PSI4_SOLVENT_SINGLE
+                        ):
+                            val = other_kw_dict[PSI4_SOLVENT][setting][0]
+                            out_str += "    %s = %s\n" % (setting, val)
+                        else:
+                            # array of values
+                            if not out_str.endswith("\n\n") and not out_str.endswith("{\n"):
+                                out_str += "\n"
+                            out_str += "    %s {\n" % setting
+                            for val in other_kw_dict[PSI4_SOLVENT][setting]:
+                                out_str += "        %s\n" % val
+                            out_str += "    }\n\n"
+
+            out_str += "}\n\n"
+
+
         if PSI4_OPTKING in other_kw_dict and any(
             other_kw_dict[PSI4_OPTKING][setting]
             for setting in other_kw_dict[PSI4_OPTKING]
@@ -2252,3 +2452,252 @@ class Theory:
             )
         
         return s.rstrip(), warnings
+
+    def get_qchem_header(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+        """
+        write QChem input file header (up to charge mult)
+        other_kw_dict is a dictionary with file positions (using QCHEM_*)
+        corresponding to options/keywords
+        returns warnings if a certain feature is not available in QChem
+        """
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        job_type_count = 0
+        if self.job_type is not None:
+            for i, job in enumerate(self.job_type[::-1]):
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_qchem()
+                if isinstance(job, FrequencyJob) and job.temperature != 298.15:
+                    warnings.append(
+                        "thermochemistry data in the output file will be for 298.15 K\n"
+                        "in spite of the user setting %.2f K\n" % (job.temperature) + \
+                        "free energy corrections can be calculated at different\n"
+                        "temperatures using AaronTools grabThermo.py script or\n"
+                        "SEQCROW's Procress QM Thermochemistry tool"
+                    )
+                if QCHEM_REM in job_dict and any(key.lower() == "job_type" for key in job_dict[QCHEM_REM]):
+                    job_type_count += 1
+                if job_type_count > 1:
+                    raise NotImplementedError("cannot put multiple JOB_TYPE entries in one Q-Chem header")
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        if (
+            QCHEM_COMMENT not in other_kw_dict
+            or not other_kw_dict[QCHEM_COMMENT]
+        ):
+            if self.geometry.comment:
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.name]
+
+        if QCHEM_SETTINGS in other_kw_dict:
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {QCHEM_SETTINGS: {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}},
+            )
+        else:
+            other_kw_dict[QCHEM_SETTINGS] = {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}
+
+        # add EmpiricalDispersion info
+        if self.empirical_dispersion is not None:
+            disp, warning = self.empirical_dispersion.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, disp)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add Integral(grid=X)
+        if self.grid is not None:
+            grid, warning = self.grid.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, grid)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_qchem()
+            if warning is not None:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        if self.method is not None:
+            func, warning = self.method.get_qchem()
+            if warning is not None:
+                warnings.append(warning)
+
+            warning = self.method.sanity_check_method(func, "qchem")
+            if warning:
+                warnings.append(warning)
+            
+            # Q-Chem seems to still require a basis set for HF-3c
+            # if not self.method.is_semiempirical and self.basis is not None:
+            if self.basis is not None:
+                (
+                    basis_info,
+                    basis_warnings,
+                ) = self.basis.get_qchem_basis_info(self.geometry)
+                warnings.extend(basis_warnings)
+                # check basis elements to make sure no element is
+                # in two basis sets or left out of any
+                other_kw_dict = combine_dicts(
+                    other_kw_dict,
+                    basis_info,
+                )
+                if self.geometry is not None:
+                    basis_warning = self.basis.check_for_elements(
+                        self.geometry,
+                    )
+                    if basis_warning is not None:
+                        warnings.append(basis_warning)
+
+            other_kw_dict = combine_dicts(
+                other_kw_dict, {QCHEM_REM: {"METHOD": func}},
+            )
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        out_str = ""
+
+        if QCHEM_REM in other_kw_dict and QCHEM_SETTINGS in other_kw_dict:
+            other_kw_dict[QCHEM_SETTINGS] = combine_dicts(
+                {"rem": other_kw_dict[QCHEM_REM]}, other_kw_dict[QCHEM_SETTINGS],
+            )
+        
+        elif QCHEM_REM in other_kw_dict:
+            other_kw_dict[QCHEM_SETTINGS] = {"rem": other_kw_dict[QCHEM_REM]}
+        
+        else:
+            warnings.append("no REM section")
+
+        if self.memory:
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {"rem": {"MEM_TOTAL": "%i" % (1000 * self.memory)}}
+            )
+
+        if QCHEM_SETTINGS in other_kw_dict:
+            for section in other_kw_dict[QCHEM_SETTINGS]:
+                settings = other_kw_dict[QCHEM_SETTINGS][section]
+                out_str += "$%s\n" % section
+                for setting in settings:
+                    if not setting:
+                        continue
+                    if isinstance(settings, dict):
+                        opt = settings[setting]
+                        if not opt:
+                            continue
+                        if isinstance(opt, str):
+                            val = opt
+                            out_str += "    %-20s =   %s\n" % (setting, val)
+                        elif isinstance(opt, dict):
+                            for s, v in opt.items():
+                                out_str += "    %-20s =   %s\n" % (s, v)
+                        else:
+                            if len(opt) == 1:
+                                val = opt[0]
+                                out_str += "    %-20s =   %s\n" % (setting, val)
+                            elif not opt:
+                                out_str += "    %-20s\n" % setting
+                            else:
+                                if section.lower() == "rem" and setting.lower() == "job_type":
+                                    raise NotImplementedError(
+                                        "cannot put multiple JOB_TYPE entries in one Q-Chem header"
+                                    )
+                                out_str += "    %-20s =   %s\n" % (setting, ", ".join(opt))
+
+    
+                    elif hasattr(setting, "__iter__") and not isinstance(setting, str):
+                        for val in setting:
+                            out_str += "    %s\n" % val
+                    
+                    else:
+                        out_str += "    %s\n" % setting
+    
+                out_str += "$end\n\n"
+        
+        return out_str, warnings
+    
+    def get_qchem_molecule(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        **other_kw_dict,
+    ):
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_qchem()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+
+        if (
+            GAUSSIAN_COMMENT not in other_kw_dict
+            or not other_kw_dict[GAUSSIAN_COMMENT]
+        ):
+            if self.geometry.comment:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
+            else:
+                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
+
+        # add EmpiricalDispersion info
+        if self.empirical_dispersion is not None:
+            disp, warning = self.empirical_dispersion.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, disp)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add Integral(grid=X)
+        if self.grid is not None:
+            grid, warning = self.grid.get_qchem()
+            other_kw_dict = combine_dicts(other_kw_dict, grid)
+            if warning is not None:
+                warnings.append(warning)
+
+        # add implicit solvent
+        if self.solvent is not None:
+            solvent_info, warning = self.solvent.get_qchem()
+            if warning is not None:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
+
+        other_kw_dict = combine_dicts(
+            other_kw_dict, conditional_kwargs, dict2_conditional=True
+        )
+
+        out_str = "$molecule\n    %i %i\n" % (
+            self.charge, self.multiplicity
+        )
+
+        if QCHEM_MOLECULE in other_kw_dict:
+            for line in other_kw_dict[QCHEM_MOLECULE]:
+                out_str += "    %-20s\n" % line
+        elif not self.geometry:
+            warnings.append("no molecule")
+        
+        for atom in self.geometry.atoms:
+            out_str += "    %-2s" % atom.element
+            out_str += "   %9.5f    %9.5f    %9.5f\n" % tuple(atom.coords)
+
+        out_str += "$end\n"
+        
+        return out_str, warnings
+
+    
+    

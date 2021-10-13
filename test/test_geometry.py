@@ -236,8 +236,8 @@ class TestGeometry(TestWithTimer):
         self.assertSequenceEqual(test_rank, pentane_rank)
 
         mol = Geometry(os.path.join(prefix, "test_files", "6a2e5am1hex.xyz"))
-        mol_rank = [11, 9, 8, 10, 6, 5, 4, 7, 3, 0, 2, 1]
-        test_rank = mol.canonical_rank(heavy_only=True)
+        mol_rank = [8, 6, 5, 7, 2, 1, 4, 3, 11, 0, 10, 9]
+        test_rank = mol.canonical_rank(heavy_only=True, invariant=False)
         self.assertSequenceEqual(test_rank, mol_rank)
 
     def test_flag(self):

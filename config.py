@@ -31,8 +31,13 @@ from AaronTools.theory import (
     PSI4_MOLECULE,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    PSI4_SOLVENT,
     SQM_COMMENT,
     SQM_QMMM,
+    QCHEM_MOLECULE,
+    QCHEM_REM,
+    QCHEM_COMMENT,
+    QCHEM_SETTINGS,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
@@ -66,6 +71,10 @@ THEORY_OPTIONS = [
     "PSI4_SETTINGS",
     "SQM_COMMENT",
     "SQM_QMMM",
+    "QCHEM_MOLECULE",
+    "QCHEM_REM",
+    "QCHEM_COMMENT",
+    "QCHEM_SETTINGS",
 ]
 
 
@@ -448,7 +457,16 @@ class Config(configparser.ConfigParser):
         end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
         """
         # these need to be dicts
-        two_layer = [GAUSSIAN_ROUTE, GAUSSIAN_PRE_ROUTE, GAUSSIAN_MM, ORCA_BLOCKS, PSI4_JOB]
+        two_layer = [
+            GAUSSIAN_ROUTE,
+            GAUSSIAN_PRE_ROUTE,
+            GAUSSIAN_MM,
+            ORCA_BLOCKS,
+            PSI4_JOB,
+            QCHEM_REM,
+            QCHEM_SETTINGS,
+            PSI4_SOLVENT,
+        ]
 
         # these need to be dicts, but can only have one value
         two_layer_single_value = [
@@ -470,6 +488,8 @@ class Config(configparser.ConfigParser):
             PSI4_BEFORE_GEOM,
             PSI4_BEFORE_JOB,
             PSI4_COMMENT,
+            QCHEM_MOLECULE,
+            QCHEM_COMMENT,
         ]
 
         theory_kwargs = [

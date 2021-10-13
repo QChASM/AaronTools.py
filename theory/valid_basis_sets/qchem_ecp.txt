@@ -1,0 +1,8 @@
+fit-HWMB
+fit-LANL2DZ
+fit-SBKJC
+fit-CRENBS
+fit-CRENBL
+SRLC
+SRSC
+def2-ECP

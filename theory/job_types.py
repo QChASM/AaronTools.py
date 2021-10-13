@@ -1,4 +1,6 @@
 """various job types for Theory() instances"""
+import numpy as np
+
 from AaronTools import addlogger
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
@@ -11,9 +13,12 @@ from AaronTools.theory import (
     PSI4_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
+    PSI4_BEFORE_JOB,
     SQM_QMMM,
+    QCHEM_REM,
+    QCHEM_SETTINGS,
 )
-from AaronTools.utils.utils import range_list
+from AaronTools.utils.utils import range_list, combine_dicts
 
 
 class JobType:
@@ -45,6 +50,99 @@ class JobType:
     def get_sqm(self):
         """overwrite to return a dict with SQM_* keys"""
         pass
+    
+    def get_qchem(self):
+        """overwrite to return a dict with QCHEM_* keys"""
+        pass
+
+    @staticmethod
+    def resolve_error(error, theory, exec_type, geometry=None):
+        """returns a copy of theory or modifies theory to attempt
+        to resolve an error
+        theory will be modified if it is not possible for the current theory
+        to work for any job
+        if the error is specific to the molecule and settings, theory will
+        be copied, modified, and returned
+        raises NotImplementedError if this job type has no fix for
+        the error code
+        error: error code (e.g. SCF_CONV; see fileIO ERROR)
+        theory: Theory() instance
+        exec_type: software program (i.e. gaussian, orca, etc.)
+        
+        optional kwargs:
+        geometry: Geometry(), structure might be adjusted slightly if
+            there are close contacts
+        """
+
+        if error.upper() == "CLASH":
+            # if there is a clash, rotate substituents to mitigate clashing
+            if geometry:
+                geom_copy = geometry.copy()
+                bad_subs = geom_copy.remove_clash()
+                if not bad_subs:
+                    geometry.update_structure(geom_copy.coords)
+                    return None
+
+        if error.upper() == "SCF_CONV":
+            if exec_type.lower() == "gaussian":
+                # SCF convergence issue, try different SCF algorithm
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {
+                        GAUSSIAN_ROUTE: {"scf": ["xqc"]}
+                    },
+                    out_theory.kwargs
+                )
+                return out_theory
+
+            if exec_type.lower() == "orca":
+                # SCF convergence issue, orca recommends ! SlowConv
+                # and increasing SCF iterations
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {
+                        ORCA_ROUTE: ["SlowConv"],
+                        ORCA_BLOCKS: {"scf": ["MaxIter 500"]}
+                    },
+                    out_theory.kwargs
+                )
+                return out_theory
+        
+            if exec_type.lower() == "psi4":
+                out_theory = theory.copy()
+                # if theory.charge < 0:
+                #     # if the charge is negative, try adding two electrons
+                #     # to get a guess that might work
+                #     # as well as HF with a small basis set
+                #     out_theory.kwargs = combine_dicts(
+                #         {
+                #             PSI4_BEFORE_JOB: {
+                #                 [
+                #                     "mol = get_active_molecule()",
+                #                     "mol.set_molecular_charge(%i)" % (theory.charge + 2),
+                #                     "nrg = energy($METHOD)",
+                #                     "mol.set_molecular_charge(%i)" % theory.charge,
+                #                 ]
+                #             }
+                #         },
+                #         out_theory.kwargs,
+                #     )
+                # ^ this doesn't seem to help in general
+                # do 500 iterations and dampen
+                out_theory.kwargs = combine_dicts(
+                    {
+                        PSI4_SETTINGS: {
+                            "damping_percentage": "15",
+                            "maxiter": "500",
+                        },
+                    },
+                    out_theory.kwargs,
+                )
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
 
 @addlogger
 class OptimizationJob(JobType):
@@ -703,6 +801,186 @@ class OptimizationJob(JobType):
         
         return dict(), warnings
 
+    def get_qchem(self):
+        if self.transition_state:
+            out = {QCHEM_REM: {"JOB_TYPE": "TS"}}
+        else:
+            out = {QCHEM_REM: {"JOB_TYPE": "OPT"}}
+        
+        # constraints
+        if self.constraints is not None and any(
+            [self.constraints[key] for key in self.constraints.keys()]
+        ):
+            out[QCHEM_SETTINGS] = {"opt": []}
+            constraints = None
+            fixed = None
+
+            x_atoms = []
+            y_atoms = []
+            z_atoms = []
+            xyz_atoms = []
+
+            if "x" in self.constraints:
+                x_atoms = self.geometry.find(self.constraints["x"])
+
+
+            if "y" in self.constraints:
+                y_atoms = self.geometry.find(self.constraints["y"])
+
+
+            if "z" in self.constraints:
+                z_atoms = self.geometry.find(self.constraints["z"])
+
+            if "atoms" in self.constraints:
+                xyz_atoms = self.geometry.find(self.constraints["atoms"])
+
+            if any([x_atoms, y_atoms, z_atoms, xyz_atoms]):
+                fixed = "FIXED"
+                for atom in x_atoms:
+                    fixed += "\n        %i X" % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "YZ"
+                        continue
+                    if atom in y_atoms:
+                        fixed += "Y"
+                    if atom in z_atoms:
+                        fixed += "Z"
+                
+                for atom in y_atoms:
+                    if atom in x_atoms:
+                        continue
+                    fixed += "\n        %i " % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "XYZ"
+                        continue
+                    fixed += "Y"
+                    if atom in z_atoms:
+                        fixed += "Z"
+                
+                for atom in y_atoms:
+                    if atom in x_atoms or atom in y_atoms:
+                        continue
+                    fixed += "\n        %i " % (self.geometry.atoms.index(atom) + 1)
+                    if atom in xyz_atoms:
+                        fixed += "XYZ"
+                        continue
+                    fixed += "Z"
+
+                for atom in xyz_atoms:
+                    if any(atom in l for l in [x_atoms, y_atoms, z_atoms]):
+                        continue
+                    fixed += "\n        %i XYZ" % (self.geometry.atoms.index(atom) + 1)
+
+            if "bonds" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for bond in self.constraints["bonds"]:
+                    atom1, atom2 = self.geometry.find(bond)
+                    constraints += "        STRE %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        atom1.dist(atom2),
+                    )
+            
+            if "angles" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for angle in self.constraints["angles"]:
+                    atom1, atom2, atom3 = self.geometry.find(angle)
+                    constraints += "        BEND %2i %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        self.geometry.atoms.index(atom3) + 1,
+                        np.rad2deg(atom2.angle(atom1, atom3)),
+                    )
+            
+            if "torsions" in self.constraints:
+                if constraints is None:
+                    constraints = "CONSTRAINT\n"
+                for angle in self.constraints["torsions"]:
+                    atom1, atom2, atom3, atom4 = self.geometry.find(angle)
+                    constraints += "        TORS %2i %2i %2i %2i %9.5f\n" % (
+                        self.geometry.atoms.index(atom1) + 1,
+                        self.geometry.atoms.index(atom2) + 1,
+                        self.geometry.atoms.index(atom3) + 1,
+                        self.geometry.atoms.index(atom4) + 1,
+                        np.rad2deg(
+                            self.geometry.dihedral(
+                                atom1, atom2, atom3, atom4,
+                            )
+                        ),
+                    )
+            
+            
+            if fixed:
+                fixed += "\n    ENDFIXED"
+                out[QCHEM_SETTINGS]["opt"].append(fixed)
+
+            if constraints:
+                constraints += "    ENDCONSTRAINT"
+                out[QCHEM_SETTINGS]["opt"].append(constraints)
+        
+        return out
+
+    @staticmethod
+    def resolve_error(error, theory, exec_type, geometry=None):
+        """
+        resolves optimization-specific errors
+        errors resolved by JobType take priority
+
+        optional kwargs:
+        geometry: Geometry(), structure might be adjusted slightly if
+            the software had an issue with generating internal coordinates
+        """
+        try:
+            return super(OptimizationJob, OptimizationJob).resolve_error(
+                error, theory, exec_type, geometry=geometry
+            )
+        except NotImplementedError:
+            pass
+        
+        if exec_type.lower() == "gaussian":
+            if error.upper() == "CONV_LINK":
+                # optimization out of steps, add more steps
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {GAUSSIAN_ROUTE: {"opt": ["MaxCycles=300"]}}, out_theory.kwargs,
+                )
+                return out_theory
+            
+            if error.upper() == "FBX":
+                # FormBX error, just restart the job
+                # adjusting the geometry slightly can help
+                if geometry:
+                    coords = geometry.coords
+                    scale = 1e-3
+                    coords += scale * np.random.random_sample - scale / 2
+                    geometry.update_structure(coords)
+                return None
+            
+            if error.upper() == "REDUND":
+                # internal coordinate error, just restart the job
+                if geometry:
+                    coords = geometry.coords
+                    scale = 1e-3
+                    coords += scale * np.random.random_sample - scale / 2
+                    geometry.update_structure(coords)
+                return None                
+        
+        if exec_type.lower() == "orca":
+            if error.upper() == "OPT_CONV":
+                # optimization out of steps, add more steps
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {ORCA_BLOCKS: {"geom": ["MaxIter 300"]}}, out_theory.kwargs,
+                )
+                return out_theory
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
+
 class FrequencyJob(JobType):
     """frequnecy job"""
 
@@ -752,6 +1030,39 @@ class FrequencyJob(JobType):
     def get_sqm(self):
         raise NotImplementedError("cannot build frequnecy job input for sqm")
 
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "Freq"}}
+        if self.numerical:
+            out[QCHEM_REM]["FD_DERIVATIVE_TYPE"] = "1"
+
+        return out
+
+    @staticmethod
+    def resolve_error(error, theory, exec_type, geometry=None):
+        """
+        resolves frequnecy-specific errors
+        errors resolved by JobType take priority
+        """
+        try:
+            return super(FrequencyJob, FrequencyJob).resolve_error(
+                error, theory, exec_type, geometry=geometry
+            )
+        except NotImplementedError:
+            pass
+        
+        if exec_type.lower() == "orca":
+            if error.upper() == "NUMFREQ":
+                # analytical derivatives are not available
+                for job in theory.job_type:
+                    if isinstance(job, FrequencyJob):
+                        job.numerical = True
+                return None
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
+
 class SinglePointJob(JobType):
     """single point energy"""
 
@@ -770,6 +1081,11 @@ class SinglePointJob(JobType):
     def get_sqm(self):
         """returns a dict with keys: SQM_QMMM"""
         return {SQM_QMMM: {"maxcyc": ["0"]}}
+
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "SP"}}
+        
+        return out
 
 
 class ForceJob(JobType):
@@ -795,4 +1111,9 @@ class ForceJob(JobType):
         out = {PSI4_JOB: {"gradient": []}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
+        return out
+
+    def get_qchem(self):
+        out = {QCHEM_REM: {"JOB_TYPE": "Force"}}
+        
         return out
