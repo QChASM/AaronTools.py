@@ -113,7 +113,11 @@ class Basis:
         self.user_defined = user_defined
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, " ".join(self.elements))
+        return "%s(%s)%s" % (
+            self.name,
+            " ".join(self.elements),
+            "" if not self.aux_type else "/%s" % self.aux_type
+        )
 
     def __lt__(self, other):
         if self.name < other.name:

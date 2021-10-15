@@ -1993,13 +1993,16 @@ class FileReader:
                 self.other["multiplicity"] = int(match.group(2))
             line = f.readline()
             n += 1
+            a = 0
             while len(line.split()) > 1:
                 line  = line.split()
                 if len(line) == 5:
                     flag = not(bool(line[1]))
-                    rv += [Atom(element=line[0],flag=flag,coords=line[2:])]
+                    a += 1
+                    rv += [Atom(element=line[0], flag=flag, coords=line[2:], name=str(a))]
                 elif len(line) == 4:
-                    rv += [Atom(element=line[0],coords=line[1:])]
+                    a += 1
+                    rv += [Atom(element=line[0], coords=line[1:], name=str(a))]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -2155,10 +2158,6 @@ class FileReader:
             if re.search("Optimized Parameters", line):
                 self.other["params"], n = get_params(f, n)
 
-            # input atom specs and charge/mult
-            if "Symbolic Z-matrix:" in line:
-                self.atoms, n = get_input(f, n)
- 
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True

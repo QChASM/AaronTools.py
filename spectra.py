@@ -1240,16 +1240,24 @@ class Frequency(Signals):
 class ValenceExcitation(Signal):
     x_attr = "excitation_energy"
     required_attrs = (
-        "rotatory_str_len", "rotatory_str_vel", "dipole_str",
-        "dipole_vel", "symmetry", "multiplicity",
+        "rotatory_str_len", "rotatory_str_vel", "oscillator_str",
+        "oscillator_str_vel", "symmetry", "multiplicity",
     )
+
+    @property
+    def dipole_str_len(self):
+        return self.oscillator_str / self.excitation_energy
+
+    @property
+    def dipole_str_vel(self):
+        return self.oscillator_str_vel / self.excitation_energy
 
 
 class TransientExcitation(ValenceExcitation):
     x_attr = "excitation_energy"
     required_attrs = (
-        "rotatory_str_len", "rotatory_str_vel", "dipole_str",
-        "dipole_vel", "symmetry", "multiplicity",
+        "rotatory_str_len", "rotatory_str_vel", "oscillator_str",
+        "oscillator_str_vel", "symmetry", "multiplicity",
     )
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1265,8 +1273,8 @@ class ValenceExcitations(Signals):
         nrgs = []
         rotatory_str_len = []
         rotatory_str_vel = []
-        dipole_str = []
-        dipole_vel = []
+        oscillator_str = []
+        oscillator_vel = []
         symmetry = []
         multiplicity = []
         while i < len(lines):
@@ -1274,14 +1282,14 @@ class ValenceExcitations(Signals):
                 i += 2
                 line = lines[i]
                 while line and line.split()[0].isdigit():
-                    dipole_str.append(float(line.split()[-1]))
+                    oscillator_str.append(float(line.split()[-1]))
                     i += 1
                     line = lines[i]
             elif "Ground to excited state transition velocity" in lines[i]:
                 i += 2
                 line = lines[i]
                 while line and line.split()[0].isdigit():
-                    dipole_vel.append(float(line.split()[-1]))
+                    oscillator_vel.append(float(line.split()[-1]))
                     i += 1
                     line = lines[i]
             elif "R(length)" in lines[i]:
@@ -1310,15 +1318,15 @@ class ValenceExcitations(Signals):
             else:
                 i += 1
 
-        for nrg, rot_len, rot_vel, dip_len, dip_vel, sym, mult in zip(
-            nrgs, rotatory_str_len, rotatory_str_vel, dipole_str,
-            dipole_vel, symmetry, multiplicity,
+        for nrg, rot_len, rot_vel, osc_len, osc_vel, sym, mult in zip(
+            nrgs, rotatory_str_len, rotatory_str_vel, oscillator_str,
+            oscillator_vel, symmetry, multiplicity,
         ):
             self.data.append(
                 ValenceExcitation(
                     nrg, rotatory_str_len=rot_len,
-                    rotatory_str_vel=rot_vel, dipole_str=dip_len,
-                    dipole_vel=dip_vel, symmetry=sym,
+                    rotatory_str_vel=rot_vel, oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel, symmetry=sym,
                     multiplicity=mult,
                 )
             )
@@ -1329,13 +1337,13 @@ class ValenceExcitations(Signals):
         corr = []
         rotatory_str_len = []
         rotatory_str_vel = []
-        dipole_str = []
-        dipole_vel = []
+        oscillator_str = []
+        oscillator_vel = []
         multiplicity = []
         mult = "Singlet"
         
-        transient_dipole_str = []
-        transient_dipole_vel = []
+        transient_oscillator_str = []
+        transient_oscillator_vel = []
         transient_rot_str = []
         transient_nrg = []
         
@@ -1361,7 +1369,7 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    dipole_str.append(float(info[3]))
+                    oscillator_str.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
@@ -1369,7 +1377,7 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    dipole_vel.append(float(info[3]))
+                    oscillator_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif line.endswith("CD SPECTRUM") and "TRANSIENT" not in line:
@@ -1393,7 +1401,7 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    transient_dipole_str.append(float(info[3]))
+                    transient_oscillator_str.append(float(info[3]))
                     transient_nrg.append(self.nm_to_ev(float(info[2])))
                     i += 1
                     line = lines[i]
@@ -1402,7 +1410,7 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    transient_dipole_vel.append(float(info[3]))
+                    transient_oscillator_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "TRANSIENT CD SPECTRUM" in line:
@@ -1435,26 +1443,26 @@ class ValenceExcitations(Signals):
         if not rotatory_str_vel:
             rotatory_str_vel = [None for x in rotatory_str_len]
 
-        if not dipole_vel:
-            dipole_vel = [None for x in dipole_str]
+        if not oscillator_vel:
+            oscillator_vel = [None for x in oscillator_str]
 
-        for nrg, rot_len, rot_vel, dip_len, dip_vel, mult in zip(
-            nrgs, rotatory_str_len, rotatory_str_vel, dipole_str,
-            dipole_vel, multiplicity,
+        for nrg, rot_len, rot_vel, osc_len, osc_vel, mult in zip(
+            nrgs, rotatory_str_len, rotatory_str_vel, oscillator_str,
+            oscillator_vel, multiplicity,
         ):
             self.data.append(
                 ValenceExcitation(
                     nrg, rotatory_str_len=rot_len,
-                    rotatory_str_vel=rot_vel, dipole_str=dip_len,
-                    dipole_vel=dip_vel, multiplicity=mult,
+                    rotatory_str_vel=rot_vel, oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel, multiplicity=mult,
                 )
             )
 
-        for nrg, rot_len, dip_len, dip_vel in zip(
+        for nrg, rot_len, osc_len, osc_vel in zip(
             transient_nrg,
             transient_rot_str,
-            transient_dipole_str,
-            transient_dipole_vel,
+            transient_oscillator_str,
+            transient_oscillator_vel,
         ):
             if not hasattr(self, "transient_data") or not self.transient_data:
                 self.transient_data = []
@@ -1462,8 +1470,8 @@ class ValenceExcitations(Signals):
                 TransientExcitation(
                     nrg,
                     rotatory_str_len=rot_len,
-                    dipole_str=dip_len,
-                    dipole_vel=dip_vel,
+                    oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel,
                 )
             )
 
@@ -1520,8 +1528,8 @@ class ValenceExcitations(Signals):
         ):
             self.data.append(
                 ValenceExcitation(
-                    nrg, symmetry=sym, dipole_str=osc, rotatory_str_len=r_l,
-                    rotatory_str_vel=r_v, dipole_vel=osc_v,
+                    nrg, symmetry=sym, oscillator_str=osc, rotatory_str_len=r_l,
+                    rotatory_str_vel=r_v, oscillator_str_vel=osc_v,
                 )
             )
 
@@ -1586,11 +1594,10 @@ class ValenceExcitations(Signals):
         ):
             self.data.append(
                 ValenceExcitation(
-                    nrg, multiplicity=mult, dipole_str=osc, symmetry=symm,
+                    nrg, multiplicity=mult, oscillator_str=osc, symmetry=symm,
                     rotatory_str_len=rot, rotatory_str_vel=rot_vel,
                 )
             )
-
 
     @staticmethod
     def nm_to_ev(x):
@@ -1651,15 +1658,15 @@ class ValenceExcitations(Signals):
             data_attr = "transient_data"
         
         if "intensity_attr" not in kwargs:
-            intensity_attr = "dipole_str"
+            intensity_attr = "oscillator_str"
             if plot_type.lower() == "uv-vis-velocity":
-                intensity_attr = "dipole_vel"
+                intensity_attr = "oscillator_str_vel"
             elif plot_type.lower() == "transmittance-velocity":
-                intensity_attr = "dipole_vel"
+                intensity_attr = "oscillator_str_vel"
             elif plot_type.lower() == "transmittance":
-                intensity_attr = "dipole_str"
+                intensity_attr = "oscillator_str"
             elif plot_type.lower() == "uv-vis":
-                intensity_attr = "dipole_str"
+                intensity_attr = "oscillator_str"
             elif plot_type.lower() == "ecd":
                 intensity_attr = "rotatory_str_len"
             elif plot_type.lower() == "ecd-velocity":
@@ -1667,6 +1674,7 @@ class ValenceExcitations(Signals):
             else:
                 self.LOG.warning("unrecognized plot type: %s\nDefaulting to uv-vis" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
+
 
         if getattr(self.data[0], kwargs["intensity_attr"]) is None:
             raise RuntimeError("no data was parsed for %s" % kwargs["intensity_attr"])

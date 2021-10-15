@@ -632,7 +632,7 @@ class ImplicitSolvent:
             "Medium":
                 [
                     "SolverType = %s" % self.solvent_model,
-                    "Solvent = %s" % solvent,
+                    "Solvent = \"%s\"" % solvent,
                 ],
             "Mode": "Implicit"
         }

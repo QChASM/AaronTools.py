@@ -33,7 +33,8 @@ class JobType:
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        return self.get_psi4() == other.get_psi4()
+
+        return self.__dict__ == other.__dict__
 
     def get_gaussian(self):
         """overwrite to return dict with GAUSSIAN_* keys"""

@@ -6,7 +6,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix
 from AaronTools.symmetry import PointGroup
 
-class TestFinder(TestWithTimer):
+class TestSymmetry(TestWithTimer):
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
     c60 = os.path.join(prefix, "test_files", "c60.xyz")
     adamantane = os.path.join(prefix, "test_files", "adamantane.xyz")
@@ -100,14 +100,14 @@ class TestFinder(TestWithTimer):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestFinder("test_D6h"))
-    suite.addTest(TestFinder("test_Cs"))
-    suite.addTest(TestFinder("test_S4"))
-    suite.addTest(TestFinder("test_C1"))
-    suite.addTest(TestFinder("test_Ih"))
-    suite.addTest(TestFinder("test_Td"))
-    suite.addTest(TestFinder("test_D2d"))
-    suite.addTest(TestFinder("test_C2v"))
+    suite.addTest(TestSymmetry("test_D6h"))
+    suite.addTest(TestSymmetry("test_Cs"))
+    suite.addTest(TestSymmetry("test_S4"))
+    suite.addTest(TestSymmetry("test_C1"))
+    suite.addTest(TestSymmetry("test_Ih"))
+    suite.addTest(TestSymmetry("test_Td"))
+    suite.addTest(TestSymmetry("test_D2d"))
+    suite.addTest(TestSymmetry("test_C2v"))
     return suite
 
 

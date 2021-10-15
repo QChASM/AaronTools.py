@@ -274,6 +274,8 @@ class ATDecoder(json.JSONDecoder):
     def _decode_atom(self, obj):
         kwargs = {}
         for key in ["element", "coords", "flag", "name", "tags", "charge"]:
+            if key not in obj:
+                continue
             kwargs[key] = obj[key]
         rv = Atom(**kwargs)
         rv._rank = obj["_rank"]
