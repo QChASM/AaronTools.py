@@ -15,6 +15,7 @@ class TestSymmetry(TestWithTimer):
     h2o = os.path.join(prefix, "test_files", "h2o.xyz")
     meoh = os.path.join(prefix, "test_files", "MeOH.xyz")
     Me_NO2_4 = os.path.join(prefix, "test_files", "C(NO2)4.xyz")
+    d4h = os.path.join(prefix, "test_files", "d4h.xyz")
 
     chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
     chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
@@ -98,8 +99,15 @@ class TestSymmetry(TestWithTimer):
 
         self.assertEqual(pg.name, "C2v")
 
+    def test_D4h(self):
+        mol = Geometry(self.d4h, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "D4h")
+
 def suite():
     suite = unittest.TestSuite()
+    suite.addTest(TestSymmetry("test_D4h"))
     suite.addTest(TestSymmetry("test_D6h"))
     suite.addTest(TestSymmetry("test_Cs"))
     suite.addTest(TestSymmetry("test_S4"))

@@ -303,6 +303,8 @@ class ChiralCentres(Finder):
         return "chiral centers"
 
     def get_matching_atoms(self, atoms, geometry):
+        from AaronTools.geometry import Geometry
+        from AaronTools.symmetry import PointGroup
         # from time import perf_counter
         # 
         # start = perf_counter()
@@ -322,8 +324,21 @@ class ChiralCentres(Finder):
                 continue
             properly_shaped_atoms.append(atom)
             frags.append([])
+            single_atoms = dict()
             for bonded_atom in atom.connected:
-                frags[-1].append(geometry.get_fragment(bonded_atom, atom, as_object=False))
+                frag = geometry.get_fragment(bonded_atom, atom, as_object=False)
+                frags[-1].append(frag)
+                # keep track of single atom fragments to more quickly
+                # eliminate atoms that aren't chiral
+                if len(frag) == 1:
+                    if frag[0].element in single_atoms:
+                        single_atoms[frag[0].element] += 1
+                        if single_atoms[frag[0].element] >= len(atom.connected) / 2:
+                            frags.pop(-1)
+                            properly_shaped_atoms.pop(-1)
+                            break
+                    else:
+                        single_atoms[frag[0].element] = 1
 
         # print(properly_shaped_atoms)
 
@@ -345,15 +360,25 @@ class ChiralCentres(Finder):
                 
                 # first iteration should only look for centers that are chiral
                 # because the fragments are different
-                if k == 1 and all(
+                if k == 1 and len(atom.connected) <= 4 and all(
                     neighbor_ranks.count(rank) == 1 for rank in neighbor_ranks
                 ):
                     matching_atoms.append(atom)
                     chiral_atoms_changed = True
+                elif k == 1 and len(atom.connected) > 4:
+                    test_geom = Geometry(
+                        [atom, *atom.connected], refresh_ranks=False, refresh_connected=False
+                    )
+                    groups = [ranks[geometry.atoms.index(a)] for a in test_geom.atoms]
+                    pg = PointGroup(test_geom, groups=groups, center=atom.coords)
+                    print(pg.name)
+                    if pg.name == "C1":
+                        matching_atoms.append(atom)
+                        chiral_atoms_changed = True
                 # more iterations should only look for centers that are
                 # chiral because of the presence of other chiral centers
                 elif k > 1 and all(
-                    neighbor_ranks.count(rank) <= len(atom.connected) - 2 for rank in neighbor_ranks
+                    neighbor_ranks.count(rank) <= len(atom.connected) / 2 for rank in neighbor_ranks
                 ):
                     chiral = True
                     for i, frag1 in enumerate(frags[ndx]):
