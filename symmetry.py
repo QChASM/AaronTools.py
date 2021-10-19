@@ -933,11 +933,11 @@ class PointGroup:
                     if abs(angle - np.pi / 2) < rotation_tolerance:
                         n_perp += 1 
 
-            if n_perp == max_n:
+            if n_perp >= max_n:
                 if has_sig_h:
                     return "D%ih" % max_n
 
-                if n_sig_v == max_n:
+                if n_sig_v >= max_n:
                     return "D%id" % max_n
 
                 return "D%i" % max_n
@@ -945,7 +945,7 @@ class PointGroup:
             if has_sig_h:
                 return "C%ih" % max_n
 
-            if n_sig_v == max_n:
+            if n_sig_v >= max_n:
                 return "C%iv" % max_n
 
             for ele in self.elements:

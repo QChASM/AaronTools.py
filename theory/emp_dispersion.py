@@ -36,7 +36,7 @@ class EmpiricalDispersion:
             return True
         for d in [
                 ["grimme d2", "d2", "-d2", "gd2"],
-                ["grimme d3", "d3", "-d3", "gd3"],
+                ["grimme d3", "d3", "-d3", "gd3", "d3zero", "zero-damped grimme d3"],
                 ["becke-johnson damped grimme d3", "d3bj", "-d3bj", "gd3bj"],
                 ["becke-johnson damped modified grimme d3", "d3mbj", "-d3mbj"],
                 ["petersson-frisch", "pfd"],

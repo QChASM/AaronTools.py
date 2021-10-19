@@ -7,6 +7,7 @@ import numpy as np
 from AaronTools import addlogger
 from AaronTools.config import Config
 from AaronTools.test import TestWithTimer, prefix
+from AaronTools.theory import Theory, ImplicitSolvent, OptimizationJob
 
 
 @addlogger
@@ -17,6 +18,8 @@ class TestConfig(TestWithTimer):
         ("blank.ini", None),
         ("HOH.ini", None),
     ]
+    theory_1 = os.path.join(prefix, "test_files", "theory_1.ini")
+    theory_2 = os.path.join(prefix, "test_files", "theory_2.ini")
 
     def test_init(self):
         for i, (config_name, config) in enumerate(TestConfig.config_list):
@@ -101,8 +104,49 @@ class TestConfig(TestWithTimer):
         )
 
         structure_list = config.get_template()
-        for structure, kind in structure_list:
-            print(structure, kind)
+        # for structure, kind in structure_list:
+        #     print(structure, kind)
+
+    def test_theory(self):
+        config = Config(
+            TestConfig.theory_1,
+            quiet=True,
+            skip_user_default=True,
+        )
+        geoms = config.get_template()
+        geom = geoms[0][0]
+        ref = Theory(
+            method="b3lyp",
+            basis="6-31G",
+            solvent=ImplicitSolvent("PCM", "water"),
+            empirical_dispersion="D3",
+            job_type=OptimizationJob(geometry=geom),
+            grid="(99, 590)",
+            geometry=geom,
+        )
+        test = config.get_theory(geom)
+        # print("\n", geom.write(outfile=False, theory=ref, style="gaussian"))
+        
+        self.assertEqual(ref, test)
+        
+        
+        config = Config(
+            TestConfig.theory_2,
+            quiet=True,
+            skip_user_default=True,
+        )
+        geoms = config.get_template()
+        geom = geoms[0][0]
+        ref = Theory(
+            method="b3lyp",
+            basis="zora-def2-tzvp aux J sarc Pt sarc-zora-tzvp",
+            job_type="energy",
+            geometry=geom,
+            simple=["zora"],
+        )
+        # print("\n", geom.write(outfile=False, theory=ref, style="orca"))
+        test = config.get_theory(geom)
+        self.assertEqual(ref, test)
 
 
 def suite():
@@ -111,6 +155,7 @@ def suite():
     suite.addTest(TestConfig("test_parse_changes"))
     suite.addTest(TestConfig("test_for_loop"))
     suite.addTest(TestConfig("test_call_on_suffix"))
+    suite.addTest(TestConfig("test_theory"))
     return suite
 
 
