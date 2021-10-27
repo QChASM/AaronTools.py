@@ -411,9 +411,9 @@ class Atom:
         """returns atomic mass"""
         if self.element in MASS:
             return MASS[self.element]
-        else:
+        elif not self.is_dummy:
             self.LOG.warning("no mass for %s" % self.element)
-            return 0
+        return 0
 
     def rij(self, other):
         try:

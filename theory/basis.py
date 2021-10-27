@@ -174,7 +174,11 @@ class Basis:
 
     def __repr__(self):
         try:
-            return "%s(%s)" % (self.name, " ".join(self.elements))
+            return "%s(%s)%s" % (
+                self.name,
+                " ".join(self.elements),
+                "" if not self.aux_type else "/%s" % self.aux_type
+            )
         except AttributeError:
             return "%s(%s)" % (self.name, " ".join(self.oniom_layer))
 

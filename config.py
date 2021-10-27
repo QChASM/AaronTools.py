@@ -1,4 +1,5 @@
 import configparser
+from difflib import SequenceMatcher as seqmatch
 import itertools as it
 import os
 import re
@@ -41,12 +42,7 @@ from AaronTools.theory import (
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
-from AaronTools.theory.job_types import (
-    ForceJob,
-    FrequencyJob,
-    OptimizationJob,
-    SinglePointJob,
-)
+from AaronTools.theory.job_types import job_from_string
 
 THEORY_OPTIONS = [
     "GAUSSIAN_COMMENT",
@@ -202,6 +198,45 @@ class Config(configparser.ConfigParser):
             ),
             "project": self.get("DEFAULT", "project", fallback=""),
         }
+    
+    def get(self, section, option, *, junk="_ ", max_junk=1, **kwargs):
+        """
+        see ConfigParser.get for details
+        junk are characters that are not important in the option name
+        max_junk - number of allowed junk characters
+        e.g. junk="_" with max_junk=1 when looking for
+        'empirical dispersion' will match 'empirical_dispersion'
+        """
+        # dummy class to allow user to specify whatever they
+        # want for fallback - even False and None
+        class NoFallback:
+            pass
+
+        fallback = NoFallback
+        if "fallback" in kwargs:
+            fallback = kwargs.pop("fallback")
+        
+        # see if option is present as given
+        out = super().get(section, option, fallback=NoFallback, **kwargs)
+        # otherwise, look through the rest of the options to see if one
+        # is basically the same but with some extra junk characters
+        # e.g. 'empirical_dispersion' instead of 'empirical dispersion'
+        if out is NoFallback and junk and self.has_section(section):
+            for test_opt in self.options(section):
+                # calculate similarity
+                similarity = seqmatch(lambda x: x in junk, option, test_opt).ratio()
+                # must have no more than max_junk junk characters
+                if similarity >= 1 - max_junk / len(option) and any(
+                    x in test_opt for x in junk
+                ):
+                    out = super().get(section, test_opt, fallback=NoFallback, **kwargs)
+                    break
+        
+        if out is NoFallback and fallback is NoFallback:
+            raise configparser.NoOptionError(section, option)
+        if out is NoFallback:
+            out = fallback
+        return out
 
     def optionxform(self, option):
         return str(option)
@@ -505,6 +540,8 @@ class Config(configparser.ConfigParser):
             "medium_basis",
             "low_basis",
             "ecp",
+            "grid",
+            "empirical_dispersion",
         ]
 
         # two layer options are separated by newline
@@ -613,8 +650,9 @@ class Config(configparser.ConfigParser):
         if self[section].get("solvent", fallback="gas") == "gas":
             theory.solvent = None
         elif self[section]["solvent"]:
+            solvent_model = self.get(section, "solvent_model", fallback=False)
             theory.solvent = ImplicitSolvent(
-                self[section]["solvent_model"],
+                solvent_model,
                 self[section]["solvent"],
             )
 
@@ -622,48 +660,25 @@ class Config(configparser.ConfigParser):
         job_type = self["Job"].get("type", fallback=False)
         if job_type:
             theory.job_type = []
-            job_type = job_type.split(".")
-            if "opt" in job_type[0] or "conf" in job_type[0]:
+            numerical = self[section].get("numerical", fallback=False)
+            temperature = self[section].get("temperature", fallback=298.15)
+            try:
+                constraints = self.get_constraints(theory.geometry)
+            except RuntimeError:
                 constraints = None
-                ts = False
-                if len(job_type) > 1:
-                    if "change" in job_type[1]:
-                        theory.geometry.freeze()
-                        theory.geometry.relax(self._changed_list)
-                    elif "constrain" in job_type[1]:
-                        constraints = self.get_constraints(theory.geometry)
-                    elif "ts" == job_type[1]:
-                        ts = True
+            theory.geometry.freeze()
+            theory.geometry.relax(self._changed_list)
 
-                if "opt" in job_type[0] or "conf" in job_type[0]:
-                    theory.job_type += [
-                        OptimizationJob(
-                            transition_state=ts,
-                            geometry=geometry,
-                            constraints=constraints,
-                        )
-                    ]
-            if "freq" in job_type[0]:
-                theory.job_type += [
-                    FrequencyJob(
-                        numerical=self[section].get(
-                            "numerical", fallback=False
-                        ),
-                        temperature=self[section].get(
-                            "temperature", fallback=None
-                        ),
-                    )
-                ]
-            if "single-point" in job_type or "SP" in job_type:
-                theory.job_type += [SinglePointJob()]
-            if "force" in job_type or "gradient" in job_type:
-                theory.job_type += [
-                    ForceJob(
-                        numerical=self[section].get(
-                            "numerical", fallback=False
-                        ),
-                    )
-                ]
+            info = {
+                "numerical": numerical,
+                "temperature": temperature,
+                "constraints": constraints,
+                "geometry": theory.geometry,
+            }
+            try:
+                theory.job_type += [job_from_string(job_type, **info)]
+            except ValueError:
+                raise ValueError("cannot parse job type: %s" % ".".join(job_type))
         else:
             # default to opt+freq
             theory.job_type = [
@@ -768,7 +783,7 @@ class Config(configparser.ConfigParser):
                     structure_list += get_multiple(filenames, path=dirpath)
             for structure, kind in structure_list:
                 structure.name = os.path.relpath(structure.name, path)
-        if "Geometry" not in self:
+        if not self.has_section("Geometry"):
             return structure_list
 
         # load templates from config[Geometry]
@@ -805,7 +820,7 @@ class Config(configparser.ConfigParser):
                         shape = None
                         center = None
                         ligands = None
-                        for line in structure.split("\n"):
+                        for line in structure.splitlines():
                             line = line.strip()
                             if "coordination_complex" in line.lower():
                                 shape = re.split("[:=]", line)[1].strip()

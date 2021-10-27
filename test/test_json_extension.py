@@ -11,6 +11,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.json_extension import ATDecoder, ATEncoder
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix
+from AaronTools.theory import Theory, ImplicitSolvent, OptimizationJob
 
 
 class TestJSON(TestWithTimer):
@@ -216,6 +217,33 @@ class TestJSON(TestWithTimer):
         freq = log.frequency
         self.json_tester(freq, self.freq_equal)
 
+    def test_theory(self):
+        # test with a bunch of different basis sets with different elements and
+        # auxilliary basis sets
+        ref_theory = Theory(
+            method="DLPNO-CCSD(T)",
+            basis="!H aug-cc-pvtz H cc-pvtz !H aux C aug-cc-pvtz H aux C cc-pvtz",
+            simple=["TightSCF"],
+        )
+        ref_json = json.dumps(ref_theory, cls=ATEncoder)
+        test_theory = json.loads(ref_json, cls=ATDecoder)
+        self.assertEqual(ref_theory, test_theory)
+        
+        # test with many different theory objects and an ECP
+        ref_theory = Theory(
+            method="B3LYP",
+            basis="!tm def2-SVP tm SDD",
+            ecp="tm SDD",
+            route={"opt": ["NoEigenTest"]},
+            grid="SuperFineGrid",
+            empirical_dispersion="D3",
+            solvent=ImplicitSolvent("PCM", "benzene"),
+            job_type=OptimizationJob(transition_state=True),
+        )
+        ref_json = json.dumps(ref_theory, cls=ATEncoder)
+        test_theory = json.loads(ref_json, cls=ATDecoder)
+        self.assertEqual(ref_theory, test_theory)
+
 
 def suite():
     suite = unittest.TestSuite()
@@ -226,6 +254,7 @@ def suite():
     suite.addTest(TestJSON("test_comp_output"))
     suite.addTest(TestJSON("test_catalyst"))
     suite.addTest(TestJSON("test_frequency"))
+    suite.addTest(TestJSON("test_theory"))
     return suite
 
 

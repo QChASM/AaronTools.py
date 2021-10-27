@@ -6,7 +6,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.test import TestWithTimer, prefix
 from AaronTools.symmetry import PointGroup
 
-class TestFinder(TestWithTimer):
+class TestSymmetry(TestWithTimer):
     benzene = os.path.join(prefix, "test_files", "benzene.xyz")
     c60 = os.path.join(prefix, "test_files", "c60.xyz")
     adamantane = os.path.join(prefix, "test_files", "adamantane.xyz")
@@ -15,6 +15,7 @@ class TestFinder(TestWithTimer):
     h2o = os.path.join(prefix, "test_files", "h2o.xyz")
     meoh = os.path.join(prefix, "test_files", "MeOH.xyz")
     Me_NO2_4 = os.path.join(prefix, "test_files", "C(NO2)4.xyz")
+    d4h = os.path.join(prefix, "test_files", "d4h.xyz")
 
     chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
     chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
@@ -98,16 +99,23 @@ class TestFinder(TestWithTimer):
 
         self.assertEqual(pg.name, "C2v")
 
+    def test_D4h(self):
+        mol = Geometry(self.d4h, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "D4h")
+
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestFinder("test_D6h"))
-    suite.addTest(TestFinder("test_Cs"))
-    suite.addTest(TestFinder("test_S4"))
-    suite.addTest(TestFinder("test_C1"))
-    suite.addTest(TestFinder("test_Ih"))
-    suite.addTest(TestFinder("test_Td"))
-    suite.addTest(TestFinder("test_D2d"))
-    suite.addTest(TestFinder("test_C2v"))
+    suite.addTest(TestSymmetry("test_D4h"))
+    suite.addTest(TestSymmetry("test_D6h"))
+    suite.addTest(TestSymmetry("test_Cs"))
+    suite.addTest(TestSymmetry("test_S4"))
+    suite.addTest(TestSymmetry("test_C1"))
+    suite.addTest(TestSymmetry("test_Ih"))
+    suite.addTest(TestSymmetry("test_Td"))
+    suite.addTest(TestSymmetry("test_D2d"))
+    suite.addTest(TestSymmetry("test_C2v"))
     return suite
 
 

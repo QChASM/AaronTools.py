@@ -981,7 +981,10 @@ class Geometry:
                     "Substitutions/Mappings requested, but not performed"
                 )
         if targets is not None:
-            targets = self.find(targets)
+            try:
+                targets = self.find(targets)
+            except LookupError:
+                targets = self.atoms
         else:
             targets = self.atoms
         for a in targets:

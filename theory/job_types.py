@@ -2,6 +2,7 @@
 import numpy as np
 
 from AaronTools import addlogger
+from AaronTools.finders import FlaggedAtoms
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,
@@ -21,6 +22,61 @@ from AaronTools.theory import (
 from AaronTools.utils.utils import range_list, combine_dicts
 
 
+def job_from_string(name, **kwargs):
+    """
+    return a job type for the given string
+    valid names are:
+        "opt" or "conf" with ".ts", ".transition_state", ".change", and ".con" extensions
+            * .ts and .transition_state indicate a transition state optimization
+            * .con indicates a constrained optimization - "constraints" should
+              be in kwargs and the value should be a dictionary conformable with 
+              the keyword of OptimizationJob
+        "freq" with ".num" extensions
+            * .num indicates a numerical frequnecy, as does kwargs["numerical"] = True
+            kwargs can also have a "temperature" key
+        "sp" or "energy" or "single-point"
+        "force" or "gradient" with a ".num" extension
+            * .num indicates a numerical frequnecy, as does kwargs["numerical"] = True
+    """
+    ext = None
+    if "." in name:
+        ext = name.split(".")[-1].lower()
+    
+    if any(name.lower().startswith(x) for x in ["opt", "conf"]):
+        geom = kwargs.get("geometry", None)
+        constraints = kwargs.get("constraints", None)
+
+        if ext and (ext.startswith("ts") or ext.startswith("transition")):
+            return OptimizationJob(transition_state=True, geometry=geom)
+        
+        if ext and ext.startswith("con") and constraints:
+            return OptimizationJob(constraints=constraints)
+        
+        if ext and ext.startswith("change"):
+            return OptimizationJob(
+                constraints={"atoms": FlaggedAtoms()}, geometry=geom
+            )
+        return OptimizationJob(geometry=geom)
+    
+    if name.lower().startswith("freq"):
+        numerical = kwargs.get("numerical", False)
+        numerical = numerical or (ext and ext.startswith("num"))
+        temperature = kwargs.get("temperature", 298.15)
+        
+        return FrequencyJob(numerical=numerical, temperature=temperature)
+    
+    if any(name.lower().startswith(x) for x in ["sp", "energy", "single-point"]):
+        return SinglePointJob()
+    
+    if any(name.lower().startswith(x) for x in ["force", "gradient"]):
+        numerical = kwargs.get("numerical", False)
+        numerical = numerical or (ext and ext.startswith("num"))
+        
+        return ForceJob(numerical=numerical)
+    
+    raise ValueError("cannot determine job type from string: %s" % name)
+
+
 class JobType:
     """
     parent class of all job types
@@ -33,7 +89,8 @@ class JobType:
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        return self.get_psi4() == other.get_psi4()
+
+        return self.__dict__ == other.__dict__
 
     def get_gaussian(self):
         """overwrite to return dict with GAUSSIAN_* keys"""

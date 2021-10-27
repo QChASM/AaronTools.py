@@ -36,6 +36,7 @@ from AaronTools.theory import (
     QCHEM_COMMENT,
     QCHEM_SETTINGS,
     FrequencyJob,
+    job_from_string,
 )
 from AaronTools.utils.utils import combine_dicts
 from AaronTools.theory.basis import ECP, Basis, BasisSet
@@ -377,6 +378,9 @@ class Theory:
                 self.empirical_dispersion = empirical_dispersion
 
         if self.job_type is not None:
+            if isinstance(self.job_type, str):
+                self.job_type = job_from_string(self.job_type)
+                
             if isinstance(self.job_type, JobType):
                 self.job_type = [self.job_type]
 
@@ -410,6 +414,8 @@ class Theory:
                 super().__setattr__(attr, EmpiricalDispersion(val))
             elif attr == "grid":
                 super().__setattr__(attr, IntegrationGrid(val))
+            elif attr == "job_type" and isinstance(val, str):
+                super().__setattr__(attr, [job_from_string(val)])
             else:
                 super().__setattr__(attr, val)
         elif attr == "job_type" and isinstance(val, JobType):
@@ -432,6 +438,7 @@ class Theory:
             return False
         if self.empirical_dispersion != other.empirical_dispersion:
             # print("disp")
+            print(self.empirical_dispersion, other.empirical_dispersion)
             return False
         if self.grid != other.grid:
             # print("grid")
