@@ -128,7 +128,7 @@ grid_options.add_argument(
 grid_options.add_argument(
     "-ap", "--angular-points",
     type=int,
-    default=1454,
+    default=302,
     choices=[110, 194, 302, 590, 974, 1454, 2030, 2702, 5810],
     dest="apoints",
     help="number of angular points for Lebedev integration\n" +
@@ -171,7 +171,7 @@ for n, f in enumerate(infiles):
         apoints=args.apoints,
         radii=args.radii,
     )
-    
+
     s = ""
     if len(infiles) > 1:
         s += "%s:\n" % f

@@ -1033,6 +1033,14 @@ class OptimizationJob(JobType):
                 )
                 return out_theory
         
+        if exec_type.lower() == "psi4":
+            if error.upper() == "ICOORD":
+                out_theory = theory.copy()
+                out_theory.kwargs = combine_dicts(
+                     {PSI4_OPTKING: {"opt_coordinates": "cartesian"}}, out_theory.kwargs,
+                )
+                return out_theory
+        
         raise NotImplementedError(
             "cannot fix %s errors for %s; check your input" % (error, exec_type)
         )

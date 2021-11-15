@@ -5,6 +5,7 @@ import unittest
 from AaronTools import addlogger
 from AaronTools.config import Config
 from AaronTools.test import TestWithTimer, prefix
+from AaronTools.theory import Theory
 
 
 @addlogger
@@ -45,10 +46,21 @@ class TestTheory(TestWithTimer):
         test = theory.get_xtb_cmdline(this_config)
         self.assertDictEqual(test, ref)
 
+    def test_copy_equal(self):
+        ref = Theory(
+            method="B3LYP",
+            basis="def2-SVP",
+            job_type="sp",
+            grid="(99, 590)",
+        )
+        
+        test = ref.copy()
+        self.assertEqual(test, ref)
 
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(TestTheory("test_xtb_cmdline"))
+    suite.addTest(TestTheory("test_copy_equal"))
     return suite
 
 
