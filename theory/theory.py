@@ -2088,6 +2088,13 @@ class Theory:
         else:
             other_kw_dict[QCHEM_SETTINGS] = {QCHEM_COMMENT: other_kw_dict[QCHEM_COMMENT]}
 
+        # add memory info
+        if self.memory:
+            other_kw_dict = combine_dicts(
+                other_kw_dict,
+                {QCHEM_REM: {"MEM_TOTAL": str(1000 * self.memory)}}
+            )
+
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
             disp, warning = self.empirical_dispersion.get_qchem()

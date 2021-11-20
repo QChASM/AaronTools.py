@@ -63,7 +63,7 @@ class Primes:
     @classmethod
     def store_prime(cls, prime):
         """add the prime number to the cache"""
-        if not path.exists(cls.cache):
+        if not path.exists(path.dirname(cls.cache)):
             return
         with open(cls.cache, "a") as f:
             if hasattr(prime, "__iter__"):

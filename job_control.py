@@ -3,7 +3,7 @@ import re
 import subprocess
 from time import sleep
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
 
 from AaronTools import addlogger
 from AaronTools.const import AARONLIB
@@ -46,7 +46,9 @@ class SubmitProcess:
         self.walltime = walltime
         self.processors = processors
         self.memory = memory
-        self.set_template(template)
+        self.template = template
+        if not isinstance(template, Template):
+            self.set_template(template)
 
     @staticmethod
     def unfinished_jobs_in_dir(directory, retry=True):
@@ -200,19 +202,20 @@ class SubmitProcess:
 
                     return job_ids
 
-    def submit(self, wait=False, quiet=True):
+    def submit(self, wait=False, quiet=True, **opts):
         """submit job to the queue
         wait: bool/int - do not leave the function until any job in the directory
-                         finishes (polled every 5 minutes or 'wait' seconds)"""
+                         finishes (polled every 5 minutes or 'wait' seconds)
+        opts: dict() used to render template; keys are template variables (e.g. exec_memory)
+              and values are the corresponding values
+        """
 
         job_file = os.path.join(self.directory, self.name + ".job")
 
-        opts = {
-            "name": self.name,
-            "walltime": self.walltime,
-            "processors": self.processors,
-            "memory": self.memory,
-        }
+        opts["name"] = self.name
+        opts["walltime"] = self.walltime
+        opts["processors"] = self.processors
+        opts["memory"] = self.memory
 
         tm = self.template.render(**opts)
 
