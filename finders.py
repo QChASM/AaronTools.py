@@ -4,6 +4,8 @@ import inspect
 
 import numpy as np
 
+from AaronTools import addlogger
+
 
 def get_class(name):
     """returns the finder class with the given name"""
@@ -202,13 +204,19 @@ class HasAttribute(Finder):
         return [atom for atom in atoms if hasattr(atom, self.attribute_name)]
 
 
+@addlogger
 class VSEPR(Finder):
     """atoms with the specified VSEPR geometry
     see Atom.get_shape for a list of valid vsepr strings"""
+    LOG = None
     def __init__(self, vsepr, cutoff=0.5):
         super().__init__()
         
         self.vsepr = vsepr
+        if any(vsepr == x for x in ["triangular cupola", "heptagonal bipyramidal"]):
+            self.LOG.warning(
+                "triangular cupola and heptagonal bipyramidal cannot be distinguished"
+            )
         self.cutoff = cutoff
     
     def __repr__(self):

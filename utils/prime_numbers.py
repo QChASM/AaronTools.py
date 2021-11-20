@@ -75,13 +75,24 @@ class Primes:
     @classmethod
     def list(cls, n):
         """list the first n prime numbers"""
-        rv = []
-        for i, prime in enumerate(cls.next_prime()):
-            if i >= n:
-                break
-            rv += [prime]
+        rv = [prime for i, prime in enumerate(cls.primes) if i < n]
+        if len(cls.primes) < n:
+            for i, prime in enumerate(cls.next_prime()):
+                if i >= n:
+                    break
+                rv += [prime]
         return rv
 
+    @classmethod
+    def primes_below(cls, le):
+        """list the primes that are less than or equal to le"""
+        rv = [p for p in cls.primes if p <= le]
+        if cls.primes[-1] <= le:
+            for i, prime in enumerate(cls.next_prime()):
+                if prime >= le:
+                    break
+                rv += [prime]
+        return rv
 
 if __name__ == "__main__":
     Primes(clean=True)

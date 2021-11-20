@@ -4,6 +4,7 @@ import numpy as np
 from scipy.spatial import distance_matrix
 
 from AaronTools import addlogger
+from AaronTools.utils.prime_numbers import Primes
 from AaronTools.utils.utils import rotation_matrix, mirror_matrix, proj, angle_between_vectors
 
 
@@ -599,14 +600,25 @@ class PointGroup:
         # * COM -> midpoint of atom paris
         # also grab axes for checking mirror planes
         check_axes = []
+        primes = dict()
         args = tuple([arg for arg in [axes, atom_axes, atom_pairs] if len(arg)])
         for ax in np.concatenate(args):
             max_n = None
-            for n in range(max_rotation, 1, -1):
-                if max_n and max_n % n != 0:
-                    # the highest order proper rotation axis must be
-                    # divisible by all other coincident axes
-                    continue
+            found_n = []
+            for n in range(2, max_rotation + 1):
+                if n not in primes:
+                    primes[n] = Primes.primes_below(n // 2)
+                # print(n, primes[n])
+                skip = False
+                for prime in primes[n]:
+                    if n % prime == 0 and prime not in found_n:
+                        # print("skipping", n)
+                        skip = True
+                        break
+                # if max_n and max_n % n != 0:
+                #     # the highest order proper rotation axis must be
+                #     # divisible by all other coincident axes
+                #     continue
                 # look for C5^2 stuff
                 # for exp in range(1, 1 + n // 2):
                 for exp in range(1, 2):
@@ -625,6 +637,7 @@ class PointGroup:
                         # with open("test.bild", "a") as f:
                         #     f.write(s)
                         valid.append(rot)
+                        found_n.append(n)
                         if n > 2:
                             # for Cn n != 2, add an element that is the same
                             # except the axis of rotation is antiparallel
@@ -758,7 +771,7 @@ class PointGroup:
 
         c2_axes = list(
             filter(
-                lambda ele: isinstance(ele, ProperRotation) and ele.n == 2,
+                lambda ele: isinstance(ele, ProperRotation) and ele.n == 2 and ele.exp == 1,
                 valid,
             )
         )
@@ -877,7 +890,7 @@ class PointGroup:
         has_mirror = False
         for ele in self.elements:
             if isinstance(ele, ProperRotation):
-                if ele.n not in Cn:
+                if ele.n not in Cn and ele.exp == 1:
                     Cn[ele.n] = []
                 Cn[ele.n].append(ele)
             if isinstance(ele, InversionCenter):
