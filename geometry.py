@@ -878,7 +878,7 @@ class Geometry:
         new_comment += " K:"
         for frag in sorted(self.components):
             tmp = ""
-            for key in sorted(frag.key_atoms):
+            for key in sorted(frag.key_atoms, key=self.atoms.index):
                 tmp += "{},".format(self.atoms.index(key) + 1)
             if tmp:
                 new_comment += tmp[:-1] + ";"
