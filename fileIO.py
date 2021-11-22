@@ -342,7 +342,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{ name }", name)
+            s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -395,7 +395,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{ name }", name)
+            s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
         
@@ -443,7 +443,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            out = out.replace("{ name }", name)
+            out = out.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(out)
         
@@ -493,7 +493,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{ name }", name)
+            s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
         
@@ -543,7 +543,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{ name }", name)
+            s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
 
