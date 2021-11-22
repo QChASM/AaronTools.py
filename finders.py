@@ -1,6 +1,7 @@
 """finders are used by Geometry.find to locate atoms in a more general way"""
 import sys
 import inspect
+from collections import deque
 
 import numpy as np
 
@@ -63,14 +64,21 @@ class WithinBondsOf(BondsFrom):
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
         matching_atoms = []
-        for atom in atoms:
-            try:
-                path = geometry.shortest_path(atom, self.central_atom)
-            except LookupError:
-                continue
-
-            if len(path) - 1 <= self.number_of_bonds and len(path) > 1:
-                matching_atoms.append(atom)
+        stack = deque([self.central_atom])
+        next_stack = deque([])
+        frag = [self.central_atom]
+        n_bonds = 1
+        while stack and self.number_of_bonds:
+            next_connected = stack.popleft()
+            connected = next_connected.connected - set(frag)
+            if n_bonds < self.number_of_bonds:
+                next_stack.extend(connected)
+            matching_atoms.extend(connected)
+            frag += connected
+            if not stack:
+                n_bonds += 1
+                stack = next_stack
+                next_stack = deque([])
 
         return matching_atoms
 
@@ -103,15 +111,30 @@ class WithinRadiusFromPoint(Finder):
 
     def get_matching_atoms(self, atoms, geometry=None):
         """returns list(Atom) that are within a radius of a point"""
-        matching_atoms = []
-        for atom in atoms:
-            coords = atom.coords
-            d = np.linalg.norm(coords - self.point)
-            if d < self.radius:
-                matching_atoms.append(atom)
+        keep = np.arange(0, len(atoms), dtype=int)
+        coords = np.array([atom.coords for atom in atoms])
+        coords -= self.point
+        
+        mask = np.where(coords[:, 0] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        mask = np.where(coords[:, 1] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        mask = np.where(coords[:, 2] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        dist = np.linalg.norm(coords, axis=1)
+        mask = np.where(dist < self.radius)
+        keep = keep[mask]
+        
+        matching_atoms = [atoms[k] for k in keep]
 
         return matching_atoms
-
+    
 
 class WithinRadiusFromAtom(Finder):
     """within a specified radius of a point"""
@@ -126,15 +149,30 @@ class WithinRadiusFromAtom(Finder):
 
     def get_matching_atoms(self, atoms, geometry=None):
         """returns list(Atom) that are within a radius of a point"""
-        matching_atoms = []
-        for atom in atoms:
-            coords = atom.coords
-            d = self.atom.dist(atom)
-            if d < self.radius:
-                matching_atoms.append(atom)
+        keep = np.arange(0, len(atoms), dtype=int)
+        coords = np.array([atom.coords for atom in atoms])
+        coords -= self.atom.coords
+        
+        mask = np.where(coords[:, 0] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        mask = np.where(coords[:, 1] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        mask = np.where(coords[:, 2] < self.radius)
+        coords = coords[mask]
+        keep = keep[mask]
+        
+        dist = np.linalg.norm(coords, axis=1)
+        mask = np.where(dist < self.radius)
+        keep = keep[mask]
+        
+        matching_atoms = [atoms[k] for k in keep]
 
         return matching_atoms
-    
+
 
 class NotAny(Finder):
     """atoms not matching specifiers/Finders"""

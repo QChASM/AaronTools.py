@@ -158,6 +158,28 @@ class Geometry:
         form=smiles -> structure from cactvs API/RDKit
         """
 
+        # CC and HOH are special-cased because they are used in
+        # the automated testing and we don't want that to fail
+        # b/c cactus is down and the user doesn't have rdkit
+        # these structures are from NIST
+        if name == "CC":
+            return cls([
+                Atom("C", coords=[0.0, 0.0, 0.7680], name="1"),
+                Atom("C", coords=[0.0, 0.0, -0.7680], name="2"),
+                Atom("H", coords=[-1.0192, 0.0, 1.1573], name="3"),
+                Atom("H", coords=[0.5096, 0.8826, 1.1573], name="4"),
+                Atom("H", coords=[0.5096, -0.8826, 1.1573], name="5"),
+                Atom("H", coords=[1.0192, 0.0, -1.1573], name="6"),
+                Atom("H", coords=[-0.5096, -0.8826, -1.1573], name="7"),
+                Atom("H", coords=[-0.5096, 0.8826, -1.1573], name="8"),
+            ])
+        elif name == "HOH":
+            return cls([
+                Atom("H", coords=[0.0, 0.7572, -0.4692], name="1"),
+                Atom("O", coords=[0.0, 0.0, 0.0], name="2"),
+                Atom("H", coords=[0.0, -0.7572, -0.4692], name="3"),
+            ])
+
         def get_cactus_sd(smiles):
             if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
                 raise PermissionError(
@@ -1279,9 +1301,9 @@ class Geometry:
             targets = self.atoms
         else:
             targets = self.find(targets)
-        old_connectivity = []
+        # old_connectivity = []
         for a in targets:
-            old_connectivity += [a.connected]
+        #     old_connectivity += [a.connected]
             a.connected = set([])
 
         D = distance_matrix(
