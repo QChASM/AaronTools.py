@@ -877,6 +877,7 @@ class FileReader:
         # comment
         self.comment = f.readline().strip()
         # atom info
+        atom_count = 0
         for line in f:
             line = line.strip()
             if line == "":
@@ -889,11 +890,12 @@ class FileReader:
                     ]
                 self.comment = f.readline().strip()
                 self.atoms = []
+                atom_count = 0
             except ValueError:
                 line = line.split()
-                self.atoms += [Atom(element=line[0], coords=line[1:4])]
-                for i, a in enumerate(self.atoms):
-                    a.name = str(i + 1)
+                atom_count += 1
+                self.atoms += [Atom(element=line[0], coords=line[1:4], name=str(atom_count))]
+
         # if get_all:
         #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
 
