@@ -1301,9 +1301,12 @@ class Geometry:
             targets = self.atoms
         else:
             targets = self.find(targets)
-        # old_connectivity = []
+        
+        # reset the connectivity
         for a in targets:
-        #     old_connectivity += [a.connected]
+            if targets is not self.atoms:
+                for b in a.connected:
+                    b.connected -= a
             a.connected = set([])
 
         D = distance_matrix(
@@ -1332,8 +1335,10 @@ class Geometry:
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
 
+        indices = {a: i for i, a in enumerate(targets)}
+        target_set = set(targets)
+
         coords = self.coordinates(targets)
-        dists = distance_matrix(coords, coords)
 
         def get_bo(atom1, atom2, dist):
             """
@@ -1353,14 +1358,20 @@ class Geometry:
             except KeyError:
                 return 1
 
-        heavy_bonds = [0 for a in targets]
-        bo_sums = [0 for a in targets]
         atom_numbers = [ELEMENTS.index(a.element) for a in targets]
-        hydrogen_bonds = [0 for a in targets]
+        hydrogen_bonds = np.zeros(len(targets))
+        bo_sums = np.zeros(len(targets))
+        heavy_bonds = np.zeros(len(targets))
         for i, atom1 in enumerate(targets):
-            for j, atom2 in enumerate(targets[:i]):
-                if atom2 not in atom1.connected:
-                    continue
+            if not atom1.connected:
+                continue
+            dists = np.linalg.norm(np.array([atom1.coords - atom2.coords for atom2 in atom1.connected]), axis=1)
+            for k, atom2 in enumerate(atom1.connected):
+                if atom2 in target_set:
+                    j = indices[atom2]
+                else:
+                    j = None
+
                 if atom2.element == "H":
                     hydrogen_bonds[i] += 1
                 else:
@@ -1368,26 +1379,24 @@ class Geometry:
 
                 if atom1.element == "H":
                     hydrogen_bonds[j] += 1
-                else:
+                elif j is not None:
                     heavy_bonds[j] += 1
 
                 if atom1.element != "H" or atom2.element != "H":
-                    bond_order = get_bo(atom1, atom2, dists[i, j])
-                    if atom2.element != "H":
-                        bo_sums[i] += bond_order
+                    bond_order = get_bo(atom1, atom2, dists[k])
+                
+                if atom2.element != "H":
+                    bo_sums[i] += bond_order
 
-                    if atom1.element != "H":
+                if j is not None and atom1.element != "H":
                         bo_sums[j] += bond_order
 
-            for atom2 in atom1.connected:
-                if atom2 in targets:
-                    continue
-                if atom2.element == "H":
+                elif j is None and atom2.element == "H":
                     hydrogen_bonds[i] += 1
-                    continue
-                heavy_bonds[i] += 1
-                bond_order = atom1.bond_order(atom2)
-                bo_sums[i] += bond_order
+                
+                elif j is None:
+                    heavy_bonds[i] += 1
+                    bo_sums[i] += bond_order
 
         invariants = []
         for nconn, nB, z, nH in zip(
@@ -1419,8 +1428,15 @@ class Geometry:
         self.LOG.citation(CITATION)
 
         primes = Primes.list(len(self.atoms))
+        # list of atoms we are ranking
         atoms = []
+        # list of ranks corresponding to each atom
         ranks = []
+        # index of each atom (faster than using atoms.index,
+        # particularly for larger structures
+        indices = dict()
+        # set of atoms for performance reasons
+        atoms_set = set()
 
         # using the catalyst's center can make it difficult
         # to compare C2 symmetric ligands
@@ -1437,9 +1453,8 @@ class Geometry:
             partitions = {}
             for i, a in enumerate(atoms):
                 key = primes[ranks[i]]
-                for b in a.connected:
-                    if b in atoms:
-                        key *= primes[ranks[atoms.index(b)]]
+                for b in a.connected.intersection(atoms_set):
+                    key *= primes[ranks[indices[b]]]
                 partitions.setdefault(ranks[i], {})
                 partitions[ranks[i]].setdefault(key, [])
                 partitions[ranks[i]][key] += [i]
@@ -1534,7 +1549,7 @@ class Geometry:
                         if len(connected) == 1:
                             k = connected.pop()
                             if k in atoms:
-                                k = atoms.index(k)
+                                k = indices[k]
                             else:
                                 continue
                             groups.setdefault(k, set([i]))
@@ -1575,11 +1590,15 @@ class Geometry:
             return update_ranks(ranks, new_partitions)
 
         # rank all atoms the same initially
+        c = 0
         for a in self.atoms:
             if heavy_only and a.element == "H":
                 continue
             atoms += [a]
             ranks += [0]
+            indices[a] = c
+            c += 1
+        atoms_set = set(atoms)
 
         # partition and re-rank using invariants
         partitions = {}
@@ -2487,19 +2506,19 @@ class Geometry:
                     signs = np.sign(map_xyz)
                     oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
                     tot_points[0] += sum(oct_0)
-                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) >= 2, 1, 0)
                     tot_points[1] += sum(oct_1)
                     oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
                     tot_points[2] += sum(oct_2)
-                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) >= 2, 1, 0)
                     tot_points[3] += sum(oct_3)
                     oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
                     tot_points[4] += sum(oct_4)
-                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) >= 2, 1, 0)
                     tot_points[5] += sum(oct_5)
                     oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
                     tot_points[6] += sum(oct_6)
-                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) >= 2, 1, 0)
                     tot_points[7] += sum(oct_7)
 
                 xyz += center_coords
@@ -2626,19 +2645,19 @@ class Geometry:
                     # numerical error
                     oct_0 = np.where(np.dot(signs, [1, 1, 1]) > 2, 1, 0)
                     shell_values[0][i] += np.dot(oct_0, buried_weights)
-                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) > 2, 1, 0)
+                    oct_1 = np.where(np.dot(signs, [-1, 1, 1]) >= 2, 1, 0)
                     shell_values[1][i] += np.dot(oct_1, buried_weights)
                     oct_2 = np.where(np.dot(signs, [-1, -1, 1]) > 2, 1, 0)
                     shell_values[2][i] += np.dot(oct_2, buried_weights)
-                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) > 2, 1, 0)
+                    oct_3 = np.where(np.dot(signs, [1, -1, 1]) >= 2, 1, 0)
                     shell_values[3][i] += np.dot(oct_3, buried_weights)
                     oct_4 = np.where(np.dot(signs, [1, -1, -1]) > 2, 1, 0)
                     shell_values[4][i] += np.dot(oct_4, buried_weights)
-                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) > 2, 1, 0)
+                    oct_5 = np.where(np.dot(signs, [-1, -1, -1]) >= 2, 1, 0)
                     shell_values[5][i] += np.dot(oct_5, buried_weights)
                     oct_6 = np.where(np.dot(signs, [-1, 1, -1]) > 2, 1, 0)
                     shell_values[6][i] += np.dot(oct_6, buried_weights)
-                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) > 2, 1, 0)
+                    oct_7 = np.where(np.dot(signs, [1, 1, -1]) >= 2, 1, 0)
                     shell_values[7][i] += np.dot(oct_7, buried_weights)
 
             if basis is not None:
