@@ -214,9 +214,9 @@ class Atom:
 
     def __setattr__(self, attr, val):
         if (
-            (attr == "_hashed" and val)
+            not self._hashed
+            or (attr == "_hashed" and val)
             or (attr != "element" and attr != "coords")
-            or not self._hashed
         ):
             super().__setattr__(attr, val)
         else:
@@ -244,9 +244,10 @@ class Atom:
         try:
             self._connectivity = int(CONNECTIVITY[self.element])
         except KeyError:
-            self.LOG.warning(
-                "Connectivity not found for element: " + self.element
-            )
+            pass
+            # self.LOG.warning(
+            #     "Connectivity not found for element: " + self.element
+            # )
         return
 
     def _set_saturation(self):

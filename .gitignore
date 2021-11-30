@@ -10,3 +10,5 @@ test/ligand.xyz
 /dist
 /doc
 /test/*.xyz
+test/.coverage
+/test/htmlcov/
