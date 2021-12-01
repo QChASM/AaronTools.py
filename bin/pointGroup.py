@@ -119,7 +119,8 @@ for f in glob_files(args.infile, parser=pg_parser):
         for ele in sorted(pg.elements, reverse=True):
             if isinstance(ele, InversionCenter):
                 inv += ".note %s\n" % repr(ele)
-                inv += ".sphere   %.5f  %.5f  %.5f  0.1\n" % tuple(pg.center)
+                inv += ".color plum\n"
+                inv += ".sphere   %.5f  %.5f  %.5f  0.3\n" % tuple(pg.center)
 
             elif isinstance(ele, ProperRotation):
                 prots += ".note %s\n" % repr(ele)
@@ -151,8 +152,15 @@ for f in glob_files(args.infile, parser=pg_parser):
 
             elif isinstance(ele, MirrorPlane):
                 mirror += ".note %s\n" % repr(ele)
-                mirror += ".color purple\n"
-                mirror += ".transparency 25\n"
+                if ele.label is None:
+                    mirror += ".color purple\n"
+                elif ele.label == "h":
+                    mirror += ".color black\n"
+                elif ele.label == "v":
+                    mirror += ".color chocolate\n"
+                elif ele.label == "d":
+                    mirror += ".color teal\n"
+                mirror += ".transparency 40\n"
                 z = ele.axis
                 x = perp_vector(z)
                 y = np.cross(x, z)

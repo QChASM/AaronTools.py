@@ -16,6 +16,11 @@ class TestSymmetry(TestWithTimer):
     meoh = os.path.join(prefix, "test_files", "MeOH.xyz")
     Me_NO2_4 = os.path.join(prefix, "test_files", "C(NO2)4.xyz")
     d4h = os.path.join(prefix, "test_files", "d4h.xyz")
+    ci = os.path.join(prefix, "test_files", "Ci.xyz")
+    oh = os.path.join(prefix, "test_files", "cubane.xyz")
+    d5h = os.path.join(prefix, "test_files", "c5h5.xyz")
+    t = os.path.join(prefix, "test_files", "neopentane.xyz")
+    cubeamine = os.path.join(prefix, "test_files", "cubeamine.xyz")
 
     chiral_ring = os.path.join(prefix, "test_files", "chiral_ring.xyz")
     chiral_mol_1 = os.path.join(prefix, "test_files", "chiral_centers_1.xyz")
@@ -105,17 +110,52 @@ class TestSymmetry(TestWithTimer):
 
         self.assertEqual(pg.name, "D4h")
 
+    def test_Ci(self):
+        mol = Geometry(self.ci, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "Ci")
+
+    def test_Oh(self):
+        mol = Geometry(self.oh, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "Oh")
+
+    def test_D5h(self):
+        mol = Geometry(self.d5h, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "D5h")
+
+    def test_T(self):
+        mol = Geometry(self.t, refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "T")
+
+    def test_O(self):
+        mol = Geometry(self.cubeamine, refresh_ranks=False, refresh_connected=False)
+        mol = Geometry(mol.find(["C", "N"]), refresh_ranks=False)
+        pg = PointGroup(mol)
+
+        self.assertEqual(pg.name, "O")
+
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestSymmetry("test_D4h"))
-    suite.addTest(TestSymmetry("test_D6h"))
-    suite.addTest(TestSymmetry("test_Cs"))
-    suite.addTest(TestSymmetry("test_S4"))
-    suite.addTest(TestSymmetry("test_C1"))
     suite.addTest(TestSymmetry("test_Ih"))
+    suite.addTest(TestSymmetry("test_Oh"))
+    suite.addTest(TestSymmetry("test_O"))
     suite.addTest(TestSymmetry("test_Td"))
+    suite.addTest(TestSymmetry("test_D6h"))
+    suite.addTest(TestSymmetry("test_D5h"))
+    suite.addTest(TestSymmetry("test_D4h"))
     suite.addTest(TestSymmetry("test_D2d"))
+    suite.addTest(TestSymmetry("test_S4"))
     suite.addTest(TestSymmetry("test_C2v"))
+    suite.addTest(TestSymmetry("test_Cs"))
+    suite.addTest(TestSymmetry("test_Ci"))
+    suite.addTest(TestSymmetry("test_C1"))
     return suite
 
 

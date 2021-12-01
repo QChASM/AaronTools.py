@@ -638,6 +638,14 @@ class Geometry:
         """
         return self.coordinates()
 
+    @coords.setter
+    def coords(self, value):
+        """
+        set coordinates
+        """
+        for a, c in zip(self.atoms, value):
+            a.coords = np.array(c, dtype=float)
+
     def coordinates(self, atoms=None):
         """
         returns N x 3 coordinate matrix for requested atoms
@@ -1450,10 +1458,23 @@ class Geometry:
             # partitions key is product of rank and neighbors' rank
             # use prime numbers for product so products are distinct
             # eg: primes[2]*primes[2] != primes[1]*primes[4]
+            
+            # some high-symmetry molecules can get a rank greater than
+            # the number of atoms
+            # I've had this issue with adamantane (Td)
+            # this is a lazy fix that reduces the rank of some atoms by 1
+            while max(ranks) >= len(ranks):
+                for i in range(1, max(ranks) + 1):
+                    if ranks.count(i - 1) == 0:
+                        for j in range(1, max(ranks)):
+                            if ranks[j] >= i:
+                                ranks[j] -= 1
+
             partitions = {}
             for i, a in enumerate(atoms):
                 key = primes[ranks[i]]
                 for b in a.connected.intersection(atoms_set):
+                    # print(indices[b], ranks[indices[b]])
                     key *= primes[ranks[indices[b]]]
                 partitions.setdefault(ranks[i], {})
                 partitions[ranks[i]].setdefault(key, [])
@@ -1617,7 +1638,7 @@ class Geometry:
             new_rank += len(idx_list)
 
         # re-rank using neighbors until no change
-        for i in range(500):
+        for i in range(0, min(500, len(ranks))):
             new_ranks = neighbors_rank(ranks)
             if ranks == new_ranks:
                 break
@@ -1630,7 +1651,7 @@ class Geometry:
         # break ties using spatial positions
         # AND update neighbors until no change
         if break_ties:
-            for i in range(500):
+            for i in range(0, min(500, len(ranks))):
                 new_ranks = tie_break(ranks)
                 new_ranks = neighbors_rank(new_ranks)
                 if ranks == new_ranks:
