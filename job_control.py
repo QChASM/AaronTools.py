@@ -266,6 +266,7 @@ class SubmitProcess:
             else:
                 wait_time = abs(wait)
 
+            sleep(wait_time)
             while len(self.unfinished_jobs_in_dir(self.directory)) != 0:
                 # print(self.unfinished_jobs_in_dir(self.directory))
                 sleep(wait_time)

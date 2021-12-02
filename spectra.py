@@ -1085,7 +1085,7 @@ class Frequency(Signals):
                 nmodes = len(line.split()) - 1
 
             elif line.strip().startswith("Freq"):
-                freqs = [float(x) for x in line.split()[2:]]
+                freqs = [-1 * float(x.strip("i")) if x.endswith("i") else float(x) for x in line.split()[2:]]
                 for freq in freqs:
                     self.data.append(HarmonicVibration(float(freq)))
 
