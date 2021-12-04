@@ -321,7 +321,7 @@ class Geometry:
             atom.connected.add(start_atoms[0])
             atom.element = "B"
             atom.reset()
-        geom = cls(start_atoms, refresh_connected=False)
+        geom = cls(start_atoms, refresh_connected=False, refresh_ranks=False)
 
         # we'll need to determine the formula of the requested complex
         # monodentate ligands are a, b, etc
@@ -808,11 +808,9 @@ class Geometry:
             name = self.name
         if comment is None:
             comment = self.comment
-        atoms = self._fix_connectivity(atoms)
+        atoms = self._fix_connectivity(atoms, copy=copy_atoms)
         if hasattr(self, "components") and self.components is not None and comment is None:
             self.fix_comment()
-        if copy_atoms:
-            return Geometry([a.copy() for a in atoms], name, comment=comment)
         return Geometry(atoms, name, comment=comment)
 
     def parse_comment(self):
@@ -1314,7 +1312,7 @@ class Geometry:
         for a in targets:
             if targets is not self.atoms:
                 for b in a.connected:
-                    b.connected -= a
+                    b.connected.discard(a)
             a.connected = set([])
 
         D = distance_matrix(
@@ -1325,8 +1323,7 @@ class Geometry:
         for i, a in enumerate(targets):
             for j, b in enumerate(targets[:i]):
                 if a.dist_is_connected(b, D[i, j], threshold):
-                    a.connected.add(b)
-                    b.connected.add(a)
+                    a.add_bond_to(b)
 
     def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
@@ -4855,8 +4852,11 @@ class Geometry:
                 # we'll remove any centers that are on the path between the key atoms
                 # also, sometimes the ligand atoms don't have the center in their connected
                 # attribute, even though the center has the ligand atoms in its
-                # connected attribute, so refresh_connected
-                self.refresh_connected(targets=self.center)
+                # connected attribute
+                for center in self.center:
+                    for key in old_keys:
+                        if center.is_connected(key):
+                            center.add_bond_to(key)
                 # print("old keys:", old_keys)
                 # print("old ligand:\n", old_ligand)
                 stop = [
