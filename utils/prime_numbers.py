@@ -37,6 +37,8 @@ class Primes:
             with open(Primes.cache) as f:
                 for line in f:
                     prime = int(line.strip())
+                    if prime in cls.primes:
+                        continue
                     cls.primes += [prime]
                     yield prime
             f.close()
@@ -77,6 +79,7 @@ class Primes:
     def list(cls, n):
         """list the first n prime numbers"""
         rv = [prime for i, prime in enumerate(cls.primes) if i < n]
+        new = False
         if len(cls.primes) < n:
             if path.exists(cls.cache):
                 cur_primes = len(cls.primes)
@@ -85,7 +88,8 @@ class Primes:
                     for line in f:
                         prime = int(line)
                         k += 1
-                        if k + 2 > cur_primes - 2:
+                        if new or prime not in cls.primes:
+                            new = True
                             cls.primes += [prime]
                             rv += [prime]
                             if len(cls.primes) >= n:
