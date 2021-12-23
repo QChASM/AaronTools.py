@@ -213,7 +213,7 @@ class FileWriter:
             elif style.lower() == "sqm":
                 style = "sqmin"
             elif style.lower() == "qchem":
-                style = "inq"
+                style = "inp"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
