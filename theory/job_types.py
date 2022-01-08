@@ -520,30 +520,30 @@ class OptimizationJob(JobType):
                     raise NotImplementedError(
                         "%s constraints cannot be generated for ORCA" % key
                     )
-            out[ORCA_BLOCKS] = {"geom": ["Constraints"]}
+            geom_block = "Constraints\n"
             if "atoms" in self.constraints:
                 for constraint in self.constraints["atoms"]:
                     atom1 = self.geometry.find(constraint)[0]
                     ndx1 = self.geometry.atoms.index(atom1)
-                    out_str = "    {C %2i C}" % (ndx1)
-                    out[ORCA_BLOCKS]["geom"].append(out_str)
+                    out_str = "        {C %2i C}\n" % (ndx1)
+                    geom_block += out_str
 
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
-                    out_str = "    {B %2i %2i C}" % (ndx1, ndx2)
-                    out[ORCA_BLOCKS]["geom"].append(out_str)
-
+                    out_str = "        {B %2i %2i C}\n" % (ndx1, ndx2)
+                    geom_block += out_str
+    
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
                     atom1, atom2, atom3 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
-                    out_str = "    {A %2i %2i %2i C}" % (ndx1, ndx2, ndx3)
-                    out[ORCA_BLOCKS]["geom"].append(out_str)
+                    out_str = "        {A %2i %2i %2i C}\n" % (ndx1, ndx2, ndx3)
+                    geom_block += out_str
 
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
@@ -552,15 +552,16 @@ class OptimizationJob(JobType):
                     ndx2 = self.geometry.atoms.index(atom2)
                     ndx3 = self.geometry.atoms.index(atom3)
                     ndx4 = self.geometry.atoms.index(atom4)
-                    out_str = "    {D %2i %2i %2i %2i C}" % (
+                    out_str = "        {D %2i %2i %2i %2i C}\n" % (
                         ndx1,
                         ndx2,
                         ndx3,
                         ndx4,
                     )
-                    out[ORCA_BLOCKS]["geom"].append(out_str)
+                    geom_block += out_str
 
-            out[ORCA_BLOCKS]["geom"].append("end")
+            geom_block += "    end"
+            out[ORCA_BLOCKS] = {"geom": [geom_block]}
 
         return out
 
