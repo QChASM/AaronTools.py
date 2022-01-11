@@ -803,6 +803,40 @@ class FileReader:
             elif self.file_type == "qout":
                 self.read_qchem_out(f, get_all, just_geom)
 
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        return self.other[key]
+    
+    def __setitem__(self, key, value):
+        if hasattr(self, key):
+            setattr(self, key, value)
+        self.other[key] = value
+
+    def __contains__(self, key):
+        if hasattr(self, key):
+            return True
+        return key in self.other
+
+    def __delitem__(self, key):
+        if hasattr(self, key):
+            del self.key
+        if key in self.other:
+            del self.other["key"]
+    
+    def keys(self):
+        attr_keys = set(self.__dict__.keys())
+        other_keys = set(self.other.keys())
+        return tuple(attr_keys.union(other_keys))
+    
+    def values(self):
+        keys = self.keys()
+        return tuple(self[key] for key in keys)
+    
+    def items(self):
+        keys = self.keys()
+        return tuple((key, self[key]) for key in keys)
+    
     def read_file(
         self, get_all=False, just_geom=True,
         freq_name=None, conf_name=None, nbo_name=None,
