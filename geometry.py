@@ -5353,8 +5353,9 @@ class Geometry:
         tmp=[]
         for a in self.atoms:
             if "LAH" in str(a.tags):
-                c = OniomAtom(element="H", coords = a.coords, layer="H")
+                c = OniomAtom.from_atom(a)
                 c.add_tag("LA " + a.name)
+                c.element="H"
                 tmp.append(c)
         self = self + tmp
         return self
@@ -5561,6 +5562,7 @@ class Geometry:
             matches = OfType(atomtype).get_matching_atoms(atoms,self)
             for match in matches:
                 untyped_atoms.remove(match)
+#                oniomatom = OniomAtom(match)
                 try:
                     oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, layer=match.layer, flag=match.flag, tags=match.tags, charge=match.charge)
                 except AttributeError:
@@ -5589,6 +5591,135 @@ class Geometry:
 
         return typed_geom
 
+
+    def define_layer(self, layer, reference, distance, bond_based=False, expand=True):
+        """
+        define an ONIOM layer based on reference information
+        reference can be list(Atom), list(list(float)), list(float), or str representing a layer
+        if defining a 3 layer job, start at High layer (reaction center)
+        """
+
+        def in_ring(a1, a2):
+            #determine if the bond between two atoms is in a ring
+            for connected in a1.connected:
+                if connected == a2:
+                    continue
+                else:
+                    try:
+                        path = self.shortest_path(a2, connected, avoid=a1)
+                        return True
+                    except LookupError:
+                        continue
+            return False
+
+        if isinstance(reference, list):
+            if isinstance(reference[0], float):
+                layer_atoms = WithinRadiusFromPoint(reference, distance).get_matching_atoms(self.atoms)
+            elif isinstance(reference[0], list):
+                if isinstance(reference[0][0], float):
+                    layer_atoms = []
+                    for point in reference:
+                        new_atoms = WithinRadiusFromPoint(point, distance).get_matching_atoms(self.atoms)
+                        for new_atom in new_atoms:
+                            if new_atom not in layer_atoms:
+                                #new_atom.layer == layer.upper()
+                                layer_atoms += [new_atom]
+            elif isinstance(reference[0], Atom):
+                layer_atoms = []
+                for atom in reference:
+                    if bond_based == False:
+                        new_atoms = WithinRadiusFromAtom(atom,distance).get_matching_atoms(self.atoms)
+                    elif bond_based == True:
+                        new_atoms = WithinBondsOf(atom, distance).get_matching_atoms(self.atoms)
+                    for new_atom in new_atoms:
+                        if new_atom not in layer_atoms:
+                            #new_atom.layer == layer.upper()
+                            layer_atoms += [new_atom]
+        elif isinstance(reference, Atom):
+            if bond_based == False:
+                layer_atoms = WithinRadiusFromAtom(reference, distance).get_matching_atoms(self.atoms)
+            elif bond_based == True:
+                layer_atoms = WithinBondsOf(reference,distance).get_matching_atoms(self.atoms)
+            #for atom in layer_atoms:
+            #    atom.layer == layer.upper()
+
+        elif isinstance(reference, str):
+            if reference.upper() in ("H", "M", "L"):
+                ref_atoms = []
+                for atom in self.atoms:
+                    if atom.layer == reference.upper():
+                        ref_atoms += atom 
+                layer_atoms = []
+                for atom in ref_atoms:
+                    if bond_based == False:
+                        new_atoms = WithinRadiusFromAtom(atom,distance).get_matching_atoms(self.atoms)
+                    elif bond_based == True:
+                        new_atoms = WithinBondsOf(atom, distance).get_matching_atoms(self.atoms)
+                    for new_atom in new_atoms:
+                        if new_atom not in layer_atoms:
+                            #new_atom.layer == layer.upper()
+                            layer_atoms += [new_atom]
+
+        dummy = OniomAtom(element="H", coords = np.array((0,0,0)), layer = layer)
+        for atom in layer_atoms:
+            if has_attr(atom, "layer") and atom > dummy:
+                layer_atoms.remove(atom)
+
+        boundary_atoms = []
+        unchecked_atoms = layer_atoms
+        for atom in unchecked_atoms:
+            for connected in atom.connected:
+                if connected in layer_atoms:
+                    continue
+                else:
+                    boundary_atoms += [atom]
+                    break
+        for boundary_atom in boundary_atoms:
+            for connected in boundary_atom.connected:
+                if connected.layer != boundary_atom.layer:
+                    if connected.element == "H":
+                        connected.layer = layer.upper()
+                        layer_atoms += [connected]
+                    elif connected.element == "C" and bounday_atom.element == "C":
+                        bond_order = BondOrder.get(connected, boundary_atom)
+                        if bond_order > 1:
+                            if expand==True:
+                                connected.layer = layer.upper()
+                                boundary_atoms += [connected]
+                            elif expand == False:
+                                layer_atoms.remove(boundary_atom)
+                                for connected in boundary_atom.connected:
+                                    if connected.element == "H" and connected.layer == layer.upper():
+                                        layer_atoms.remove(connected)
+                                    if connected in layer_atoms and connected not in boundary_atoms:
+                                        boundary_atoms += [connected]
+                        elif bond_order == 1:
+                            if in_ring(connected, boundary_atom):
+                                boundary_atoms.remove(boundary_atom)
+                                for connected in boundary_atom.connected:
+                                    if connected in layer_atoms:
+                                        layer_atoms.remove(connected)
+                                        boundary_atoms += [connected]
+                            elif not in_ring(connected, boundary_atom):							
+                                connected.add_tag("LAH bonded to %s" % boundary_atom)
+                    elif connected.element != "H" and connected.element != boundary_element:
+                        num_h = 0
+                        for surrounding in connected.connected:
+                            if surrounding.element == "H":
+                                num_h += 1
+                        if num_h + 1 == len(connected.connected):
+                            boundary_atoms += [connected]
+                        elif num_h +1 != len(connected.connected):
+                            if expand==True:
+                                connected.layer = layer.upper()
+                                boundary_atoms += [connected]
+                            elif expand == False:
+                                layer_atoms.remove(boundary_atom)
+                                for connected in boundary_atom.connected:
+                                    if connected.element == "H" and connected.layer == layer.upper():
+                                        layer_atoms.remove(connected)
+                                    if connected in layer_atoms and connected not in boundary_atoms:
+                                        boundary_atoms += [connected] 
 
     def change_chirality(self, target):
         """

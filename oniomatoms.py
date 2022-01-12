@@ -79,6 +79,27 @@ class OniomAtom(Atom):
             pass
         return s
 
+    def __gt__(self, other):
+        """ sorts by the layer the atom is in, with atoms in High layer considered greater than those in Medium and Low"""
+        if self.layer == "H" and other.layer != "H":
+            return True
+        elif self.layer == "M" and other.layer == "L":
+            return True
+        else:
+            return False
+
+    @classmethod
+    def from_atom(cls, atom):
+        """creates a new OniomAtom object from an existing Atom or OniomAtom object"""
+        if not isinstance(atom, Atom):
+            raise ValueError("atom must be an Atom or OniomAtom object")
+
+        oniom_atom = OniomAtom(element=atom.element, coords = atom.coords)
+        for attr in ("atomtype", "layer", "tags", "flag", "name", "charge"):
+            if hasattr(atom, attr):
+                oniom_atom.attr = atom.attr
+        return oniom_atom
+
     def get_layer(self):
         if self.layer not in ['H', 'L', 'M']:
             raise ValueError("Layer set to High. Incorrect symbol for layer: " + self.layer)
