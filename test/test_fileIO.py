@@ -20,6 +20,7 @@ class TestFileReader(TestWithTimer):
     gaussian_ccsd_file = os.path.join(prefix, "test_files", "ccsd.log")
     gaussian_ccsd_t_file = os.path.join(prefix, "test_files", "ccsd_t.log")
     gaussian_dhdft_file = os.path.join(prefix, "test_files", "b2plypd3.log")
+    ts = os.path.join(prefix, "test_files", "claisen_ts.xyz")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -273,7 +274,7 @@ O    -3.96579  -3.59263   0.00134
             job_type=[FrequencyJob(), OptimizationJob()],
         )
 
-        kw_dict = {QCHEM_COMMENT: ["comment line 1", "comment line 2"]}
+        kw_dict = {ORCA_COMMENT: ["comment line 1", "comment line 2"]}
 
         test = FileWriter.write_inp(
             geom, theory=theory, outfile=False, **kw_dict
@@ -281,6 +282,56 @@ O    -3.96579  -3.59263   0.00134
 
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
+
+
+        geom = Geometry(self.ts)
+
+        ref = """#test_orbits.out
+! M06L printMOs printBasis Opt def2-SVP
+%geom
+    Constraints
+        {B  1  3 C}
+        {B  2  5 C}
+    end
+end
+
+*xyz 0 1
+C     1.18854  -0.33581   0.91844
+C     0.03710  -0.11108   1.65753
+C     1.49009   0.55244  -0.12490
+C    -1.46714  -0.56175   0.16760
+C    -0.98763   0.39297  -0.71523
+O     0.13435   0.25731  -1.31132
+H     1.59783  -1.34820   0.87301
+H    -0.30053  -0.83534   2.40220
+H    -0.29409   0.91445   1.83715
+H     2.32894   0.33997  -0.78844
+H     1.29000   1.61694   0.01894
+H    -1.12283  -1.59079   0.06594
+H    -2.43357  -0.40885   0.65412
+H    -1.46740   1.39172  -0.71711
+*
+
+"""
+
+        theory = Theory(
+            charge=0,
+            multiplicity=1,
+            method="M06-L",
+            basis="def2-SVP",
+            job_type=[OptimizationJob(constraints={"bonds":[["2", "4"], ["3", "6"]]})],
+            comments=["test_orbits.out"],
+        )
+
+        kw_dict = {"simple": ["printMOs", "printBasis"]}
+
+        test = FileWriter.write_inp(
+            geom, theory=theory, outfile=False, **kw_dict
+        )
+
+        for line1, line2 in zip(test.splitlines(), ref.splitlines()):
+            self.assertEqual(line1.strip(), line2.strip())
+
 
     def test_write_in(self):
         """write psi4 input file"""

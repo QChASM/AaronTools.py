@@ -867,7 +867,7 @@ class Theory:
         if self.processors is not None:
             out_str += "%%NProcShared=%i\n" % self.processors
 
-        if self.memory is not None:
+        if self.memory:
             out_str += "%%Mem=%iGB\n" % self.memory
 
         if GAUSSIAN_PRE_ROUTE in other_kw_dict:
@@ -1461,7 +1461,7 @@ class Theory:
             out_str += "%%pal\n    nprocs %i\nend\n" % self.processors
 
             # orca memory is per core, so only specify it if processors are specified
-            if self.memory is not None:
+            if self.memory:
                 out_str += "%%MaxCore %i\n" % (
                     int(1000 * self.memory / self.processors)
                 )
@@ -1722,7 +1722,7 @@ class Theory:
             out_str += "set_num_threads(%i)\n" % self.processors
 
         # mem
-        if self.memory is not None:
+        if self.memory:
             out_str += "memory %i GB\n" % self.memory
 
         # before geometry options e.g. basis {} or building a dft method

@@ -327,7 +327,7 @@ class Geometry:
             start_atoms[0].connected.add(atom)
             atom.connected.add(start_atoms[0])
             atom.reset()
-        geom = cls(start_atoms, refresh_connected=False)
+        geom = cls(start_atoms, refresh_connected=False, refresh_ranks=False)
 
         # we'll need to determine the formula of the requested complex
         # monodentate ligands are a, b, etc
@@ -644,6 +644,14 @@ class Geometry:
         """
         return self.coordinates()
 
+    @coords.setter
+    def coords(self, value):
+        """
+        set coordinates
+        """
+        for a, c in zip(self.atoms, value):
+            a.coords = np.array(c, dtype=float)
+
     def coordinates(self, atoms=None):
         """
         returns N x 3 coordinate matrix for requested atoms
@@ -815,11 +823,9 @@ class Geometry:
             name = self.name
         if comment is None:
             comment = self.comment
-        atoms = self._fix_connectivity(atoms)
+        atoms = self._fix_connectivity(atoms, copy=copy_atoms)
         if hasattr(self, "components") and self.components is not None and comment is None:
             self.fix_comment()
-        if copy_atoms:
-            return Geometry([a.copy() for a in atoms], name, comment=comment)
         return Geometry(atoms, name, comment=comment)
 
     def parse_comment(self):
@@ -1348,7 +1354,7 @@ class Geometry:
         for a in targets:
             if targets is not self.atoms:
                 for b in a.connected:
-                    b.connected -= a
+                    b.connected.discard(a)
             a.connected = set([])
 
         D = distance_matrix(
@@ -1359,8 +1365,7 @@ class Geometry:
         for i, a in enumerate(targets):
             for j, b in enumerate(targets[:i]):
                 if a.dist_is_connected(b, D[i, j], threshold):
-                    a.connected.add(b)
-                    b.connected.add(a)
+                    a.add_bond_to(b)
 
     def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
@@ -1492,10 +1497,23 @@ class Geometry:
             # partitions key is product of rank and neighbors' rank
             # use prime numbers for product so products are distinct
             # eg: primes[2]*primes[2] != primes[1]*primes[4]
+            
+            # some high-symmetry molecules can get a rank greater than
+            # the number of atoms
+            # I've had this issue with adamantane (Td)
+            # this is a lazy fix that reduces the rank of some atoms by 1
+            while max(ranks) >= len(ranks):
+                for i in range(1, max(ranks) + 1):
+                    if ranks.count(i - 1) == 0:
+                        for j in range(1, max(ranks)):
+                            if ranks[j] >= i:
+                                ranks[j] -= 1
+
             partitions = {}
             for i, a in enumerate(atoms):
                 key = primes[ranks[i]]
                 for b in a.connected.intersection(atoms_set):
+                    # print(indices[b], ranks[indices[b]])
                     key *= primes[ranks[indices[b]]]
                 partitions.setdefault(ranks[i], {})
                 partitions[ranks[i]].setdefault(key, [])
@@ -1659,7 +1677,7 @@ class Geometry:
             new_rank += len(idx_list)
 
         # re-rank using neighbors until no change
-        for i in range(500):
+        for i in range(0, min(500, len(ranks))):
             new_ranks = neighbors_rank(ranks)
             if ranks == new_ranks:
                 break
@@ -1672,7 +1690,7 @@ class Geometry:
         # break ties using spatial positions
         # AND update neighbors until no change
         if break_ties:
-            for i in range(500):
+            for i in range(0, min(500, len(ranks))):
                 new_ranks = tie_break(ranks)
                 new_ranks = neighbors_rank(new_ranks)
                 if ranks == new_ranks:
@@ -3021,7 +3039,7 @@ class Geometry:
                 L = test_L
                 vector["L"] = L_vec
         
-        num_pts = 360
+        num_pts = 240
         if max_error is not None:
             # max error estimate is:
             # (sum of atom radii that are tangent to B1 face) *
@@ -3072,42 +3090,110 @@ class Geometry:
                 radius_list[i] = np.sqrt(radius_list[i] ** 2 - diff ** 2)
                 coords[i] -= diff * L_axis
 
-        for i, (rad, coord) in enumerate(zip(radius_list, coords)):
-            if rad < 0:
-                continue
-            # B1-4 stuff - we come back to this later
-            test_v = coord - start.coords
-            new_coords = np.dot(test_v, basis)
-            # in plane coordinates - z-axis is L-axis, which
-            # we don't care about for B1
-            ip_coords = new_coords[0:2]
-            ndx = np.append(ndx, (i * std_ndx))
-            grid = rad * b1_points
-            grid += ip_coords
-            points = np.append(points, grid, axis=0)
-            # B5
-            # find distance along L-axis, then subtract this from vector from
-            # vector from molecule to this atom to get the B5 vector
-            # add the atom's radius to get the full B5
-            b = np.dot(test_v, L_axis)
-            test_B5_v = test_v - (b * L_axis)
-            test_B5 = np.linalg.norm(test_B5_v) + rad
-            if B5 is None or test_B5 > B5:
-                B5 = test_B5
-                start_x = coord - test_B5_v
-                if np.linalg.norm(test_B5_v) > 3 * np.finfo(float).eps:
-                    perp_vec = test_B5_v
-                else:
-                    # this atom might be along the L-axis, in which case use
-                    # any vector orthogonal to L-axis
-                    v_n = test_v / np.linalg.norm(test_v)
-                    perp_vec = utils.perp_vector(L_axis)
-                    perp_vec -= np.dot(v_n, perp_vec) * v_n
+        radius_list = np.array(radius_list)
+        # radii are negative if we don't want to consider them
+        # e.g. calculating parameters at a specific L value
+        # we only need to work with atoms with positive radii
+        # going forward
+        positive_radii = np.where(radius_list >= 0)
+        positive_radius_list = radius_list[positive_radii]
+        considered_coords = coords[positive_radii]
+        # vector from each atom to starting atom
+        if len(considered_coords) == 0:
+            if at_L is not None:
+                self.LOG.warning(
+                    "there are no atoms at %.2f along the L axis" % at_L
+                )
+                if return_vector:
+                    vector["B1"] = (vector["L"][1], vector["L"][1])
+                    vector["B2"] = (vector["L"][1], vector["L"][1])
+                    vector["B3"] = (vector["L"][1], vector["L"][1])
+                    vector["B4"] = (vector["L"][1], vector["L"][1])
+                    vector["B5"] = (vector["L"][1], vector["L"][1])
+                    return vector
+                params = {
+                    "L": L,
+                    "B1": 0,
+                    "B2": 0,
+                    "B3": 0,
+                    "B4": 0,
+                    "B5": 0,
+                }
+                return params
+            raise RuntimeError("there are no atoms with a non-zero radius")
+        test_v = considered_coords - start.coords
+        # project onto basis such that z is along L axis
+        # and x and y can be used to find B_n
+        new_coords = np.dot(test_v, basis)
+        ip_coords = new_coords[:, 0:2]
+        # construct an array of points around the circumference of 
+        # each atom's radius projected onto the xy plane
+        ndx = np.outer(positive_radii, std_ndx).reshape(-1)
+        points = np.outer(positive_radius_list, b1_points).reshape(
+            len(positive_radius_list) * num_pts, 2
+        )
+        block_ndx = np.outer(np.arange(0, len(positive_radius_list)), std_ndx).reshape(-1)
+        points += ip_coords[block_ndx]
+        # determine component of each atom-start vector that is 
+        # parallel to L axis
+        # subtract this out and add the radii - the max. of these
+        # is the B5
+        para = np.sum(test_v * L_axis, axis=1)
+        test_B5_v = test_v - np.outer(para, L_axis)
+        test_B5 = np.linalg.norm(test_B5_v, axis=1) + positive_radius_list
+        b5_ndx = np.argmax(test_B5)
+        B5 = test_B5[b5_ndx]
+        start_x = considered_coords[b5_ndx] - test_B5_v[b5_ndx]
+        if np.linalg.norm(test_B5_v[b5_ndx]) > 3 * np.finfo(float).eps:
+            perp_vec = test_B5_v[b5_ndx]
+        else:
+            # if the atom is along the L-axis, we can use any vector
+            # orthogonal to L-axis
+            # this is more stable
+            v_n = test_v[b5_ndx] / np.linalg.norm(test_v[b5_ndx])
+            perp_vec = utils.perp_vector(L_axis)
+            perp_vec -= np.dot(v_n, perp_vec) * v_n
+        
+        end = start_x + B5 * (perp_vec / np.linalg.norm(perp_vec))
+        vector["B5"] = (start_x, end)
 
-                end = start_x + test_B5 * (perp_vec / np.linalg.norm(perp_vec))
 
-                vector["B5"] = (start_x, end)
-
+        # some things I thought would make this run faster
+        # by reducing the number of points we give to
+        # ConvexHull, but it turns out doing these is slower
+        # leaving it here in case there's some really large
+        # thing that this somehow helps with
+        # 
+        # # we can remove points that are facing the L axis
+        # # these points will be on the interior of the convex hull
+        # # this will speed up the convex hull
+        # 
+        # # also keep points on atoms that are basically on the
+        # # L axis for numerical precision reasons
+        # if not at_L:
+        #     v = ip_coords[block_ndx]
+        #     g = points - ip_coords[block_ndx]
+        #     mask = np.sum(v * g, axis=1) >= 0
+        #     inv_mask = np.invert(mask)
+        #     d = np.linalg.norm(ip_coords, axis=1) < positive_radius_list
+        #     mask[inv_mask] = d[block_ndx[inv_mask]]
+        #     points = points[mask]
+        #     block_ndx = block_ndx[mask]
+        #     ndx = ndx[mask]
+        # 
+        # # Laguerre-Voronoi tesselation sort of
+        # # this will basically just leave the points that are
+        # # not covered up by another atom's VDW radius
+        # # if d^2 - r^2 for an atom's point is smallest for
+        # # that atom, keep the point
+        # # otherwise, discard
+        # d = np.sum((points[:, np.newaxis, :] - ip_coords[np.newaxis, :, :]) ** 2, axis=-1)
+        # d = np.transpose(d - positive_radius_list ** 2)
+        # mask = np.equal(np.argmin(d, axis=0), block_ndx)
+        # points = points[mask]
+        # block_ndx = block_ndx[mask]
+        # ndx = ndx[mask]
+        
         hull = ConvexHull(points)
 
         # import matplotlib.pyplot as plt
@@ -3138,13 +3224,7 @@ class Geometry:
         # go through each edge, find a vector perpendicular to the one
         # defined by the edge that passes through the origin
         # the length of the shortest of these vectors is B1
-        tangents = points[hull.vertices[1:]] - points[hull.vertices[:-1]]
-        tangents = np.append(
-            tangents,
-            [points[hull.vertices[-1]] - points[hull.vertices[0]]],
-            axis=0,
-        )
-
+        tangents = points[np.roll(hull.vertices, 1)] - points[hull.vertices]
         tangents = tangents / np.linalg.norm(tangents, axis=1)[:, None]
         paras = np.sum(
             tangents * points[hull.vertices], axis=1
@@ -3153,7 +3233,7 @@ class Geometry:
         norm_mags = np.linalg.norm(norms, axis=1)
         B1_ndx = np.argmin(norm_mags)
         B1 = norm_mags[B1_ndx]
-        b1_atom_coords = coords[ndx[hull.vertices[B1_ndx]]]
+        b1_atom_coords = considered_coords[block_ndx[hull.vertices[B1_ndx]]]
         test_v = b1_atom_coords - start.coords
         test_B1_v = test_v - (np.dot(test_v, L_axis) * L_axis)
         start_x = b1_atom_coords - test_B1_v
@@ -3174,9 +3254,7 @@ class Geometry:
         Bperp2 = None
         perp_vec1 = None
         perp_vec2 = None
-        for rad, coord in zip(radius_list, coords):
-            if rad < 0:
-                continue
+        for rad, coord in zip(positive_radius_list, considered_coords):
             test_v = coord - start.coords
             b = np.dot(test_v, L_axis)
             test_B_v = test_v - (b * L_axis)
@@ -4881,8 +4959,11 @@ class Geometry:
                 # we'll remove any centers that are on the path between the key atoms
                 # also, sometimes the ligand atoms don't have the center in their connected
                 # attribute, even though the center has the ligand atoms in its
-                # connected attribute, so refresh_connected
-                self.refresh_connected(targets=self.center)
+                # connected attribute
+                for center in self.center:
+                    for key in old_keys:
+                        if center.is_connected(key):
+                            center.add_bond_to(key)
                 # print("old keys:", old_keys)
                 # print("old ligand:\n", old_ligand)
                 stop = [

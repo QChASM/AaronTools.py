@@ -359,7 +359,7 @@ class Basis:
 
         # pople basis sets don't have commas
         # e.g. 6-31G(d,p) -> 6-31G(d_p)
-        if name.startswith("6-31") or name.startswith("3-21"):
+        if name.startswith("6-31") or name.startswith("3-21") or name.lower().startswith("sto"):
             name = name.replace(",", "_")
 
         return name
@@ -1095,8 +1095,6 @@ class BasisSet:
 
         if self.basis is not None:
             for basis in self.basis:
-                if basis.user_defined:
-                    continue
                 aux_type = basis.aux_type
                 basis_name = basis.get_psi4(basis.name)
                 # JK and RI will try to guess what basis set is being requested
@@ -1105,7 +1103,7 @@ class BasisSet:
                 if isinstance(aux_type, str):
                     aux_type = aux_type.upper()
                 else:
-                    aux_type = "basis"
+                    aux_type = "BASIS"
                 if aux_type == "JK":
                     aux_type = "df_basis_scf"
                     basis_name += "-jkfit"
@@ -1136,12 +1134,13 @@ class BasisSet:
                     else:
                         basis_name += "-ri"
 
-                warning = basis.sanity_check_basis(basis_name, "psi4")
-                if warning:
-                    warnings.append(warning)
+                if not basis.user_defined:
+                    warning = basis.sanity_check_basis(basis_name, "psi4")
+                    if warning:
+                        warnings.append(warning)
 
                 if aux_type not in out_str:
-                    out_str[aux_type] = "%s {\n" % aux_type
+                    out_str[aux_type] = "%s {\n" % aux_type.lower()
                     out_str[aux_type] += "    assign    %s\n" % basis_name
 
                 else:
@@ -1155,18 +1154,12 @@ class BasisSet:
                     if basis.user_defined:
                         aux_type = basis.aux_type
                         if not aux_type:
-                            aux_type = ""
+                            aux_type = "BASIS"
                         aux_type = aux_type.upper()
                         if os.path.exists(basis.user_defined):
                             if aux_type not in out_str:
-                                if not aux_type:
-                                    out_str[aux_type] = "basis {\n"
-                                elif aux_type == "JK" and sapt:
-                                    out_str[aux_type] = "df_basis_sapt {\n"
-                                elif aux_type == "JK":
-                                    out_str[aux_type] = "df_basis_scf {\n"
-                                elif aux_type == "RI":
-                                    out_str[aux_type] = "df_basis_%s {\n"
+                                out_str[aux_type] = "%s {\n" % aux_type.lower()
+
                             out_str[aux_type] += "\n[%s]\n" % basis.name
                             with open(basis.user_defined, "r") as f:
                                 lines = [

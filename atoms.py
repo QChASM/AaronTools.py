@@ -385,6 +385,11 @@ class Atom:
         cutoff = self._radii + other._radii + tolerance
         return dist_to_other < cutoff
 
+    def add_bond_to(self, other):
+        """add self and other to eachother's connected attribute"""
+        self.connected.add(other)
+        other.connected.add(self)
+
     def bond(self, other):
         """returns the vector self-->other"""
         if isinstance(other, np.ndarray):
