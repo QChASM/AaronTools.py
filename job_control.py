@@ -278,6 +278,12 @@ class SubmitProcess:
         sets job template to filename
         AARONLIB directories are searched
         """
+        if len(filename.splitlines()) > 1:
+            # filename is actually the contents of a template file
+            self.template = Template(filename)
+            return
+
+        # default templates are loaded from Aaron_Lib
         environment = Environment(loader=FileSystemLoader(AARONLIB))
         if filename is None:
             if self.exe == "com" or self.exe == "gjf":
