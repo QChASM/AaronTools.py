@@ -1,5 +1,6 @@
 """For storing, manipulating, and measuring molecular structures"""
 import itertools
+import os
 import re
 import ssl
 from collections import deque
@@ -12,11 +13,11 @@ from scipy.spatial import distance_matrix
 import AaronTools
 import AaronTools.utils.utils as utils
 from AaronTools import addlogger
-from AaronTools.atoms import Atom
+from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
 from AaronTools.const import BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
 from AaronTools.fileIO import FileReader, FileWriter
-from AaronTools.finders import Finder, OfType
+from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom 
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
 
@@ -5673,17 +5674,30 @@ class Geometry:
         return typed_geom
 
 
-    def define_layer(self, layer, reference, distance, bond_based=False, expand=True):
+    def define_layer(self, layer, reference, distance, bond_based=False, expand=True, force=False):
         """
         define an ONIOM layer based on reference information
-        reference can be list(Atom), list(list(float)), list(float), or str representing a layer
+        reference can be list(Atom), list(list(float)), list(float), or str representing a layer (H, M, L, !H, etc)
         if defining a 3 layer job, start at High layer (reaction center)
         """
+
+        old_connectivity = []
+        ndx = {atom: i for i, atom in enumerate(self.atoms)}
+        
+        for i, atom in enumerate(self.atoms):
+            old_connectivity.append([])
+            for connected in atom.connected:
+                old_connectivity[-1].append(ndx[connected])
+            if not isinstance(atom, OniomAtom):
+                self.atoms[i] = OniomAtom(element = atom.element, coords=atom.coords, name=atom.name, tags = atom.tags, charge = "")
+        for atom, connectivity in zip(self.atoms, old_connectivity):
+            for i in connectivity:
+                atom.connected.add(self.atoms[i])
 
         def in_ring(a1, a2):
             #determine if the bond between two atoms is in a ring
             for connected in a1.connected:
-                if connected == a2:
+                if connected == a2 or connected.element=="H":
                     continue
                 else:
                     try:
@@ -5692,9 +5706,8 @@ class Geometry:
                     except LookupError:
                         continue
             return False
-
         if isinstance(reference, list):
-            if isinstance(reference[0], float):
+            if isinstance(reference[0], float) or isinstance(reference[0], int):
                 layer_atoms = WithinRadiusFromPoint(reference, distance).get_matching_atoms(self.atoms)
             elif isinstance(reference[0], list):
                 if isinstance(reference[0][0], float):
@@ -5725,6 +5738,15 @@ class Geometry:
             #    atom.layer == layer.upper()
 
         elif isinstance(reference, str):
+            if reference.startswith("!"):
+                if reference[1].upper() in ("H", "M", "L"):
+                    not_layer = reference[1].upper()
+                layer_atoms = []
+                for atom in self.atoms:
+                    if atom.layer != not_layer:
+                        layer_atoms += [atom]
+                        atom.layer = layer.upper()
+                return
             if reference.upper() in ("H", "M", "L"):
                 ref_atoms = []
                 for atom in self.atoms:
@@ -5743,7 +5765,7 @@ class Geometry:
 
         dummy = OniomAtom(element="H", coords = np.array((0,0,0)), layer = layer)
         for atom in layer_atoms:
-            if has_attr(atom, "layer") and atom > dummy:
+            if hasattr(atom, "layer") and atom > dummy:
                 layer_atoms.remove(atom)
 
         boundary_atoms = []
@@ -5751,56 +5773,105 @@ class Geometry:
         for atom in unchecked_atoms:
             for connected in atom.connected:
                 if connected in layer_atoms:
-                    continue
+                    pass
                 else:
                     boundary_atoms += [atom]
                     break
         for boundary_atom in boundary_atoms:
-            for connected in boundary_atom.connected:
-                if connected.layer != boundary_atom.layer:
-                    if connected.element == "H":
-                        connected.layer = layer.upper()
-                        layer_atoms += [connected]
-                    elif connected.element == "C" and bounday_atom.element == "C":
-                        bond_order = BondOrder.get(connected, boundary_atom)
-                        if bond_order > 1:
-                            if expand==True:
-                                connected.layer = layer.upper()
-                                boundary_atoms += [connected]
-                            elif expand == False:
-                                layer_atoms.remove(boundary_atom)
-                                for connected in boundary_atom.connected:
-                                    if connected.element == "H" and connected.layer == layer.upper():
-                                        layer_atoms.remove(connected)
-                                    if connected in layer_atoms and connected not in boundary_atoms:
-                                        boundary_atoms += [connected]
-                        elif bond_order == 1:
-                            if in_ring(connected, boundary_atom):
-                                boundary_atoms.remove(boundary_atom)
-                                for connected in boundary_atom.connected:
-                                    if connected in layer_atoms:
-                                        layer_atoms.remove(connected)
-                                        boundary_atoms += [connected]
-                            elif not in_ring(connected, boundary_atom):							
+            new_layer_atoms = []
+            new_boundary_atoms = []
+            if boundary_atom.element == "H":
+                if force==True:
+                    for connected in boundary_atom.connected:
+                        connected.add_tag("LAH bonded to %s" % boundary_atom)
+                    print("Warning: atom %s set as link atom to hydrogen atom %s" % connected.name % boundary_atom.name)
+                else:
+                    boundary_atoms.remove(boundary_atom)
+                    layer_atoms.remove(boundary_atom)
+                    #boundary_atoms = boundary_atoms + boundary_atom.connected
+            else:
+                for connected in boundary_atom.connected:
+                    if connected not in layer_atoms:
+                        if connected.element == "H" and expand == True and force == False:
+                            new_layer_atoms += [connected]
+                        elif connected.element == "H" and any((expand == False, force == True)):
+                            connected.add_tag("LAH bonded to %s" % boundary_atom)
+                            print("Warning: atom %s set as link atom host is hydrogen atom" % connected.name)
+                        elif connected.element == "C" and boundary_atom.element == "C":
+                            bond_order = BondOrder.get(connected, boundary_atom)
+                            if bond_order > 1:
+                                if any((expand==True, expand==False)) and force==True:
+                                    print("Warning: layer boundary cuts across bond of order > 1 between atoms %s and %s" % boundary_atom.name % connected.name)
+                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                elif expand==True and force==False:
+                                    new_boundary_atoms += [connected]
+                                    new_layer_atoms += [connected]
+                                elif expand == False and force==False:
+                                    layer_atoms.remove(boundary_atom)
+                                    for connected in boundary_atom.connected:
+                                        if connected.element == "H" and connected in layer_atoms:
+                                            layer_atoms.remove(connected)
+                                        if connected in layer_atoms and connected not in boundary_atoms and connected.element != "H":
+                                            boundary_atoms += [connected]
+                                    new_layer_atoms = []
+                                    new_boundary_atoms = []
+                                    break
+                            elif bond_order == 1:
+                                if in_ring(connected, boundary_atom) and force==True:
+                                    print("Warning: layer boundary cuts across bond in a ring between atoms %s and %s" % boundary_atom.name % connected.name)
+                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                elif in_ring(connected, boundary_atom) and force==False:
+                                    boundary_atoms.remove(boundary_atom)
+                                    if expand == False:
+                                        layer_atoms.remove(boundary_atom)
+                                        for connected in boundary_atom.connected:
+                                            if connected in layer_atoms and connected not in boundary_atoms and connected.element != "H":
+                                                boundary_atoms += [connected]
+                                            if connected in layer_atoms and connected.element == "H":
+                                                layer_atoms.remove(connected)
+                                        new_layer_atoms = []
+                                        new_boundary_atoms = []
+                                        break
+                                    if expand == True:
+                                        new_layer_atoms += [connected]
+                                        new_boundary_atoms += [connected]
+                                elif not in_ring(connected, boundary_atom):							
+                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                        elif connected.element != "H" and connected.element != boundary_atom.element:
+                            if force == True:
                                 connected.add_tag("LAH bonded to %s" % boundary_atom)
-                    elif connected.element != "H" and connected.element != boundary_element:
-                        num_h = 0
-                        for surrounding in connected.connected:
-                            if surrounding.element == "H":
-                                num_h += 1
-                        if num_h + 1 == len(connected.connected):
-                            boundary_atoms += [connected]
-                        elif num_h +1 != len(connected.connected):
-                            if expand==True:
-                                connected.layer = layer.upper()
-                                boundary_atoms += [connected]
-                            elif expand == False:
+                                if boundary_atom.element == "C":
+                                    print("Warning: layer boundary cuts between bond between carbon atom %s and heteroatom %s" % boundary_atom.name % connected.name)
+                                elif connected.element != "C":
+                                    print("Warning: layer boundary cuts between bond between carbon atom %s and heteroatom %s" % connected.name % boundary_atom.name)
+                                elif connected.element != "C" and boundary_atom.element != "C":
+                                    print("Warning: layer boundary cuts between bond between heteroatom %s and heteroatom %s" % connected.name % boundary_atom.name)
+                            elif force == False and expand == True:
+                                num_h = 0
+                                hydrogens = []
+                                for surrounding in connected.connected:
+                                    if surrounding.element == "H":
+                                        num_h += 1
+                                        hydrogens += [surrounding]
+                                new_layer_atoms += [connected]
+                                new_layer_atoms += hydrogens
+                                if num_h +1 != len(connected.connected):
+                                    new_boundary_atoms += [connected]
+                            elif force == False and expand == False:
                                 layer_atoms.remove(boundary_atom)
                                 for connected in boundary_atom.connected:
-                                    if connected.element == "H" and connected.layer == layer.upper():
+                                    if connected.element == "H" and connected in layer_atoms:
                                         layer_atoms.remove(connected)
-                                    if connected in layer_atoms and connected not in boundary_atoms:
-                                        boundary_atoms += [connected] 
+                                    if connected.element != "H" and connected in layer_atoms and connected not in boundary_atoms:
+                                        boundary_atoms += [connected]
+                                new_layer_atoms = []
+                                new_boundary_atoms = []
+                                break
+            boundary_atoms += new_boundary_atoms
+            layer_atoms += new_layer_atoms
+
+        for atom in layer_atoms:
+            self.atoms[int(atom.name)-1].layer = layer.upper()
 
     def change_chirality(self, target):
         """
@@ -5865,3 +5936,92 @@ class Geometry:
             )
         return targets
 
+    def detect_solvent(self, solvent=""):
+        """detects solvent based on either an input xyz or a solvent name in solvent library"""
+        if isinstance(solvent, str):
+            if "xyz" not in solvent:
+                solv, x = Geometry(FileReader("/home/la48076/chem/ONIOM/AaronTools/Solvents/%s.xyz" % solvent)).reorder()
+                solv = Geometry(solv)
+            elif "xyz" in solvent:
+                solv, x = Geometry(FileReader(solvent)).reorder()
+                solv = Geometry(solv)
+        terminal_atoms = ["H", "F", "Cl", "Br", "I"]
+
+        def detect_mol(atom):
+            connected_list = [atm for atm in atom.connected]
+            molecule = []
+            molecule.append(atom)
+            complete = False
+            no_mol = False
+            while complete == False:
+                new_connected_list = []
+                for atom in connected_list:
+                    if atom not in molecule:
+                        molecule.append(atom)
+                        if atom.element not in terminal_atoms:
+                            for connected in atom.connected:
+                                if connected not in molecule:
+                                    new_connected_list += [connected]
+                                    molecule.append(connected)
+                if new_connected_list == []:
+                    complete = True
+                else:
+                    if len(molecule) > len(solv.atoms):
+                        no_mol = True
+                        complete=True
+                    else:
+                        connected_list = new_connected_list
+            if no_mol == True:
+                return False, molecule
+            elif no_mol == False:
+                if len(molecule) == len(solv.atoms):
+                    return True, molecule
+                else:
+                    return False, molecule
+
+        mol_list = []
+        checked_atoms = []
+        for atom in self.atoms:
+            if atom.element not in terminal_atoms and atom not in checked_atoms:
+                is_mol, mol = detect_mol(atom)
+                checked_atoms = checked_atoms+mol
+                if is_mol == True:
+                    mol = Geometry(mol)
+                    mol_list.append(mol)
+
+        solv_ndx = {atom: i for i, atom in enumerate(solv.atoms)}
+        solv_connectivity = []
+        for atom in solv.atoms:
+            solv_connectivity.append([])
+            for a in atom.connected:
+                solv_connectivity[-1].append(solv_ndx[a])
+                solv_connectivity[-1] = sorted(solv_connectivity[-1])
+#        solv_elements = []
+#        for atom in solv.atoms:
+#            solv_elements += atom.element
+
+#        from collections import Counter
+#        n_solv_elements = Counter(solv_elements)
+
+        vetted_mols = []
+
+        for candidate in mol_list:
+            candidate_elems = []
+            for c in candidate.atoms:
+                candidate_elems += c.element
+#            if n_solv_elements == Counter(candidate_elems):
+#            if sorted(solv.elements) == sorted(candidate.elements):
+            if solv.element_counts() == candidate.element_counts():
+                cand, x = candidate.reorder()
+                cand = Geometry(cand)
+                cand_ndx = {atom: i for i, atom in enumerate(cand.atoms)}
+                cand_connectivity = []
+                for atom in cand.atoms:
+                    cand_connectivity.append([])
+                    for a in atom.connected:
+                        cand_connectivity[-1].append(cand_ndx[a])
+                        cand_connectivity[-1] = sorted(cand_connectivity[-1])
+                if cand_connectivity == solv_connectivity:
+                    vetted_mols += [cand]
+
+        return vetted_mols

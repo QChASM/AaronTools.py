@@ -3,11 +3,19 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ, ATOM_TYPES
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge=""):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
+        if atom != None and type(atom) == Atom:
+            self.element = atom.element
+            self.coords = atom.coords
+            self.flag = atom.flag
+            self.name = atom.name
+            self.tags = atom.tags
+            self.charge = atom.charge
+
         element = str(element).strip().capitalize()
-        if element == "":
+        if element == "" and atom == None:
             self.element = element
             self._radii = None
             self._connectivity = None
@@ -15,25 +23,50 @@ class OniomAtom(Atom):
             self.element = element
             self._set_radii()
             self._set_connectivity()
+        elif element == "" and atom != None:
+            pass
         else:
             raise ValueError("Unknown element detected:", element)
 
-        self.coords = np.array(coords, dtype=float)
-        self.flag = bool(flag)
-        self.name = str(name).strip()
+        if atom == None:
+            self.coords = np.array(coords, dtype=float)
+        if atom != None and coords != []:
+            self.coords = np.array(coords, dtype=float)
+        if atom == None:
+            self.flag = bool(flag)
+        if atom == None or (atom != None and name != ""):
+            self.name = str(name).strip()
         try:
             self.index = int(self.name)
         except ValueError:
             pass
 
-        if hasattr(tags, "__iter__") and not isinstance(tags, str):
+        if hasattr(tags, "__iter__") and not isinstance(tags, str) and atom == None:
             self.tags = tags
+        elif atom != None:
+            self.add_tag(tags)
         else:
             self.tags = set([tags])
 
-        self.connected = set([])
-        self.constraint = set([])
-        self._rank = None
+        if atom == None:
+            self.connected = set([])
+            self.constraint = set([])
+            self._rank = None
+
+        if atom != None:
+            if atom.connected == []:
+                self.connected = set([])
+            else:
+                self.connected = atom.connected
+            if atom.constraint == []:
+                self.constraint == set([])
+            else:
+                self.contraint = atom.constraint
+            if atom._rank == None:
+                self._rank = None
+            else:
+                self._rank = atom._rank 
+
         charge=str(charge).strip()
         if charge == "":
             pass
@@ -42,15 +75,22 @@ class OniomAtom(Atom):
 
         atomtype = str(atomtype).strip()
         layer=str(layer).strip().capitalize()
-        if layer == "":
+        if layer == "" and atom==None:
             self.layer=layer
+        elif layer == "" and atom != None:
+            if hasattr(atom, "layer"):
+                self.layer = atom.layer
+            else:
+                self.layer = layer
         elif layer not in ['H', 'L', 'M']:
             raise ValueError("Incorrect symbol for layer: " + layer)
         else:
             self.layer=layer
 
-        if atomtype == "":
+        if atomtype == "" and atom==None:
             self.atomtype=atomtype
+        elif atomtype == "" and atom != None:
+            pass
         elif atomtype not in ATOM_TYPES:
             self.atomtype=atomtype
             #raise ValueError("Atom type " + self.atomtype + " not in reference")

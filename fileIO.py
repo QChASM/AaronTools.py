@@ -34,6 +34,8 @@ read_types = [
     "out",
     "dat",
     "fchk",
+    "pdb",
+    "pdbqt",
     "crest",
     "xtb",
     "sqmout",
@@ -323,6 +325,7 @@ class FileWriter:
         fmt2 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f}\n"
         fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s}\n"
         fmt4 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
+        fmt5 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} \n"
         s = "%i\n" % len(geom.atoms)
         s += "%s\n" % geom.comment
         for atom in geom.atoms:
@@ -335,20 +338,24 @@ class FileWriter:
             except AttributeError:
                 try:
                     s += fmt2.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge)
-                except AttributeError:
+#                except TypeError:
+#                    print(type(atom.element), type(atom.coords), type(atom.layer), type(atom.atomtype), type(atom.charge))
+                except ValueError:
                     try:
                         s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
-                    except AttributeError:
+                    except ValueError:
                         try:
                             s += fmt4.format(atom.element, *atom.coords, atom.layer)
-                        except AttributeError:
-                            atom.layer = "H"
-                            try:
-                                print(atom.layer)
-                                s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
-                            except AttributeError:
-                                print(atom.layer)
-                                s += fmt4.format(atom.element, *atom.coords, atom.layer)
+                        except ValueError:
+                            print("Warning: no layers designated for OniomAtom object(s)")
+                            s += fmt5.format(atom.element, *atom.coords)
+                            #atom.layer = "H"
+                            #try:
+                                #print(atom.layer)
+                            #    s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
+                            #except AttributeError:
+                            #    print(atom.layer)
+                            #    s += fmt4.format(atom.element, *atom.coords, atom.layer)
 
         s = s.rstrip()
 
@@ -861,6 +868,10 @@ class FileReader:
                 self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom, max_length=max_length)
+            elif self.file_type == "pdb":
+                self.read_pdb(f, qt=False)
+            elif self.file_type == "pdbqt":
+                self.read_pdb(f, qt=True)
             elif self.file_type == "crest":
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
@@ -954,6 +965,10 @@ class FileReader:
             self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom, max_length=max_length)
+        elif self.file_type == "pdb":
+            self.read_pdb(f, qt=False)
+        elif self.file_type == "pdbqt":
+            self.read_pdb(f, qt=True)
         elif self.file_type == "crest":
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
@@ -3261,6 +3276,68 @@ class FileReader:
                         "size of %s is > %i: %i" % (key, max_length, self.other[key])
                     )
 
+    def read_pdb(self, f, qt=False):
+        """
+        read pdb or pdbqt file
+        """
+        line = f.readline()
+        n = 1
+        def get_atoms(f, n, line):
+            rv = []
+            while line.split()[0] in {"ATOM", "TER", "ANISOU", "HETATM", "ROOT", "BRANCH", "ENDROOT", "ENDBRANCH", "ENDMDL"}:
+                endmdl = False
+                if line.split()[0].upper() in ("ATOM", "HETATM"):
+                    if qt==False:
+                        if line[76:78].strip() != "":
+                            element = line[76:78].strip()
+                        else:
+                            element = ''.join(i for i in line[12:16].strip() if not i.isdigit())
+                        atomtype = line[12:16].strip()
+                        charge = line[78:].strip()
+                    if qt==True:
+                        element = ''.join(i for i in line[12:16].strip() if not i.isdigit())
+                        atomtype = line[78:].strip()
+                        charge = line[66:76].strip()
+                    a = OniomAtom(element=element, coords=line[30:54].split(), name=line[6:11].strip(), tags=line[17:20].strip(), atomtype=atomtype, charge=charge)
+                    rv += [a]
+                elif line.startswith("ENDMDL"):
+                    endmdl = True
+                    break
+                line = f.readline()
+                n += 1
+            return rv, n, endmdl
+        num_models = 0
+        while line != "":
+            if line.startswith("EXPDTA"):
+                self.other["Source"] = line[10:].strip()
+            elif line.startswith("MODEL"):
+                model_num = int(line.split()[1])
+                line = f.readline()
+                n += 1
+                if model_num == 1:
+                    self.atoms, n, endmdl = get_atoms(f, n, line)
+                elif model_num > 1:
+                    self.other["Model_%s" % str(model_num)], n, endmdl = get_atoms(f, n, line)
+            elif line.startswith("ATOM") or line.startswith("HETATM"):
+                atoms, n, endmdl = get_atoms(f, n, line)
+                if endmdl == True:
+                    num_models+=1
+                    if num_models == 1:
+                        self.atoms = atoms
+                    elif num_models > 1:
+                        self.other["Model_%s" % str(num_models)] = atoms
+                elif endmdl == False:
+                    self.atoms = atoms
+            elif line.startswith("CONECT"):
+                while line.startswith("CONECT"):
+                    for atom_num in line.split()[3:]:
+                        self.atoms[int(line.split()[1])-1].connected.add(self.atoms[int(atom_num)-1])
+                    line = f.readline()
+                    n += 1
+            line = f.readline()
+            n += 1
+        return
+
     def read_nbo(self, f):
         """
         read nbo data
@@ -3742,3 +3819,4 @@ class FileReader:
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
 
+            
