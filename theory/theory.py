@@ -1192,29 +1192,42 @@ class Theory:
                     warnings.append("unknown coordinate type: %s" % type(val))
             if oniom:
                 s += " %s" % atom.layer
-                lac = re.search("LAH bonded to (\d+)", str(atom.tags))
-                if lac:
-                    lac_name = int(lac.group(1))
-                    lac_index = int(lac.group(1))-1
-                    if self.geometry.atoms[lac_index].atomtype.lower() == "ca":
-                        link_type = "ha"
-                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("c"):
-                        link_type = "hc"
-                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("n"):
-                        link_type = "hn"
-                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("o"):
-                        link_type = "ho"
-                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("s"):
-                        link_type = "hs"
-                    elif self.geometry.atoms[lac_index].atomtype.lower().startswith("p"):
-                        link_type = "hp"
-                    else:
-                        link_type = ""
-                    s += " H-%s-%f  %i" % (link_type, atom.charge, lac_name)
-                    scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
-                    if scale_fax:
-                        for scale_fac in scal_fax.group(1).split(","):
-                            s += " %i" % int(scale_fac)
+                if atom.link_info == {}:
+                    pass
+                #lac = re.search("LAH bonded to (\d+)", str(atom.tags))
+                else:
+                    s += " %s" % link_info["element"]
+                    if has_type:
+                        try:
+                            s += "-%s" % link_info["atomtype"]
+                        except KeyError:
+                            if atom.atomtype.lower() == "ca":
+                                link_type = "ha"
+                            else:
+                                connected_elements = []
+                                for connected in atom.connected:
+                                    connected_elements.append(connected.element)
+                                if "C" in connected_elements:
+                                    link_type = "hc"
+                                elif "C" not in connected_elements and "N" in connected_elements:
+                                    link_type = "hn"
+                                elif "C" not in connected_elements and "O" in connected_elements:
+                                    link_type = "ho"
+                                elif "C" not in connected_elements and "S" in connected_elements:
+                                    link_type = "hs"
+                                elif "C" not in connected_elements and "P" in connected_elements:
+                                    link_type = "hp"
+                            s += "-%s" % link_type
+                    if has_charge:
+                        try:
+                            s += "-%s" % link_info["charge"]
+                        except KeyError:
+                            s += "-%f" % atom.charge
+                    s += " %s" % link_info["connected"]
+                    #scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
+                    #if scale_fax:
+                    #    for scale_fac in scal_fax.group(1).split(","):
+                    #        s += " %i" % int(scale_fac)
             s += "\n"
 
         if (

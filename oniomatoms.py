@@ -3,7 +3,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ, ATOM_TYPES
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", atom=None):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info={}, atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
         if atom != None and type(atom) == Atom:
@@ -47,6 +47,8 @@ class OniomAtom(Atom):
             self.add_tag(tags)
         else:
             self.tags = set([tags])
+
+        self.link_info = link_info
 
         if atom == None:
             self.connected = set([])

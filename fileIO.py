@@ -45,10 +45,10 @@ read_types = [
 ]
 write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
 file_type_err = "File type not yet implemented: {}"
-LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
-LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
-LA_charge = re.compile("[-+]?[0-9]*\.[0-9]+")
-LA_bonded_to = re.compile("(?<=')([0-9][0-9]?)(?![0-9 A-Z\.])(?=')")
+#LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
+#LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
+#LA_charge = re.compile("[-+]?[0-9]*\.[0-9]+")
+#LA_bonded_to = re.compile("(?<=')([0-9][0-9]?)(?![0-9 A-Z\.])(?=')")
 #Svalue = re.compile("(?<=diff= +)-?[0-9]+\.[0-9]+")
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
@@ -321,34 +321,38 @@ class FileWriter:
         elif frag == 'layer':
             geom=geom.oniom_frag(layer=kwargs["layer"], as_object=True)
         mode = "a" if append else "w"
-        fmt1 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f} {:2s} {:2s} {: 8.6f} {:2d}\n"
-        fmt2 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f}\n"
-        fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s}\n"
-        fmt4 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
-        fmt5 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} \n"
+        fmt1a = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f} {:2s} {:2s} {: 8.6f} {:2d}\n"
+        fmt1b = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {:2s} {:2s} {:2d}\n"
+        fmt1c = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {: 8.6f} {:2s} {: 8.6f} {:2d}\n"
+        fmt1d = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:2s} {:2d}\n"
+        fmt2a = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f}\n"
+        fmt2b = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s}\n"
+        fmt2c = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {: 8.6f}\n"
+        fmt2d = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
+        fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} \n"
         s = "%i\n" % len(geom.atoms)
         s += "%s\n" % geom.comment
         for atom in geom.atoms:
-            #match = LAH_bonded_to.search(str(a.tags))
-            match2 = LA_atom_type.search(str(atom.tags))
-            match3 = LA_charge.search(str(atom.tags))
-            match4 = LA_bonded_to.search(str(atom.tags))
             try:
-                s += fmt1.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge, "H", match2.group(0), float(match3.group(0)), int(match4.group(0)))
-            except AttributeError:
-                try:
-                    s += fmt2.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge)
-#                except TypeError:
-#                    print(type(atom.element), type(atom.coords), type(atom.layer), type(atom.atomtype), type(atom.charge))
-                except ValueError:
-                    try:
-                        s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
-                    except ValueError:
-                        try:
-                            s += fmt4.format(atom.element, *atom.coords, atom.layer)
-                        except ValueError:
-                            print("Warning: no layers designated for OniomAtom object(s)")
-                            s += fmt5.format(atom.element, *atom.coords)
+                if atom.atomtype != "" and atom.charge != "" and atom.link_info:
+                    s += fmt1a.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge, atom.link_info["element"], atom.link_info["atomtype"], float(atom.link_info["charge"]), int(atom.link_info["connected"]))
+                elif atom.atomtype != "" and atom.charge == "" and atom.link_info:
+                    s += fmt1b.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.link_info["element"], atom.link_info["atomtype"], int(atom.link_info["connected"]))
+                elif atom.atomtype == "" and atom.charge != "" and atom.link_info:
+                    s += fmt1c.format(atom.element, *atom.coords, atom.layer, atom.charge, atom.link_info["element"], float(atom.link_info["charge"]), int(atom.link_info["connected"]))
+                elif atom.atomtype == "" and atom.charge == "" and atom.link_info:
+                    s += fmt1d.format(atom.element, *atom.coords, atom.layer, atom.link_info["element"], int(atom.link_info["connected"]))
+                elif atom.atomtype != "" and atom.charge != "" and not atom.link_info:
+                    s += fmt2a.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge)
+                elif atom.atomtype != "" and atom.charge == "" and not atom.link_info:
+                    s += fmt2b.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
+                elif atom.atomtype == "" and atom.charge != "" and not atom.link_info:
+                    s += fmt2c.format(atom.element, *atom.coords, atom.layer, atom.charge)
+                elif atom.atomtype == "" and atom.charge == "" and not atom.link_info:
+                    s += fmt2d.format(atom.element, *atom.coords, atom.layer)
+            except ValueError:
+                print("Warning: no layers designated for OniomAtom object(s)")
+                s += fmt3.format(atom.element, *atom.coords)
                             #atom.layer = "H"
                             #try:
                                 #print(atom.layer)
@@ -1018,23 +1022,34 @@ class FileReader:
                 layer = ""
                 atomtype = ""
                 charge = ""
-                tags = ""
+                link_info = {}
+                #tags = ""
                 if len(line) > 4:
                     layer = line[4]
                     oniom = True
                     if len(line) == 11:
                         atomtype = line[5]
                         charge = line[6]
-                        tags=line[7:]
+                        #tags=line[7:]
+                        link_info["element"] = line[7]
+                        link_info["atomtype"] = line[8]
+                        link_info["charge"] = line[9]
+                        link_info["connected"] = line[10]
                     if len(line) == 9:
-                        tags = line[6:]
+                        #tags = line[6:]
+                        link_info["element"] = line[6]
+                        link_info["connected"] = line[8]
                         if is_alpha(line[5][0]):
                             atomtype = line[5]
+                            link_info["atomtype"] = line[7]
                         else:
                             charge = line[5]
+                            link_info["charge"] = line[7]
                     if len(line) == 7:
                         if line[6].isdigit():
-                            tags = line[5:]
+                            #tags = line[5:]
+                            link_info["element"] = line[5]
+                            link_info["connected"] = line[6]
                         else:
                             atomtype = line[5]
                             charge = line[6]
@@ -1045,7 +1060,7 @@ class FileReader:
                             charge = line[5]
                 if oniom == True:
                     atom_count += 1
-                    self.atoms += [OniomAtom(element=element, coords=coords, layer=layer, atomtype=atomtype, charge=charge, tags=tags, name=str(atom_count))]
+                    self.atoms += [OniomAtom(element=element, coords=coords, layer=layer, atomtype=atomtype, charge=charge, link_info=link_info, name=str(atom_count))]
                 else:
                     atom_count += 1
                     self.atoms += [Atom(element=line[0], coords=line[1:4], name=str(atom_count))]
@@ -2205,7 +2220,8 @@ class FileReader:
                 flag = ""
                 atomtype = ""
                 charge = ""
-                tags = []
+                #tags = []
+                link_info = {}
                 has_flag = False
                 if len(line[0].split("-")) == 2:
                     if not is_alpha(line[0].split("-")[1][0]):
@@ -2228,11 +2244,23 @@ class FileReader:
                 if not has_flag:
                     coords = line[1:4]
                 if len(line) > 6:
-                    tags.append(line[len(line)-2:])
+                    link_atom = line[len(line)-2:].split()
+                    link_info["connected"] = link_atom[1]
+                    info = link_atom[0].split("-")
+                    link_info["element"] = info[0]
+                    if len(info) == 3:
+                        link_info["atomtype"] = info[1]
+                        link_info["charge"] = info[2]
+                    elif len(info) == 2:
+                        if is_alpha(info[1][0]):
+                            link_info["atomtype"] = info[1]
+                        else:
+                            link_info["charge"] = info[1]
+                    #tags.append(line[len(line)-2:])
                     layer = line[len(line)-3]
                 if len(line) < 7:
                     layer = line[len(line)-1]
-                a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,tags=tags)
+                a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
                 rv += [a] 
                 line = f.readline()
                 n += 1
@@ -3074,6 +3102,7 @@ class FileReader:
                     a = Atom(element=line[0], coords=nums)
                     atoms += [a]
             elif is_oniom:
+                link_info = {}
                 if len(line) > 0 and len(line[0].split("-")) > 0 and len(nums) > 2:
                     if len(line[0].split("-")) == 2:
                         if not is_alpha(line[0].split("-")[1][0]):
@@ -3096,11 +3125,23 @@ class FileReader:
                     if not has_flag:
                         coords = line[1:4]
                     if len(line) > 6:
-                        tags.append(line[len(line)-2:])
+                        #tags.append(line[len(line)-2:])
+                        link_atom = line[len(line)-2:].split()
+                        link_info["connected"] = link_atom[1]
+                        info = link_atom[0].split("-")
+                        link_info["element"] = info[0]
+                        if len(info) == 3:
+                            link_info["atomtype"] = info[1]
+                            link_info["charge"] = info[2]
+                        elif len(info) == 2:
+                            if is_alpha(info[1][0]):
+                                link_info["atomtype"] = info[1]
+                            else:
+                                link_info["charge"] = info[1]
                         layer = line[len(line)-3]
                     if len(line) < 7:
                         layer = line[len(line)-1]
-                    a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,tags=tags)
+                    a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
                     atoms += [a] 
         for i, a in enumerate(atoms):
             a.name = str(i + 1)
