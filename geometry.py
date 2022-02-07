@@ -15,14 +15,12 @@ import AaronTools.utils.utils as utils
 from AaronTools import addlogger
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
-from AaronTools.const import BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
+from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
 from AaronTools.fileIO import FileReader, FileWriter
 from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom 
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
 
-LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
-LA_on = re.compile("(LA) on ([0-9])")
 COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
@@ -5937,14 +5935,24 @@ class Geometry:
         return targets
 
     def detect_solvent(self, solvent=""):
-        """detects solvent based on either an input xyz or a solvent name in solvent library"""
+        """detects solvent based on either an input xyz, solvent in solvent library, or input SMILES"""
+
+        AARON_LIBS = os.path.join(AARONLIB, "Solvents")
+        BUILTIN = os.path.join(AARONTOOLS, "Solvents")
+
         if isinstance(solvent, str):
-            if "xyz" not in solvent:
-                solv, x = Geometry(FileReader("/home/la48076/chem/ONIOM/AaronTools/Solvents/%s.xyz" % solvent)).reorder()
-                solv = Geometry(solv)
-            elif "xyz" in solvent:
-                solv, x = Geometry(FileReader(solvent)).reorder()
-                solv = Geometry(solv)
+            if ".xyz" not in solvent:
+                solventxyz = solvent + ".xyz"
+            else:
+                solventxyz = solvent
+            try:
+                solv, x = Geometry(FileReader("%s/%s" % (BUILTIN,solventxyz))).reorder()
+            except OSError:
+                try:
+                    solv, x = Geometry(FileReader("%s/%s" % (AARON_LIBS, solventxyz))).reorder()
+                except OSError:
+                    solv, x = Geometry().from_string(solvent).reorder()
+            solv = Geometry(solv)
         terminal_atoms = ["H", "F", "Cl", "Br", "I"]
 
         def detect_mol(atom):
@@ -5996,21 +6004,10 @@ class Geometry:
             for a in atom.connected:
                 solv_connectivity[-1].append(solv_ndx[a])
                 solv_connectivity[-1] = sorted(solv_connectivity[-1])
-#        solv_elements = []
-#        for atom in solv.atoms:
-#            solv_elements += atom.element
-
-#        from collections import Counter
-#        n_solv_elements = Counter(solv_elements)
 
         vetted_mols = []
 
         for candidate in mol_list:
-            candidate_elems = []
-            for c in candidate.atoms:
-                candidate_elems += c.element
-#            if n_solv_elements == Counter(candidate_elems):
-#            if sorted(solv.elements) == sorted(candidate.elements):
             if solv.element_counts() == candidate.element_counts():
                 cand, x = candidate.reorder()
                 cand = Geometry(cand)
