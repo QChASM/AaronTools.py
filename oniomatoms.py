@@ -6,13 +6,49 @@ class OniomAtom(Atom):
     def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info={}, atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
-        if atom != None and type(atom) == Atom:
+        atomtype = str(atomtype).strip()
+        layer=str(layer).strip().upper()
+
+        if atom != None and isinstance(atom, Atom):
             self.element = atom.element
             self.coords = atom.coords
             self.flag = atom.flag
             self.name = atom.name
             self.tags = atom.tags
-            self.charge = atom.charge
+            if hasattr(atom, "layer") and not layer:
+                self.layer = atom.layer
+            else:
+                self.layer = layer
+            if hasattr(atom, "charge") and not charge:
+                self.charge = atom.charge
+            else:
+                self.charge = float(charge)
+            if hasattr(atom, "atomtype") and not atomtype:
+                self.atomtype = atom.atomtype
+            else:
+                self.atomtype = atomtype
+            if hasattr(atom, "link_info") and not link_info:
+                self.link_info = atom.link_info
+            else:
+                self.link_info = link_info
+            if coords:
+                self.coords = np.array(coords, dtype=float)
+            if name:
+                self.name = str(name).strip()
+            if tags:
+                self.add_tag(tags)
+            if atom.connected == []:
+                self.connected = set([])
+            else:
+                self.connected = atom.connected # change the connected atoms to OniomAtom type
+            if atom.constraint == []:
+                self.constraint == set([])
+            else:
+                self.contraint = atom.constraint
+            if atom._rank == None:
+                self._rank = None
+            else:
+                self._rank = atom._rank 
 
         element = str(element).strip().capitalize()
         if element == "" and atom == None:
@@ -30,73 +66,23 @@ class OniomAtom(Atom):
 
         if atom == None:
             self.coords = np.array(coords, dtype=float)
-        if atom != None and coords != []:
-            self.coords = np.array(coords, dtype=float)
-        if atom == None:
             self.flag = bool(flag)
-        if atom == None or (atom != None and name != ""):
             self.name = str(name).strip()
-        try:
-            self.index = int(self.name)
-        except ValueError:
-            pass
+            if hasattr(tags, "__iter__") and not isinstance(tags, str) and atom == None:
+                self.tags = tags
+            else:
+                self.tags = set([tags])
 
-        if hasattr(tags, "__iter__") and not isinstance(tags, str) and atom == None:
-            self.tags = tags
-        elif atom != None:
-            self.add_tag(tags)
-        else:
-            self.tags = set([tags])
-
-        self.link_info = link_info
-
-        if atom == None:
+            self.link_info = link_info
             self.connected = set([])
             self.constraint = set([])
             self._rank = None
-
-        if atom != None:
-            if atom.connected == []:
-                self.connected = set([])
+            charge=str(charge).strip()
+            if charge == "":
+                pass
             else:
-                self.connected = atom.connected
-            if atom.constraint == []:
-                self.constraint == set([])
-            else:
-                self.contraint = atom.constraint
-            if atom._rank == None:
-                self._rank = None
-            else:
-                self._rank = atom._rank 
-
-        charge=str(charge).strip()
-        if charge == "":
-            pass
-        else:
-            self.charge = float(charge)
-
-        atomtype = str(atomtype).strip()
-        layer=str(layer).strip().capitalize()
-        if layer == "" and atom==None:
+                self.charge = float(charge)
             self.layer=layer
-        elif layer == "" and atom != None:
-            if hasattr(atom, "layer"):
-                self.layer = atom.layer
-            else:
-                self.layer = layer
-        elif layer not in ['H', 'L', 'M']:
-            raise ValueError("Incorrect symbol for layer: " + layer)
-        else:
-            self.layer=layer
-
-        if atomtype == "" and atom==None:
-            self.atomtype=atomtype
-        elif atomtype == "" and atom != None:
-            pass
-        elif atomtype not in ATOM_TYPES:
-            self.atomtype=atomtype
-            #raise ValueError("Atom type " + self.atomtype + " not in reference")
-        else:
             self.atomtype=atomtype
 
     def __repr__(self):
@@ -123,52 +109,10 @@ class OniomAtom(Atom):
 
     def __gt__(self, other):
         """ sorts by the layer the atom is in, with atoms in High layer considered greater than those in Medium and Low"""
-        if self.layer == "H" and other.layer != "H":
-            return True
-        elif self.layer == "M" and other.layer == "L":
-            return True
-        else:
-            return False
-
-    @classmethod
-    def from_atom(cls, atom):
-        """creates a new OniomAtom object from an existing Atom or OniomAtom object"""
-        if not isinstance(atom, Atom):
-            raise ValueError("atom must be an Atom or OniomAtom object")
-
-        oniom_atom = OniomAtom(element=atom.element, coords = atom.coords)
-        for attr in ("atomtype", "layer", "tags", "flag", "name", "charge"):
-            if hasattr(atom, attr):
-                oniom_atom.attr = atom.attr
-        return oniom_atom
-
-    def get_layer(self):
-        if self.layer not in ['H', 'L', 'M']:
-            raise ValueError("Layer set to High. Incorrect symbol for layer: " + self.layer)
-        else:
-            return self.layer
-
-    def get_charge(self):
-        return self.charge
-
-    def get_at(self):
-        return self.atomtype
-        if self.atomtype not in ATOM_TYPES:
-            raise ValueError("Atom type " + self.atomtype + " not in reference")
-
-    def change_layer(self, newlayer):
-        self.layer = str(newlayer).strip().capitalize()
- 
-    def change_atomtype(self, newtype):
-        self.atomtype = str(newtype).strip()
- 
-    def change_charge(self, newcharge):
-        self.charge[0] = float(newcharge)
-
-    def __gt__(self, other):
         if not isinstance(other, OniomAtom):
             raise TypeError("cannot compare atoms of different type")
-        if self.layer == "H" and self.layer != other.layer:
+
+        if self.layer == "H" and other.layer != "H":
             return True
         elif self.layer == "M" and other.layer == "L":
             return True

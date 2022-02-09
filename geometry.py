@@ -1372,6 +1372,39 @@ class Geometry:
             a._rank = r
         return
 
+    def make_oniom(self, get_types=True):
+        """convert existing geometry composed of Atom objects
+        to geometry of OniomAtom objects including changing
+        all atoms in attribute lists to OniomAtom objects"""
+        
+        old_connectivity = []
+        ndx = {atom: i for i, atom in enumerate(self.atoms)}
+        constraint_ndx = {}
+        oniomatoms = []
+
+        for i, atom in enumerate(self.atoms):
+            old_connectivity.append([])
+            for connected in atom.connected:
+                old_connectivity[-1].append(ndx[connected])
+            if atom.constraint:
+                for j, b in enumerate(self.atoms[i:]):
+                    for a, dist in a.constraint:
+                        if b == a:
+                            constraint_ndx[i] = [j, dist]
+            oniomatom = OniomAtom(atom=atom)
+            oniomatoms.append(oniomatom)
+
+        for oniomatom, connectivity in zip(oniomatoms, old_connectivity):
+            oniomatom.connected = set([])
+            for i in connectivity:
+                oniomatom.connected.add(oniomatoms[i])
+        for key, val in constraint_ndx:
+            oniomatoms[key].constraint = set([])
+            oniomatoms[key].constraint.add((oniomatoms[val[0]], val[1]))
+
+        geom = Geometry(structure = oniomatoms, name = self.name, comment = self.comment, components = self.components)
+        return geom
+
     def get_invariants(self, heavy_only=False):
         """
         returns a list of invariants for the specified targets
@@ -5626,7 +5659,8 @@ class Geometry:
         typelist = []
         elementlist = []
         atoms = self.atoms
-        for atom in atoms:
+        for i, atom in enumerate(atoms):
+            atom.index = i
             if atom.element not in elementlist: elementlist.append(atom.element)
         for element in elementlist:
             if element == 'C': typelist = typelist + ['c','c1','c2','c3','ca']
@@ -5636,41 +5670,35 @@ class Geometry:
             if element == 'H': typelist = typelist + ['hc','ha','hn','ho','hs','hp','hw']
             if element == 'P': typelist = typelist + ['p2','p3','p4','p5']
             if element in {'Br', 'Cl', 'F', 'I'}: typelist.append(element)
-        oniomatoms = []
+        oniomatoms = [0]*len(atoms)
         untyped_atoms = list(atoms)
         for atomtype in typelist:
             matches = OfType(atomtype).get_matching_atoms(atoms,self)
             for match in matches:
                 untyped_atoms.remove(match)
-#                oniomatom = OniomAtom(match)
-                try:
-                    oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, layer=match.layer, flag=match.flag, tags=match.tags, charge=match.charge)
-                except AttributeError:
-                    try:
-                        oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags, charge=match.charge)
-                    except AttributeError:
-                        try:
-                            oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags, layer=match.layer)
-                        except AttributeError:
-                            oniomatom = OniomAtom(element = match.element,coords = match.coords, name = match.name, atomtype = atomtype, flag=match.flag, tags=match.tags)
-                oniomatoms.append(oniomatom)
+                if not isinstance(match, OniomAtom):
+                    is_oniom = False
+                    oniomatom = OniomAtom(atom=match, atomtype=atomtype)
+                    oniomatom.index = match.index
+                    oniomatoms[match.index] = oniomatom
+                else:
+                    is_oniom = True
+                    match.atomtype = atomtype
+                    oniomatoms[match.index] = match
         for atom in untyped_atoms:
-            try:
-                oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, layer=atom.layer, flag=atom.flag, tags=atom.tags, charge=atom.charge)
-            except AttributeError:
-                try:
-                    oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags, charge=atom.charge)
-                except AttributeError:
-                    try:
-                        oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags, layer=atom.layer)
-                    except AttributeError:
-                        oniomatom = OniomAtom(element = atom.element,coords = atom.coords, name = atom.name, atomtype = atom.element, flag=atom.flag, tags=atom.tags)
-            oniomatoms.append(oniomatom)
-        import operator
-        typed_geom = Geometry(structure=sorted(oniomatoms, key=operator.attrgetter("index")), name = self.name)
-
-        return typed_geom
-
+            if not isinstance(atom, OniomAtom):
+                is_oniom = False
+                oniomatom = OniomAtom(atom=atom, atomtype=atom.element)
+                oniomatom.index = atom.index
+                oniomatoms[atom.index] = oniomatom
+            else:
+                is_oniom = True
+                atom.atomtype = atomtype
+        if is_oniom:
+            return self
+        else:
+            typed_geom = Geometry(structure=oniomatoms, name = self.name, comment = self.comment, components = self.components)
+            return typed_geom
 
     def define_layer(self, layer, reference, distance, bond_based=False, expand=True, force=False):
         """
@@ -5679,18 +5707,17 @@ class Geometry:
         if defining a 3 layer job, start at High layer (reaction center)
         """
 
-        old_connectivity = []
-        ndx = {atom: i for i, atom in enumerate(self.atoms)}
-        
-        for i, atom in enumerate(self.atoms):
-            old_connectivity.append([])
-            for connected in atom.connected:
-                old_connectivity[-1].append(ndx[connected])
-            if not isinstance(atom, OniomAtom):
-                self.atoms[i] = OniomAtom(element = atom.element, coords=atom.coords, name=atom.name, tags = atom.tags, charge = "")
-        for atom, connectivity in zip(self.atoms, old_connectivity):
-            for i in connectivity:
-                atom.connected.add(self.atoms[i])
+        if not isinstance(self.atoms[0], OniomAtom):
+            self = self.make_oniom()
+
+        avoid = []
+        constraints = self.get_constraints()
+        for key, val in constraints:
+            a = WithinBondsOf(self.atoms[key[0]],3).get_matching_atoms(self.atoms)
+            b =  WithinBondsOf(self.atoms[key[1]],3).get_matching_atoms(self.atoms)
+            for atom in a+b:
+                if atom not in avoid:
+                    avoid.append(atom)
 
         def in_ring(a1, a2):
             #determine if the bond between two atoms is in a ring
@@ -5776,12 +5803,15 @@ class Geometry:
                     boundary_atoms += [atom]
                     break
         for boundary_atom in boundary_atoms:
+            if boundary_atom in avoid:
+                print("Warning: layer boundary at atom %s may be too close to bond order change" % boundary_atom.name)
             new_layer_atoms = []
             new_boundary_atoms = []
             if boundary_atom.element == "H":
                 if force==True:
                     for connected in boundary_atom.connected:
-                        connected.add_tag("LAH bonded to %s" % boundary_atom)
+                        connected.link_info["element"] = "H"
+                        connected.link_info["connected"]= boundary_atom
                     print("Warning: atom %s set as link atom to hydrogen atom %s" % connected.name % boundary_atom.name)
                 else:
                     boundary_atoms.remove(boundary_atom)
@@ -5793,14 +5823,16 @@ class Geometry:
                         if connected.element == "H" and expand == True and force == False:
                             new_layer_atoms += [connected]
                         elif connected.element == "H" and any((expand == False, force == True)):
-                            connected.add_tag("LAH bonded to %s" % boundary_atom)
+                            connected.link_info["element"] = "H"
+                            connected.link_info["connected"]= boundary_atom
                             print("Warning: atom %s set as link atom host is hydrogen atom" % connected.name)
                         elif connected.element == "C" and boundary_atom.element == "C":
                             bond_order = BondOrder.get(connected, boundary_atom)
                             if bond_order > 1:
                                 if any((expand==True, expand==False)) and force==True:
                                     print("Warning: layer boundary cuts across bond of order > 1 between atoms %s and %s" % boundary_atom.name % connected.name)
-                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                    connected.link_info["element"] = "H"
+                                    connected.link_info["connected"]= boundary_atom
                                 elif expand==True and force==False:
                                     new_boundary_atoms += [connected]
                                     new_layer_atoms += [connected]
@@ -5817,7 +5849,8 @@ class Geometry:
                             elif bond_order == 1:
                                 if in_ring(connected, boundary_atom) and force==True:
                                     print("Warning: layer boundary cuts across bond in a ring between atoms %s and %s" % boundary_atom.name % connected.name)
-                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                    connected.link_info["element"] = "H"
+                                    connected.link_info["connected"]= boundary_atom
                                 elif in_ring(connected, boundary_atom) and force==False:
                                     boundary_atoms.remove(boundary_atom)
                                     if expand == False:
@@ -5833,11 +5866,13 @@ class Geometry:
                                     if expand == True:
                                         new_layer_atoms += [connected]
                                         new_boundary_atoms += [connected]
-                                elif not in_ring(connected, boundary_atom):							
-                                    connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                elif not in_ring(connected, boundary_atom):
+                                    connected.link_info["element"] = "H"
+                                    connected.link_info["connected"]= boundary_atom
                         elif connected.element != "H" and connected.element != boundary_atom.element:
                             if force == True:
-                                connected.add_tag("LAH bonded to %s" % boundary_atom)
+                                connected.link_info["element"] = "H"
+                                connected.link_info["connected"]= boundary_atom
                                 if boundary_atom.element == "C":
                                     print("Warning: layer boundary cuts between bond between carbon atom %s and heteroatom %s" % boundary_atom.name % connected.name)
                                 elif connected.element != "C":
@@ -6010,7 +6045,7 @@ class Geometry:
         for candidate in mol_list:
             if solv.element_counts() == candidate.element_counts():
                 cand, x = candidate.reorder()
-                cand = Geometry(cand)
+                cand = Geometry(cand, refresh_ranks=True)
                 cand_ndx = {atom: i for i, atom in enumerate(cand.atoms)}
                 cand_connectivity = []
                 for atom in cand.atoms:
