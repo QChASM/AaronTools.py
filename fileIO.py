@@ -1233,7 +1233,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[1:]])
 
-                    self.other["forces"] = -gradient
+                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
 
                 elif "SAPT Results" in line:
                     self.skip_lines(f, 1)
@@ -1449,7 +1449,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[3:]])
 
-                    self.other["forces"] = -gradient
+                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
@@ -2469,7 +2469,7 @@ class FileReader:
                     info = line.split()
                     gradient[i] = np.array([float(x) for x in info[2:]])
 
-                self.other["forces"] = gradient
+                self.other["forces"] = UNIT.A0_TO_BOHR * gradient
 
             # nbo stuff
             if "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:

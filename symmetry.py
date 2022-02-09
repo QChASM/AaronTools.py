@@ -113,6 +113,7 @@ class SymmetryElement:
         """trace of this symmetry element's matrix"""
         return np.trace(self.operation)
 
+
 class Identity(SymmetryElement):
     def __init__(self):
         self.translation = np.zeros(3)
