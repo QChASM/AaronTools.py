@@ -1333,6 +1333,9 @@ class FileReader:
                 line = f.readline()
                 n += 1
 
+        if "error" not in self.other:
+            self.other["error"] = None
+
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
 
@@ -1759,6 +1762,9 @@ class FileReader:
                 and "basis_set_by_ele" in self.other
             ):
                 self.other["orbitals"] = Orbitals(self)
+        
+        if "error" not in self.other:
+            self.other["error"] = None
 
     def read_qchem_out(self, f, get_all=False, just_geom=True):
         """read qchem output file"""
@@ -1987,6 +1993,9 @@ class FileReader:
         
         if not just_geom and "finished" not in self.other:
             self.other["finished"] = False
+
+        if "error" not in self.other:
+            self.other["error"] = None
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
