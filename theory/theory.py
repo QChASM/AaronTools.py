@@ -1078,11 +1078,11 @@ class Theory:
             if isinstance(self.charge, list):
                 charge_list = self.charge
             elif isinstance(self.charge, int):
-                charge_list = list(self.charge)
+                charge_list = list(str(self.charge))
             if isinstance(self.multiplicity, list):
                 mult_list = self.multiplicity
             elif isinstance(self.multiplicity, int):
-                mult_list = list(self.multiplicity)
+                mult_list = list(str(self.multiplicity))
             if len(charge_list) > 1 and len(charge_list) != len(mult_list):
                 raise ValueError("Charge and multiplicty must match in length. see gaussian.com/oniom/")
             elif len(charge_list) > 1 and len(charge_list) == len(mult_list):
@@ -1192,14 +1192,13 @@ class Theory:
                     warnings.append("unknown coordinate type: %s" % type(val))
             if oniom:
                 s += " %s" % atom.layer
-                if atom.link_info == {}:
+                if not atom.link_info:
                     pass
-                #lac = re.search("LAH bonded to (\d+)", str(atom.tags))
-                else:
-                    s += " %s" % link_info["element"]
+                elif atom.link_info:
+                    s += " %s" % atom.link_info["element"]
                     if has_type:
                         try:
-                            s += "-%s" % link_info["atomtype"]
+                            s += "-%s" % atom.link_info["atomtype"]
                         except KeyError:
                             if atom.atomtype.lower() == "ca":
                                 link_type = "ha"
@@ -1220,10 +1219,10 @@ class Theory:
                             s += "-%s" % link_type
                     if has_charge:
                         try:
-                            s += "-%s" % link_info["charge"]
+                            s += "-%s" % atom.link_info["charge"]
                         except KeyError:
                             s += "-%f" % atom.charge
-                    s += " %s" % link_info["connected"]
+                    s += " %s" % atom.link_info["connected"]
                     #scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
                     #if scale_fax:
                     #    for scale_fac in scal_fax.group(1).split(","):

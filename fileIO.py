@@ -333,6 +333,37 @@ class FileWriter:
         s = "%i\n" % len(geom.atoms)
         s += "%s\n" % geom.comment
         for atom in geom.atoms:
+            if atom.link_info:
+                if "atomtype" not in atom.link_info.keys():
+                    connected_elements = []
+                    for connected in atom.connected:
+                        connected_elements.append(connected.element)
+                    if "C" in connected_elements:
+                        atom.link_info["atomtype"] = "hc"
+                    elif "C" not in connected_elements and "N" in connected_elements:
+                        atom.link_info["atomtype"] = "hn"
+                    elif "C" not in connected_elements and "O" in connected_elements:
+                        atom.link_info["atomtype"] = "ho"
+                    elif "C" not in connected_elements and "S" in connected_elements:
+                        atom.link_info["atomtype"] = "hs"
+                    elif "C" not in connected_elements and "P" in connected_elements:
+                        atom.link_info["atomtype"] = "hp"
+                if "charge" not in atom.link_info.keys():
+                    atom.link_info["charge"] = atom.charge
+                if "element" not in atom.link_info.keys():
+                    atom.link_info["element"] = "H"
+                if "connected" not in atom.link_info.keys():
+                    print("Determining link atom connection from connectivity")
+                    for connected in atom.connected:
+                        if connected.layer == "":
+                            raise ValueError("cannot determine link atom connection without defined layers")
+                        elif connected.layer != atom.layer:
+                            for i, a in enumerate(geom.atoms):
+                                if a == connected:
+                                    atom.link_info["connected"] = i+1
+                                    break
+                    if "connected" not in atom.link_info.keys():
+                        raise ValueError("Cannot determine link atom connection based on layers")
             try:
                 if atom.atomtype != "" and atom.charge != "" and atom.link_info:
                     s += fmt1a.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge, atom.link_info["element"], atom.link_info["atomtype"], float(atom.link_info["charge"]), int(atom.link_info["connected"]))

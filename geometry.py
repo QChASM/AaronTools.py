@@ -5677,28 +5677,23 @@ class Geometry:
             for match in matches:
                 untyped_atoms.remove(match)
                 if not isinstance(match, OniomAtom):
-                    is_oniom = False
                     oniomatom = OniomAtom(atom=match, atomtype=atomtype)
                     oniomatom.index = match.index
                     oniomatoms[match.index] = oniomatom
                 else:
-                    is_oniom = True
                     match.atomtype = atomtype
                     oniomatoms[match.index] = match
         for atom in untyped_atoms:
             if not isinstance(atom, OniomAtom):
-                is_oniom = False
                 oniomatom = OniomAtom(atom=atom, atomtype=atom.element)
                 oniomatom.index = atom.index
                 oniomatoms[atom.index] = oniomatom
             else:
-                is_oniom = True
-                atom.atomtype = atomtype
-        if is_oniom:
-            return self
-        else:
-            typed_geom = Geometry(structure=oniomatoms, name = self.name, comment = self.comment, components = self.components)
-            return typed_geom
+                atom.atomtype = atom.element
+                oniomatoms[atom.index] = atom
+
+        typed_geom = Geometry(structure=oniomatoms, name = self.name, comment = self.comment, components = self.components)
+        return typed_geom
 
     def define_layer(self, layer, reference, distance, bond_based=False, expand=True, force=False):
         """
@@ -5804,15 +5799,23 @@ class Geometry:
                     break
         for boundary_atom in boundary_atoms:
             if boundary_atom in avoid:
-                print("Warning: layer boundary at atom %s may be too close to bond order change" % boundary_atom.name)
+                self.LOG.warning("Layer boundary at atom %s may be too close to bond order change" % boundary_atom.name)
             new_layer_atoms = []
             new_boundary_atoms = []
             if boundary_atom.element == "H":
                 if force==True:
                     for connected in boundary_atom.connected:
-                        connected.link_info["element"] = "H"
-                        connected.link_info["connected"]= boundary_atom
-                    print("Warning: atom %s set as link atom to hydrogen atom %s" % connected.name % boundary_atom.name)
+                        if hasattr(connected, "layer"):
+                            if connected > dummy:
+                                boundary_atom.link_info["element"] = "H"
+                                boundary_atom.link_info["connected"] = connected.index + 1
+                            else:
+                                connected.link_info["element"] = "H"
+                                connected.link_info["connected"]= boundary_atom.index + 1
+                        else:
+                            connected.link_info["element"] = "H"
+                            connected.link_info["connected"]= boundary_atom.index + 1
+                    self.LOG.warning("Layer boundary across bond between atom %s and hydrogen atom %s" % connected.name % boundary_atom.name)
                 else:
                     boundary_atoms.remove(boundary_atom)
                     layer_atoms.remove(boundary_atom)
@@ -5823,16 +5826,32 @@ class Geometry:
                         if connected.element == "H" and expand == True and force == False:
                             new_layer_atoms += [connected]
                         elif connected.element == "H" and any((expand == False, force == True)):
-                            connected.link_info["element"] = "H"
-                            connected.link_info["connected"]= boundary_atom
-                            print("Warning: atom %s set as link atom host is hydrogen atom" % connected.name)
+                            if hasattr(connected, "layer"):
+                                if connected > dummy:
+                                    boundary_atom.link_info["element"] = "H"
+                                    boundary_atom.link_info["connected"] = connected.index + 1
+                                else:
+                                    connected.link_info["element"] = "H"
+                                    connected.link_info["connected"]= boundary_atom.index + 1
+                            else:
+                                connected.link_info["element"] = "H"
+                                connected.link_info["connected"]= boundary_atom.index + 1
+                            self.LOG.warning("Atom %s set as link atom host is hydrogen atom" % connected.name)
                         elif connected.element == "C" and boundary_atom.element == "C":
                             bond_order = BondOrder.get(connected, boundary_atom)
                             if bond_order > 1:
                                 if any((expand==True, expand==False)) and force==True:
-                                    print("Warning: layer boundary cuts across bond of order > 1 between atoms %s and %s" % boundary_atom.name % connected.name)
-                                    connected.link_info["element"] = "H"
-                                    connected.link_info["connected"]= boundary_atom
+                                    if hasattr(connected, "layer"):
+                                        if connected > dummy:
+                                            boundary_atom.link_info["element"] = "H"
+                                            boundary_atom.link_info["connected"] = connected.index + 1
+                                        else:
+                                            connected.link_info["element"] = "H"
+                                            connected.link_info["connected"]= boundary_atom.index + 1
+                                    else:
+                                        connected.link_info["element"] = "H"
+                                        connected.link_info["connected"]= boundary_atom.index + 1
+                                    self.LOG.warning("Layer boundary cuts across bond of order > 1 between atoms %s and %s" % boundary_atom.name % connected.name)
                                 elif expand==True and force==False:
                                     new_boundary_atoms += [connected]
                                     new_layer_atoms += [connected]
@@ -5848,9 +5867,17 @@ class Geometry:
                                     break
                             elif bond_order == 1:
                                 if in_ring(connected, boundary_atom) and force==True:
-                                    print("Warning: layer boundary cuts across bond in a ring between atoms %s and %s" % boundary_atom.name % connected.name)
-                                    connected.link_info["element"] = "H"
-                                    connected.link_info["connected"]= boundary_atom
+                                    if hasattr(connected, "layer"):
+                                        if connected > dummy:
+                                            boundary_atom.link_info["element"] = "H"
+                                            boundary_atom.link_info["connected"] = connected.index + 1
+                                        else:
+                                            connected.link_info["element"] = "H"
+                                            connected.link_info["connected"]= boundary_atom.index + 1
+                                    else:
+                                        connected.link_info["element"] = "H"
+                                        connected.link_info["connected"]= boundary_atom.index + 1
+                                    self.LOG.warning("Layer boundary cuts across bond in a ring between atoms %s and %s" % boundary_atom.name % connected.name)
                                 elif in_ring(connected, boundary_atom) and force==False:
                                     boundary_atoms.remove(boundary_atom)
                                     if expand == False:
@@ -5867,18 +5894,35 @@ class Geometry:
                                         new_layer_atoms += [connected]
                                         new_boundary_atoms += [connected]
                                 elif not in_ring(connected, boundary_atom):
-                                    connected.link_info["element"] = "H"
-                                    connected.link_info["connected"]= boundary_atom
+                                    if hasattr(connected, "layer"):
+                                        if connected > dummy:
+                                            boundary_atom.link_info["element"] = "H"
+                                            boundary_atom.link_info["connected"] = connected.index + 1
+                                        else:
+                                            connected.link_info["element"] = "H"
+                                            connected.link_info["connected"]= boundary_atom.index + 1
+                                    else:
+                                        print("true")
+                                        connected.link_info["element"] = "H"
+                                        connected.link_info["connected"]= boundary_atom.index + 1
                         elif connected.element != "H" and connected.element != boundary_atom.element:
                             if force == True:
-                                connected.link_info["element"] = "H"
-                                connected.link_info["connected"]= boundary_atom
+                                if hasattr(connected, "layer"):
+                                    if connected > dummy:
+                                        boundary_atom.link_info["element"] = "H"
+                                        boundary_atom.link_info["connected"] = connected.index + 1
+                                    else:
+                                        connected.link_info["element"] = "H"
+                                        connected.link_info["connected"]= boundary_atom.index + 1
+                                else:
+                                    connected.link_info["element"] = "H"
+                                    connected.link_info["connected"]= boundary_atom.index + 1
                                 if boundary_atom.element == "C":
-                                    print("Warning: layer boundary cuts between bond between carbon atom %s and heteroatom %s" % boundary_atom.name % connected.name)
+                                    self.LOG.warning("Layer boundary cuts between bond between carbon atom %s and heteroatom %s" % boundary_atom.name % connected.name)
                                 elif connected.element != "C":
-                                    print("Warning: layer boundary cuts between bond between carbon atom %s and heteroatom %s" % connected.name % boundary_atom.name)
+                                    self.LOG.warning("Layer boundary cuts between bond between carbon atom %s and heteroatom %s" % connected.name % boundary_atom.name)
                                 elif connected.element != "C" and boundary_atom.element != "C":
-                                    print("Warning: layer boundary cuts between bond between heteroatom %s and heteroatom %s" % connected.name % boundary_atom.name)
+                                    self.LOG.warning("Layer boundary cuts between bond between heteroatom %s and heteroatom %s" % connected.name % boundary_atom.name)
                             elif force == False and expand == True:
                                 num_h = 0
                                 hydrogens = []
@@ -5903,8 +5947,12 @@ class Geometry:
             boundary_atoms += new_boundary_atoms
             layer_atoms += new_layer_atoms
 
-        for atom in layer_atoms:
-            self.atoms[int(atom.name)-1].layer = layer.upper()
+        for layer_atom in layer_atoms:
+            for atom in self.atoms:
+                if layer_atom == atom:
+                    atom.layer = layer.upper()
+                if atom not in layer_atoms and atom.layer == layer.upper():
+                    atom.layer = ""
 
     def change_chirality(self, target):
         """

@@ -635,7 +635,9 @@ class OfType(Finder):
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are of the given atom type"""
         if self.ignore_metals == True:
+            metals = []
             for atom in AnyTransitionMetal().get_matching_atoms(atoms):
+                metals.append(atom)
                 geometry = geometry - atom
             #atoms = geometry.atoms
 
@@ -752,6 +754,10 @@ class OfType(Finder):
             for shape in shapes.get(self.atomtype):
                 for atom in VSEPR(shape).get_matching_atoms(atoms): matching_atoms.append(atom)
         matching_atoms = [match for match in matching_atoms if match.element == self.element]
+
+        #for metal in metals:
+            #geometry = geometry + metal
+
         return matching_atoms
 
 class Aromatics(Finder):
