@@ -3618,7 +3618,7 @@ class Geometry:
 
         self.update_geometry(np.dot(self.coords, eye))
 
-    def invert(self, plane="xy"):
+    def invert(self):
         """
         invert self's coordinates 
         """
@@ -3660,8 +3660,12 @@ class Geometry:
         # get rotation vector
         v1 = a2.bond(a1)
         v2 = a2.bond(a3)
-        w = np.cross(v1, v2)
-        w = w / np.linalg.norm(w)
+        # bond vectors are nearly colinear
+        if abs(abs(np.dot(v1, v2)) / (a2.dist(a1) * a2.dist(a3)) - 1) < 1e-4:
+            w = utils.perp_vector(v1)
+        else:
+            w = np.cross(v1, v2)
+            w = w / np.linalg.norm(w)
 
         # determine rotation angle
         if not radians:
@@ -3938,7 +3942,7 @@ class Geometry:
         # set up substituent
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
-        sub.refresh_connected()
+        # sub.refresh_connected()
         # determine target and atoms defining connection bond
         target = self.find(target)
         # if we have components, do the substitution to the component

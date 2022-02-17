@@ -1252,6 +1252,14 @@ class ValenceExcitation(Signal):
     def dipole_str_vel(self):
         return self.oscillator_str_vel / self.excitation_energy
 
+    @property
+    def delta_abs_len(self):
+        return self.rotatory_str_len * self.excitation_energy
+
+    @property
+    def delta_abs_vel(self):
+        return self.rotatory_str_vel * self.excitation_energy
+
 
 class TransientExcitation(ValenceExcitation):
     x_attr = "excitation_energy"
@@ -1668,9 +1676,9 @@ class ValenceExcitations(Signals):
             elif plot_type.lower() == "uv-vis":
                 intensity_attr = "oscillator_str"
             elif plot_type.lower() == "ecd":
-                intensity_attr = "rotatory_str_len"
+                intensity_attr = "delta_abs_len"
             elif plot_type.lower() == "ecd-velocity":
-                intensity_attr = "rotatory_str_vel"
+                intensity_attr = "delta_abs_vel"
             else:
                 self.LOG.warning("unrecognized plot type: %s\nDefaulting to uv-vis" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
@@ -1731,9 +1739,9 @@ class ValenceExcitations(Signals):
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
         elif y_label is None and "uv-vis" in plot_type.lower():
-            y_label = "Absorbance (arb.)"
+            y_label = "Aborptivity (arb.)"
         elif y_label is None and "ecd" in plot_type.lower():
-            y_label = "ΔAbsorbance (arb.)"
+            y_label = "ΔAborptivity (arb.)"
 
         self.plot_spectrum(
             figure,
