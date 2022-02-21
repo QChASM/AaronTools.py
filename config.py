@@ -3,7 +3,6 @@ from difflib import SequenceMatcher as seqmatch
 import itertools as it
 import os
 import re
-from getpass import getuser
 
 import AaronTools
 from AaronTools import addlogger
@@ -40,6 +39,8 @@ from AaronTools.theory import (
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import job_from_string
+from AaronTools.utils.utils import getuser
+
 
 THEORY_OPTIONS = [
     "GAUSSIAN_COMMENT",

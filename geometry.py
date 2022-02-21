@@ -10,6 +10,7 @@ import numpy as np
 from scipy.spatial import distance_matrix
 
 import AaronTools
+from AaronTools import default_config as DEFAULT_CONFIG
 import AaronTools.utils.utils as utils
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
@@ -23,7 +24,6 @@ COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
 
-DEFAULT_CONFIG = Config(quiet=True)
 
 if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
     import urllib.parse
@@ -126,8 +126,8 @@ class Geometry:
         return
 
     # class methods
-    @classmethod
-    def iupac2smiles(cls, name):
+    @staticmethod
+    def iupac2smiles(name):
         if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
             raise PermissionError(
                 "Converting IUPAC to SMILES failed. External network lookup disallowed."
@@ -1865,6 +1865,19 @@ class Geometry:
                 )
             )
         return [self.atoms[i] for i in path]
+
+    def get_monomers(self):
+        """returns a list of lists of atoms for each monomer of self"""
+        
+        all_atoms = set(self.atoms)
+        monomers = []
+        while all_atoms:
+            atom = all_atoms.pop()
+            monomer = set(self.get_all_connected(atom))
+            all_atoms -= monomer
+            monomers.append(monomer)
+        
+        return [list(monomer) for monomer in monomers]
 
     # geometry measurement
     def bond(self, a1, a2):
