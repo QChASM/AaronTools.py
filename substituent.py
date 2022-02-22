@@ -349,14 +349,14 @@ class Substituent(Geometry):
         out.refresh_ranks()
         return out
 
-    def copy(self, end=None):
+    def copy(self, end=None, **kwargs):
         """
         creates a new copy of the geometry
         parameters:
-            atoms (list): defaults to all atoms
-            name (str): defaults to NAME_copy
+            end - atom substituent is connected to
+            kwargs - passed to super().copy
         """
-        rv = super().copy(copy_atoms=False)
+        rv = super().copy(**kwargs)
         rv = Substituent(
             rv,
             end=end,
