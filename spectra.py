@@ -1037,7 +1037,7 @@ class Frequency(Signals):
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        t = 0
+        t = sum([1 for mode in self.data if mode.frequency < 0])
         for line in lines[intensity_start:]:
             if not re.match(r"\s*\d+:", line):
                 continue

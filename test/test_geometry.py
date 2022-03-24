@@ -884,7 +884,7 @@ def suite():
     # suite.addTest(TestGeometry("test_vbur_lebedev"))
     # suite.addTest(TestGeometry("test_examine_constraints"))
     # suite.addTest(TestGeometry("test_detect_components"))
-    suite.addTest(TestGeometry("test_fix_comment"))
+    suite.addTest(TestGeometry("test_map_ligand"))
     # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 
