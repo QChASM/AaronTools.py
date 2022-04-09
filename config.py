@@ -114,7 +114,12 @@ class Config(configparser.ConfigParser):
         return contents
 
     def __init__(
-        self, infile=None, quiet=False, skip_user_default=False, **kwargs
+        self, 
+        infile=None, 
+        quiet=False, 
+        skip_user_default=False, 
+        interpolation=configparser.ExtendedInterpolation(), 
+        **kwargs
     ):
         """
         infile: the configuration file to read

@@ -54,6 +54,7 @@ ERROR = {
     "Wrong number of Negative eigenvalues": "EIGEN",
     "Erroneous write": "QUOTA",
     "Atoms too close": "CLASH",
+    "Small interatomic distances encountered:": "CLASH",
     "The combination of multiplicity": "CHARGEMULT",
     "Bend failed for angle": "REDUND",
     "Linear angle in Bend": "REDUND",
@@ -1746,6 +1747,8 @@ class FileReader:
                             self.other["error"] = ERROR_ORCA[err]
                             self.other["error_msg"] = line.strip()
                             break
+                    else:
+                        self.other["error"] = False
 
                 line = f.readline()
                 n += 1
@@ -2027,6 +2030,16 @@ class FileReader:
             line = f.readline()
             n += 1
             a = 0
+            if len(line.split()) == 1:
+                # internal coordinate z-matrix
+                # not parsed
+                while line.split():
+                    line = line.split()
+                    rv += [Atom(element=line[0], name=str(a), coords=np.zeros(3))]
+                    a += 1
+                    line = f.readline()
+                return rv, n
+
             while len(line.split()) > 1:
                 line  = line.split()
                 if len(line) == 5:
@@ -2135,7 +2148,7 @@ class FileReader:
             if line.strip().startswith("#") and route is None:
                 route = ""
                 while "------" not in line:
-                    route += line.strip()
+                    route += line.strip() + " "
                     n += 1
                     line = f.readline()
             # archive entry
@@ -2171,7 +2184,7 @@ class FileReader:
 
             # geometry
             if re.search("(Standard|Input) orientation:", line):
-                if get_all and len(self.atoms) > 0:
+                if get_all and self.atoms:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]

@@ -229,7 +229,10 @@ class TestGeometry(TestWithTimer):
         self.assertTrue(len(old) - len(mol.atoms[0].connected) == 1)
 
     def test_canonical_rank(self):
-        pentane = Geometry(os.path.join(prefix, "test_files", "pentane.xyz"))
+        pentane = Geometry(
+            os.path.join(prefix, "test_files", "pentane.xyz"),
+            refresh_ranks=False
+        )
         pentane_rank = [1, 3, 4, 2, 0]
         test_rank = pentane.canonical_rank(heavy_only=True)
         self.assertSequenceEqual(test_rank, pentane_rank)
@@ -884,7 +887,7 @@ def suite():
     # suite.addTest(TestGeometry("test_vbur_lebedev"))
     # suite.addTest(TestGeometry("test_examine_constraints"))
     # suite.addTest(TestGeometry("test_detect_components"))
-    suite.addTest(TestGeometry("test_fix_comment"))
+    suite.addTest(TestGeometry("test_canonical_rank"))
     # suite.addTest(TestGeometry("test_RMSD"))
     return suite
 

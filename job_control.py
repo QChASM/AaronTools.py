@@ -278,7 +278,7 @@ class SubmitProcess:
         sets job template to filename
         AARONLIB directories are searched
         """
-        if len(filename.splitlines()) > 1:
+        if filename and len(filename.splitlines()) > 1:
             # filename is actually the contents of a template file
             self.template = Template(filename)
             return
