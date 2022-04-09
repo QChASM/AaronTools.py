@@ -131,6 +131,7 @@ class JobType:
             there are close contacts
         """
 
+        print("try to resolve an error:", error)
         if error.upper() == "CLASH":
             # if there is a clash, rotate substituents to mitigate clashing
             if geometry:
@@ -195,6 +196,7 @@ class JobType:
                     },
                     out_theory.kwargs,
                 )
+                return out_theory
         
         raise NotImplementedError(
             "cannot fix %s errors for %s; check your input" % (error, exec_type)

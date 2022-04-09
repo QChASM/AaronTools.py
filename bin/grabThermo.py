@@ -15,7 +15,7 @@ from AaronTools.utils.utils import glob_files
 
 
 thermo_parser = argparse.ArgumentParser(
-    description="print thermal corrections and free energy",
+    description="print gas-phase thermal corrections and free energy",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
