@@ -1234,7 +1234,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[1:]])
 
-                    self.other["forces"] = -gradient
+                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
 
                 elif "SAPT Results" in line:
                     self.skip_lines(f, 1)
@@ -1333,6 +1333,9 @@ class FileReader:
 
                 line = f.readline()
                 n += 1
+
+        if "error" not in self.other:
+            self.other["error"] = None
 
     def read_orca_out(self, f, get_all=False, just_geom=True):
         """read orca output file"""
@@ -1447,7 +1450,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[3:]])
 
-                    self.other["forces"] = -gradient
+                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
@@ -1762,6 +1765,9 @@ class FileReader:
                 and "basis_set_by_ele" in self.other
             ):
                 self.other["orbitals"] = Orbitals(self)
+        
+        if "error" not in self.other:
+            self.other["error"] = None
 
     def read_qchem_out(self, f, get_all=False, just_geom=True):
         """read qchem output file"""
@@ -1990,6 +1996,9 @@ class FileReader:
         
         if not just_geom and "finished" not in self.other:
             self.other["finished"] = False
+
+        if "error" not in self.other:
+            self.other["error"] = None
 
     def read_log(self, f, get_all=False, just_geom=True):
         def get_atoms(f, n):
@@ -2473,7 +2482,7 @@ class FileReader:
                     info = line.split()
                     gradient[i] = np.array([float(x) for x in info[2:]])
 
-                self.other["forces"] = gradient
+                self.other["forces"] = UNIT.A0_TO_BOHR * gradient
 
             # nbo stuff
             if "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:

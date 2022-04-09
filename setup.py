@@ -52,7 +52,7 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version="1.0b14",  # Required
+    version="1.0b17",  # Required
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
@@ -142,6 +142,31 @@ setup(
         "AaronTools.utils",
     ],  # Required
     include_package_data=True,
+    package_data={
+        "AaronTools": [
+            "Substituents/*", 
+            "Ligands/*", 
+            "coordination_complex/*/*/*.csv", 
+            "coordination_complex/README.txt", 
+            "Rings/*",
+            "calculated_bond_lengths.json",
+            "LICENSE",
+            "config.ini",
+        ],
+        "AaronTools.test": [
+            "test_files/*",
+            "test_files/*/*",
+            "ref_files/*",
+            "ref_files/*/*",
+        ],
+        "AaronTools.utils": [
+            "quad_grids/*",
+        ],
+        "AaronTools.theory" : [
+            "valid_basis_sets/*",
+            "valid_methods/*",
+        ],
+    },
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
     # and refuse to install the project if the version does not match. If you

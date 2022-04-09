@@ -257,10 +257,11 @@ class Atom:
         try:
             self._saturation = int(SATURATION[self.element])
         except KeyError:
-            if self.element not in TMETAL:
-                self.LOG.warning(
-                    "Saturation not found for element: " + self.element
-                )
+            pass
+            # if self.element not in TMETAL:
+            #     self.LOG.warning(
+            #         "Saturation not found for element: " + self.element
+            #     )
         return
 
     @property

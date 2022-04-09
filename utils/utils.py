@@ -744,4 +744,28 @@ def is_num(test):
     rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
 
+def getuser():
+    """returns the username of the user"""
+    for envar in ["LOGNAME", "USER", "LNAME", "USERNAME"]:
+        user = os.getenv(envar, default=False)
+        if user:
+            return user
+    
+    try:
+        import pwd
+        return pwd.getpwuid(os.getuid())[0]
+    except (ModuleNotFoundError, ImportError):
+        from psutil import username
+        return username()
+
+def available_memory():
+    """returns available memory in B"""
+    for envar in ["SLURM_MEM_PER_NODE"]:
+        mem = os.getenv(envar, default=False)
+        if mem:
+            return 1e6 * int(mem)
+    
+    from psutil import virtual_memory
+    return virtual_memory().free
+
 float_num = re.compile("[-+]?\d+\.?\d*")

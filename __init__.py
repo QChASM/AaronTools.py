@@ -6,33 +6,33 @@ import re
 
 from AaronTools.const import AARONLIB, AARONTOOLS
 
-config = configparser.ConfigParser(interpolation=None, comment_prefixes=("#"))
+default_config = configparser.ConfigParser(interpolation=None, comment_prefixes=("#"))
 for filename in [
     os.path.join(AARONTOOLS, "config.ini"),
     os.path.join(AARONLIB, "config.ini"),
 ]:
     try:
-        config.read(filename)
+        default_config.read(filename)
     except FileNotFoundError:
         continue
     except configparser.MissingSectionHeaderError:
         # add global options to default section
         with open(filename) as f:
             contents = "[DEFAULT]\n" + f.read()
-        config.read_string(contents)
+        default_config.read_string(contents)
 
-if "log_level" in config["DEFAULT"]:
-    LOGLEVEL = config["DEFAULT"]["log_level"].upper()
+if "log_level" in default_config["DEFAULT"]:
+    LOGLEVEL = default_config["DEFAULT"]["log_level"].upper()
 else:
     LOGLEVEL = "WARNING"
-if "print_citations" in config["DEFAULT"]:
-    PRINT_CITATIONS = config["DEFAULT"].getboolean("print_citations")
+if "print_citations" in default_config["DEFAULT"]:
+    PRINT_CITATIONS = default_config["DEFAULT"].getboolean("print_citations")
 else:
     PRINT_CITATIONS = False
 try:
-    SAVE_CITATIONS = config["DEFAULT"].getboolean("save_citations")
+    SAVE_CITATIONS = default_config["DEFAULT"].getboolean("save_citations")
 except ValueError:
-    SAVE_CITATIONS = config["DEFAULT"].get("save_citations")
+    SAVE_CITATIONS = default_config["DEFAULT"].get("save_citations")
 if SAVE_CITATIONS is False:
     SAVE_CITATIONS = None
 

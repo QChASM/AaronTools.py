@@ -10,6 +10,7 @@ import numpy as np
 from scipy.spatial import distance_matrix
 
 import AaronTools
+from AaronTools import default_config as DEFAULT_CONFIG
 import AaronTools.utils.utils as utils
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
@@ -23,7 +24,6 @@ COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
 
-DEFAULT_CONFIG = Config(quiet=True)
 
 if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
     import urllib.parse
@@ -126,8 +126,8 @@ class Geometry:
         return
 
     # class methods
-    @classmethod
-    def iupac2smiles(cls, name):
+    @staticmethod
+    def iupac2smiles(name):
         if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
             raise PermissionError(
                 "Converting IUPAC to SMILES failed. External network lookup disallowed."
@@ -448,7 +448,7 @@ class Geometry:
                 os.path.join(libdir, f), dtype=str, delimiter=",", ndmin=2
             )
 
-            point_group, subset = f.rstrip(".csv").split("_")
+            point_group, subset = f.rstrip(".csv").split("_")[:2]
             # for each possible structure, create a copy of the original template shape
             # attach ligands in the order they would appear in the formula
             for i, mapping in enumerate(mappings):
@@ -1865,6 +1865,19 @@ class Geometry:
                 )
             )
         return [self.atoms[i] for i in path]
+
+    def get_monomers(self):
+        """returns a list of lists of atoms for each monomer of self"""
+        
+        all_atoms = set(self.atoms)
+        monomers = []
+        while all_atoms:
+            atom = all_atoms.pop()
+            monomer = set(self.get_all_connected(atom))
+            all_atoms -= monomer
+            monomers.append(monomer)
+        
+        return [list(monomer) for monomer in monomers]
 
     # geometry measurement
     def bond(self, a1, a2):
@@ -3618,7 +3631,7 @@ class Geometry:
 
         self.update_geometry(np.dot(self.coords, eye))
 
-    def invert(self, plane="xy"):
+    def invert(self):
         """
         invert self's coordinates 
         """
@@ -3660,8 +3673,12 @@ class Geometry:
         # get rotation vector
         v1 = a2.bond(a1)
         v2 = a2.bond(a3)
-        w = np.cross(v1, v2)
-        w = w / np.linalg.norm(w)
+        # bond vectors are nearly colinear
+        if abs(abs(np.dot(v1, v2)) / (a2.dist(a1) * a2.dist(a3)) - 1) < 1e-4:
+            w = utils.perp_vector(v1)
+        else:
+            w = np.cross(v1, v2)
+            w = w / np.linalg.norm(w)
 
         # determine rotation angle
         if not radians:
@@ -3938,7 +3955,7 @@ class Geometry:
         # set up substituent
         if not isinstance(sub, AaronTools.substituent.Substituent):
             sub = AaronTools.substituent.Substituent(sub)
-        sub.refresh_connected()
+        # sub.refresh_connected()
         # determine target and atoms defining connection bond
         target = self.find(target)
         # if we have components, do the substitution to the component
@@ -4850,7 +4867,7 @@ class Geometry:
         def get_rotation(old_axis, new_axis):
             w = np.cross(old_axis, new_axis)
             # if old and new axes are colinear, use perp_vector
-            if np.linalg.norm(w) <= 1e-4:
+            if np.linalg.norm(w) <= 1e-6:
                 w = utils.perp_vector(old_axis)
             angle = np.dot(old_axis, new_axis)
             angle /= np.linalg.norm(old_axis)
@@ -4913,10 +4930,10 @@ class Geometry:
                 # also, sometimes the ligand atoms don't have the center in their connected
                 # attribute, even though the center has the ligand atoms in its
                 # connected attribute
-                for center in self.center:
+                for c in self.center:
                     for key in old_keys:
-                        if center.is_connected(key):
-                            center.add_bond_to(key)
+                        if c.is_connected(key):
+                            c.add_bond_to(key)
                 # print("old keys:", old_keys)
                 # print("old ligand:\n", old_ligand)
                 stop = [
@@ -4973,9 +4990,7 @@ class Geometry:
                         )
                         v /= np.linalg.norm(v)
                         old_vec += v
-                        # print(atom)
 
-                # print("vec:", old_vec)
                 old_vec /= np.linalg.norm(old_vec)
 
             new_walk = ligand.shortest_path(*new_keys)
@@ -4996,7 +5011,14 @@ class Geometry:
             # rotate for best overlap
             old_axis = old_keys[0].bond(old_keys[1])
             new_axis = new_keys[0].bond(new_keys[1])
-            w, angle = get_rotation(old_axis, new_axis)
+            old_axis -= utils.proj(old_vec, old_axis)
+            new_axis -= utils.proj(old_vec, new_axis)
+            w = old_vec
+            v1 = old_axis / np.linalg.norm(old_axis)
+            v2 = new_axis / np.linalg.norm(new_axis)
+            angle = np.arccos(np.dot(v1, v2))
+            if np.dot(np.cross(v1, v2), w) > 0:
+                angle *= -1
             ligand.rotate(w, angle, center=center)
 
             return remove_centers

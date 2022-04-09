@@ -113,6 +113,7 @@ class SymmetryElement:
         """trace of this symmetry element's matrix"""
         return np.trace(self.operation)
 
+
 class Identity(SymmetryElement):
     def __init__(self):
         self.translation = np.zeros(3)
@@ -356,7 +357,7 @@ class PointGroup:
         if error <= tolerance:
             valid.append(inver)
 
-        if any(np.isclose(m, 0) for m in moments):
+        if any(np.isclose(m, 0, atol=1e-6) for m in moments):
             return valid
 
         ortho_to = []
@@ -1110,7 +1111,7 @@ class PointGroup:
         """
         moments, axes = self.geom.get_principle_axes()
         linear = False
-        if any(np.isclose(m, 0) for m in moments):
+        if any(np.isclose(m, 0, atol=1e-6) for m in moments):
             linear = True
 
         if linear:

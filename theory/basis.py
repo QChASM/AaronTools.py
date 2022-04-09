@@ -486,7 +486,11 @@ class BasisSet:
                         # I don't see it, but basis file names cannot start with 'aux'
                         os.path.exists(info[i + 1])
                         and not info[i + 1].lower().startswith("aux")
-                    ) or os.sep in info[i + 1]:
+                    ) or (
+                        "/" in info[i + 1] or
+                        "\\" in info[i + 1] or
+                        os.sep in info[i + 1]
+                    ):
                         user_defined = info[i + 1]
                         i += 1
                 except IndexError:
