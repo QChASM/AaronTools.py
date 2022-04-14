@@ -225,6 +225,8 @@ class FileWriter:
                 style = "sqmin"
             elif style.lower() == "qchem":
                 style = "inp"
+            elif style.lower() == "pdb":
+                style = "pdb"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -235,8 +237,10 @@ class FileWriter:
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
-            if "oniom" in kwargs:
+            if "oniom" in kwargs and "models" not in kwargs:
                 out = cls.write_oniom_xyz(geom, append, outfile, **kwargs)
+            elif "oniom" in kwargs and "models" in kwargs:
+                out = cls.write_multi_xyz(geom, append, outfile, **kwargs)
             else:
                 out = cls.write_xyz(geom, append, outfile)
 
@@ -288,6 +292,9 @@ class FileWriter:
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
+        elif style.lower() == "pdb":
+            out = cls.write_pdb(geom, append, outfile=outfile, **kwargs)
+
         return out
 
     @classmethod
@@ -314,12 +321,73 @@ class FileWriter:
         return
 
     @classmethod
+    def write_multi_xyz(cls, geom, append, outfile=None, **kwargs):
+        """write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
+        kwargs["models"] can be string "all", string of model number e.g. "2", string of model range e.g. "1-5",
+        or list of model numbers including ranges e.g. ["1", "3-5", "10"]
+        kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
+        models = None
+        geom_list = [geom]
+        if "models" in kwargs.keys():
+            models = kwargs["models"]
+        if models is not None:
+            if isinstance(models, str):
+                if models != "all":
+                    try:
+                        models = int(models)
+                        models = ["model_%s" % str(models)]
+                    except ValueError:
+                        if "-" in models:
+                            models = models.split("-")
+                            model_list = []
+                            for i in range(int(models[0]), int(models[1])+1):
+                                model_list.append("models_%s" % str(i))
+                            models = model_list
+                        else: raise ValueError("improper specification of included models")
+            elif isinstance(models, list):
+                model_list = []
+                for model in models:
+                    if "-" in model:
+                        model = model.split("-")
+                        for i in range(int(model[0]), int(model[1])+1):
+                            model_list.append("model_%s" % str(i))
+                    else:
+                        model_list.append("model_%s" % str(model))
+                models = model_list
+
+            for key in geom.other.keys():
+                if key.startswith("model"):
+                    print("this worked")
+                    if models == "all":
+                        geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
+                    elif isinstance(models, list):
+                        if key in models:
+                            geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
+
+        counter = 0
+        for geom in geom_list:
+            if outfile == False:
+                FileWriter.write_oniom_xyz(geom, append, outfile = False, **kwargs)
+            elif outfile==None:
+                FileWriter.write_oniom_xyz(geom, append, outfile = geom.name, **kwargs)
+            else:
+                counter += 1
+                outfile_name = outfile.split(".")[0] + "_" + str(counter) + "." + outfile.split(".")[1]
+                FileWriter.write_oniom_xyz(geom, append, outfile = outfile_name, **kwargs)
+        return
+
+    @classmethod
     def write_oniom_xyz(cls, geom, append, outfile=None, **kwargs):
+        """write xyz files with additional columns for atomtype, charge, and link atom info
+        kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
         frag = kwargs["oniom"]
         if frag == 'all':
             geom.sub_links()
         elif frag == 'layer':
             geom=geom.oniom_frag(layer=kwargs["layer"], as_object=True)
+
         mode = "a" if append else "w"
         fmt1a = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f} {:2s} {:2s} {: 8.6f} {:2d}\n"
         fmt1b = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {:2s} {:2s} {:2d}\n"
@@ -330,6 +398,7 @@ class FileWriter:
         fmt2c = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {: 8.6f}\n"
         fmt2d = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
         fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} \n"
+
         s = "%i\n" % len(geom.atoms)
         s += "%s\n" % geom.comment
         for atom in geom.atoms:
@@ -382,15 +451,8 @@ class FileWriter:
                 elif atom.atomtype == "" and atom.charge == "" and not atom.link_info:
                     s += fmt2d.format(atom.element, *atom.coords, atom.layer)
             except ValueError:
-                print("Warning: no layers designated for OniomAtom object(s)")
+                self.LOG.warning("no layers designated for OniomAtom object(s)")
                 s += fmt3.format(atom.element, *atom.coords)
-                            #atom.layer = "H"
-                            #try:
-                                #print(atom.layer)
-                            #    s += fmt3.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
-                            #except AttributeError:
-                            #    print(atom.layer)
-                            #    s += fmt4.format(atom.element, *atom.coords, atom.layer)
 
         s = s.rstrip()
 
@@ -807,6 +869,123 @@ class FileWriter:
             # write output to the requested destination
             with open(outfile, "w") as f:
                 f.write(s)
+        return
+
+    @classmethod
+    def write_pdb(cls, geom, append, outfile=None, qt=False):
+        mode = "a" if append else "w"
+        if "model_2" in geom.other.keys():
+            models = True
+        else:
+            models = False
+        s = ""
+        def spaced(spac, val, align="right"):
+            if not isinstance(val, str):
+                val = str(val)
+            val_predecimal = len(val.split(".")[0])
+            writ_space = spac
+            if len(val) > writ_space:
+                val=str(round(float(val),writ_space-val_predecimal-1))
+            n = writ_space-len(val)
+            sp = " "
+            spaces = n*sp
+            if align=="right":
+                rv = spaces+val
+            elif align=="left":
+                rv = val+spaces
+            return rv
+
+        connectivity = []
+        con_spac = 5
+
+        def write_atoms(atoms, s, get_connect=False):
+            for i, atom in enumerate(atoms):
+                atom.index = i
+                serial_spac = 5
+                atom_spac = 4
+                res_spac = 3
+                coord_spac = 8
+                ele_spac = 2
+                if get_connect:
+                    connectivity.append([])
+                    connectivity[-1].append(atom)
+                    for connected in atom.connected:
+                        connectivity[-1].append(connected)
+                if qt == False:
+                    charge_spac = 2
+                else:
+                    charge_spac = 10
+                if atom.res:
+                    s += "ATOM  "
+                else:
+                    s += "HETATM"
+                s += spaced(serial_spac, str(i+1))
+                if qt==True:
+                    s += spaced(atom_spac, atom.element)
+                else:
+                    s += spaced(atom_spac, atom.atomtype)
+                s += " "
+                s += spaced(res_spac, atom.res)
+                s += 10 * " "
+                for coord in atom.coords:
+                    s += spaced(coord_spac, coord)
+                if qt == False:
+                    s += 26*" "
+                    s += spaced(ele_spac, atom.element)
+                    s += "{: 4.2f}".format(atom.charge)
+                else:
+                    s += 12 * " "
+                    s += spaced(charge_spac, atom.charge, align="left")
+                    s += spaced(ele_spac, atom.atomtype)
+                s += "\n"
+            return s
+
+        if hasattr(geom, "name"):
+            s += "HEADER"
+            s += " " * 52
+            s += geom.name
+            s += "\n"
+
+        if hasattr(geom, "other"):
+            if isinstance(geom.other, dict) and "source" in geom.other.keys():
+                s += "EXPDATA"
+                s += " " *3
+                s += geom.other["source"]
+                s += "\n"
+
+        if models == True:
+            num_models = 1
+            s += "MODEL 1\n"
+            s = write_atoms(geom.atoms, s, get_connect=True)
+            s += "ENDMDL\n"
+            for key in geom.other.keys():
+                if key.startswith("model"):
+                    num_models += 1
+                    s += "MODEL %s\n" % str(num_models)
+                    s = write_atoms(geom.other[key], s)
+                    s += "ENDMDL\n"
+
+        elif models == False:
+            s = write_atoms(geom.atoms, s, get_connect=True)
+
+        for connection in connectivity:
+            s += "CONECT"
+            for connect in connection: 
+                s += spaced(con_spac, connect.index)
+            s += "\n"
+
+        if outfile is None:
+            #if no output file is specified, use the name of the geometry
+            with open(geom.name + ".xyz", mode) as f:
+                f.write(s)
+        elif outfile is False:
+            #if no output file is desired, just return the file contents
+            return s
+        else:
+            #write output to the requested destination
+            with open(outfile, mode) as f:
+                f.write(s)
+
         return
 
 
@@ -3166,7 +3345,7 @@ class FileReader:
                         coords = line[1:4]
                     if len(line) > 6:
                         #tags.append(line[len(line)-2:])
-                        link_atom = line[len(line)-2:].split()
+                        link_atom = line[len(line)-2:]
                         link_info["connected"] = link_atom[1]
                         info = link_atom[0].split("-")
                         link_info["element"] = info[0]
@@ -3379,7 +3558,7 @@ class FileReader:
                         element = ''.join(i for i in line[12:16].strip() if not i.isdigit())
                         atomtype = line[78:].strip()
                         charge = line[66:76].strip()
-                    a = OniomAtom(element=element, coords=line[30:54].split(), name=line[6:11].strip(), tags=line[17:20].strip(), atomtype=atomtype, charge=charge)
+                    a = OniomAtom(element=element, coords=[line[30:38], line[38:46], line[46:54]], name=line[6:11].strip(), res=line[17:20].strip(), atomtype=atomtype, charge=charge)
                     rv += [a]
                 elif line.startswith("ENDMDL"):
                     endmdl = True
@@ -3389,8 +3568,10 @@ class FileReader:
             return rv, n, endmdl
         num_models = 0
         while line != "":
+            if line.startswith("HEADER"):
+                self.name = line[62:66]
             if line.startswith("EXPDTA"):
-                self.other["Source"] = line[10:].strip()
+                self.other["source"] = line[10:].strip()
             elif line.startswith("MODEL"):
                 model_num = int(line.split()[1])
                 line = f.readline()
@@ -3398,7 +3579,7 @@ class FileReader:
                 if model_num == 1:
                     self.atoms, n, endmdl = get_atoms(f, n, line)
                 elif model_num > 1:
-                    self.other["Model_%s" % str(model_num)], n, endmdl = get_atoms(f, n, line)
+                    self.other["model_%s" % str(model_num)], n, endmdl = get_atoms(f, n, line)
             elif line.startswith("ATOM") or line.startswith("HETATM"):
                 atoms, n, endmdl = get_atoms(f, n, line)
                 if endmdl == True:
@@ -3406,7 +3587,7 @@ class FileReader:
                     if num_models == 1:
                         self.atoms = atoms
                     elif num_models > 1:
-                        self.other["Model_%s" % str(num_models)] = atoms
+                        self.other["model_%s" % str(num_models)] = atoms
                 elif endmdl == False:
                     self.atoms = atoms
             elif line.startswith("CONECT"):

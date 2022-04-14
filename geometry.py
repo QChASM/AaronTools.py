@@ -1372,7 +1372,7 @@ class Geometry:
             a._rank = r
         return
 
-    def make_oniom(self, get_types=True):
+    def make_oniom(self):
         """convert existing geometry composed of Atom objects
         to geometry of OniomAtom objects including changing
         all atoms in attribute lists to OniomAtom objects"""
@@ -1401,6 +1401,7 @@ class Geometry:
         for key, val in constraint_ndx:
             oniomatoms[key].constraint = set([])
             oniomatoms[key].constraint.add((oniomatoms[val[0]], val[1]))
+            oniomatoms[val[0]].constraint.add((oniomatoms[key], val[1]))
 
         geom = Geometry(structure = oniomatoms, name = self.name, comment = self.comment, components = self.components)
         return geom
@@ -5465,9 +5466,9 @@ class Geometry:
     def add_links(self):
         tmp=[]
         for a in self.atoms:
-            if "LAH" in str(a.tags):
-                c = OniomAtom.from_atom(a)
-                c.add_tag("LA " + a.name)
+            if a.link_info:
+                c = OniomAtom(atom=a)
+                c.link_info["link"] = a
                 c.element="H"
                 tmp.append(c)
         self = self + tmp
@@ -5476,8 +5477,7 @@ class Geometry:
     def sub_links(self):
         tmp = []
         for a in self.atoms:
-            match = re.search("LA [0-9]+", str(a.tags))
-            if match is not None:
+            if a.link_info and "link" in a.link_info.keys():
                 tmp.append(a)
             else:
                 pass
@@ -5487,38 +5487,44 @@ class Geometry:
     def sub_hosts(self):
         tmp = []
         for a in self.atoms:
-            match = re.search("LAH", str(a.tags))
-            if match is not None:
-                tmp.append(a)
+            if a.link_info and "link" in a.link_info.keys():
+                tmp.append(a.link_info["link"])
             else:
                 pass
         self = self - tmp
         return self
 
-    def check_links(self):
-        for i in range(len(self.atoms)):
-            if not isinstance(self.atoms[i], OniomAtom):
+    def fix_links(self):
+        numlinks = 0
+        for i, a in enumerate(self.atoms):
+            if not isinstance(a, OniomAtom):
                 raise TypeError("geometry must be composed of OniomAtoms")
             else:
-                numtrue = 0
-                numlinks = 0
                 for j in range(i+1, len(self.atoms)):
-                    if (self.atoms[i].is_connected(self.atoms[j])) \
-                            and (self.atoms[i].layer != self.atoms[j].layer):
-                        a = self.atoms[i]
-                        b = self.atoms[b]
+                    if (a.is_connected(self.atoms[j])) and (a.layer != self.atoms[j].layer):
+                        b = self.atoms[j]
                         numlinks += 1
                         if a > b:
-                            match = LAH_bonded_to.search(str(b.tags))
-                            match2 = LA_on.search(str(a.tags))
-                            if match.group(2) == a.name and match2.group(2) == b.name:
-                                numtrue += 1
+                            if "connected" in b.link_info.keys() and b.link_info["connected"] == i+1:
+                                pass
+                            else:
+                                 b.link_info["connected"] = i+1
                         elif b > a:
-                            match = LAH_bonded_to.search(str(a.tags))
-                            match2 = LA_on.search(str(b.tags))
-                            if match.group(2) == b.name and match2.group(2) == a.name:
-                                numtrue += 1
-        return numtrue == numlinks
+                            if "connected" in a.link_info.keys() and b.link_info["connected"] == i+1:
+                                pass
+                            else:
+                                b.link_info["connected"] = i+1
+                    if a.link_info and "connected" in a.link_info.keys():
+                        if a.link_info["connected"] == j+1:
+                            if not a.is_connected(b):
+                                a.link_info = {}
+                            elif a.is_connected(b) and a.layer == b.layer:
+                                a.link_info = {}
+                            else:
+                                numlinks +=1
+                        else:
+                            pass
+        return
 
     #def write_comment(self):
     #    for atom in self.atoms:
@@ -5656,9 +5662,13 @@ class Geometry:
 
     def get_gaff_geom(self):
         """Returns a geometry comprised of OniomAtoms with GAFF atomtypes from OfType finder"""
+        if not isinstance(self.atoms[0], OniomAtom):
+            geom = self.make_oniom()
+        else:
+            geom = self
         typelist = []
         elementlist = []
-        atoms = self.atoms
+        atoms = geom.atoms
         for i, atom in enumerate(atoms):
             atom.index = i
             if atom.element not in elementlist: elementlist.append(atom.element)
@@ -5673,27 +5683,28 @@ class Geometry:
         oniomatoms = [0]*len(atoms)
         untyped_atoms = list(atoms)
         for atomtype in typelist:
-            matches = OfType(atomtype).get_matching_atoms(atoms,self)
+            matches = OfType(atomtype).get_matching_atoms(atoms,geom)
             for match in matches:
                 untyped_atoms.remove(match)
-                if not isinstance(match, OniomAtom):
-                    oniomatom = OniomAtom(atom=match, atomtype=atomtype)
-                    oniomatom.index = match.index
-                    oniomatoms[match.index] = oniomatom
-                else:
-                    match.atomtype = atomtype
-                    oniomatoms[match.index] = match
+#                if not isinstance(match, OniomAtom):
+#                    oniomatom = OniomAtom(atom=match, atomtype=atomtype)
+#                    oniomatom.index = match.index
+#                    oniomatoms[match.index] = oniomatom
+#                else:
+                match.atomtype = atomtype
+                oniomatoms[match.index] = match
         for atom in untyped_atoms:
-            if not isinstance(atom, OniomAtom):
-                oniomatom = OniomAtom(atom=atom, atomtype=atom.element)
-                oniomatom.index = atom.index
-                oniomatoms[atom.index] = oniomatom
-            else:
-                atom.atomtype = atom.element
-                oniomatoms[atom.index] = atom
+#            if not isinstance(atom, OniomAtom):
+#                oniomatom = OniomAtom(atom=atom, atomtype=atom.element)
+#                oniomatom.index = atom.index
+#                oniomatoms[atom.index] = oniomatom
+#            else:
+            atom.atomtype = atom.element
+            oniomatoms[atom.index] = atom
 
         typed_geom = Geometry(structure=oniomatoms, name = self.name, comment = self.comment, components = self.components)
         return typed_geom
+#        return
 
     def define_layer(self, layer, reference, distance, bond_based=False, expand=True, force=False):
         """
@@ -5704,6 +5715,10 @@ class Geometry:
 
         if not isinstance(self.atoms[0], OniomAtom):
             self = self.make_oniom()
+
+        if not hasattr(self.atoms[0], "index"):
+            for i, atom in enumerate(self.atoms):
+                atom.index = i
 
         avoid = []
         constraints = self.get_constraints()
@@ -6105,3 +6120,25 @@ class Geometry:
                     vetted_mols += [cand]
 
         return vetted_mols
+
+    @classmethod
+    def from_pdb(cls, structure, name=""):
+        if isinstance(structure, FileReader):
+            from_file = structure
+        elif isinstance(structure, str):
+            from_file = FileReader(structure)
+        if name == "":
+            base_name = from_file.name
+            if base_name =="":
+                base_name = self.name
+        else:
+            base_name = name
+        geom_list=[]
+        struct_list = {base_name + "_" + "model_1":from_file.atoms}
+        for key in from_file.other.keys():
+            if "model" in key:
+                struct_list[base_name + "_" + key] = from_file.other[key]
+        for struct_name, atoms in struct_list:
+            geom = cls(name=struct_name, structure=atoms,comment=self.comment)
+            geom_list.append(geom)
+        return geom_list

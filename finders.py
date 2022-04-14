@@ -634,12 +634,17 @@ class OfType(Finder):
 
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are of the given atom type"""
+#        geom = geometry.copy()
         if self.ignore_metals == True:
             metals = []
-            for atom in AnyTransitionMetal().get_matching_atoms(atoms):
-                metals.append(atom)
-                geometry = geometry - atom
-            #atoms = geometry.atoms
+            from AaronTools.const import TMETAL
+            for i, atom in enumerate(geometry.atoms):
+                atom.index = i
+                if atom.element in TMETAL:
+                    metals.append(atom)
+
+        geometry - metals
+        atoms = geometry.atoms
 
         atoms = [atom for atom in atoms if atom.element == self.element]
 
@@ -755,8 +760,12 @@ class OfType(Finder):
                 for atom in VSEPR(shape).get_matching_atoms(atoms): matching_atoms.append(atom)
         matching_atoms = [match for match in matching_atoms if match.element == self.element]
 
-        #for metal in metals:
-            #geometry = geometry + metal
+        #add metals back into geometry and reorder
+        geometry = geometry + metals
+        new_atoms = [0]* len(geometry.atoms)
+        for atom in geometry.atoms:
+            new_atoms[atom.index] = atom
+        geometry.atoms = new_atoms
 
         return matching_atoms
 

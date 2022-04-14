@@ -1,9 +1,9 @@
 import numpy as np
 from AaronTools.atoms import Atom
-from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ, ATOM_TYPES
+from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info={}, atom=None):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info={}, res = "", atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
         atomtype = str(atomtype).strip()
@@ -48,7 +48,11 @@ class OniomAtom(Atom):
             if atom._rank == None:
                 self._rank = None
             else:
-                self._rank = atom._rank 
+                self._rank = atom._rank
+            if hasattr(atom, "res") and not res:
+                self.res = atom.res
+            else:
+                self.res = res
 
         element = str(element).strip().capitalize()
         if element == "" and atom == None:
@@ -77,6 +81,7 @@ class OniomAtom(Atom):
             self.connected = set([])
             self.constraint = set([])
             self._rank = None
+            self.res = res
             charge=str(charge).strip()
             if charge == "":
                 pass
@@ -155,8 +160,12 @@ class OniomSanity:
         """returns True if atomtypes in atomlist are all in reference"""
         counter = 0
         for atom in atomlist:
-            if atom.get_at():
+            if hasattr(atom,"atomtype"):
                 counter+=1
+                if atom.atomtype in ATOM_TYPES:
+                    continue
+                else:
+                    return False
         return counter == len(atomlist)
 
     @classmethod
@@ -164,7 +173,11 @@ class OniomSanity:
         """returns True if layers are defined correctly as either H, L, or M"""
         counter=0
         for atom in atomlist:
-            if atom.get_layer():
+            if hasattr(atom,"layer"):
                 counter+=1
+                if atom.layer in ("H", "M", "L"):
+                    continue
+                else:
+                    return False
         return counter==len(atomlist)
 

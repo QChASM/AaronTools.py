@@ -141,6 +141,19 @@ class TestOniomAtoms(TestWithTimer):
         self.assertTrue(atoms[4] < atoms[2])
         self.assertTrue(atoms[5] < atoms[3])
 
+    def test_greater_than(self):
+        atoms = Geometry(TestOniomAtoms.small_mol)
+        atoms = atoms.atoms
+        self.assertTrue(atoms[0] > atoms[10])
+        self.assertTrue(atoms[0] > atoms[11])
+        self.assertTrue(atoms[0] > atoms[12])
+        self.assertTrue(atoms[0] > atoms[13])
+        self.assertTrue(atoms[0] > atoms[14])
+        self.assertTrue(atoms[0] > atoms[15])
+        self.assertTrue(atoms[0] > atoms[16])
+        self.assertTrue(atoms[0] > atoms[17])
+        self.assertTrue(atoms[0] > atoms[18])
+
     def test_add_tag(self):
         mol = self.read_xyz(TestOniomAtoms.small_mol)
         for atom in mol:
@@ -161,14 +174,14 @@ class TestOniomAtoms(TestWithTimer):
             if a.element == 'H':
                 continue
             s += a.get_invariant() + " "
-        self.assertEqual(s, "1010063 2020062 2020062 2020062 1010063 ")
+        self.assertEqual(s, "10100063 20200062 20200062 20200062 10100063 ")
 
         s = ''
         for a in mol.atoms:
             if a.element == 'H':
                 continue
             s += a.get_invariant() + " "
-        ans = "3030061 2020062 2020062 3030061 2020062 2020062 2020062 2020062 1010081 1010063 1010072 1010072 "
+        ans = "30300061 20200062 20200062 30300061 20200062 20200062 20200062 20200062 10100081 10100063 10100072 10100072 "
         self.assertEqual(s, ans)
 
     # measurement
@@ -218,6 +231,13 @@ class TestOniomAtoms(TestWithTimer):
         mol = self.read_xyz(TestOniomAtoms.small_mol)
         angle = mol[17].angle(mol[16], mol[18])
         self.assertTrue(abs(np.rad2deg(angle) - 101.1) < 10**(-1))
+
+class TestChargeSum(TestWithTimer): 
+    atoms = Geometry(TestOniomAtoms.small_mol)
+    tot_charge = ChargeSum().get(atoms.atoms)
+    diff = abs(tot_charge-(-1))
+    def test_charge_sum(self):
+        self.assertTrue(self.diff < 0.000001)
 
 class TestOniomSanity(TestWithTimer):
     a = TestOniomAtoms()
