@@ -647,7 +647,6 @@ class ImplicitSolvent:
 
         return (out, warnings)
 
-
     def get_qchem(self):
         """returns dict() with solvent information for qchem input files"""
 

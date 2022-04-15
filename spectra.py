@@ -1037,7 +1037,7 @@ class Frequency(Signals):
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        t = 0
+        t = sum([1 for mode in self.data if mode.frequency < 0])
         for line in lines[intensity_start:]:
             if not re.match(r"\s*\d+:", line):
                 continue
@@ -1251,6 +1251,14 @@ class ValenceExcitation(Signal):
     @property
     def dipole_str_vel(self):
         return self.oscillator_str_vel / self.excitation_energy
+
+    @property
+    def delta_abs_len(self):
+        return self.rotatory_str_len * self.excitation_energy
+
+    @property
+    def delta_abs_vel(self):
+        return self.rotatory_str_vel * self.excitation_energy
 
 
 class TransientExcitation(ValenceExcitation):
@@ -1668,9 +1676,9 @@ class ValenceExcitations(Signals):
             elif plot_type.lower() == "uv-vis":
                 intensity_attr = "oscillator_str"
             elif plot_type.lower() == "ecd":
-                intensity_attr = "rotatory_str_len"
+                intensity_attr = "delta_abs_len"
             elif plot_type.lower() == "ecd-velocity":
-                intensity_attr = "rotatory_str_vel"
+                intensity_attr = "delta_abs_vel"
             else:
                 self.LOG.warning("unrecognized plot type: %s\nDefaulting to uv-vis" % plot_type)
             kwargs["intensity_attr"] = intensity_attr
@@ -1731,9 +1739,9 @@ class ValenceExcitations(Signals):
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
         elif y_label is None and "uv-vis" in plot_type.lower():
-            y_label = "Absorbance (arb.)"
+            y_label = "Aborptivity (arb.)"
         elif y_label is None and "ecd" in plot_type.lower():
-            y_label = "ΔAbsorbance (arb.)"
+            y_label = "ΔAborptivity (arb.)"
 
         self.plot_spectrum(
             figure,

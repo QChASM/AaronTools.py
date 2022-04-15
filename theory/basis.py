@@ -579,7 +579,11 @@ class BasisSet:
                         os.path.exists(info[i + 1])
                         and not info[i + 1].lower().startswith("aux")
                         and not info[i + 1].lower() in {"high", "medium", "low"}
-                    ) or os.sep in info[i + 1]:
+                    ) or (
+                        "/" in info[i + 1] or
+                        "\\" in info[i + 1] or
+                        os.sep in info[i + 1]
+                    ):
                         user_defined = info[i + 1]
                         i += 1
                 except IndexError:

@@ -198,10 +198,10 @@ class TestFileReader(TestWithTimer):
         test = FileReader(self.com_file2, just_geom=False)
         self.assertEqual(test.other, ref2)
 
-    def test_read_pdb(self):
-        """read rcsb pdb files"""
-        ref = Geometry(FileReader(self.pdb_xyz))
-        test = Geometry(FileReader(self.pdb))
+#    def test_read_pdb(self):
+#        """read rcsb pdb files"""
+#        ref = Geometry(FileReader(self.pdb_xyz))
+#        test = Geometry(FileReader(self.pdb))
         #self.assertTrue(ref==test)
 
     def test_write_com(self):

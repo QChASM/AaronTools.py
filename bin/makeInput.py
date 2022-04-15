@@ -510,7 +510,7 @@ gaussian_options.add_argument(
 args = theory_parser.parse_args()
 
 if not args.method and not args.use_prev:
-    sys.stderr.write("no method specified; -m/--method or -u/--use-previous is required")
+    sys.stderr.write("no method specified; -m/--method or -u/--use-previous is required\n")
     theory_parser.print_help()
     sys.exit(1)
 
@@ -581,7 +581,7 @@ for f in glob_files(args.infile, parser=theory_parser):
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f), just_geom=False, get_all=True)
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_ranks=False)
 
 
     if args.method is None and args.use_prev:

@@ -64,7 +64,7 @@ for f in glob_files(args.infile, parser=stat_parser):
             )
 
     co = CompOutput(infile)
-    if co.gradient.keys() and (
+    if co.gradient and co.gradient.keys() and (
         not all(
             x in header_vals for x in co.gradient.keys()
         ) or not all(
@@ -81,7 +81,7 @@ for f in glob_files(args.infile, parser=stat_parser):
     s += "%30s" % f
     s += "%8s" % co.opt_steps
 
-    if co.gradient.keys():
+    if co.gradient and co.gradient.keys():
         for crit in header_vals:
             col = "%.2e/%s" % (
                 float(co.gradient[crit]["value"]), "YES" if co.gradient[crit]["converged"] else "NO"
@@ -94,7 +94,7 @@ for f in glob_files(args.infile, parser=stat_parser):
             infile.other["error"] != "UNKNOWN"
     ):
         s += "  %s" % infile.other["error_msg"]
-    elif not co.gradient.keys():
+    elif not co.gradient or not co.gradient.keys():
         s += "  no progress found"
     elif co.finished:
         s += "  finished"

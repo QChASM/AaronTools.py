@@ -60,7 +60,7 @@ def proj(v_vec, u_vec):
     v_vec should be a np.array, and u_vec should have the
     same shape as v_vec"""
     numerator = np.dot(u_vec, v_vec)
-    denominator = np.linalg.norm(v_vec) ** 2
+    denominator = np.dot(v_vec, v_vec)
     return numerator * v_vec / denominator
 
 
@@ -743,5 +743,29 @@ def is_int(test):
 def is_num(test):
     rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
+
+def getuser():
+    """returns the username of the user"""
+    for envar in ["LOGNAME", "USER", "LNAME", "USERNAME"]:
+        user = os.getenv(envar, default=False)
+        if user:
+            return user
+    
+    try:
+        import pwd
+        return pwd.getpwuid(os.getuid())[0]
+    except (ModuleNotFoundError, ImportError):
+        from psutil import username
+        return username()
+
+def available_memory():
+    """returns available memory in B"""
+    for envar in ["SLURM_MEM_PER_NODE"]:
+        mem = os.getenv(envar, default=False)
+        if mem:
+            return 1e6 * int(mem)
+    
+    from psutil import virtual_memory
+    return virtual_memory().free
 
 float_num = re.compile("[-+]?\d+\.?\d*")

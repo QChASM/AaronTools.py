@@ -62,6 +62,7 @@ ERROR = {
     "Wrong number of Negative eigenvalues": "EIGEN",
     "Erroneous write": "QUOTA",
     "Atoms too close": "CLASH",
+    "Small interatomic distances encountered:": "CLASH",
     "The combination of multiplicity": "CHARGEMULT",
     "Bend failed for angle": "REDUND",
     "Linear angle in Bend": "REDUND",
@@ -1578,7 +1579,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[1:]])
 
-                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
+                    self.other["forces"] = -gradient
 
                 elif "SAPT Results" in line:
                     self.skip_lines(f, 1)
@@ -1794,7 +1795,7 @@ class FileReader:
                         info = line.split()
                         gradient[i] = np.array([float(x) for x in info[3:]])
 
-                    self.other["forces"] = UNIT.A0_TO_BOHR * -gradient
+                    self.other["forces"] = -gradient
 
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
@@ -2094,6 +2095,8 @@ class FileReader:
                             self.other["error"] = ERROR_ORCA[err]
                             self.other["error_msg"] = line.strip()
                             break
+                    else:
+                        self.other["error"] = False
 
                 line = f.readline()
                 n += 1
@@ -2381,6 +2384,16 @@ class FileReader:
             line = f.readline()
             n += 1
             a = 0
+            if len(line.split()) == 1:
+                # internal coordinate z-matrix
+                # not parsed
+                while line.split():
+                    line = line.split()
+                    rv += [Atom(element=line[0], name=str(a), coords=np.zeros(3))]
+                    a += 1
+                    line = f.readline()
+                return rv, n
+
             while len(line.split()) > 1:
                 line  = line.split()
                 if len(line) == 5:
@@ -2585,7 +2598,7 @@ class FileReader:
             if line.strip().startswith("#") and route is None:
                 route = ""
                 while "------" not in line:
-                    route += line.strip()
+                    route += line.strip() + " "
                     n += 1
                     line = f.readline()
             # archive entry
@@ -2925,7 +2938,7 @@ class FileReader:
                     info = line.split()
                     gradient[i] = np.array([float(x) for x in info[2:]])
 
-                self.other["forces"] = UNIT.A0_TO_BOHR * gradient
+                self.other["forces"] = gradient
 
             # nbo stuff
             if "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
