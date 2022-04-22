@@ -32,6 +32,9 @@ from AaronTools.theory import (
     QCHEM_REM,
     QCHEM_COMMENT,
     QCHEM_SETTINGS,
+    XTB_CONTROL_BLOCKS,
+    XTB_COMMAND_LINE,
+    CREST_COMMAND_LINE,
     FrequencyJob,
     job_from_string,
 )
@@ -2059,7 +2062,7 @@ class Theory:
                 job_dict = job.get_qchem()
                 if isinstance(job, FrequencyJob) and job.temperature != 298.15:
                     warnings.append(
-                        "thermochemistry data in the output file will be for 298.15 K\n"
+                        "thermochemistry data in the output file might be for 298.15 K\n"
                         "in spite of the user setting %.2f K\n" % (job.temperature) + \
                         "free energy corrections can be calculated at different\n"
                         "temperatures using AaronTools grabThermo.py script or\n"
@@ -2235,13 +2238,13 @@ class Theory:
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
 
         if (
-            GAUSSIAN_COMMENT not in other_kw_dict
-            or not other_kw_dict[GAUSSIAN_COMMENT]
+            QCHEM_COMMENT not in other_kw_dict
+            or not other_kw_dict[QCHEM_COMMENT]
         ):
             if self.geometry.comment:
-                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.comment]
             else:
-                other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
+                other_kw_dict[QCHEM_COMMENT] = [self.geometry.name]
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -2286,5 +2289,169 @@ class Theory:
         
         return out_str, warnings
 
+    def get_xtb_control(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        crest=False,
+        **other_kw_dict,
+    ):
+        
+        other_kw_dict = combine_dicts(other_kw_dict, self.kwargs)
+        
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                if crest:
+                    job_dict = job.get_crest()
+                else:
+                    job_dict = job.get_xtb()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+        
+        if self.method is not None:
+            func, warning = self.method.get_xtb()
+            if warning is not None:
+                warnings.append(warning)
+            other_kw_dict = combine_dicts(func, other_kw_dict)
+
+            warning = self.method.sanity_check_method(self.method.name, "xtb")
+            if warning:
+                warnings.append(warning)
+
+        write_geom = False
+
+        xc_str = "$chrg %i\n" % self.charge
+        if self.multiplicity > 0:
+            xc_str += "$spin %i\n" % (self.multiplicity - 1)
+        else:
+            xc_str += "$spin %i\n" % (self.multiplicity + 1)
+
+        other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
+
+        if XTB_CONTROL_BLOCKS in other_kw_dict:
+            for block, settings in other_kw_dict[XTB_CONTROL_BLOCKS].items():
+                if not settings:
+                    continue
+                xc_str += "$%s\n" % block
+                for setting in settings:
+                    xc_str += "  %s\n" % setting
+                    if block.lower() == "metadyn" and setting.lower().startswith("coord"):
+                        write_geom = "=".join(setting.split("=")[1:])
+                    elif block.lower() == "constrain" and setting.lower().startswith("reference"):
+                        write_geom = "=".join(setting.split("=")[1:])
+                xc_str += "\n"
+        
+        return xc_str, warnings, write_geom
     
+    def get_xtb_cmd(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        split_words=False,
+        **other_kw_dict,
+    ):
+        other_kw_dict = combine_dicts(other_kw_dict, self.kwargs)
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_xtb()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+        
+        if self.method is not None:
+            func, warning = self.method.get_xtb()
+            if warning is not None:
+                warnings.append(warning)
+            other_kw_dict = combine_dicts(func, other_kw_dict)
+        
+        if self.solvent is not None:
+            solvent, warning = self.solvent.get_xtb()
+            if warning:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(solvent, other_kw_dict)
+
+        if self.processors:
+            other_kw_dict = combine_dicts(
+                {XTB_COMMAND_LINE: {"parallel": [str(self.processors)]}},
+                other_kw_dict,
+            )
+
+        other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
+
+        out = ["xtb", "--input", "{{ name }}.xc", "{{ name }}.xyz"]
+        if XTB_COMMAND_LINE in other_kw_dict:
+            for flag, option in other_kw_dict[XTB_COMMAND_LINE].items():
+                out.append("--%s " % flag)
+                if option:
+                    out.append(",".join(option))
+        
+        if not split_words:
+            out = " ".join(out)
+        
+        return out, warnings
     
+    def get_crest_cmd(
+        self,
+        return_warnings=False,
+        conditional_kwargs=None,
+        split_words=False,
+        **other_kw_dict,
+    ):
+        other_kw_dict = combine_dicts(other_kw_dict, self.kwargs)
+
+        if conditional_kwargs is None:
+            conditional_kwargs = {}
+
+        warnings = []
+        if self.job_type is not None:
+            for job in self.job_type[::-1]:
+                if hasattr(job, "geometry"):
+                    job.geometry = self.geometry
+
+                job_dict = job.get_crest()
+                other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+        
+        if self.method is not None:
+            func, warning = self.method.get_xtb()
+            if warning is not None:
+                warnings.append(warning)
+            other_kw_dict = combine_dicts(func, other_kw_dict)
+        
+        if self.solvent is not None:
+            solvent, warning = self.solvent.get_xtb()
+            if warning:
+                warnings.extend(warning)
+            other_kw_dict = combine_dicts(solvent, other_kw_dict)
+
+        if self.processors:
+            other_kw_dict = combine_dicts(
+                {CREST_COMMAND_LINE: {"T": [str(self.processors)]}},
+                other_kw_dict,
+            )
+
+        other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
+
+        out = ["crest", "{{ name }}.xyz"]
+        if CREST_COMMAND_LINE in other_kw_dict:
+            for flag, option in other_kw_dict[CREST_COMMAND_LINE].items():
+                out.append("--%s " % flag)
+                if option:
+                    out.append(",".join(option))
+        
+        if not split_words:
+            out = " ".join(out)
+        
+        return out, warnings
+        

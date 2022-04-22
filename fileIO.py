@@ -40,7 +40,7 @@ read_types = [
     "31",
     "qout",
 ]
-write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest"]
 file_type_err = "File type not yet implemented: {}"
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
@@ -225,12 +225,12 @@ class FileWriter:
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
-            out = cls.write_xyz(geom, append, outfile)
+            out = cls.write_xyz(geom, append, outfile=outfile)
         elif style.lower() == "com":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_com(geom, theory, outfile, **kwargs)
+                out = cls.write_com(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -239,7 +239,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_inp(geom, theory, outfile, **kwargs)
+                out = cls.write_inp(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'inp' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -248,7 +248,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_in(geom, theory, outfile, **kwargs)
+                out = cls.write_in(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -257,7 +257,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_sqm(geom, theory, outfile, **kwargs)
+                out = cls.write_sqm(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -266,11 +266,30 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_inq(geom, theory, outfile, **kwargs)
+                out = cls.write_inq(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'inq' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
+        elif style.lower() == "xtb":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_xtb(geom, theory, outfile=outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'xtb' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "crest":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_crest(geom, theory, outfile=outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'crest' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
@@ -501,7 +520,6 @@ class FileWriter:
         if return_warnings:
             return warnings
 
-
     @classmethod
     def write_sqm(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
@@ -699,6 +717,125 @@ class FileWriter:
                 f.write(s)
         return
 
+    @classmethod
+    def write_xtb(
+        cls,
+        geom,
+        theory,
+        outfile=None,
+        return_warnings=False,
+        **kwargs,
+    ):
+        if theory.job_type:
+            for job in theory.job_type:
+                if hasattr(job, "geometry"):
+                    job.geometry = geom
+                    
+        contents = dict()
+        cli, cli_warnings = theory.get_xtb_cmd(
+            return_warnings=True, **kwargs
+        )
+        contents["cmd"] = cli
+        xcontrol, xc_warnings, write_ref = theory.get_xtb_control(
+            return_warnings=True, **kwargs
+        )
+        contents["xc"] = xcontrol
+
+        contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
+
+        warnings = cli_warnings + xc_warnings
+        
+        if write_ref:
+            contents[write_ref] = contents["xyz"]
+
+        if outfile is False:
+            if return_warnings:
+                return contents, warnings
+            return contents
+        
+        if outfile is None:
+            if "step" in kwargs:
+                outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = geom.name
+        
+        dirname, basename = os.path.split(outfile)
+        name, ext = os.path.splitext(basename)
+
+        cls.write_dict_files(contents, dirname, name)
+        
+        if return_warnings:
+            return warnings
+
+    @classmethod
+    def write_crest(
+        cls,
+        geom,
+        theory,
+        outfile=None,
+        return_warnings=False,
+        **kwargs,
+    ):
+        if theory.job_type:
+            for job in theory.job_type:
+                if hasattr(job, "geometry"):
+                    job.geometry = geom
+                 
+        contents = dict()
+        cli, cli_warnings = theory.get_crest_cmd(
+            return_warnings=True, **kwargs
+        )
+        contents["cmd"] = cli
+        xcontrol, xc_warnings, write_ref = theory.get_xtb_control(
+            return_warnings=True, crest=True, **kwargs
+        )
+        contents["xc"] = xcontrol
+        contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
+        if write_ref:
+            contents[write_ref] = contents["xyz"]
+ 
+        warnings = cli_warnings + xc_warnings
+ 
+        if outfile is False:
+            if return_warnings:
+                return contents, warnings
+            return contents
+        
+        if outfile is None:
+            if "step" in kwargs:
+                outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = geom.name
+
+        dirname, basename = os.path.split(outfile)
+        name, ext = os.path.splitext(basename)
+
+        cls.write_dict_files(contents, dirname, name)
+        
+        if return_warnings:
+            return warnings
+
+    @staticmethod
+    def write_dict_files(contents, dirname, name):
+        """
+        write data to different files
+        contents - dict(), keys are either a file name (includes a ".") or
+            a file extension (no ".")
+        dirname - where to write files
+        e.g. calling with contents as
+        {"run.sh": "cat {{ name }}.txt", "txt": "hi"}
+        and name as "test"
+        will write run.sh and test.txt to dirname
+        """
+        for key, data in contents.items():
+            if "." in key:
+                output_path = os.path.join(dirname, key)
+            else:
+                output_path = os.path.join(dirname, "%s.%s" % (name, key))
+                
+            with open(output_path, "w") as f:
+                f.write(data.replace("{{ name }}", name))
+
 
 @addlogger
 class FileReader:
@@ -856,12 +993,12 @@ class FileReader:
                         the array would be
         """
         if os.path.isfile(self.name):
-            f = open(self.name)
+            f = open(self.name, "r", encoding="utf8")
         else:
             fname = ".".join([self.name, self.file_type])
             fname = os.path.expanduser(fname)
             if os.path.isfile(fname):
-                f = open(fname)
+                f = open(fname, "r", encoding="utf8")
             else:
                 raise FileNotFoundError(
                     "Error while looking for %s: could not find %s or %s in %s"
@@ -1387,6 +1524,15 @@ class FileReader:
                 return self.read_qchem_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
+
+            if (
+                "Entering Gaussian System"
+                in line
+            ):
+                self.file_type = "log"
+                return self.read_log(
+                    f, get_all=get_all, just_geom=just_geom
+                )
             
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if get_all and len(self.atoms) > 0:
@@ -1744,7 +1890,7 @@ class FileReader:
                     self.other["finished"] = True
 
                 # TODO E_ZPVE
-                if "error" not in self.other:
+                if "error" not in self.other or not self["error"]:
                     for err in ERROR_ORCA:
                         if err in line:
                             self.other["error"] = ERROR_ORCA[err]
@@ -1752,6 +1898,21 @@ class FileReader:
                             break
                     else:
                         self.other["error"] = False
+                        if "!!!!!!!!" in line:
+                            line = f.readline()
+                            n += 1
+                            self.other["error"] = line.strip()
+                            line = f.readline()
+                            n += 1
+                            self.other["error_msg"] = ""
+                            found_error = False
+                            while "!!!!!!!" not in line:
+                                for err in ERROR_ORCA:
+                                    if err in line:
+                                        self.other["error"] = ERROR_ORCA[err]
+                                self.other["error_msg"] += line.strip() + "\n"
+                                line = f.readline()
+                                n += 1
 
                 line = f.readline()
                 n += 1
@@ -2020,7 +2181,12 @@ class FileReader:
                     rv[atnum].coords = np.array(line[3:], dtype=float)
                 except IndexError:
                     pass
-                    #print(atnum)
+                    rv.append(Atom(
+                        element=ELEMENTS[int(line[1])],
+                        name=str(atnum + 1),
+                    ))
+                    rv[atnum].coords = np.array(line[3:], dtype=float)
+
                 atnum += 1
                 line = f.readline()
                 n += 1
@@ -2261,7 +2427,7 @@ class FileReader:
             if "Harmonic frequencies" in line:
                 freq_str = line
                 line = f.readline()
-                while line != "\n":
+                while line.strip():
                     n += 1
                     freq_str += line
                     line = f.readline()

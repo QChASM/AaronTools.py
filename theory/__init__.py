@@ -30,6 +30,17 @@ GAUSSIAN_COMMENT: list(str)
 
 SQM_COMMENT: list(str)
 SQM_QMMM: dict()
+
+QCHEM_MOLECULE: list(str) - $molecule section
+QCHEM_REM: dict(str:str) - $rem section
+QCHEM_COMMENT: list(str) - comments
+QCHEM_SETTINGS: dict(str:str) - all other sections
+
+XTB_CONTROL_BLOCKS: dict - stuff in xcontrol file
+XTB_COMMAND_LINE: dict(str:list) - command line stuff, values should be 
+    emtpy lists if the command line flag (key) has no arguments
+
+CREST_COMMAND_LINE: crest command line - see XTB_COMMAND_LINE
 """
 
 ORCA_ROUTE = "simple" # simple input
@@ -64,6 +75,11 @@ QCHEM_MOLECULE = "molecule" # $molecule
 QCHEM_REM = "rem" # $rem
 QCHEM_COMMENT = "comments" # $comment
 QCHEM_SETTINGS = "section" # $*
+
+XTB_CONTROL_BLOCKS = "xcontrol" # $blocks in xcontrol
+XTB_COMMAND_LINE = "command_line" # xtb command line options
+
+CREST_COMMAND_LINE = "command_line" # crest command line options
 
 from AaronTools.theory.basis import BasisSet, Basis, ECP
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion

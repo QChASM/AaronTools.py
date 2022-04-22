@@ -35,6 +35,8 @@ from AaronTools.theory import (
     QCHEM_REM,
     QCHEM_COMMENT,
     QCHEM_SETTINGS,
+    XTB_CONTROL_BLOCKS,
+    XTB_COMMAND_LINE,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
@@ -69,6 +71,8 @@ THEORY_OPTIONS = [
     "QCHEM_REM",
     "QCHEM_COMMENT",
     "QCHEM_SETTINGS",
+    "XTB_COMMAND_LINE",
+    "XTB_CONTROL_BLOCKS"
 ]
 
 
@@ -503,6 +507,8 @@ class Config(configparser.ConfigParser):
             QCHEM_REM,
             QCHEM_SETTINGS,
             PSI4_SOLVENT,
+            XTB_CONTROL_BLOCKS,
+            XTB_COMMAND_LINE,
         ]
 
         # these need to be dicts, but can only have one value

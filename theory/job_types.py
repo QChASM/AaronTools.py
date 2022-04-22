@@ -18,6 +18,8 @@ from AaronTools.theory import (
     SQM_QMMM,
     QCHEM_REM,
     QCHEM_SETTINGS,
+    XTB_CONTROL_BLOCKS,
+    XTB_COMMAND_LINE,
 )
 from AaronTools.utils.utils import range_list, combine_dicts
 
@@ -42,7 +44,7 @@ def job_from_string(name, **kwargs):
     if "." in name:
         ext = name.split(".")[-1].lower()
     
-    if any(name.lower().startswith(x) for x in ["opt", "conf"]):
+    if name.lower().startswith("opt"):
         geom = kwargs.get("geometry", None)
         constraints = kwargs.get("constraints", None)
 
@@ -50,13 +52,23 @@ def job_from_string(name, **kwargs):
             return OptimizationJob(transition_state=True, geometry=geom)
         
         if ext and ext.startswith("con") and constraints:
-            return OptimizationJob(constraints=constraints)
+            return OptimizationJob(geometry=geom, constraints=constraints)
         
         if ext and ext.startswith("change"):
             return OptimizationJob(
                 constraints={"atoms": FlaggedAtoms()}, geometry=geom
             )
         return OptimizationJob(geometry=geom)
+    
+    if name.lower().startswith("conf"):
+        geom = kwargs.get("geometry", None)
+        constraints = kwargs.get("constraints", None)
+        
+        if ext and ext.startswith("con") and constraints:
+            return ConformerSearchJob(geometry=geom, constraints=constraints)
+
+        return ConformerSearchJob(geometry=geom)
+    
     
     if name.lower().startswith("freq"):
         numerical = kwargs.get("numerical", False)
@@ -112,6 +124,11 @@ class JobType:
         """overwrite to return a dict with QCHEM_* keys"""
         pass
 
+    def get_xtb(self):
+        """overwrite to return a dict with XTB_* keys"""
+        pass
+
+
     @staticmethod
     def resolve_error(error, theory, exec_type, geometry=None):
         """returns a copy of theory or modifies theory to attempt
@@ -131,7 +148,6 @@ class JobType:
             there are close contacts
         """
 
-        print("try to resolve an error:", error)
         if error.upper() == "CLASH":
             # if there is a clash, rotate substituents to mitigate clashing
             if geometry:
@@ -796,59 +812,62 @@ class OptimizationJob(JobType):
 
         return out
 
-    def get_xcontrol(self, config, ref=None):
+    def get_xtb(self):
         """
         Generates xcontrol file constraints
 
-        Returns: dict(xcontrol)
+        Returns: dict(fix, constrain, metadyn, cli)
         """
-        if ref is None:
-            ref = "ref.xyz"
-        xcontrol = ""
+        out = dict()
         # only put constraints in xcontrol file so this works with Crest also
-        frozen = [i + 1 for i, a in enumerate(self.geometry) if bool(a.flag)]
-        if frozen:
+        if self.constraints and self.constraints.get("atoms", False):
+            frozen = [
+                self.geometry.atoms.index(a) + 1
+                for a in self.geometry.find(self.constraints["atoms"])
+            ]
             frozen = range_list(frozen)
-            xcontrol += "$fix\n"
-            xcontrol += "  atoms: {}\n".format(frozen)
-            xcontrol += "  freeze: {}\n".format(frozen)
-        elif self.constraints:
-            xcontrol += "$constrain\n"
-            xcontrol += "  force constant={}\n".format(
-                config["Job"].get("constrain_force", fallback="0.5")
-            )
-            xcontrol += "  reference={}\n".format(
-                config["Job"].get("constrain_ref", fallback=ref)
-            )
-            constrained = set([])
-            for bond in self.constraints.get("bonds", []):
+            out["fix"] = []
+            out["fix"].append("atoms: {}".format(frozen))
+            out["fix"].append("freeze: {}".format(frozen))
+
+        if self.constraints and self.constraints.get("bonds", False):
+            out.setdefault("constrain", [])
+            for bond in self.constraints["bonds"]:
                 bond = self.geometry.find(bond)
-                constrained.update(bond)
-                xcontrol += "  distance: {},{},auto\n".format(
-                    *(self.geometry.atoms.index(c) + 1 for c in bond)
+                out["constrain"].append(
+                    "distance: {},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in bond)
+                    )
                 )
-            for angle in self.constraints.get("angles", []):
+
+        if self.constraints and self.constraints.get("angles", False):
+            out.setdefault("constrain", [])
+            for angle in self.constraints["angles"]:
                 angle = self.geometry.find(angle)
-                constrained.update(angle)
-                xcontrol += "  angle: {},{},{},auto\n".format(
-                    *(self.geometry.atoms.index(c) + 1 for c in angle)
+                out["constrain"].append(
+                    "angle: {},{},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in angle)
+                    )
                 )
-            for dihedral in self.constraints.get("torsions", []):
+
+        if self.constraints and self.constraints.get("torsions", False):
+            out.setdefault("constrain", [])
+            for dihedral in self.constraints["torsions"]:
                 dihedral = self.geometry.find(dihedral)
-                constrained.update(dihedral)
-                xcontrol += "  dihedral: {},{},{},{},auto\n".format(
-                    *(self.geometry.atoms.index(c) + 1 for c in dihedral)
+                out["constrain"].append(
+                    "dihedral: {},{},{},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in dihedral)
+                    )
                 )
-            relaxed = {
-                i + 1
-                for i, a in enumerate(self.geometry.atoms)
-                if a not in constrained
-            }
-            relaxed = range_list(relaxed)
-            xcontrol += "$metadyn\n"
-            xcontrol += "  atoms: {}\n".format(relaxed)
-        xcontrol += "$end\n"
-        return xcontrol
+
+        out = {XTB_CONTROL_BLOCKS: out}
+        
+        if self.transition_state:
+            out[XTB_COMMAND_LINE] = {"optts": []}
+        else:
+            out[XTB_COMMAND_LINE] = {"opt": []}
+        
+        return out
 
     def get_sqm(self):
         """returns a dict(), warnings for optimization jobs"""
@@ -1105,6 +1124,13 @@ class FrequencyJob(JobType):
 
         return out
 
+    def get_xtb(self):
+        out = {
+            XTB_COMMAND_LINE: {"hess": []},
+            XTB_CONTROL_BLOCKS: {"thermo": ["temp=%.2f" % self.temperature]},
+        }
+        return out
+
     @staticmethod
     def resolve_error(error, theory, exec_type, geometry=None):
         """
@@ -1184,4 +1210,94 @@ class ForceJob(JobType):
     def get_qchem(self):
         out = {QCHEM_REM: {"JOB_TYPE": "Force"}}
         
+        return out
+
+    def get_xtb(self):
+        return {XTB_COMMAND_LINE: {"grad": []}}
+
+
+class ConformerSearchJob(JobType):
+    """conformer search"""
+    
+    def __init__(
+        self,
+        constraints=None,
+        geometry=None,
+    ):
+        """
+        constraints - dict with keys:
+            'atoms': atom identifiers/finders - atoms to constrain
+            'bonds': list(atom idenifiers/finders) - distances to constrain
+                    each atom identifier in the list should result in exactly 2 atoms
+            'angles': list(atom idenifiers/finders) - 1-3 angles to constrain
+                    each atom identifier should result in exactly 3 atoms
+            'torsions': list(atom identifiers/finders) - constrained dihedral angles
+                        each atom identifier should result in exactly 4 atoms            
+        geometry    - Geoemtry, will be set when using an AaronTools FileWriter"""
+        self.constraints = constraints
+        self.geometry = geometry
+
+    def get_crest(self):
+        out = dict()
+
+        constrained = set([])
+        if self.constraints and self.constraints.get("atoms", False):
+            out.setdefault("constrain", [])
+            atoms = self.geometry.find(self.constraints["atoms"])
+            constrained.update(atoms)
+            out["constrain"].append("atoms: " + ",".join(
+                [str(self.geometry.atoms.index(a) + 1) for a in atoms]
+            ))
+
+        if self.constraints and self.constraints.get("bonds", False):
+            out.setdefault("constrain", [])
+            for bond in self.constraints["bonds"]:
+                bond = self.geometry.find(bond)
+                constrained.update(bond)
+                out["constrain"].append(
+                    "distance: {},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in bond)
+                    )
+                )
+
+        if self.constraints and self.constraints.get("angles", False):
+            out.setdefault("constrain", [])
+            for angle in self.constraints["angles"]:
+                angle = self.geometry.find(angle)
+                constrained.update(angle)
+                out["constrain"].append(
+                    "angle: {},{},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in angle)
+                    )
+                )
+
+        if self.constraints and self.constraints.get("torsions", False):
+            out.setdefault("constrain", [])
+            for dihedral in self.constraints["torsions"]:
+                dihedral = self.geometry.find(dihedral)
+                constrained.update(dihedral)
+                out["constrain"].append(
+                    "dihedral: {},{},{},{},auto".format(
+                        *(self.geometry.atoms.index(c) + 1 for c in dihedral)
+                    )
+                )
+
+        if out:
+            out = {XTB_CONTROL_BLOCKS: out}
+
+        if constrained:
+            out[XTB_CONTROL_BLOCKS].setdefault("constrain", [])
+            out[XTB_CONTROL_BLOCKS]["constrain"].append(
+                "reference=original.xyz"
+            )
+            relaxed = {
+                i + 1
+                for i, a in enumerate(self.geometry.atoms)
+                if a not in constrained
+            }
+            relaxed = range_list(relaxed)
+            out[XTB_CONTROL_BLOCKS]["metadyn"] = ["  atoms: {}".format(relaxed)]
+            out[XTB_COMMAND_LINE] = {}
+            out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
+
         return out
