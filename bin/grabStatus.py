@@ -90,10 +90,13 @@ for f in glob_files(args.infile, parser=stat_parser):
 
     if (
             "error" in infile.other and
-            infile.other["error"] is not None and
+            infile.other["error"] not in (None, False) and
             infile.other["error"] != "UNKNOWN"
     ):
-        s += "  %s" % infile.other["error_msg"]
+        try:
+            s += "  %s" % infile.other["error_msg"]
+        except KeyError:
+            s += "  %s" % infile["error"]
     elif not co.gradient or not co.gradient.keys():
         s += "  no progress found"
     elif co.finished:

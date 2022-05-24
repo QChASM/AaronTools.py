@@ -2695,9 +2695,9 @@ class FileReader:
                 else:
                     other["method"] = method.group(2)
                 if "temperature=" in line:
-                    other["temperature"] = re.search(
-                        "temperature=(\d+\.?\d*)", line
-                    ).group(1)
+                    other["temperature"] = float(
+                        re.search("temperature=(\d+\.?\d*)", line).group(1)
+                    )
                 if "solvent=" in line:
                     other["solvent"] = re.search(
                         "solvent=(\S+)\)", line
