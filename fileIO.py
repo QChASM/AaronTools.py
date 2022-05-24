@@ -1158,7 +1158,8 @@ class FileReader:
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         uv_vis = ""
-        def get_atoms(f, n):
+        coord_unit_bohr = False
+        def get_atoms(f, n, bohr):
             rv = []
             self.skip_lines(f, 1)
             n += 2
@@ -1174,6 +1175,8 @@ class FileReader:
                 if "Gh" in element:
                     element = element.strip("Gh(").strip(")")
                 coords = np.array([float(x) for x in atom_info[1:-1]])
+                if bohr:
+                    coords *= UNIT.A0_TO_BOHR
                 rv += [Atom(element=element, coords=coords, name=str(i))]
                 mass += float(atom_info[-1])
 
@@ -1199,6 +1202,7 @@ class FileReader:
                 )
 
             if line.startswith("    Geometry (in Angstrom), charge"):
+                coord_unit_bohr = False
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
                     self.other["multiplicity"] = int(
@@ -1207,6 +1211,9 @@ class FileReader:
 
             elif line.strip() == "SCF":
                 read_geom = True
+
+            elif line.startswith("    Geometry (in Bohr), charge"):
+                coord_unit_bohr = True
 
             elif line.strip().startswith("Center") and read_geom:
                 read_geom = False
@@ -1218,7 +1225,7 @@ class FileReader:
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
 
-                self.atoms, mass, n = get_atoms(f, n)
+                self.atoms, mass, n = get_atoms(f, n, coord_unit_bohr)
                 if not just_geom:
                     self.other["mass"] = mass
                     self.other["mass"] *= UNIT.AMU_TO_KG

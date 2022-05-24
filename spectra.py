@@ -1094,6 +1094,11 @@ class Frequency(Signals):
                 for i, data in enumerate(self.data[-nmodes:]):
                     data.forcek = force_consts[i]
 
+            elif line.strip().startswith("IR activ"):
+                intensities = [float(x) for x in line.split()[3:]]
+                for i, data in enumerate(self.data[-nmodes:]):
+                    data.intensity = intensities[i]
+
             elif line.strip().startswith("Irrep"):
                 # sometimes psi4 doesn't identify the irrep of a mode, so we can't
                 # use line.split()

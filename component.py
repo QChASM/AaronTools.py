@@ -492,7 +492,9 @@ class Component(Geometry):
             total_angle = 0
             if len(key) > 2:
                 raise NotImplementedError(
-                    "Tolman cone angle not implemented for tridentate or more ligands"
+                    "Tolman cone angle not implemented for tridentate or more ligands\n" +
+                    "Coordinating atoms (should be 1 or 2 atoms): %s\n" % ", ".join(repr(a) for a in key) + 
+                    "Coordinated atom: %s" % repr(center)
                 )
 
             elif len(key) == 2:

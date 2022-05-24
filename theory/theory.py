@@ -1733,9 +1733,15 @@ class Theory:
                         for kwarg in other_kw_dict[PSI4_JOB][func]
                     ]
                 ):
-                    out_str += "nrg, wfn = %s('%s'" % (func, method)
+                    if func == "gradient":
+                        out_str += "grad, wfn = %s('%s'" % (func, method)
+                    else:
+                        out_str += "nrg, wfn = %s('%s'" % (func, method)
                 else:
-                    out_str += "nrg = %s('%s'" % (func, method)
+                    if func == "gradient":
+                        out_str += "grad = %s('%s'" % (func, method)
+                    else:
+                        out_str += "nrg = %s('%s'" % (func, method)
 
                 known_kw = []
                 for keyword in other_kw_dict[PSI4_JOB][func]:
