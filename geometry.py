@@ -2027,8 +2027,8 @@ class Geometry:
             targets = [a for a in targets if a.element != "H"]
             ref_targets = [a for a in ref_targets if a.element != "H"]
 
-        this = Geometry([t.copy() for t in targets])
-        ref = Geometry([r.copy() for r in ref_targets])
+        this = Geometry([t.copy() for t in targets], refresh_ranks=sort)
+        ref = Geometry([r.copy() for r in ref_targets], refresh_ranks=sort)
         if weights is not None:
             for w, a in zip(weights, this.atoms):
                 a.coords *= w

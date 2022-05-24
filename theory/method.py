@@ -76,6 +76,8 @@ class Method:
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "sqm.txt"), dtype=str)
         elif program.lower() == "qchem":
             valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "qchem.txt"), dtype=str)
+        elif program.lower() == "xtb":
+            valid = loadtxt(os.path.join(AARONTOOLS, "theory", "valid_methods", "xtb.txt"), dtype=str)
         else:
             raise NotImplementedError("cannot validate method names for %s" % program)
         
@@ -214,6 +216,26 @@ class Method:
         # we aren't checking if the method is available
 
         return self.name.replace('ω', 'w'), None
+
+    def get_xtb(self):
+        if self.name.lower() == "gfn-ff":
+            return {"command_line": {"gfnff": []}}, None
+        if self.name.lower() == "gfn1-xtb":
+            return {"command_line": {"gfn": ["1"]}}, None
+        if self.name.lower() == "gfn2-xtb":
+            return {"command_line": {"gfn": ["2"]}}, None
+        return {"xcontrol": {"gfn": ["method=%s" % self.name]}}, None
+        
+    def get_crest(self):
+        if self.name.lower() == "gfn-ff":
+            return {"command_line": {"gfnff": []}}, None
+        if self.name.lower() == "gfn1-xtb":
+            return {"command_line": {"gfn1": []}}, None
+        if self.name.lower() == "gfn2-xtb":
+            return {"command_line": {"gfn2": []}}, None
+        if self.name.lower() == "gfn2-xtb//gfn-ff":
+            return {"command_line": {"gfn2//gfnff": []}}, None
+        return {"xcontrol": {"gfn": ["method=%s" % self.name]}}, None
 
 
 class SAPTMethod(Method):

@@ -9,7 +9,7 @@ from AaronTools.test import TestWithTimer, prefix
 from AaronTools.theory import *
 
 
-class TestFileReader(TestWithTimer):
+class TestFileIO(TestWithTimer):
     small_mol = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
     com_file1 = os.path.join(prefix, "test_files", "test-route.com")
     com_file2 = os.path.join(prefix, "test_files", "test-route-2.com")
@@ -50,8 +50,8 @@ class TestFileReader(TestWithTimer):
             return True
 
     def test_read_xyz_structure(self):
-        ref = self.xyz_matrix(TestFileReader.small_mol)
-        mol = FileReader(TestFileReader.small_mol)
+        ref = self.xyz_matrix(TestFileIO.small_mol)
+        mol = FileReader(TestFileIO.small_mol)
         for i, line in enumerate(ref):
             if i == 0:
                 # check number of atoms
@@ -341,7 +341,7 @@ H    -1.46740   1.39172  -0.71711
 
         ref = """#comment line 1
 #comment line 2
-basis {
+basis this_basis {
     assign    def2-SVP
     assign C  def2-TZVP
 }

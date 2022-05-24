@@ -60,7 +60,7 @@ def proj(v_vec, u_vec):
     v_vec should be a np.array, and u_vec should have the
     same shape as v_vec"""
     numerator = np.dot(u_vec, v_vec)
-    denominator = np.linalg.norm(v_vec) ** 2
+    denominator = np.dot(v_vec, v_vec)
     return numerator * v_vec / denominator
 
 
