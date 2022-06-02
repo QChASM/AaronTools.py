@@ -131,7 +131,7 @@ class TestFileIO(TestWithTimer):
         """testing if we can read route info"""
         ref1 = {
             "method": "B3LYP/aug-cc-pVDZ",
-            "temperature": "298.15",
+            "temperature": 298.15,
             "solvent": "1,1,1-TriChloroEthane",
             "solvent_model": "PCM",
             "emp_dispersion": "GD3",
@@ -146,7 +146,7 @@ class TestFileIO(TestWithTimer):
 
         ref2 = {
             "method": "B3LYP/aug-cc-pVDZ",
-            "temperature": "298.15",
+            "temperature": 298.15,
             "solvent": "1,1,1-TriChloroEthane",
             "solvent_model": "PCM",
             "emp_dispersion": "GD3",

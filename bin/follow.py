@@ -207,13 +207,13 @@ for i, mode in enumerate(modes):
                     0,
                     mode_scale,
                 ]
-            pathway = Pathway(geom, np.array([Xf, X, Xr, X, Xf]), other_vars=other_vars)
+            pathway = Pathway(np.array([Xf, X, Xr, X, Xf]), other_vars=other_vars)
 
         else:
             other_vars = {}
             for i, mode_scale in enumerate(scale[i]):
                 other_vars["scale %i"] = [mode_scale, 0, -mode_scale]
-            pathway = Pathway(geom, np.array([Xf, X, Xr]), other_vars=other_vars)
+            pathway = Pathway(np.array([Xf, X, Xr]), other_vars=other_vars)
 
         # print animation frames
         for k, t in enumerate(np.linspace(0, 1, num=args.animate[0])):
@@ -222,12 +222,12 @@ for i, mode in enumerate(modes):
             else:
                 outfile = outfiles[i]
 
-            followed_geom = pathway.geom_func(t)
+            followed_geom = pathway.interpolate_geometry(t, geom)
             followed_geom.comment = (
                 "animating mode %s scaled to displace at most [%s]"
                 % (
                     repr(mode),
-                    ", ".join(str(pathway.var_func[key](t)) for key in other_vars),
+                    ", ".join(str(pathway.interpolate_other_var(t, key)) for key in other_vars),
                 )
             )
             if args.outfile:
