@@ -699,7 +699,7 @@ class Config(configparser.ConfigParser):
         # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
         parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
         # captures config-style structure/suffix -> (structure.suffix, suffix)
-        structure_patt = re.compile("(structure\.(\S+?))\.?")
+        structure_patt = re.compile("(structure\.([^\(\s\.]+))\.?")
 
         def get_multiple(filenames, path=None, suffix=None):
             rv = []
@@ -741,6 +741,8 @@ class Config(configparser.ConfigParser):
             if for_loop is not None:
                 for_match, it_val = for_loop
             for structure_match in structure_patt.findall(line):
+                if getattr(AaronTools.geometry.Geometry, structure_match[1], False):
+                    continue
                 # if our suffix is not the iterator, keep it's value for the dict key
                 if for_loop is None or structure_match[1] != for_match.group(
                     1

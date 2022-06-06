@@ -91,6 +91,7 @@ class Theory:
     # don't add settings that need > 1 value in the array
     FORCED_PSI4_ARRAY = [
         "cubeprop_orbitals",
+        "cubeprop_tasks",
         "docc",
         "frac_occ",
     ]
@@ -1643,14 +1644,14 @@ class Theory:
                         else:
                             # array of values
                             val = "["
-                            val += ",".join(
-                                [
-                                    "%s" % v
-                                    for v in other_kw_dict[PSI4_SETTINGS][
-                                        setting
-                                    ]
-                                ]
-                            )
+                            for v in other_kw_dict[PSI4_SETTINGS][setting]:
+                                try:
+                                    float(v)
+                                    val += str(v)
+                                except ValueError:
+                                    val += "\"%s\"" % v
+                                val += ","
+                            val = val.rstrip(",")
                             val += "]"
 
                     out_str += "    %-20s    %s\n" % (setting, val)
