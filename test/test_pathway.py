@@ -17,8 +17,8 @@ class TestPathway(TestWithTimer):
         ref = Geometry(
             os.path.join(prefix, "ref_files", "torsion_interpolation.xyz")
         )
-        pathway = Pathway(self.t60, array([self.t60.coords, self.t90.coords]))
-        geom = pathway.geom_func(0.4)
+        pathway = Pathway(array([self.t60.coords, self.t90.coords]))
+        geom = pathway.interpolate_geometry(0.4, self.t60)
         rmsd = geom.RMSD(ref, align=True, sort=False)
         self.assertTrue(rmsd < rmsd_tol(ref, superLoose=True))
 

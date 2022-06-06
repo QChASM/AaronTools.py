@@ -166,11 +166,9 @@ for geom, nrg in zip(geom_list, nrg_list):
 
 #interpolate between the structures
 pathway = Pathway(
-    ref_geom,
     np.array([geom.coords for geom in geom_list]),
     other_vars={"energy": nrg_list}
 )
-s_max, r_max = Pathway.t_to_s(1, pathway.region_length)
 
 #header for writing energies
 nrg_out = "t\tE\tdE/dt\n"
@@ -184,19 +182,22 @@ if args.print_max or args.print_min:
     ts = np.linspace(0, 1, num=10001)
     dt = ts[1] - ts[0]
     for t in ts:
-        dnrg_dt = pathway.dvar_func_dt["energy"](t) * pathway.dvar_func_dt["energy"](t + dt)
-        if dnrg_dt <= 0 and pathway.dvar_func_dt["energy"](t) > 0 and args.print_max:
+        dnrg_dt = (
+            pathway.other_var_derivative(t, "energy") *
+            pathway.other_var_derivative(t + dt, "energy")
+        )
+        if dnrg_dt <= 0 and pathway.other_var_derivative(t, "energy") > 0 and args.print_max:
             max_n_min_ts.append(t)
-        elif dnrg_dt <= 0 and pathway.dvar_func_dt["energy"](t) < 0 and args.print_min:
+        elif dnrg_dt <= 0 and pathway.other_var_derivative(t, "energy") < 0 and args.print_min:
             max_n_min_ts.append(t)
 
     for i, t in enumerate(max_n_min_ts):
-        nrg = pathway.var_func["energy"](t)
+        nrg = pathway.interpolate_other_var(t, "energy")
         if args.print_E:
-            d_nrg = pathway.dvar_func_dt["energy"](t)
+            d_nrg = pathway.other_var_derivative(t, "energy")
             nrg_out += "%f\t%f\t%f\n" % (t, nrg, d_nrg)
         else:
-            geom = pathway.geom_func(t)
+            geom = pathway.interpolate_geometry(t, geom)
             comment = "E(%f) = %f" % (t, nrg)
             geom.comment = comment
             write_geoms.append(geom)
@@ -205,23 +206,21 @@ if args.specific_ts:
     #print structures for specified values of t
     for i, t in enumerate(args.specific_ts):
         if args.print_E:
-            nrg = pathway.var_func["energy"](t)
-            d_nrg = pathway.dvar_func_dt["energy"](t)
+            nrg = pathway.interpolate_other_var(t, "energy")
+            d_nrg = pathway.other_var_derivative(t, "energy")
             nrg_out += "%f\t%f\t%f\n" % (t, nrg, d_nrg)
         else:
-            geom = pathway.geom_func(t)
-            nrg = pathway.var_func["energy"](t)
+            geom = pathway.interpolate_geometry(t, geom)
+            nrg = pathway.interpolate_other_var(t, "energy")
             comment = "E(%f) = %f" % (t, nrg)
             geom.comment = comment
             write_geoms.append(geom)
 
 if args.print_E:
     if args.n_struc:
-        ss = np.linspace(0, s_max, num=args.n_struc[0])
-        for s in ss:
-            t = Pathway.s_to_t(s, pathway.region_length)
-            nrg = pathway.var_func["energy"](t)
-            d_nrg = pathway.dvar_func_dt["energy"](t)
+        for t in np.linspace(0, 1, num=args.n_struc[0]):
+            nrg = pathway.interpolate_other_var(t, "energy")
+            d_nrg = pathway.other_var_derivative(t, "energy")
             nrg_out += "%f\t%f\t%f\n" % (t, nrg, d_nrg)
 
     if outfile is not None:
@@ -237,8 +236,8 @@ else:
 
         ts = np.linspace(0, 1, num=args.n_struc[0])
         for i, t in enumerate(ts):
-            geom = pathway.geom_func(t)
-            nrg = pathway.var_func["energy"](t)
+            geom = pathway.interpolate_geometry(t, geom)
+            nrg = pathway.interpolate_other_var(t, "energy")
             comment = "E(%f) = %f" % (t, nrg)
             geom.comment = comment
             write_geoms.append(geom)

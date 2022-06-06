@@ -1038,7 +1038,10 @@ class BasisSet:
                         warnings.append(warning)
 
                 if aux_type not in out_str:
-                    out_str[aux_type] = "%s {\n" % aux_type.lower()
+                    out_str[aux_type] = "%s this_%s {\n" % (
+                        aux_type.lower(),
+                        aux_type.lower().replace(" ", "_")
+                    )
                     out_str[aux_type] += "    assign    %s\n" % basis_name
 
                 else:
@@ -1056,7 +1059,10 @@ class BasisSet:
                         aux_type = aux_type.upper()
                         if os.path.exists(basis.user_defined):
                             if aux_type not in out_str:
-                                out_str[aux_type] = "%s {\n" % aux_type.lower()
+                                out_str[aux_type] = "%s this_%s {\n" % (
+                                    aux_type.lower(),
+                                    aux_type.lower().replace(" ", "_")
+                                )
 
                             out_str[aux_type] += "\n[%s]\n" % basis.name
                             with open(basis.user_defined, "r") as f:
