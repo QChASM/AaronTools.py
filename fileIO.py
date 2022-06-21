@@ -856,6 +856,7 @@ class FileReader:
         fname,
         get_all=False,
         just_geom=True,
+        scan_read_all=False,
         freq_name=None,
         conf_name=None,
         nbo_name=None,
@@ -900,7 +901,7 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(
-                get_all, just_geom,
+                get_all, just_geom, scan_read_all,
                 freq_name=freq_name,
                 conf_name=conf_name,
                 nbo_name=nbo_name,
@@ -913,7 +914,7 @@ class FileReader:
 
         if self.content is not None:
             if self.file_type == "log":
-                self.read_log(f, get_all, just_geom)
+                self.read_log(f, get_all, just_geom, scan_read_all)
             elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
                 self.read_sd(f)
             elif self.file_type == "xyz":
@@ -976,7 +977,7 @@ class FileReader:
         return tuple((key, self[key]) for key in keys)
     
     def read_file(
-        self, get_all=False, just_geom=True,
+        self, get_all=False, just_geom=True, scan_read_all=False,
         freq_name=None, conf_name=None, nbo_name=None,
         max_length=10000000,
     ):
@@ -1008,7 +1009,7 @@ class FileReader:
         if self.file_type == "xyz":
             self.read_xyz(f, get_all)
         elif self.file_type == "log":
-            self.read_log(f, get_all, just_geom)
+            self.read_log(f, get_all, just_geom, scan_read_all)
         elif any(self.file_type == ext for ext in ["com", "gjf"]):
             self.read_com(f)
         elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
@@ -1538,7 +1539,7 @@ class FileReader:
             ):
                 self.file_type = "log"
                 return self.read_log(
-                    f, get_all=get_all, just_geom=just_geom
+                    f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                 )
             
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
@@ -2168,7 +2169,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_log(self, f, get_all=False, just_geom=True):
+    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -2265,11 +2266,11 @@ class FileReader:
             line = f.readline()
             n += 1
             while line.strip():
-                atom_match = re.search("X\s+(\d+)\s+F", line)
-                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+F", line)
-                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                atom_match = re.search("X\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
+                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
+                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
                 torsion_match = re.search(
-                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line
+                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line
                 )
                 if atom_match:
                     if "atoms" not in rv:
@@ -2277,12 +2278,20 @@ class FileReader:
                     else:
                         rv["atoms"] += ","
                     rv["atoms"] += atom_match.group(1)
+                    if atom_match.group(2) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([atom_match.group(1), atom_match.group(4), atom_match.group(5)]))
                 elif bond_match:
                     if "bonds" not in rv:
                         rv["bonds"] = []
                     rv["bonds"].append(
                         ",".join([bond_match.group(1), bond_match.group(2)])
                     )
+                    if bond_match.group(3) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([bond_match.group(1), bond_match.group(2), bond_match.group(5), bond_match.group(6)]))
                 elif angle_match:
                     if "angles" not in rv:
                         rv["angles"] = []
@@ -2295,6 +2304,10 @@ class FileReader:
                             ]
                         )
                     )
+                    if angle_match.group(4) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([angle_match.group(1), angle_match.group(2), angle_match.group(3), angle_match.group(6), angle_match.group(7)]))
                 elif torsion_match:
                     if "torsions" not in rv:
                         rv["torsions"] = []
@@ -2308,6 +2321,10 @@ class FileReader:
                             ]
                         )
                     )
+                    if torsion_match.group(5) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([torsion_match.group(1), torsion_match.group(2), torsion_match.group(3), torsion_match.group(4), torsion_match.group(7), torsion_match.group(8)]))
 
                 line = f.readline()
                 n += 1
@@ -2366,11 +2383,26 @@ class FileReader:
 
             # geometry
             if re.search("(Standard|Input) orientation:", line):
-                if get_all and self.atoms:
+                record_coords = True
+                if "constraints" in locals():
+                    if "scan" in constraints: 
+                        if scan_read_all == False:
+                            record_coords = False
+                            if "gradient" in self.other:
+                                true_count=0
+                                for i in self.other["gradient"]:
+                                    if self.other["gradient"][i]["converged"] == True:
+                                        true_count+=1
+                                if true_count == 4:
+                                    record_coords = True
+                        elif scan_read_all == True:
+                            record_coords = True
+                if get_all and self.atoms and record_coords:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
-                self.atoms, n = get_atoms(f, n)
+                if record_coords:
+                    self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
 
             if re.search(
