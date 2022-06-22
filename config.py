@@ -38,6 +38,8 @@ from AaronTools.theory import (
     QCHEM_REM,
     QCHEM_COMMENT,
     QCHEM_SETTINGS,
+    XTB_CONTROL_BLOCKS,
+    XTB_COMMAND_LINE,
     Theory,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
@@ -72,6 +74,8 @@ THEORY_OPTIONS = [
     "QCHEM_REM",
     "QCHEM_COMMENT",
     "QCHEM_SETTINGS",
+    "XTB_COMMAND_LINE",
+    "XTB_CONTROL_BLOCKS"
 ]
 
 
@@ -507,6 +511,8 @@ class Config(configparser.ConfigParser):
             QCHEM_REM,
             QCHEM_SETTINGS,
             PSI4_SOLVENT,
+            XTB_CONTROL_BLOCKS,
+            XTB_COMMAND_LINE,
         ]
 
         # these need to be dicts, but can only have one value
@@ -559,16 +565,29 @@ class Config(configparser.ConfigParser):
             if value:
                 if isinstance(value, dict):
                     out[option] = value
-                elif "{" in value:
+                elif "{{" not in value and "{" in value:
                     # if it's got brackets, it's probably a python-looking dictionary
                     # eval it instead of parsing
+                    # double brackets would indicate an interpolated value
+                    # e.g. link0=chk {{ name }}.chk
                     out[option] = eval(value, {})
                 else:
                     out[option] = {}
                     for v in value.splitlines():
-                        key = v.split()[0]
-                        if len(v.split()) > 1:
-                            info = v.split()[1].split(",")
+                        data = v.split()
+                        key = data[0]
+                        if len(data) > 1:
+                            i = 1
+                            info = []
+                            while i < len(data):
+                                word = data[i]
+                                if word == "{{" and i < len(data) - 2:
+                                    word += " " + data[i + 1] + " " + data[i + 2]
+                                    info.extend(word.split(","))
+                                    i += 3
+                                    continue
+                                info.extend(word.split(","))
+                                i += 1
                         else:
                             info = []
 
@@ -705,7 +724,7 @@ class Config(configparser.ConfigParser):
         # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
         parsed_struct_patt = re.compile("(structure\['(\S+?)'\])\.?")
         # captures config-style structure/suffix -> (structure.suffix, suffix)
-        structure_patt = re.compile("(structure\.(\S+?))\.?")
+        structure_patt = re.compile("(structure\.([^\(\s\.]+))\.?")
 
         def get_multiple(filenames, path=None, suffix=None):
             rv = []
@@ -747,6 +766,8 @@ class Config(configparser.ConfigParser):
             if for_loop is not None:
                 for_match, it_val = for_loop
             for structure_match in structure_patt.findall(line):
+                if getattr(AaronTools.geometry.Geometry, structure_match[1], False):
+                    continue
                 # if our suffix is not the iterator, keep it's value for the dict key
                 if for_loop is None or structure_match[1] != for_match.group(
                     1

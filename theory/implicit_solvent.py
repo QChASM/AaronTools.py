@@ -1,237 +1,215 @@
 """used to specify implicit solvent info for Theory()"""
 from AaronTools import addlogger
 from AaronTools.theory import (
-    GAUSSIAN_ROUTE, ORCA_BLOCKS, ORCA_ROUTE, PSI4_SETTINGS, PSI4_SOLVENT
+    GAUSSIAN_ROUTE,
+    ORCA_BLOCKS,
+    ORCA_ROUTE,
+    PSI4_SETTINGS,
+    PSI4_SOLVENT,
+    XTB_COMMAND_LINE,
 )
 
 
-class ImplicitSolvent:
-    """implicit solvent info"""
+_KNOWN_GAUSSIAN_SOLVENTS = [
+    "Water",
+    "Acetonitrile",
+    "Methanol",
+    "Ethanol",
+    "IsoQuinoline",
+    "Quinoline",
+    "Chloroform",
+    "DiethylEther",
+    "DichloroMethane",
+    "DiChloroEthane",
+    "CarbonTetraChloride",
+    "Benzene",
+    "Toluene",
+    "ChloroBenzene",
+    "NitroMethane",
+    "Heptane",
+    "CycloHexane",
+    "Aniline",
+    "Acetone",
+    "TetraHydroFuran",
+    "DiMethylSulfoxide",
+    "Argon",
+    "Krypton",
+    "Xenon",
+    "n-Octanol",
+    "1,1,1-TriChloroEthane",
+    "1,1,2-TriChloroEthane",
+    "1,2,4-TriMethylBenzene",
+    "1,2-DiBromoEthane",
+    "1,2-EthaneDiol",
+    "1,4-Dioxane",
+    "1-Bromo-2-MethylPropane",
+    "1-BromoOctane",
+    "1-BromoPentane",
+    "1-BromoPropane",
+    "1-Butanol",
+    "1-ChloroHexane",
+    "1-ChloroPentane",
+    "1-ChloroPropane",
+    "1-Decanol",
+    "1-FluoroOctane",
+    "1-Heptanol",
+    "1-Hexanol",
+    "1-Hexene",
+    "1-Hexyne",
+    "1-IodoButane",
+    "1-IodoHexaDecane",
+    "1-IodoPentane",
+    "1-IodoPropane",
+    "1-NitroPropane",
+    "1-Nonanol",
+    "1-Pentanol",
+    "1-Pentene",
+    "1-Propanol",
+    "2,2,2-TriFluoroEthanol",
+    "2,2,4-TriMethylPentane",
+    "2,4-DiMethylPentane",
+    "2,4-DiMethylPyridine",
+    "2,6-DiMethylPyridine",
+    "2-BromoPropane",
+    "2-Butanol",
+    "2-ChloroButane",
+    "2-Heptanone",
+    "2-Hexanone",
+    "2-MethoxyEthanol",
+    "2-Methyl-1-Propanol",
+    "2-Methyl-2-Propanol",
+    "2-MethylPentane",
+    "2-MethylPyridine",
+    "2-NitroPropane",
+    "2-Octanone",
+    "2-Pentanone",
+    "2-Propanol",
+    "2-Propen-1-ol",
+    "3-MethylPyridine",
+    "3-Pentanone",
+    "4-Heptanone",
+    "4-Methyl-2-Pentanone",
+    "4-MethylPyridine",
+    "5-Nonanone",
+    "AceticAcid",
+    "AcetoPhenone",
+    "a-ChloroToluene",
+    "Anisole",
+    "Benzaldehyde",
+    "BenzoNitrile",
+    "BenzylAlcohol",
+    "BromoBenzene",
+    "BromoEthane",
+    "Bromoform",
+    "Butanal",
+    "ButanoicAcid",
+    "Butanone",
+    "ButanoNitrile",
+    "ButylAmine",
+    "ButylEthanoate",
+    "CarbonDiSulfide",
+    "Cis-1,2-DiMethylCycloHexane",
+    "Cis-Decalin",
+    "CycloHexanone",
+    "CycloPentane",
+    "CycloPentanol",
+    "CycloPentanone",
+    "Decalin-mixture",
+    "DiBromoMethane",
+    "DiButylEther",
+    "DiEthylAmine",
+    "DiEthylSulfide",
+    "DiIodoMethane",
+    "DiIsoPropylEther",
+    "DiMethylDiSulfide",
+    "DiPhenylEther",
+    "DiPropylAmine",
+    "E-1,2-DiChloroEthene",
+    "E-2-Pentene",
+    "EthaneThiol",
+    "EthylBenzene",
+    "EthylEthanoate",
+    "EthylMethanoate",
+    "EthylPhenylEther",
+    "FluoroBenzene",
+    "Formamide",
+    "FormicAcid",
+    "HexanoicAcid",
+    "IodoBenzene",
+    "IodoEthane",
+    "IodoMethane",
+    "IsoPropylBenzene",
+    "m-Cresol",
+    "Mesitylene",
+    "MethylBenzoate",
+    "MethylButanoate",
+    "MethylCycloHexane",
+    "MethylEthanoate",
+    "MethylMethanoate",
+    "MethylPropanoate",
+    "m-Xylene",
+    "n-ButylBenzene",
+    "n-Decane",
+    "n-Dodecane",
+    "n-Hexadecane",
+    "n-Hexane",
+    "NitroBenzene",
+    "NitroEthane",
+    "n-MethylAniline",
+    "n-MethylFormamide-mixture",
+    "n,n-DiMethylAcetamide",
+    "n,n-DiMethylFormamide",
+    "n-Nonane",
+    "n-Octane",
+    "n-Pentadecane",
+    "n-Pentane",
+    "n-Undecane",
+    "o-ChloroToluene",
+    "o-Cresol",
+    "o-DiChloroBenzene",
+    "o-NitroToluene",
+    "o-Xylene",
+    "Pentanal",
+    "PentanoicAcid",
+    "PentylAmine",
+    "PentylEthanoate",
+    "PerFluoroBenzene",
+    "p-IsoPropylToluene",
+    "Propanal",
+    "PropanoicAcid",
+    "PropanoNitrile",
+    "PropylAmine",
+    "PropylEthanoate",
+    "p-Xylene",
+    "Pyridine",
+    "sec-ButylBenzene",
+    "tert-ButylBenzene",
+    "TetraChloroEthene",
+    "TetraHydroThiophene-s,s-dioxide",
+    "Tetralin",
+    "Thiophene",
+    "Thiophenol",
+    "trans-Decalin",
+    "TriButylPhosphate",
+    "TriChloroEthene",
+    "TriEthylAmine",
+    "Xylene-mixture",
+    "Z-1,2-DiChloroEthene",
+]
 
-    KNOWN_GAUSSIAN_SOLVENTS = [
-        "Water",
-        "Acetonitrile",
-        "Methanol",
-        "Ethanol",
-        "IsoQuinoline",
-        "Quinoline",
-        "Chloroform",
-        "DiethylEther",
-        "DichloroMethane",
-        "DiChloroEthane",
-        "CarbonTetraChloride",
-        "Benzene",
-        "Toluene",
-        "ChloroBenzene",
-        "NitroMethane",
-        "Heptane",
-        "CycloHexane",
-        "Aniline",
-        "Acetone",
-        "TetraHydroFuran",
-        "DiMethylSulfoxide",
-        "Argon",
-        "Krypton",
-        "Xenon",
-        "n-Octanol",
-        "1,1,1-TriChloroEthane",
-        "1,1,2-TriChloroEthane",
-        "1,2,4-TriMethylBenzene",
-        "1,2-DiBromoEthane",
-        "1,2-EthaneDiol",
-        "1,4-Dioxane",
-        "1-Bromo-2-MethylPropane",
-        "1-BromoOctane",
-        "1-BromoPentane",
-        "1-BromoPropane",
-        "1-Butanol",
-        "1-ChloroHexane",
-        "1-ChloroPentane",
-        "1-ChloroPropane",
-        "1-Decanol",
-        "1-FluoroOctane",
-        "1-Heptanol",
-        "1-Hexanol",
-        "1-Hexene",
-        "1-Hexyne",
-        "1-IodoButane",
-        "1-IodoHexaDecane",
-        "1-IodoPentane",
-        "1-IodoPropane",
-        "1-NitroPropane",
-        "1-Nonanol",
-        "1-Pentanol",
-        "1-Pentene",
-        "1-Propanol",
-        "2,2,2-TriFluoroEthanol",
-        "2,2,4-TriMethylPentane",
-        "2,4-DiMethylPentane",
-        "2,4-DiMethylPyridine",
-        "2,6-DiMethylPyridine",
-        "2-BromoPropane",
-        "2-Butanol",
-        "2-ChloroButane",
-        "2-Heptanone",
-        "2-Hexanone",
-        "2-MethoxyEthanol",
-        "2-Methyl-1-Propanol",
-        "2-Methyl-2-Propanol",
-        "2-MethylPentane",
-        "2-MethylPyridine",
-        "2-NitroPropane",
-        "2-Octanone",
-        "2-Pentanone",
-        "2-Propanol",
-        "2-Propen-1-ol",
-        "3-MethylPyridine",
-        "3-Pentanone",
-        "4-Heptanone",
-        "4-Methyl-2-Pentanone",
-        "4-MethylPyridine",
-        "5-Nonanone",
-        "AceticAcid",
-        "AcetoPhenone",
-        "a-ChloroToluene",
-        "Anisole",
-        "Benzaldehyde",
-        "BenzoNitrile",
-        "BenzylAlcohol",
-        "BromoBenzene",
-        "BromoEthane",
-        "Bromoform",
-        "Butanal",
-        "ButanoicAcid",
-        "Butanone",
-        "ButanoNitrile",
-        "ButylAmine",
-        "ButylEthanoate",
-        "CarbonDiSulfide",
-        "Cis-1,2-DiMethylCycloHexane",
-        "Cis-Decalin",
-        "CycloHexanone",
-        "CycloPentane",
-        "CycloPentanol",
-        "CycloPentanone",
-        "Decalin-mixture",
-        "DiBromoMethane",
-        "DiButylEther",
-        "DiEthylAmine",
-        "DiEthylSulfide",
-        "DiIodoMethane",
-        "DiIsoPropylEther",
-        "DiMethylDiSulfide",
-        "DiPhenylEther",
-        "DiPropylAmine",
-        "E-1,2-DiChloroEthene",
-        "E-2-Pentene",
-        "EthaneThiol",
-        "EthylBenzene",
-        "EthylEthanoate",
-        "EthylMethanoate",
-        "EthylPhenylEther",
-        "FluoroBenzene",
-        "Formamide",
-        "FormicAcid",
-        "HexanoicAcid",
-        "IodoBenzene",
-        "IodoEthane",
-        "IodoMethane",
-        "IsoPropylBenzene",
-        "m-Cresol",
-        "Mesitylene",
-        "MethylBenzoate",
-        "MethylButanoate",
-        "MethylCycloHexane",
-        "MethylEthanoate",
-        "MethylMethanoate",
-        "MethylPropanoate",
-        "m-Xylene",
-        "n-ButylBenzene",
-        "n-Decane",
-        "n-Dodecane",
-        "n-Hexadecane",
-        "n-Hexane",
-        "NitroBenzene",
-        "NitroEthane",
-        "n-MethylAniline",
-        "n-MethylFormamide-mixture",
-        "n,n-DiMethylAcetamide",
-        "n,n-DiMethylFormamide",
-        "n-Nonane",
-        "n-Octane",
-        "n-Pentadecane",
-        "n-Pentane",
-        "n-Undecane",
-        "o-ChloroToluene",
-        "o-Cresol",
-        "o-DiChloroBenzene",
-        "o-NitroToluene",
-        "o-Xylene",
-        "Pentanal",
-        "PentanoicAcid",
-        "PentylAmine",
-        "PentylEthanoate",
-        "PerFluoroBenzene",
-        "p-IsoPropylToluene",
-        "Propanal",
-        "PropanoicAcid",
-        "PropanoNitrile",
-        "PropylAmine",
-        "PropylEthanoate",
-        "p-Xylene",
-        "Pyridine",
-        "sec-ButylBenzene",
-        "tert-ButylBenzene",
-        "TetraChloroEthene",
-        "TetraHydroThiophene-s,s-dioxide",
-        "Tetralin",
-        "Thiophene",
-        "Thiophenol",
-        "trans-Decalin",
-        "TriButylPhosphate",
-        "TriChloroEthene",
-        "TriEthylAmine",
-        "Xylene-mixture",
-        "Z-1,2-DiChloroEthene",
-    ]
+KNOWN_GAUSSIAN_SOLVENTS = {
+    "SMD": _KNOWN_GAUSSIAN_SOLVENTS,
+    "CPCM": _KNOWN_GAUSSIAN_SOLVENTS,
+    "PCM": _KNOWN_GAUSSIAN_SOLVENTS,
+    "DIPOLE": _KNOWN_GAUSSIAN_SOLVENTS,
+    "IPCM": _KNOWN_GAUSSIAN_SOLVENTS,
+    "ISODENSITY": _KNOWN_GAUSSIAN_SOLVENTS,
+    "IEFPCM": _KNOWN_GAUSSIAN_SOLVENTS,
+    "SCIPCM": _KNOWN_GAUSSIAN_SOLVENTS,
+}
 
-    KNOWN_GAUSSIAN_MODELS = [
-        "SMD",
-        "CPCM",
-        "PCM",
-        "DIPOLE",
-        "IPCM",
-        "ISODENSITY",
-        "IEFPCM",
-        "SCIPCM",
-        "ONIOMPCM=A",
-        "ONIOMPCM=B",
-        "ONIOMPCM=C",
-        "ONIOMPCM=X",
-    ]
-
-    KNOWN_ORCA_CPCM_SOLVENTS = [
-        "Water",
-        "Acetonitrile",
-        "Acetone",
-        "Ammonia",
-        "Ethanol",
-        "Methanol",
-        "CH2Cl2",
-        "CCl4",
-        "DMF",
-        "DMSO",
-        "Pyridine",
-        "THF",
-        "Chloroform",
-        "Hexane",
-        "Benzene",
-        "CycloHexane",
-        "Octanol",
-        "Toluene",
-    ]
-
-    KNOWN_ORCA_SMD_SOLVENTS = [
+KNOWN_ORCA_SOLVENTS = {
+    "SMD": [
         "1,1,1-TRICHLOROETHANE",
         "CYCLOPENTANE",
         "1,1,2-TRICHLOROETHANE",
@@ -418,11 +396,31 @@ class ImplicitSolvent:
         "CYCLOHEXANE",
         "P-XYLENE",
         "CYCLOHEXANONE",
-    ]
+    ],
+    "CPCM": [
+        "Water",
+        "Acetonitrile",
+        "Acetone",
+        "Ammonia",
+        "Ethanol",
+        "Methanol",
+        "CH2Cl2",
+        "CCl4",
+        "DMF",
+        "DMSO",
+        "Pyridine",
+        "THF",
+        "Chloroform",
+        "Hexane",
+        "Benzene",
+        "CycloHexane",
+        "Octanol",
+        "Toluene",
+    ],
+}
 
-    KNOWN_ORCA_MODELS = ["SMD", "CPCM", "C-PCM", "PCM"]
-
-    KNOWN_PSI4_SOLVENTS = [
+KNOWN_PSI4_SOLVENTS = {
+    "CPCM": [
         "water",
         "propylene carbonate",
         "dimethylsolfoxide",
@@ -444,9 +442,80 @@ class ImplicitSolvent:
         "carbon tetrachloride",
         "cyclohexane",
         "n-heptane",
+    ],
+    "IEFPCM": [
+        "water",
+        "propylene carbonate",
+        "dimethylsolfoxide",
+        "nitromethane",
+        "aceotonitrile",
+        "methanol",
+        "ethanol",
+        "acetone",
+        "1,2-dichloroethane",
+        "methylenechloride",
+        "CH2Cl2",
+        "tetrahydrofuran",
+        "aniline",
+        "chlorobenzene",
+        "chloroform",
+        "toluene",
+        "1,4-dioxane",
+        "benzene",
+        "carbon tetrachloride",
+        "cyclohexane",
+        "n-heptane",
+    ],
+}
+
+KNOWN_XTB_SOLVENTS = {
+    "ALPB": [
+        "acetone",
+        "acetonitrile",
+        "aniline",
+        "benzaldehyde",
+        "benzene",
+        "ch2cl2",
+        "chcl3",
+        "cs2",
+        "dioxane",
+        "dmf",
+        "dmso",
+        "ether",
+        "ethylacetate",
+        "furane",
+        "hexandecane",
+        "hexane",
+        "methanol",
+        "nitromethane",
+        "octanol",
+        "woctanol",
+        "phenol",
+        "toluene",
+        "thf",
+        "water",
+    ],
+    "GBSA": [
+        "acetone",
+        "acetonitrile",
+        "benzene",
+        "CH2Cl2",
+        "CHCl3",
+        "CS2",
+        "DMF",
+        "DMSO",
+        "ether",
+        "H2O",
+        "methanol",
+        "n-hexane",
+        "THF",
+        "toluene",
     ]
-    
-    KNOWN_PSI4_MODELS = ["CPCM", "IEFPCM"]
+}
+
+
+class ImplicitSolvent:
+    """implicit solvent info"""
 
     LOG = None
 
@@ -488,29 +557,16 @@ class ImplicitSolvent:
             # all gas, no solvent
             return (dict(), warnings)
 
+        model = self.solvent_model.upper()
+
         if not any(
-                self.solvent_model.upper() == model for model in self.KNOWN_GAUSSIAN_MODELS
+            model == x for x in KNOWN_GAUSSIAN_SOLVENTS.keys()
         ):
             warnings.append(
                 "solvent model is not available in Gaussian: %s\nuse one of: %s"
                 % (
                     self.solvent_model,
-                    " ".join(
-                        [
-                            "SMD",
-                            "CPCM",
-                            "PCM",
-                            "DIPOLE",
-                            "IPCM",
-                            "ISODENSITY",
-                            "IEFPCM",
-                            "SCIPCM",
-                            "ONIOMPCM=A",
-                            "ONIOMPCM=B",
-                            "ONIOMPCM=C",
-                            "ONIOMPCM=X",
-                        ]
-                    ),
+                    " ".join(list(KNOWN_GAUSSIAN_SOLVENTS.keys()))
                 )
             )
 
@@ -525,7 +581,7 @@ class ImplicitSolvent:
         else:
             if not any(
                     solvent.lower() == gaussian_sol.lower()
-                    for gaussian_sol in self.KNOWN_GAUSSIAN_SOLVENTS
+                    for gaussian_sol in KNOWN_GAUSSIAN_SOLVENTS[model]
             ):
                 warnings.append(
                     "solvent is unknown to Gaussian: %s\n" % solvent +
@@ -544,19 +600,24 @@ class ImplicitSolvent:
         if self.solvent.lower() == "gas":
             return (dict(), warnings)
 
+        model = self.solvent_model.upper()
+
         if not any(
-                self.solvent_model.upper() == model for model in self.KNOWN_ORCA_MODELS
+            model == x for x in KNOWN_ORCA_SOLVENTS.keys()
         ):
             warnings.append(
-                "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
-                % self.solvent_model
+                "solvent model is not available in ORCA: %s\nuse one of: %s"
+                % (
+                    self.solvent_model,
+                    " ".join(list(KNOWN_ORCA_SOLVENTS.keys()))
+                )
             )
 
         out = {}
         cpcm = True
         # route option: CPCM(solvent name)
         # if using smd, add block %cpcm smd true end
-        if self.solvent_model.upper() == "SMD":
+        if model == "SMD":
             cpcm = False
             out[ORCA_BLOCKS] = {"cpcm": ["smd    true"]}
 
@@ -573,22 +634,22 @@ class ImplicitSolvent:
             else:
                 if not any(
                         solvent.lower() == orca_sol.lower()
-                        for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS
+                        for orca_sol in KNOWN_ORCA_SOLVENTS[model]
                 ):
                     warnings.append(
                         "solvent is unknown to ORCA: %s\n" % solvent +
-                        "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_CPCM_SOLVENTS"
+                        "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SOLVENTS"
                     )
 
         else:
             # TODO: look for gaussian/orca pcm solvent names that need to change
             if not any(
                     solvent.lower() == orca_sol.lower()
-                    for orca_sol in self.KNOWN_ORCA_SMD_SOLVENTS
+                    for orca_sol in KNOWN_ORCA_SOLVENTS[model]
             ):
                 warnings.append(
                     "solvent is unknown to ORCA: %s\n" % solvent +
-                    "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SMD_SOLVENTS"
+                    "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SOLVENTS"
                 )
 
         out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
@@ -603,12 +664,17 @@ class ImplicitSolvent:
         if self.solvent.lower() == "gas":
             return (dict(), warnings)
 
+        model = self.solvent_model.upper()
+
         if not any(
-                self.solvent_model.upper() == model for model in self.KNOWN_ORCA_MODELS
+            model == x for x in KNOWN_PSI4_SOLVENTS.keys()
         ):
             warnings.append(
-                "solvent model is not available in ORCA: %s\nuse CPCM or SMD"
-                % self.solvent_model
+                "solvent model is not available in Psi4: %s\nuse one of: %s"
+                % (
+                    self.solvent_model,
+                    " ".join(list(KNOWN_PSI4_SOLVENTS.keys()))
+                )
             )
 
         out = {}
@@ -627,8 +693,8 @@ class ImplicitSolvent:
             solvent = "tetrahydrofuran"
         else:
             if not any(
-                    solvent.lower() == orca_sol.lower()
-                    for orca_sol in self.KNOWN_ORCA_CPCM_SOLVENTS
+                    solvent.lower() == psi4_sol.lower()
+                    for psi4_sol in KNOWN_PSI4_SOLVENTS[model]
             ):
                 warnings.append(
                     "solvent may be unknown to Psi4: %s\n" % solvent +
@@ -658,3 +724,35 @@ class ImplicitSolvent:
         raise NotImplementedError(
             "cannot create solvent info for Q-Chem input files"
         )
+
+    def get_xtb(self):
+        warnings = []
+        out = dict()
+        if self.solvent.lower() == "gas":
+            # all gas, no solvent
+            return (dict(), warnings)
+        
+        model = self.solvent_model.upper()
+
+        if not any(
+            model == x for x in KNOWN_XTB_SOLVENTS.keys()
+        ):
+            warnings.append(
+                "solvent model is not available in Psi4: %s\nuse one of: %s"
+                % (
+                    self.solvent_model,
+                    " ".join(list(KNOWN_XTB_SOLVENTS.keys()))
+                )
+            )
+
+        if not any(
+            xtb_sol.lower() == self.solvent.lower() for xtb_sol in KNOWN_XTB_SOLVENTS[model]
+        ):
+            warnings.append(
+                "solvent may be unknown to xTB: %s\n" % self.solvent +
+                "see AaronTools.theory.implicit_solvent.KNOWN_XTB_SOLVENTS"
+            )
+        
+        out[XTB_COMMAND_LINE] = {self.solvent_model.lower(): [self.solvent]}
+        return out, warnings
+        

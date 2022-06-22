@@ -43,7 +43,7 @@ read_types = [
     "31",
     "qout",
 ]
-write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest"]
 file_type_err = "File type not yet implemented: {}"
 #LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
 #LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
@@ -258,7 +258,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_inp(geom, theory, outfile, **kwargs)
+                out = cls.write_inp(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'inp' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -267,7 +267,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_in(geom, theory, outfile, **kwargs)
+                out = cls.write_in(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'in' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -276,7 +276,7 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_sqm(geom, theory, outfile, **kwargs)
+                out = cls.write_sqm(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'sqmin' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
@@ -285,11 +285,30 @@ class FileWriter:
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_inq(geom, theory, outfile, **kwargs)
+                out = cls.write_inq(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'inq' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
+        elif style.lower() == "xtb":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_xtb(geom, theory, outfile=outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'xtb' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        elif style.lower() == "crest":
+            if "theory" in kwargs:
+                theory = kwargs["theory"]
+                del kwargs["theory"]
+                out = cls.write_crest(geom, theory, outfile=outfile, **kwargs)
+            else:
+                raise TypeError(
+                    "when writing 'crest' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
+                )
+        
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
@@ -674,7 +693,6 @@ class FileWriter:
         if return_warnings:
             return warnings
 
-
     @classmethod
     def write_sqm(
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
@@ -988,6 +1006,123 @@ class FileWriter:
                 f.write(s)
 
         return
+    def write_xtb(
+        cls,
+        geom,
+        theory,
+        outfile=None,
+        return_warnings=False,
+        **kwargs,
+    ):
+        if theory.job_type:
+            for job in theory.job_type:
+                if hasattr(job, "geometry"):
+                    job.geometry = geom
+                    
+        contents = dict()
+        cli, cli_warnings = theory.get_xtb_cmd(
+            return_warnings=True, **kwargs
+        )
+        contents["cmd"] = cli
+        xcontrol, xc_warnings, write_ref = theory.get_xtb_control(
+            return_warnings=True, **kwargs
+        )
+        contents["xc"] = xcontrol
+
+        contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
+
+        warnings = cli_warnings + xc_warnings
+        
+        if write_ref:
+            contents[write_ref] = contents["xyz"]
+
+        if outfile is False:
+            if return_warnings:
+                return contents, warnings
+            return contents
+        
+        if outfile is None:
+            if "step" in kwargs:
+                outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = geom.name
+        
+        dirname, basename = os.path.split(outfile)
+        name, ext = os.path.splitext(basename)
+
+        cls.write_dict_files(contents, dirname, name)
+        
+        if return_warnings:
+            return warnings
+
+    @classmethod
+    def write_crest(
+        cls,
+        geom,
+        theory,
+        outfile=None,
+        return_warnings=False,
+        **kwargs,
+    ):
+        if theory.job_type:
+            for job in theory.job_type:
+                if hasattr(job, "geometry"):
+                    job.geometry = geom
+                 
+        contents = dict()
+        cli, cli_warnings = theory.get_crest_cmd(
+            return_warnings=True, **kwargs
+        )
+        contents["cmd"] = cli
+        xcontrol, xc_warnings, write_ref = theory.get_xtb_control(
+            return_warnings=True, crest=True, **kwargs
+        )
+        contents["xc"] = xcontrol
+        contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
+        if write_ref:
+            contents[write_ref] = contents["xyz"]
+ 
+        warnings = cli_warnings + xc_warnings
+ 
+        if outfile is False:
+            if return_warnings:
+                return contents, warnings
+            return contents
+        
+        if outfile is None:
+            if "step" in kwargs:
+                outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
+            else:
+                outfile = geom.name
+
+        dirname, basename = os.path.split(outfile)
+        name, ext = os.path.splitext(basename)
+
+        cls.write_dict_files(contents, dirname, name)
+        
+        if return_warnings:
+            return warnings
+
+    @staticmethod
+    def write_dict_files(contents, dirname, name):
+        """
+        write data to different files
+        contents - dict(), keys are either a file name (includes a ".") or
+            a file extension (no ".")
+        dirname - where to write files
+        e.g. calling with contents as
+        {"run.sh": "cat {{ name }}.txt", "txt": "hi"}
+        and name as "test"
+        will write run.sh and test.txt to dirname
+        """
+        for key, data in contents.items():
+            if "." in key:
+                output_path = os.path.join(dirname, key)
+            else:
+                output_path = os.path.join(dirname, "%s.%s" % (name, key))
+                
+            with open(output_path, "w") as f:
+                f.write(data.replace("{{ name }}", name))
 
 
 @addlogger
@@ -1010,6 +1145,7 @@ class FileReader:
         get_all=False,
         just_geom=True,
         oniom=False,
+        scan_read_all=False,
         freq_name=None,
         conf_name=None,
         nbo_name=None,
@@ -1054,7 +1190,7 @@ class FileReader:
         # Fill in attributes with geometry information
         if self.content is None:
             self.read_file(
-                get_all, just_geom,
+                get_all, just_geom, scan_read_all,
                 freq_name=freq_name,
                 conf_name=conf_name,
                 nbo_name=nbo_name,
@@ -1068,7 +1204,7 @@ class FileReader:
 
         if self.content is not None:
             if self.file_type == "log":
-                self.read_log(f, get_all, just_geom)
+                self.read_log(f, get_all, just_geom, scan_read_all)
             elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
                 self.read_sd(f)
             elif self.file_type == "xyz":
@@ -1135,7 +1271,7 @@ class FileReader:
         return tuple((key, self[key]) for key in keys)
     
     def read_file(
-        self, get_all=False, just_geom=True,
+        self, get_all=False, just_geom=True, scan_read_all=False,
         freq_name=None, conf_name=None, nbo_name=None, oniom=False,
         max_length=10000000,
     ):
@@ -1152,12 +1288,12 @@ class FileReader:
                         the array would be
         """
         if os.path.isfile(self.name):
-            f = open(self.name)
+            f = open(self.name, "r", encoding="utf8")
         else:
             fname = ".".join([self.name, self.file_type])
             fname = os.path.expanduser(fname)
             if os.path.isfile(fname):
-                f = open(fname)
+                f = open(fname, "r", encoding="utf8")
             else:
                 raise FileNotFoundError(
                     "Error while looking for %s: could not find %s or %s in %s"
@@ -1167,7 +1303,7 @@ class FileReader:
         if self.file_type == "xyz":
             self.read_xyz(f, get_all, oniom)
         elif self.file_type == "log":
-            self.read_log(f, get_all, just_geom)
+            self.read_log(f, get_all, just_geom, scan_read_all)
         elif any(self.file_type == ext for ext in ["com", "gjf"]):
             self.read_com(f)
         elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
@@ -1366,7 +1502,8 @@ class FileReader:
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         uv_vis = ""
-        def get_atoms(f, n):
+        coord_unit_bohr = False
+        def get_atoms(f, n, bohr):
             rv = []
             self.skip_lines(f, 1)
             n += 2
@@ -1382,6 +1519,8 @@ class FileReader:
                 if "Gh" in element:
                     element = element.strip("Gh(").strip(")")
                 coords = np.array([float(x) for x in atom_info[1:-1]])
+                if bohr:
+                    coords *= UNIT.A0_TO_BOHR
                 rv += [Atom(element=element, coords=coords, name=str(i))]
                 mass += float(atom_info[-1])
 
@@ -1407,6 +1546,7 @@ class FileReader:
                 )
 
             if line.startswith("    Geometry (in Angstrom), charge"):
+                coord_unit_bohr = False
                 if not just_geom:
                     self.other["charge"] = int(line.split()[5].strip(","))
                     self.other["multiplicity"] = int(
@@ -1415,6 +1555,9 @@ class FileReader:
 
             elif line.strip() == "SCF":
                 read_geom = True
+
+            elif line.startswith("    Geometry (in Bohr), charge"):
+                coord_unit_bohr = True
 
             elif line.strip().startswith("Center") and read_geom:
                 read_geom = False
@@ -1426,7 +1569,7 @@ class FileReader:
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
 
-                self.atoms, mass, n = get_atoms(f, n)
+                self.atoms, mass, n = get_atoms(f, n, coord_unit_bohr)
                 if not just_geom:
                     self.other["mass"] = mass
                     self.other["mass"] *= UNIT.AMU_TO_KG
@@ -1731,6 +1874,15 @@ class FileReader:
                 self.file_type = "qout"
                 return self.read_qchem_out(
                     f, get_all=get_all, just_geom=just_geom
+                )
+
+            if (
+                "Entering Gaussian System"
+                in line
+            ):
+                self.file_type = "log"
+                return self.read_log(
+                    f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                 )
             
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
@@ -2089,7 +2241,7 @@ class FileReader:
                     self.other["finished"] = True
 
                 # TODO E_ZPVE
-                if "error" not in self.other:
+                if "error" not in self.other or not self["error"]:
                     for err in ERROR_ORCA:
                         if err in line:
                             self.other["error"] = ERROR_ORCA[err]
@@ -2097,6 +2249,21 @@ class FileReader:
                             break
                     else:
                         self.other["error"] = False
+                        if "!!!!!!!!" in line:
+                            line = f.readline()
+                            n += 1
+                            self.other["error"] = line.strip()
+                            line = f.readline()
+                            n += 1
+                            self.other["error_msg"] = ""
+                            found_error = False
+                            while "!!!!!!!" not in line:
+                                for err in ERROR_ORCA:
+                                    if err in line:
+                                        self.other["error"] = ERROR_ORCA[err]
+                                self.other["error_msg"] += line.strip() + "\n"
+                                line = f.readline()
+                                n += 1
 
                 line = f.readline()
                 n += 1
@@ -2345,7 +2512,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_log(self, f, get_all=False, just_geom=True):
+    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -2365,7 +2532,12 @@ class FileReader:
                     rv[atnum].coords = np.array(line[3:], dtype=float)
                 except IndexError:
                     pass
-                    #print(atnum)
+                    rv.append(Atom(
+                        element=ELEMENTS[int(line[1])],
+                        name=str(atnum + 1),
+                    ))
+                    rv[atnum].coords = np.array(line[3:], dtype=float)
+
                 atnum += 1
                 line = f.readline()
                 n += 1
@@ -2528,11 +2700,11 @@ class FileReader:
             line = f.readline()
             n += 1
             while line.strip():
-                atom_match = re.search("X\s+(\d+)\s+F", line)
-                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+F", line)
-                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line)
+                atom_match = re.search("X\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
+                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
+                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
                 torsion_match = re.search(
-                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+F", line
+                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line
                 )
                 if atom_match:
                     if "atoms" not in rv:
@@ -2540,12 +2712,20 @@ class FileReader:
                     else:
                         rv["atoms"] += ","
                     rv["atoms"] += atom_match.group(1)
+                    if atom_match.group(2) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([atom_match.group(1), atom_match.group(4), atom_match.group(5)]))
                 elif bond_match:
                     if "bonds" not in rv:
                         rv["bonds"] = []
                     rv["bonds"].append(
                         ",".join([bond_match.group(1), bond_match.group(2)])
                     )
+                    if bond_match.group(3) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([bond_match.group(1), bond_match.group(2), bond_match.group(5), bond_match.group(6)]))
                 elif angle_match:
                     if "angles" not in rv:
                         rv["angles"] = []
@@ -2558,6 +2738,10 @@ class FileReader:
                             ]
                         )
                     )
+                    if angle_match.group(4) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([angle_match.group(1), angle_match.group(2), angle_match.group(3), angle_match.group(6), angle_match.group(7)]))
                 elif torsion_match:
                     if "torsions" not in rv:
                         rv["torsions"] = []
@@ -2571,6 +2755,10 @@ class FileReader:
                             ]
                         )
                     )
+                    if torsion_match.group(5) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([torsion_match.group(1), torsion_match.group(2), torsion_match.group(3), torsion_match.group(4), torsion_match.group(7), torsion_match.group(8)]))
 
                 line = f.readline()
                 n += 1
@@ -2637,11 +2825,26 @@ class FileReader:
 
             # geometry
             if re.search("(Standard|Input) orientation:", line) and not oniom:
-                if get_all and len(self.atoms) > 0:
+                record_coords = True
+                if "constraints" in locals():
+                    if "scan" in constraints: 
+                        if scan_read_all == False:
+                            record_coords = False
+                            if "gradient" in self.other:
+                                true_count=0
+                                for i in self.other["gradient"]:
+                                    if self.other["gradient"][i]["converged"] == True:
+                                        true_count+=1
+                                if true_count == 4:
+                                    record_coords = True
+                        elif scan_read_all == True:
+                            record_coords = True
+                if get_all and self.atoms and record_coords:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
-                self.atoms, n = get_atoms(f, n)
+                if record_coords:
+                    self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
 
             if re.search("(Standard|Input) orientation:", line) and oniom == True:
@@ -2717,7 +2920,7 @@ class FileReader:
             if "Harmonic frequencies" in line:
                 freq_str = line
                 line = f.readline()
-                while line != "\n":
+                while line.strip():
                     n += 1
                     freq_str += line
                     line = f.readline()
@@ -3256,9 +3459,9 @@ class FileReader:
                 else:
                     other["method"] = method.group(2)
                 if "temperature=" in line:
-                    other["temperature"] = re.search(
-                        "temperature=(\d+\.?\d*)", line
-                    ).group(1)
+                    other["temperature"] = float(
+                        re.search("temperature=(\d+\.?\d*)", line).group(1)
+                    )
                 if "solvent=" in line:
                     other["solvent"] = re.search(
                         "solvent=(\S+)\)", line
