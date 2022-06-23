@@ -40,7 +40,7 @@ read_types = [
     "31",
     "qout",
 ]
-write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest", "mol"]
 file_type_err = "File type not yet implemented: {}"
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
@@ -226,6 +226,8 @@ class FileWriter:
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
             out = cls.write_xyz(geom, append, outfile=outfile)
+        elif style.lower() == "mol":
+            out = cls.write_mol(geom, outfile=outfile)
         elif style.lower() == "com":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -317,6 +319,69 @@ class FileWriter:
                 f.write(s)
 
         return
+
+    @classmethod
+    def write_mol(
+        cls, geom, outfile=None, **kwargs
+    ):
+        from AaronTools.finders import ChiralCenters
+        
+        elements = geom.element_counts()
+        s = ""
+        for ele, n in sorted(elements.items(), key=lambda ele: -1 if ele[0] == "C" else ELEMENTS.index(ele[0])):
+            s += "%s%i" % (ele, n)
+        s += "\nAaronTools\n%s\n" % geom.comment
+        
+        def bond_order_to_code(x):
+            if x == 1.5:
+                return 4
+            return int(x)
+        
+        atom_block = ""
+        bond_block = ""
+        n_bonds = 0
+        for i, atom in enumerate(geom.atoms):
+            atom_block += "%10.4f%10.4f%10.4f %3s 0%3i  0  0  0  0  0  0  0  0\n" % (
+                *atom.coords,
+                atom.element,
+                0 # if not hasattr(atom, "_saturation") else len(atom.connected) - atom._saturation,
+            )
+            n_bonds += len(atom.connected)
+            for atom2 in atom.connected:
+                ndx2 = geom.atoms.index(atom2)
+                if ndx2 < i:
+                    continue
+                
+                bond_block += "%3i%3i%3i  0  0  0  0\n" % (
+                    i + 1, ndx2 + 1, bond_order_to_code(atom.bond_order(atom2))
+                )
+        
+        try:
+            geom.find(ChiralCenters())
+            chiral = True
+        except LookupError:
+            chiral = False
+        
+        s += "%3i%3i  0  0%3i  0  0  0  0  0  0 V2000\n" % (
+            len(geom.atoms),
+            n_bonds // 2,
+            1 if chiral else 0,
+        )
+        s += atom_block
+        s += bond_block
+        s += "M  END\n"
+        
+        if outfile is None:
+            # if no output file is specified, use the name of the geometry
+            with open(geom.name + ".mol", "w") as f:
+                f.write(s)
+        elif outfile is False:
+            # if no output file is desired, just return the file contents
+            return s.strip()
+        else:
+            # write output to the requested destination
+            with open(outfile, "w") as f:
+                f.write(s)
 
     @classmethod
     def write_com(
@@ -1090,9 +1155,8 @@ class FileReader:
                 self.comment = line.strip()
 
             if progress == 4:
-                counts = line.split()
-                natoms = int(counts[0])
-                nbonds = int(counts[1])
+                natoms = int(line[0:3])
+                nbonds = int(line[3:6])
 
             if progress == 5:
                 self.atoms = []
@@ -1103,7 +1167,7 @@ class FileReader:
                     ]
 
                 for line in lines[i + natoms : i + natoms + nbonds]:
-                    a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
+                    a1, a2 = [int(line[3 * j: 3 * (j + 1)]) - 1 for j in [0, 1]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
 
