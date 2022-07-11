@@ -106,6 +106,8 @@ class Atom:
         element = ele.capitalize()
         if "-" in ele:
             element = "-".join(e.capitalize() for e in ele.split("-"))
+        if element.isdigit():
+            element = ELEMENTS[int(element)]
         if element == "":
             self.element = element
             self._radii = None
@@ -210,6 +212,7 @@ class Atom:
             self._radii = float(RADII[self.element])
         except KeyError:
             self.LOG.warning("Radii not found for element: %s" % self.element)
+            self._radii = 1.5
         return
 
     def __setattr__(self, attr, val):

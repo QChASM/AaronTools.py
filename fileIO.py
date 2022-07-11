@@ -1824,6 +1824,16 @@ class FileReader:
                         charges[i] = float(line.split()[-1])
                     self.other["Löwdin Charges"] = charges
 
+                elif line.startswith("MULLIKEN ATOMIC CHARGES"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = np.zeros(len(self.atoms))
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges[i] = float(line.split()[-1])
+                    self.other["Mulliken Charges"] = charges
+
                 elif line.startswith("BASIS SET IN INPUT FORMAT"):
                     # read basis set primitive info
                     self.skip_lines(f, 3)
@@ -2399,6 +2409,7 @@ class FileReader:
         line = f.readline()
         self.other["archive"] = ""
         constraints = {}
+        grad = {}
         self.other["opt_steps"] = 0
         found_archive = False
         n = 1
@@ -2448,23 +2459,28 @@ class FileReader:
             # geometry
             if re.search("(Standard|Input) orientation:", line):
                 record_coords = True
-                if "constraints" in locals():
-                    if "scan" in constraints: 
-                        if scan_read_all == False:
-                            record_coords = False
-                            if "gradient" in self.other:
-                                true_count=0
-                                for i in self.other["gradient"]:
-                                    if self.other["gradient"][i]["converged"] == True:
-                                        true_count+=1
-                                if true_count == 4:
-                                    record_coords = True
-                        elif scan_read_all == True:
-                            record_coords = True
+                if "scan" in constraints:
+                    if scan_read_all == False:
+                        # only want to only record converged geometries for scans
+                        record_coords = False
+                        if "gradient" in self.other:
+                            true_count=0
+                            for i in self.other["gradient"]:
+                                if self.other["gradient"][i]["converged"] == True:
+                                    true_count+=1
+                            if true_count == len(self.other["gradient"]):
+                                record_coords = True
+                    elif scan_read_all == True:
+                        record_coords = True
                 if get_all and self.atoms and record_coords:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
+                    # delete gradient so we don't double up on standard and input orientation
+                    try:
+                        del self.other["gradient"]
+                    except KeyError:
+                        pass
                 if record_coords:
                     self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
@@ -2781,6 +2797,18 @@ class FileReader:
 
             line = f.readline()
             n += 1
+
+        if (
+            get_all and 
+            scan_read_all == False and
+            not just_geom and not
+            all(grad[i]["converged"] for i in grad)
+        ):
+            if get_all:
+                self.other["gradient"] = grad
+            self.all_geom += [
+                (deepcopy(self.atoms), deepcopy(self.other))
+            ]
 
         if not just_geom:
             if route is not None:
