@@ -226,6 +226,7 @@ METAL = [
     "Lr",
 ] + list(TMETAL.keys())
 
+# Radii for lanthanides/actinides from http://www.chem.helsinki.fi/~pyykko/Radii09.pdf
 RADII = {
     "H": 0.32,
     "He": 0.93,
@@ -297,6 +298,34 @@ RADII = {
     "Tl": 1.48,
     "Pb": 1.47,
     "Bi": 1.46,
+    "Ce": 1.63,
+    "Pr": 1.76,
+    "Nd": 1.74,
+    "Pm": 1.73,
+    "Sm": 1.72,
+    "Eu": 1.68,
+    "Gd": 1.69,
+    "Tb": 1.68,
+    "Dy": 1.67,
+    "Ho": 1.66,
+    "Er": 1.65,
+    "Tm": 1.64,
+    "Yb": 1.70,
+    "Lu": 1.62,
+    "Th": 1.75,
+    "Pa": 1.69,
+    "U": 1.70,
+    "Np": 1.71,
+    "Pu": 1.72,
+    "Am": 1.66,
+    "Cm": 1.66,
+    "Bk": 1.68,
+    "Cf": 1.68,
+    "Es": 1.65,
+    "Fm": 1.67,
+    "Md": 1.73,
+    "No": 1.76,
+    "Lr": 1.61,
     "X": 0,
 }
 
