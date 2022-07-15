@@ -1550,6 +1550,7 @@ class FileReader:
         """read orca output file"""
 
         nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
+        opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -1964,6 +1965,9 @@ class FileReader:
                     self.other["n_alpha"] = int(
                         np.rint(float(line.split()[2]))
                     )
+
+                elif opt_cycle.search(line):
+                    self.other["opt_steps"] = int(opt_cycle.search(line).group(1))
 
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
