@@ -225,7 +225,7 @@ class Method:
         if self.name.lower() == "gfn2-xtb":
             return {"command_line": {"gfn": ["2"]}}, None
         return {"xcontrol": {"gfn": ["method=%s" % self.name]}}, None
-        
+
     def get_crest(self):
         if self.name.lower() == "gfn-ff":
             return {"command_line": {"gfnff": []}}, None

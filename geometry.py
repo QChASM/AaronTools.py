@@ -632,6 +632,10 @@ class Geometry:
         return np.array([a.element for a in self.atoms])
 
     @property
+    def num_atoms(self):
+        return len(self.atoms)
+
+    @property
     def coords(self):
         """
         array of coordinates (read only)

@@ -9,12 +9,14 @@ from AaronTools.finders import AnyTransitionMetal
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import glob_files
 
-cone_parser = argparse.ArgumentParser(
-    description="calculate ligand cone angles",
+# from cProfile import Profile
+
+solid_parser = argparse.ArgumentParser(
+    description="print ligand solid angle",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
-cone_parser.add_argument(
+solid_parser.add_argument(
     "infile", metavar="input file",
     type=str,
     nargs="*",
@@ -22,7 +24,7 @@ cone_parser.add_argument(
     help="a coordinate file",
 )
 
-cone_parser.add_argument(
+solid_parser.add_argument(
     "-o", "--output",
     type=str,
     default=False,
@@ -33,7 +35,7 @@ cone_parser.add_argument(
     "Default: stdout"
 )
 
-cone_parser.add_argument(
+solid_parser.add_argument(
     "-if", "--input-format",
     type=str,
     default=None,
@@ -42,7 +44,7 @@ cone_parser.add_argument(
     help="file format of input - xyz is assumed if input is stdin",
 )
 
-cone_parser.add_argument(
+solid_parser.add_argument(
     "-k", "--key-atoms",
     type=str,
     default=None,
@@ -51,7 +53,7 @@ cone_parser.add_argument(
     "the cone angle of (1-indexed)",
 )
 
-cone_parser.add_argument(
+solid_parser.add_argument(
     "-c", "--center",
     type=str,
     default=AnyTransitionMetal(),
@@ -59,24 +61,26 @@ cone_parser.add_argument(
     help="index of complex's center atom (1-indexed)\nDefault: transition metals",
 )
 
-cone_parser.add_argument(
-    "-m", "--method",
-    type=lambda x: x.capitalize(),
-    choices=["Tolman", "Exact"],
-    default="exact",
-    dest="method",
-    help="cone angle type\n" +
-    "Tolman: Tolman's method for unsymmetric mono- and bidentate ligands\n" +
-    "        see J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI:\n" +
-    "        10.1021/ja00808a009)\n" +
-    "Exact: (Default) Allen's method for an all-encompassing cone\n" +
-    "       see Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.\n" +
-    "       (2013), Exact ligand cone angles. J. Comput. Chem., 34:\n" +
-    "       1189-1197. (DOI: 10.1002/jcc.23217)",
+solid_parser.add_argument(
+    "-p", "--points",
+    type=int,
+    choices=[110, 194, 302, 590, 974, 1454, 2030, 2702, 5810],
+    default=5810,
+    dest="points",
+    help="number of angular points for integration\n" +
+    "lower values are faster, but at the cost of accuracy\nDefault: 5810"
 )
 
-cone_parser.add_argument(
-    "-r", "--vdw-radii",
+solid_parser.add_argument(
+    "-sca", "--solid-cone-angle",
+    action="store_true",
+    default=False,
+    dest="solid_cone",
+    help="print solid ligand cone angles instead of solid angles",
+)
+
+solid_parser.add_argument(
+    "-vdw", "--vdw-radii",
     default="umn",
     choices=["umn", "bondi"],
     dest="radii",
@@ -90,19 +94,27 @@ cone_parser.add_argument(
     "Default: umn",
 )
 
-cone_parser.add_argument(
-    "-b", "--cone-bild",
-    action="store_true",
-    default=False,
-    dest="print_cones",
-    help="print Chimera/ChimeraX bild file containing cones",
-)
 
-args = cone_parser.parse_args()
+args = solid_parser.parse_args()
+
+# profile = Profile()
+# profile.enable()
 
 s = ""
 
-for f in glob_files(args.infile, parser=cone_parser):
+# args.radii = {
+#     "P": 1.8,
+#     "H": 1.2,
+#     "C": 1.7,
+#     "N": 1.55,
+#     "O": 1.52,
+#     "F": 1.47,
+#     "S": 1.8,
+#     "Cl": 1.75,
+#     "Fe": 2.0,
+# }
+
+for f in glob_files(args.infile, parser=solid_parser):
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format[0], None))
@@ -115,37 +127,38 @@ for f in glob_files(args.infile, parser=cone_parser):
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f))
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_ranks=False)
 
     ligand = geom.get_fragment(args.key_atoms, stop=args.center)
 
-    comp = Component(ligand, key_atoms=args.key_atoms, detect_backbone=False)
-
-    angle = comp.cone_angle(
-        center=geom.find(args.center),
-        method=args.method,
-        radii=args.radii,
-        return_cones=args.print_cones,
+    comp = Component(
+        ligand,
+        key_atoms=args.key_atoms,
+        detect_backbone=False,
+        refresh_ranks=False,
+        refresh_connected=False,
     )
 
-    if args.print_cones:
-        angle, cones = angle
-
+    angle = comp.solid_angle(
+        center=geom.find(args.center),
+        radii=args.radii,
+        return_solid_cone=args.solid_cone,
+        grid=args.points,
+    )
+    
     if len(args.infile) > 1:
         s += "%20s:\t" % f
 
-    s += "%4.1f\n" % angle
+    if args.solid_cone:
+        s += "%4.2f\n" % angle
+    else:
+        s += "%4.3f\n" % angle
     
-    if args.print_cones:
-        s += ".transparency 0.5\n"
-        for cone in cones:
-            apex, base, radius = cone
-            s += ".cone   %6.3f %6.3f %6.3f   %6.3f %6.3f %6.3f   %.3f open\n" % (
-                *apex, *base, radius
-            )
-
 if not args.outfile:
     print(s.rstrip())
 else:
     with open(args.outfile, "a") as f:
         f.write(s.rstrip())
+
+# profile.disable()
+# profile.print_stats()
