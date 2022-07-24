@@ -942,6 +942,8 @@ class Component(Geometry):
         # X is the height of each atom's cone that touches the unit sphere
         # divided by the distance to the atom
         X = np.sqrt(dx2 - radii_list ** 2) / dx2
+        if np.any(np.isnan(X)):
+            return 4 * np.pi
         # adjusted_coords are the points inside the unit circle (shifted to be
         # centered at the origin) that are at the center of the base of each cone
         adjusted_coords = X[:, np.newaxis] * shifted_coords
