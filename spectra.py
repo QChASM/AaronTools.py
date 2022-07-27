@@ -983,6 +983,9 @@ class Frequency(Signals):
             if line == "NORMAL MODES":
                 break
 
+            if line.startswith("Scaling"):
+                continue
+
             freq = line.split()[1]
             self.data += [HarmonicVibration(float(freq))]
 

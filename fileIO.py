@@ -1674,8 +1674,8 @@ class FileReader:
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
                     freq_str = "VIBRATIONAL FREQUENCIES\n"
-                    self.skip_lines(f, 4)
-                    n += 5
+                    self.skip_lines(f, 2)
+                    n += 3
                     line = f.readline()
                     while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":
