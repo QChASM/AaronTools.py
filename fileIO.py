@@ -36,6 +36,8 @@ read_types = [
     "fchk",
     "pdb",
     "pdbqt",
+    "cif",
+    "mmcif",
     "crest",
     "xtb",
     "sqmout",
@@ -378,7 +380,6 @@ class FileWriter:
 
             for key in geom.other.keys():
                 if key.startswith("model"):
-                    print("this worked")
                     if models == "all":
                         geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
                     elif isinstance(models, list):
@@ -1223,6 +1224,8 @@ class FileReader:
                 self.read_pdb(f, qt=False)
             elif self.file_type == "pdbqt":
                 self.read_pdb(f, qt=True)
+            elif self.file_type in ("mmcif", "cif"):
+                self.read_mmcif(f)
             elif self.file_type == "crest":
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
@@ -1320,6 +1323,8 @@ class FileReader:
             self.read_pdb(f, qt=False)
         elif self.file_type == "pdbqt":
             self.read_pdb(f, qt=True)
+        elif self.file_type in ("mmcif", "cif"):
+            self.read_mmcif(f)
         elif self.file_type == "crest":
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
@@ -3812,6 +3817,111 @@ class FileReader:
                         self.atoms[int(line.split()[1])-1].connected.add(self.atoms[int(atom_num)-1])
                     line = f.readline()
                     n += 1
+            line = f.readline()
+            n += 1
+        return
+
+    def read_mmcif(self, f):
+        line = f.readline()
+        n = 1
+        nloops=0
+        current_model="data_UNK"
+        self.other[current_model] = {}
+        def read_loop(line, n, nloops):
+            entries = "(?:[\'\"].*?[\'\"]|\S)+"
+            self.other[current_model]["loop_" + str(nloops)]={}
+            self.other[current_model]["loop_" + str(nloops)]["titles"]=[]
+            self.other[current_model]["loop_" + str(nloops)]["items"]=[]
+            n_titles = 0
+            name_ndx=None
+            ele_ndx=None
+            type_ndx=None
+            charge_ndx=None
+            res_ndx=None
+            x_ndx=None
+            y_ndx=None
+            z_ndx=None
+            read_atoms=False
+            while line.startswith("_"):
+                self.other[current_model]["loop_" + str(nloops)]["titles"].append(line.strip())
+                if line.startswith("_atom_site.id"):
+                    read_atoms=True
+                    atoms=[]
+                    name_ndx = n_titles
+                if line.startswith("_atom_site.type_symbol"):
+                    ele_ndx = n_titles
+                if line.startswith("_atom_site.label_atom_id"):
+                    type_ndx = n_titles
+                if line.startswith("_atom_site.auth_comp_id"):
+                    res_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_x":
+                    x_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_y":
+                    y_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_z":
+                    z_ndx = n_titles
+                if line.startswith("_atom_site.pdbx_formal_charge"):
+                    charge_ndx = n_titles
+                line = f.readline()
+                n += 1
+                n_titles+=1
+            while not line.startswith("_") and line != "" and "#" not in line:
+                item_list=[]
+                items=[]
+                while len(item_list) < n_titles:
+                    item = ""
+                    items=[]
+                    if line.startswith(";"):
+                        item = line.strip()
+                        line = f.readline()
+                        while not line.startswith(";"):
+                            item = item + line.strip()
+                            line = f.readline()
+                    else:
+                        items=re.findall(entries, line.strip())
+                        if read_atoms:
+                            atom = OniomAtom()
+                            if name_ndx:
+                                atom.name=items[name_ndx]
+                            if ele_ndx:
+                                atom.element=items[ele_ndx]
+                            if res_ndx:
+                                atom.res=items[res_ndx]
+                            if type_ndx:
+                                atom.atomtype=items[type_ndx]
+                            if charge_ndx:
+                                atom.charge=items[charge_ndx]
+                            if x_ndx:
+                                atom.coords=[float(items[x_ndx]), float(items[y_ndx]), float(items[z_ndx])]
+                            atoms.append(atom)
+                    item_list = item_list + items
+                    if item != "":
+                        item_list.append(item.strip(";"))
+                    line = f.readline()
+                    n+=1
+
+                self.other[current_model]["loop_" + str(nloops)]["items"].append(item_list)
+                #print(self.other[current_model]["loop_" + str(nloops)]["items"])
+            if read_atoms:
+                if self.atoms==[]:
+                    self.atoms=atoms
+                else:
+                    self.other[current_model]["atoms"]=atoms
+            nloops +=1
+            return
+
+
+        while line:
+            if line.startswith("data"):
+                current_model = line.strip()
+                self.other[current_model] = {}
+            elif line.startswith("loop"):
+                line=f.readline()
+                n+=1
+                read_loop(line, n, nloops)
+            elif line.startswith("_") and len(line.split())==2:
+                if line.split()[1] != "?":
+                    self.other[current_model][line.split()[0]]=line.split()[1]
             line = f.readline()
             n += 1
         return
