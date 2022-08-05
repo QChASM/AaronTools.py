@@ -220,7 +220,7 @@ class TestCLS(TestWithTimer):
         # print(err.decode("utf-8"))
         fr = FileReader(("out", "xyz", out.decode("utf-8")))
         mol = Geometry(fr)
-        self.assertTrue(validate(mol, ref))
+        self.assertTrue(validate(mol, ref, debug=False, thresh="loose"))
 
         # I don't want to run these tests anymore
         # sometimes the server timeout stuff doesn't seem to work and

@@ -45,7 +45,7 @@ read_types = [
     "31",
     "qout",
 ]
-write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest"]
+write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest", "mol"]
 file_type_err = "File type not yet implemented: {}"
 #LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
 #LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
@@ -247,6 +247,8 @@ class FileWriter:
             else:
                 out = cls.write_xyz(geom, append, outfile)
 
+        elif style.lower() == "mol":
+            out = cls.write_mol(geom, outfile=outfile)
         elif style.lower() == "com":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -491,6 +493,68 @@ class FileWriter:
 
         return
 
+
+    def write_mol(
+        cls, geom, outfile=None, **kwargs
+    ):
+        from AaronTools.finders import ChiralCenters
+        
+        elements = geom.element_counts()
+        s = ""
+        for ele, n in sorted(elements.items(), key=lambda ele: -1 if ele[0] == "C" else ELEMENTS.index(ele[0])):
+            s += "%s%i" % (ele, n)
+        s += "\nAaronTools\n%s\n" % geom.comment
+        
+        def bond_order_to_code(x):
+            if x == 1.5:
+                return 4
+            return int(x)
+        
+        atom_block = ""
+        bond_block = ""
+        n_bonds = 0
+        for i, atom in enumerate(geom.atoms):
+            atom_block += "%10.4f%10.4f%10.4f %3s 0%3i  0  0  0  0  0  0  0  0\n" % (
+                *atom.coords,
+                atom.element,
+                0 # if not hasattr(atom, "_saturation") else len(atom.connected) - atom._saturation,
+            )
+            n_bonds += len(atom.connected)
+            for atom2 in atom.connected:
+                ndx2 = geom.atoms.index(atom2)
+                if ndx2 < i:
+                    continue
+                
+                bond_block += "%3i%3i%3i  0  0  0  0\n" % (
+                    i + 1, ndx2 + 1, bond_order_to_code(atom.bond_order(atom2))
+                )
+        
+        try:
+            geom.find(ChiralCenters())
+            chiral = True
+        except LookupError:
+            chiral = False
+        
+        s += "%3i%3i  0  0%3i  0  0  0  0  0  0 V2000\n" % (
+            len(geom.atoms),
+            n_bonds // 2,
+            1 if chiral else 0,
+        )
+        s += atom_block
+        s += bond_block
+        s += "M  END\n"
+        
+        if outfile is None:
+            # if no output file is specified, use the name of the geometry
+            with open(geom.name + ".mol", "w") as f:
+                f.write(s)
+        elif outfile is False:
+            # if no output file is desired, just return the file contents
+            return s.strip()
+        else:
+            # write output to the requested destination
+            with open(outfile, "w") as f:
+                f.write(s)
 
     @classmethod
     def write_com(
@@ -1199,7 +1263,20 @@ class FileReader:
                 oniom=oniom
             )
         elif isinstance(self.content, str):
-            f = StringIO(self.content)
+            #f = StringIO(self.content)
+            if os.path.isfile(self.name):
+                f = open(self.name, "r", encoding="utf8")
+            else:
+                fname = ".".join([self.name, self.file_type])
+                fname = os.path.expanduser(fname)
+                if os.path.isfile(fname):
+                    f = open(fname, "r", encoding="utf8")
+                else:
+                    raise FileNotFoundError(
+                        "Error while looking for %s: could not find %s or %s in %s"
+                        % (self.name, fname, self.name, os.getcwd())
+                    )
+
         elif isinstance(self.content, IOBase):
             f = self.content
 
@@ -1439,9 +1516,8 @@ class FileReader:
                 self.comment = line.strip()
 
             if progress == 4:
-                counts = line.split()
-                natoms = int(counts[0])
-                nbonds = int(counts[1])
+                natoms = int(line[0:3])
+                nbonds = int(line[3:6])
 
             if progress == 5:
                 self.atoms = []
@@ -1452,7 +1528,7 @@ class FileReader:
                     ]
 
                 for line in lines[i + natoms : i + natoms + nbonds]:
-                    a1, a2 = [int(x) - 1 for x in line.split()[0:2]]
+                    a1, a2 = [int(line[3 * j: 3 * (j + 1)]) - 1 for j in [0, 1]]
                     self.atoms[a1].connected.add(self.atoms[a2])
                     self.atoms[a2].connected.add(self.atoms[a1])
 
@@ -1834,6 +1910,7 @@ class FileReader:
         """read orca output file"""
 
         nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
+        opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -1957,8 +2034,8 @@ class FileReader:
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
                     freq_str = "VIBRATIONAL FREQUENCIES\n"
-                    self.skip_lines(f, 4)
-                    n += 5
+                    self.skip_lines(f, 2)
+                    n += 3
                     line = f.readline()
                     while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":
@@ -2108,6 +2185,16 @@ class FileReader:
                         charges[i] = float(line.split()[-1])
                     self.other["Löwdin Charges"] = charges
 
+                elif line.startswith("MULLIKEN ATOMIC CHARGES"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = np.zeros(len(self.atoms))
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges[i] = float(line.split()[-1])
+                    self.other["Mulliken Charges"] = charges
+
                 elif line.startswith("BASIS SET IN INPUT FORMAT"):
                     # read basis set primitive info
                     self.skip_lines(f, 3)
@@ -2238,6 +2325,9 @@ class FileReader:
                     self.other["n_alpha"] = int(
                         np.rint(float(line.split()[2]))
                     )
+
+                elif opt_cycle.search(line):
+                    self.other["opt_steps"] = int(opt_cycle.search(line).group(1))
 
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
@@ -2774,6 +2864,7 @@ class FileReader:
         line = f.readline()
         self.other["archive"] = ""
         constraints = {}
+        grad = {}
         self.other["opt_steps"] = 0
         found_archive = False
         n = 1
@@ -2831,23 +2922,28 @@ class FileReader:
             # geometry
             if re.search("(Standard|Input) orientation:", line) and not oniom:
                 record_coords = True
-                if "constraints" in locals():
-                    if "scan" in constraints: 
-                        if scan_read_all == False:
-                            record_coords = False
-                            if "gradient" in self.other:
-                                true_count=0
-                                for i in self.other["gradient"]:
-                                    if self.other["gradient"][i]["converged"] == True:
-                                        true_count+=1
-                                if true_count == 4:
-                                    record_coords = True
-                        elif scan_read_all == True:
-                            record_coords = True
+                if "scan" in constraints:
+                    if scan_read_all == False:
+                        # only want to only record converged geometries for scans
+                        record_coords = False
+                        if "gradient" in self.other:
+                            true_count=0
+                            for i in self.other["gradient"]:
+                                if self.other["gradient"][i]["converged"] == True:
+                                    true_count+=1
+                            if true_count == len(self.other["gradient"]):
+                                record_coords = True
+                    elif scan_read_all == True:
+                        record_coords = True
                 if get_all and self.atoms and record_coords:
                     self.all_geom += [
                         (deepcopy(self.atoms), deepcopy(self.other))
                     ]
+                    # delete gradient so we don't double up on standard and input orientation
+                    try:
+                        del self.other["gradient"]
+                    except KeyError:
+                        pass
                 if record_coords:
                     self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
@@ -3176,6 +3272,18 @@ class FileReader:
 
             line = f.readline()
             n += 1
+
+        if (
+            get_all and 
+            scan_read_all == False and
+            not just_geom and not
+            all(grad[i]["converged"] for i in grad)
+        ):
+            if get_all:
+                self.other["gradient"] = grad
+            self.all_geom += [
+                (deepcopy(self.atoms), deepcopy(self.other))
+            ]
 
         if not just_geom:
             if route is not None:

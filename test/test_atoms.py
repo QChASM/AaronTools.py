@@ -148,7 +148,7 @@ class TestAtoms(TestWithTimer):
 
     def test_set_radii(self):
         atom = Atom("H", [0, 0, 0])
-        self.assertEqual(atom._radii, 0.32)
+        self.assertEqual(atom._radii, 0.31)
         atom = Atom("X", [0, 0, 0])  # ghost atom
         self.assertEqual(atom._radii, 0.0)
         with self.assertRaises(ValueError):

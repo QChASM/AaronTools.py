@@ -572,7 +572,7 @@ class ImplicitSolvent:
 
         # check some orca solvent keywords and switch to gaussian ones
         solvent = self.solvent
-        if solvent.lower() == "chcl2":
+        if solvent.lower() == "ch2cl2":
             solvent = "DiChloroMethane"
         elif solvent.lower() == "ccl4":
             solvent = "CarbonTetraChloride"

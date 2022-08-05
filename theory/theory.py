@@ -2870,7 +2870,7 @@ class Theory:
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
         
         if self.method is not None:
-            func, warning = self.method.get_xtb()
+            func, warning = self.method.get_crest()
             if warning is not None:
                 warnings.append(warning)
             other_kw_dict = combine_dicts(func, other_kw_dict)

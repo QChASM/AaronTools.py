@@ -13,6 +13,7 @@ from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
 from AaronTools.substituent import Substituent
 from AaronTools.test import TestWithTimer, prefix, rmsd_tol, validate
+from AaronTools.finders import NotAny
 
 
 def is_close(a, b, tol=10 ** -8, debug=False):
@@ -763,7 +764,7 @@ class TestGeometry(TestWithTimer):
         mol.substitute(Substituent("NO2"), "12")
         mol.substitute(Substituent("Cl"), "11")
 
-        self.assertTrue(validate(mol, ref))
+        self.assertTrue(validate(mol, ref, thresh="loose"))
 
     def test_close_ring(self):
         mol = Geometry(TestGeometry.benzene)
@@ -846,9 +847,10 @@ class TestGeometry(TestWithTimer):
         ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_4.xyz"))
         org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
+        org_tri.write(outfile="test.xyz")
         self.assertTrue(
             validate(
-                org_tri, ref, thresh="loose", heavy_only=True, debug=debug
+                org_tri, ref, thresh="loose", heavy_only=False, debug=False
             )
         )
 

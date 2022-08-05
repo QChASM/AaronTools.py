@@ -52,15 +52,15 @@ class TestComponent(TestWithTimer):
         benz_Ph_Cl = TestComponent.benz_Ph_Cl.copy()
 
         mol.substitute(Substituent("Cl"), "11")
-        res = validate(mol, benz_Cl)
+        res = validate(mol, benz_Cl, debug=False, thresh="loose")
         self.assertTrue(res)
 
         mol.substitute(Substituent("NO2"), "12", "1")
-        res = validate(mol, benz_NO2_Cl, sort=True)
+        res = validate(mol, benz_NO2_Cl, sort=True, debug=False, thresh="loose")
         self.assertTrue(res)
 
         mol.substitute(Substituent("OH"), "NO2")
-        res = validate(mol, benz_OH_Cl, sort=True)
+        res = validate(mol, benz_OH_Cl, sort=True, thresh="loose")
         self.assertTrue(res)
 
         mol.substitute(Substituent("Ph"), ["12", "12.*"])
@@ -95,7 +95,7 @@ class TestComponent(TestWithTimer):
         geom.substitute(Substituent("Ph"), "10")
         geom.substitute(Substituent("OH"), "7")
         geom.minimize_sub_torsion(allow_planar=True)
-        self.assertTrue(validate(geom, ref, heavy_only=True))
+        self.assertTrue(validate(geom, ref, heavy_only=True, debug=False, thresh="loose"))
 
     def test_sub_rotate(self):
         geom = TestComponent.RQ_tBu.copy()
