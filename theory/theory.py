@@ -2399,7 +2399,7 @@ class Theory:
         out = ["xtb", "--input", "{{ name }}.xc", "{{ name }}.xyz"]
         if XTB_COMMAND_LINE in other_kw_dict:
             for flag, option in other_kw_dict[XTB_COMMAND_LINE].items():
-                out.append("--%s " % flag)
+                out.append("--%s" % flag)
                 if option:
                     out.append(",".join(option))
         
@@ -2430,7 +2430,7 @@ class Theory:
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
         
         if self.method is not None:
-            func, warning = self.method.get_xtb()
+            func, warning = self.method.get_crest()
             if warning is not None:
                 warnings.append(warning)
             other_kw_dict = combine_dicts(func, other_kw_dict)
@@ -2449,10 +2449,10 @@ class Theory:
 
         other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
 
-        out = ["crest", "{{ name }}.xyz"]
+        out = ["crest", "{{ name }}.xyz", "{{ name }}.xc"]
         if CREST_COMMAND_LINE in other_kw_dict:
             for flag, option in other_kw_dict[CREST_COMMAND_LINE].items():
-                out.append("--%s " % flag)
+                out.append("--%s" % flag)
                 if option:
                     out.append(",".join(option))
         

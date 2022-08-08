@@ -973,7 +973,20 @@ class FileReader:
                 max_length=max_length,
             )
         elif isinstance(self.content, str):
-            f = StringIO(self.content)
+            #f = StringIO(self.content)
+            if os.path.isfile(self.name):
+                f = open(self.name, "r", encoding="utf8")
+            else:
+                fname = ".".join([self.name, self.file_type])
+                fname = os.path.expanduser(fname)
+                if os.path.isfile(fname):
+                    f = open(fname, "r", encoding="utf8")
+                else:
+                    raise FileNotFoundError(
+                        "Error while looking for %s: could not find %s or %s in %s"
+                        % (self.name, fname, self.name, os.getcwd())
+                    )
+
         elif isinstance(self.content, IOBase):
             f = self.content
 
@@ -1674,8 +1687,8 @@ class FileReader:
                 elif line.startswith("VIBRATIONAL FREQUENCIES"):
                     stage = "frequencies"
                     freq_str = "VIBRATIONAL FREQUENCIES\n"
-                    self.skip_lines(f, 4)
-                    n += 5
+                    self.skip_lines(f, 2)
+                    n += 3
                     line = f.readline()
                     while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":

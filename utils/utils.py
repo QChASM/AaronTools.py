@@ -8,6 +8,8 @@ import AaronTools.atoms as Atoms
 import numpy as np
 from AaronTools.const import AARONTOOLS, PHYSICAL
 
+_loaded_leb_grids = dict()
+
 
 def range_list(number_list, sep=",", sort=True):
     """
@@ -563,6 +565,12 @@ def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
     over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number
     of points (num) must be one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810
     """
+    try:
+        grid, weights = _loaded_leb_grids[num]
+        return radius * grid + center, weights.copy()
+    except KeyError:
+        pass
+    
     # read grid data  on unit sphere
     grid_file = os.path.join(
         AARONTOOLS, "utils", "quad_grids", "Leb" + str(num) + ".grid"
@@ -574,12 +582,12 @@ def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
             + "use one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810"
         )
     grid_data = np.loadtxt(grid_file)
-    grid = grid_data[:, [0, 1, 2]]
+    grid = grid_data[:, :3]
     weights = grid_data[:, 3]
+    _loaded_leb_grids[num] = (grid, weights.copy())
 
     # scale the points to the specified radius and move the center
-    grid *= radius
-    grid += center
+    grid = grid * radius + center
 
     return grid, weights
 

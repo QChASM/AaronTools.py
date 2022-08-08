@@ -4,6 +4,8 @@ import re
 
 import numpy as np
 
+from scipy.spatial import distance_matrix
+
 from AaronTools.const import (
     AARONLIB,
     AARONTOOLS,
@@ -15,7 +17,11 @@ from AaronTools.fileIO import read_types
 from AaronTools.finders import BondedTo, CloserTo, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import perp_vector
+from AaronTools.utils.utils import (
+    perp_vector,
+    lebedev_sphere,
+    fibonacci_sphere,
+)
 
 
 class Component(Geometry):
@@ -43,11 +49,12 @@ class Component(Geometry):
         to_center=None,
         key_atoms=None,
         detect_backbone=True,
+        **kwargs,
     ):
         """
         comp is either a file, a geometry, or an atom list
         """
-        super().__init__()
+        super().__init__(**kwargs)
         self.name = name
         self.comment = comment
         self.other = {}
@@ -87,7 +94,7 @@ class Component(Geometry):
                         "Cannot find ligand in library:", structure
                     )
             structure = flig
-        super().__init__(structure, name, comment)
+        super().__init__(structure, name, comment, **kwargs)
 
         if tag is not None:
             for a in self.atoms:
@@ -251,19 +258,24 @@ class Component(Geometry):
 
     def rebuild(self):
         sub_atoms = []
-        for sub in sorted(self.substituents):
-            tmp = [sub.atoms[0]]
-            tmp += sorted(sub.atoms[1:])
-            for t in tmp:
-                if t in sub_atoms:
-                    continue
-                if self.backbone and t in self.backbone:
-                    continue
-                sub_atoms += [t]
-        if self.backbone is None:
-            self.backbone = [a for a in self.atoms if a not in sub_atoms]
-        self.backbone = sorted(self.backbone)
-        self.atoms = self.backbone + sub_atoms
+        if self.substituents:
+            for sub in sorted(self.substituents):
+                tmp = [sub.atoms[0]]
+                tmp += sorted(sub.atoms[1:])
+                for t in tmp:
+                    if t in sub_atoms:
+                        continue
+                    if self.backbone and t in self.backbone:
+                        continue
+                    sub_atoms += [t]
+            sub_atoms_set = set(sub_atoms)
+            if self.backbone is None:
+                self.backbone = [a for a in self.atoms if a not in sub_atoms_set]
+            self.backbone = sorted(self.backbone)
+            self.atoms = self.backbone + sub_atoms
+        else:
+            self.backbone = self.atoms.copy()
+
 
     def get_frag_list(self, targets=None, max_order=None):
         """
@@ -885,3 +897,75 @@ class Component(Geometry):
             raise NotImplementedError(
                 "cone angle type is not implemented: %s" % method
             )
+
+    def solid_angle(
+        self,
+        center,
+        radii="umn",
+        grid=5810,
+        return_solid_cone=False,
+    ):
+        """
+        calculate the solid angle of a ligand
+        center - atoms or point to denote the center of the sphere
+        radii - "umn", "bondi", or a dictionary with elements as
+            the keys and radii as the values
+        grid - number of points in lebedev grid
+        return_solid_cone - return solid ligand cone angle (degrees)
+            instead of solid angle (steradians)
+        """
+        # we calculate the solid angle by projecting each atom's
+        # radius onto a unit sphere around the center
+        # the radii of the shadow of the atoms depends on
+        # the original radius and the distance from the center
+
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+
+        radii_list = np.array([
+            radii_dict[atom.element] for atom in self.atoms
+        ])
+
+        if not isinstance(center, np.ndarray):
+            center = np.mean(self.coordinates(center), axis=0)
+        
+        coords = self.coords
+        shifted_coords = coords - center
+        
+        dx2 = np.sum(shifted_coords * shifted_coords, axis=1)
+        dist = np.sqrt(dx2)
+
+        # X is the height of each atom's cone that touches the unit sphere
+        # divided by the distance to the atom
+        X = np.sqrt(dx2 - radii_list ** 2) / dx2
+        if np.any(np.isnan(X)):
+            return 4 * np.pi
+        # adjusted_coords are the points inside the unit circle (shifted to be
+        # centered at the origin) that are at the center of the base of each cone
+        adjusted_coords = X[:, np.newaxis] * shifted_coords
+        # H is the radius of each atom's cone on the unit sphere 
+        H = radii_list / dist
+
+        int_grid, weights = lebedev_sphere(
+            radius=1, center=np.zeros(3), num=grid,
+        )
+
+        dist = distance_matrix(int_grid, adjusted_coords)
+
+        # figure out which points are inside a shadow and
+        # sum the corresponding weights
+        mask = np.any(dist - H[np.newaxis, :] <= 0, axis=1)
+        fraction = sum(weights[mask])
+
+        solid_angle = 4 * np.pi * fraction
+        if not return_solid_cone:
+            return solid_angle
+         
+        ligand_solid_angle = 2 * np.arccos(
+            1 - (solid_angle / (2 * np.pi))
+        )
+        return np.rad2deg(ligand_solid_angle)
