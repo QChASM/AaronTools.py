@@ -94,13 +94,14 @@ class Atom:
     _bo = BondOrder()
 
     def __init__(
-        self, element="", coords=None, flag=False, name="", tags=None, charge=None
+        self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
     ):
         super().__setattr__("_hashed", False)
         if coords is None:
             coords = []
         if tags is None:
             tags = []
+        self._mass = mass
         # for BqO to have a ghost atom with oxygen basis functions
         ele = str(element).strip()
         element = ele.capitalize()
@@ -417,6 +418,8 @@ class Atom:
 
     def mass(self):
         """returns atomic mass"""
+        if self._mass is not None:
+            return self._mass
         if self.element in MASS:
             return MASS[self.element]
         elif not self.is_dummy:

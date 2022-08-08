@@ -271,7 +271,6 @@ class Theory:
             return False
         if self.empirical_dispersion != other.empirical_dispersion:
             # print("disp")
-            print(self.empirical_dispersion, other.empirical_dispersion)
             return False
         if self.grid != other.grid:
             # print("grid")
@@ -691,7 +690,7 @@ class Theory:
         # add other route options
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
-        if GAUSSIAN_ROUTE in other_kw_dict.keys():
+        if any(key == GAUSSIAN_ROUTE for key in other_kw_dict.keys()):
             for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
                 known_opts = []
                 out_str += option
