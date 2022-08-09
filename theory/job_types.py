@@ -43,7 +43,7 @@ def job_from_string(name, **kwargs):
     ext = None
     if "." in name:
         ext = name.split(".")[-1].lower()
-    
+  
     if name.lower().startswith("opt"):
         geom = kwargs.get("geometry", None)
         constraints = kwargs.get("constraints", None)

@@ -363,7 +363,7 @@ class Theory:
             elif self.high_basis is not None and self.medium_basis is None and self.low_basis is None:
                 if self.low_method.is_mm == True:
                     self.basis = BasisSet(basis = self.high_basis)
-                else: 
+                elif not self.low_method.is_semiempirical: 
                     raise ValueError("low_method requires low_basis if not an MM method")
         #print("basis is " + str(self.basis))
 
@@ -926,9 +926,10 @@ class Theory:
             elif self.high_method is not None and self.medium_method is None and self.low_method is None:
                 raise ValueError("must have more than one method defined for ONIOM")
             n_layers = len(methods)
+            basis_sets = [getattr(self, "%s_basis" % layer) for layer in ["high", "medium", "low"] if getattr(self, "%s_method" % layer)]
             #layers_written = 0
             out_str += "oniom("
-            for i, method in enumerate(methods, start=1):
+            for i, (method, basis) in enumerate(zip(methods, basis_sets), start=1):
                 #print(type(method))
                 func, warning = method.get_gaussian()
                 if warning is not None:
@@ -938,27 +939,12 @@ class Theory:
                     warnings.append(warning)
                 out_str += "%s" % func
                 if not method.is_semiempirical and not method.is_mm:
-                    if self.basis is None:
+                    if basis is None:
                         raise AttributeError("need to include a basis set for %s" % method.name)
-                    for basis in self.basis.basis:
-                        if basis.oniom_layer.upper() == method.oniom_layer.upper():
-                            basis = BasisSet(basis=basis)
-                            (
-                                basis_info,
-                                basis_warnings,
-                            ) = basis.get_gaussian_basis_info()
-                            warnings.extend(basis_warnings)
-                            # check basis elements to make sure no element is
-                            # in two basis sets or left out of any
-                            #if self.geometry is not None:
-                            #    basis_warning = basis.check_for_elements(
-                            #        self.geometry
-                            #    )
-                            #    if basis_warning is not None:
-                            #        warnings.append(basis_warning)
-
-                            if GAUSSIAN_ROUTE in basis_info:
-                                out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+                    basis_info, basis_warnings = basis.get_gaussian_basis_info()
+                    warnings.extend(basis_warnings)
+                    if GAUSSIAN_ROUTE in basis_info:
+                        out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
 
                     if isinstance(self.basis, Basis):
                         if basis.oniom_layer.upper() == method.oniom_layer.upper():
