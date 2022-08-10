@@ -442,7 +442,6 @@ class Theory:
             return False
         if self.empirical_dispersion != other.empirical_dispersion:
             # print("disp")
-            print(self.empirical_dispersion, other.empirical_dispersion)
             return False
         if self.grid != other.grid:
             # print("grid")
@@ -998,7 +997,7 @@ class Theory:
         # add other route options
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
-        if GAUSSIAN_ROUTE in other_kw_dict.keys():
+        if any(key == GAUSSIAN_ROUTE for key in other_kw_dict.keys()):
             for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
                 known_opts = []
                 out_str += option
@@ -2820,7 +2819,7 @@ class Theory:
         out = ["xtb", "--input", "{{ name }}.xc", "{{ name }}.xyz"]
         if XTB_COMMAND_LINE in other_kw_dict:
             for flag, option in other_kw_dict[XTB_COMMAND_LINE].items():
-                out.append("--%s " % flag)
+                out.append("--%s" % flag)
                 if option:
                     out.append(",".join(option))
         
@@ -2870,10 +2869,10 @@ class Theory:
 
         other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
 
-        out = ["crest", "{{ name }}.xyz"]
+        out = ["crest", "{{ name }}.xyz", "{{ name }}.xc"]
         if CREST_COMMAND_LINE in other_kw_dict:
             for flag, option in other_kw_dict[CREST_COMMAND_LINE].items():
-                out.append("--%s " % flag)
+                out.append("--%s" % flag)
                 if option:
                     out.append(",".join(option))
         

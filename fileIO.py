@@ -2608,6 +2608,7 @@ class FileReader:
             self.other["error"] = None
 
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
+        isotope = re.compile(" Atom\s+(\d+) has atomic number")
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -3015,6 +3016,10 @@ class FileReader:
                 self.other["mass"] = float(float_num.search(line).group(0))
                 self.other["mass"] *= UNIT.AMU_TO_KG
 
+            if isotope.match(line):
+                ndx = int(isotope.match(line).group(1)) - 1
+                self.atoms[ndx]._mass = float(line.split()[-1])
+            
             # Frequencies
             if route is not None and "hpmodes" in route.lower():
                 self.other["hpmodes"] = True
