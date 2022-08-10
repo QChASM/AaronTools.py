@@ -27,7 +27,7 @@ class OniomAtom(Atom):
                 self.atomtype = atom.atomtype
             else:
                 self.atomtype = atomtype
-            if hasattr(atom, "link_info") and not link_info:
+            if hasattr(atom, "link_info") and link_info == {}:
                 self.link_info = atom.link_info
             else:
                 self.link_info = link_info

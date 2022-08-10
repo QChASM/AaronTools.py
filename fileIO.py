@@ -2999,7 +2999,7 @@ class FileReader:
                 if nrg_match:
                     self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
                     self.other[nrg_match.group(1)] = self.other["energy"]
-            
+
             # CC energy
             if line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))
@@ -3249,17 +3249,18 @@ class FileReader:
                 self.read_nbo(f)
 
             # atomic charges
-            charge_match = re.search("(\S+) charges:\s*$", line)
-            if charge_match:
-                self.skip_lines(f, 1)
-                n += 1
-                charges = []
-                for i in range(0, len(self.atoms)):
-                    line = f.readline()
+            if any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+                charge_match = re.search("(\S+) charges.*:", line)
+                if charge_match:
+                    self.skip_lines(f, 1)
                     n += 1
-                    charges.append(float(line.split()[2]))
-                    self.atoms[i].charge = float(line.split()[2])
-                self.other[charge_match.group(1) + " Charges"] = charges
+                    charges = []
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges.append(float(line.split()[2]))
+                        self.atoms[i].charge = float(line.split()[2])
+                    self.other[charge_match.group(1) + " Charges"] = charges
 
             # capture errors
             # only keep first error, want to fix one at a time

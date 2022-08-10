@@ -5536,20 +5536,20 @@ class Geometry:
                             else:
                                  b.link_info["connected"] = i+1
                         elif b > a:
-                            if "connected" in a.link_info.keys() and b.link_info["connected"] == i+1:
+                            if "connected" in a.link_info.keys() and a.link_info["connected"] == j+1:
                                 pass
                             else:
-                                b.link_info["connected"] = i+1
-                    if a.link_info and "connected" in a.link_info.keys():
-                        if a.link_info["connected"] == j+1:
-                            if not a.is_connected(b):
-                                a.link_info = {}
-                            elif a.is_connected(b) and a.layer == b.layer:
-                                a.link_info = {}
-                            else:
-                                numlinks +=1
-                        else:
-                            pass
+                                a.link_info["connected"] = j+1
+                if a.link_info and "connected" in a.link_info.keys():
+                    b = self.atoms[a.link_info["connected"]-1]
+                    if not a.is_connected(b):
+                        a.link_info = {}
+                    elif a.is_connected(b) and a.layer == b.layer:
+                        a.link_info = {}
+                    else:
+                        numlinks +=1
+                #else:
+                #    pass
         return
 
     #def write_comment(self):
@@ -5746,6 +5746,8 @@ class Geometry:
             for i, atom in enumerate(self.atoms):
                 atom.index = i
 
+        #self.refresh_connected
+
         avoid = []
         constraints = self.get_constraints()
         for key, val in constraints:
@@ -5862,6 +5864,7 @@ class Geometry:
                     layer_atoms.remove(boundary_atom)
                     #boundary_atoms = boundary_atoms + boundary_atom.connected
             else:
+                print(boundary_atom)
                 for connected in boundary_atom.connected:
                     if connected not in layer_atoms:
                         if connected.element == "H" and expand == True and force == False:
@@ -6168,3 +6171,38 @@ class Geometry:
             geom = cls(name=struct_name, structure=atoms,comment=self.comment)
             geom_list.append(geom)
         return geom_list
+
+    def update_charges(self, charges=""):
+        """update the atomic partial charges.
+        accepts Tuple or List(charges), Dict{atom name: charge}"""
+        if not any((isinstance(charges, tuple), isinstance(charges, list), isinstance(charges, dict))):
+            raise ValueError("charges must be in tuple, list, or dict")
+        elif isinstance(charges, dict):
+            for name, charge in charges:
+                if not isinstance(name, str):
+                    name = str(name)
+                for atom in self.atoms:
+                    if atom.name == name:
+                        atom.charge = charge
+        elif isinstance(charges, list) or isinstance(charges, tuple):
+            for atom, charge in zip(self.atoms, charges):
+                atom.charge = charge
+        return
+
+    def update_atom_types(self, atom_types=""):
+        """update the atom types.
+        accepts Tuple or List(atom types), Dict{atom name: atom type}"""
+        if not any((isinstance(atom_types, tuple), isinstance(atom_types, list), isinstance(atom_types, dict))):
+            raise ValueError("atom types must be in tuple, list, or dict")
+        elif isinstance(atom_types, dict):
+            for name, at in atom_types:
+                if not isinstance(name, str):
+                    name = str(name)
+                for atom in self.atoms:
+                    if atom.name == name:
+                        atom.atom_type = str(at)
+        elif isinstance(atom_types, list) or isinstance(atom_types, tuple):
+            for atom, at in zip(self.atoms, atom_types):
+                atom.atom_type = at
+        return
+

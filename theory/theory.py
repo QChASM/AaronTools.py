@@ -1150,20 +1150,15 @@ class Theory:
             if atom.flag:
                 has_frozen = True
                 break
-        for atom in self.geometry.atoms:
-            if hasattr(atom, "layer"):
-                oniom = True
-                break
-        for atom in self.geometry.atoms:
-            if hasattr(atom, "atomtype"):
-                if atom.atomtype != "":
-                    has_type = True
-                    break
-        for atom in self.geometry.atoms:
-            if hasattr(atom, "charge"):
-                if atom.charge != "":
-                    has_charge = True
-                    break
+        test_atom = self.geometry.atoms[0]
+        if hasattr(test_atom, "layer"):
+            oniom = True
+        if hasattr(test_atom, "atomtype"):
+            if atom.atomtype != "":
+                has_type = True
+        if hasattr(test_atom, "charge"):
+            if atom.charge != "":
+                has_charge = True
         for atom, coord in zip(
             self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
         ):
@@ -1196,9 +1191,9 @@ class Theory:
                     warnings.append("unknown coordinate type: %s" % type(val))
             if oniom:
                 s += " %s" % atom.layer
-                if not atom.link_info:
+                if atom.link_info =={}:
                     pass
-                elif atom.link_info:
+                elif atom.link_info != {}:
                     s += " %s" % atom.link_info["element"]
                     if has_type:
                         try:
