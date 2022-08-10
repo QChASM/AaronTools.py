@@ -2882,7 +2882,7 @@ class FileReader:
             if line.strip().startswith("#") and route is None:
                 route = ""
                 while "------" not in line:
-                    route += line.strip() + " "
+                    route += line[1:].splitlines()[0]
                     n += 1
                     line = f.readline()
             # archive entry
