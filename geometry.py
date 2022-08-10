@@ -5864,7 +5864,6 @@ class Geometry:
                     layer_atoms.remove(boundary_atom)
                     #boundary_atoms = boundary_atoms + boundary_atom.connected
             else:
-                print(boundary_atom)
                 for connected in boundary_atom.connected:
                     if connected not in layer_atoms:
                         if connected.element == "H" and expand == True and force == False:
