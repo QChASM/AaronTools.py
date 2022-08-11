@@ -777,7 +777,7 @@ class Frequency(Signals):
                 (hpmodes and "---" in line) or (not hpmodes and "--" in line)
             ):
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].intensity = float(intensities[i])
                 continue
 
@@ -947,13 +947,13 @@ class Frequency(Signals):
 
             if "IR Intens:" in line:
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].intensity = float(intensities[i])
                 continue
 
             if "Raman Intens:" in line:
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].raman_activity = float(intensities[i])
                 continue
 

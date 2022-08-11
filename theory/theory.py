@@ -248,7 +248,10 @@ class Theory:
             elif attr == "grid":
                 super().__setattr__(attr, IntegrationGrid(val))
             elif attr == "job_type" and isinstance(val, str):
-                super().__setattr__(attr, [job_from_string(val)])
+                job_type = []
+                for job in val.split("+"):
+                    job_type.append(job_from_string(job))
+                super().__setattr__(attr, job_type)
             else:
                 super().__setattr__(attr, val)
         elif attr == "job_type" and isinstance(val, JobType):
