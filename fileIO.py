@@ -973,9 +973,10 @@ class FileReader:
                 max_length=max_length,
             )
         elif isinstance(self.content, str):
-            #f = StringIO(self.content)
             if os.path.isfile(self.name):
                 f = open(self.name, "r", encoding="utf8")
+            elif len(self.content.splitlines()):
+                f = StringIO(self.content)
             else:
                 fname = ".".join([self.name, self.file_type])
                 fname = os.path.expanduser(fname)

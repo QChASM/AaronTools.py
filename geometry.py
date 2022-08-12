@@ -815,7 +815,7 @@ class Geometry:
         atoms = self._fix_connectivity(atoms, copy=copy_atoms)
         if hasattr(self, "components") and self.components is not None and comment is None:
             self.fix_comment()
-        return Geometry(atoms, name, comment=comment)
+        return Geometry(atoms, name, comment=comment, refresh_ranks=False)
 
     def parse_comment(self):
         """
