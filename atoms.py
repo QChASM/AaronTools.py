@@ -270,7 +270,7 @@ class Atom:
 
     @property
     def is_dummy(self):
-        return re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element)
+        return re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element) is not None
 
     def reset(self):
         if self.is_dummy:

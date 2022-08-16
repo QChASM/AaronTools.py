@@ -460,6 +460,9 @@ class FileWriter:
         )
         s = header
         for atom in geom.atoms:
+            if atom.is_dummy:
+                s += fmt.format("DA", *atom.coords)
+                continue
             s += fmt.format(atom.element, *atom.coords)
 
         s += "*\n"
@@ -1583,6 +1586,8 @@ class FileReader:
                 line = line.strip()
                 atom_info = line.split()
                 element = atom_info[0]
+                if element == "-":
+                    element = "X"
                 coords = np.array([float(x) for x in atom_info[1:]])
                 rv += [Atom(element=element, coords=coords, name=str(i))]
 
