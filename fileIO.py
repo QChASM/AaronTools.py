@@ -1643,29 +1643,29 @@ class FileReader:
                     # as E(MP2) for CC jobs
                     if nrg_type == "MP2":
                         nrg_type = "MP2 CORR"
-                    self.other["E(%s)" % nrg_type] = float(nrg.group(2))
+                        self.other["E(%s)" % nrg_type] = float(nrg.group(2))
 
-                if line.startswith("FINAL SINGLE POINT ENERGY"):
-                    # if the wavefunction doesn't converge, ORCA prints a message next
-                    # to the energy so we can't use line.split()[-1]
-                    self.other["energy"] = float(line.split()[4])
+                        if line.startswith("FINAL SINGLE POINT ENERGY"):
+                            # if the wavefunction doesn't converge, ORCA prints a message next
+                            # to the energy so we can't use line.split()[-1]
+                            self.other["energy"] = float(line.split()[4])
 
-                if line.startswith("TOTAL SCF ENERGY"):
-                    self.skip_lines(f, 2)
-                    line = f.readline()
-                    n += 3
-                    self.other["SCF energy"] = float(line.split()[3])
+                        if line.startswith("TOTAL SCF ENERGY"):
+                            self.skip_lines(f, 2)
+                            line = f.readline()
+                            n += 3
+                            self.other["SCF energy"] = float(line.split()[3])
 
-                elif "TOTAL ENERGY:" in line:
-                    item = line.split()[-5] + " energy"
-                    self.other[item] = float(line.split()[-2])
+                        elif "TOTAL ENERGY:" in line:
+                            item = line.split()[-5] + " energy"
+                            self.other[item] = float(line.split()[-2])
 
-                elif "CORRELATION ENERGY" in line and "Eh" in line:
-                    item = line.split()[-6] + " correlation energy"
-                    self.other[item] = float(line.split()[-2])
-                
-                elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
-                    nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
+                        elif "CORRELATION ENERGY" in line and "Eh" in line:
+                            item = line.split()[-6] + " correlation energy"
+                            self.other[item] = float(line.split()[-2])
+                        
+                        elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
+                            nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                     self.other["energy"] = float(nrg.group(2))
                     self.other[nrg.group(1)] = float(nrg.group(2))
 
@@ -2541,9 +2541,11 @@ class FileReader:
                 # * E(B2PLYPD3) = -76.353361915801
                 # very similar names for very different energies...
                 if nrg_match:
-                    self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
-                    self.other[nrg_match.group(1)] = self.other["energy"]
-            
+                    nrg = float(nrg_match.group(2).replace("D", "E"))
+                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
+                        self.other["energy"] = nrg
+                    self.other[nrg_match.group(1)] = nrg
+
             # CC energy
             if line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))

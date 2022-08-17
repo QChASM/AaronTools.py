@@ -78,7 +78,7 @@ for f in glob_files(args.infile, parser=stat_parser):
         header += "\n"
         s += header
 
-    s += "%30s" % f
+    s += "%35s" % f
     s += "%8s" % co.opt_steps
 
     if co.gradient and co.gradient.keys():
