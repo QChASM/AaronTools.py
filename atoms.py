@@ -416,6 +416,7 @@ class Atom:
         else:
             return np.arccos(dot / (self.dist(a1) * self.dist(a3)))
 
+    @property
     def mass(self):
         """returns atomic mass"""
         if self._mass is not None:
@@ -425,6 +426,10 @@ class Atom:
         elif not self.is_dummy:
             self.LOG.warning("no mass for %s" % self.element)
         return 0
+
+    @mass.setter
+    def mass(self, value):
+        self._mass = value
 
     def rij(self, other):
         try:

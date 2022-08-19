@@ -1931,8 +1931,8 @@ class Geometry:
         if mass_weight:
             total_mass = 0
             for i in range(0, len(coords)):
-                coords[i] *= targets[i].mass()
-                total_mass += targets[i].mass()
+                coords[i] *= targets[i].mass
+                total_mass += targets[i].mass
 
         # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
         center = np.mean(coords, axis=0)
@@ -2233,7 +2233,7 @@ class Geometry:
         I_CM = np.zeros((3, 3))
         for a in self:
             if mass_weight:
-                mass = a.mass()
+                mass = a.mass
             else:
                 mass = 1
             coords = a.coords - COM

@@ -112,6 +112,8 @@ class Config(configparser.ConfigParser):
                 if not quiet:
                     cls.LOG.INFO("failed to read %s: %s", filename, e)
                 return ""
+        elif not len(filename.splitlines()) > 1:
+            return ""
         try:
             configparser.ConfigParser().read_string(contents)
         except configparser.MissingSectionHeaderError:

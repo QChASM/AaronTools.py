@@ -551,14 +551,14 @@ class CompOutput:
                     if i == j:
                         inertia_mat[i][j] += sum(
                             [
-                                atom.mass() * atom.coords[k] ** 2
+                                atom.mass * atom.coords[k] ** 2
                                 for k in range(0, 3)
                                 if k != i
                             ]
                         )
                     else:
                         inertia_mat[i][j] -= (
-                            atom.mass() * atom.coords[i] * atom.coords[j]
+                            atom.mass * atom.coords[i] * atom.coords[j]
                         )
 
         principal_inertia, vecs = np.linalg.eigh(inertia_mat)

@@ -1366,7 +1366,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="psi4"
+                        freq_str, hpmodes=False, style="psi4", atoms=self.atoms,
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -1722,7 +1722,7 @@ class FileReader:
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="orca"
+                        freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                     )
 
                 elif line.startswith("Temperature"):
@@ -2174,7 +2174,7 @@ class FileReader:
                         freq_str += line
                         line = f.readline()
                     self.other["frequency"] = Frequency(
-                        freq_str, style="qchem",
+                        freq_str, style="qchem", atoms=self.atoms,
                     )
                     self.other["temperature"] = float(line.split()[4])
     
