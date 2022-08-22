@@ -2568,6 +2568,23 @@ class FileReader:
                 ndx = int(isotope.match(line).group(1)) - 1
                 self.atoms[ndx]._mass = float(line.split()[-1])
 
+            # basis set details
+            if line.startswith(" NBasis") and "NFC" in line:
+                n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
+                self.other["n_basis"] = n_basis
+                n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
+                self.other["n_frozen"] = n_frozen
+            
+            if line.startswith(" NROrb"):
+                n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
+                self.other["n_occupied_alpha"] = n_occupied_alpha
+                n_occupied_beta = int(re.search(" NOB=\s*(\d+)", line).group(1))
+                self.other["n_occupied_beta"] = n_occupied_beta
+                n_virtual_alpha = int(re.search(" NVA=\s*(\d+)", line).group(1))
+                self.other["n_virtual_alpha"] = n_virtual_alpha
+                n_virtual_beta = int(re.search(" NVB=\s*(\d+)", line).group(1))
+                self.other["n_virtual_beta"] = n_virtual_beta
+
             # Frequencies
             if route is not None and "hpmodes" in route.lower():
                 self.other["hpmodes"] = True

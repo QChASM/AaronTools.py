@@ -1268,7 +1268,8 @@ class ValenceExcitation(Signal):
     x_attr = "excitation_energy"
     required_attrs = (
         "rotatory_str_len", "rotatory_str_vel", "oscillator_str",
-        "oscillator_str_vel", "symmetry", "multiplicity",
+        "oscillator_str_vel", "symmetry", "multiplicity", 
+        "dipole_len_vec", "dipole_vel_vec", "magnetic_mom",
     )
 
     @property
@@ -1310,6 +1311,10 @@ class ValenceExcitations(Signals):
         rotatory_str_vel = []
         oscillator_str = []
         oscillator_vel = []
+        dipole_moments_len = []
+        dipole_moments_vel = []
+        magnetic_moments = []
+        quadrupole_moments_len = []
         symmetry = []
         multiplicity = []
         while i < len(lines):
@@ -1318,6 +1323,9 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line and line.split()[0].isdigit():
                     oscillator_str.append(float(line.split()[-1]))
+                    dipole_moments_len.append(
+                        [float(x) for x in line.split()[1:4]]
+                    )
                     i += 1
                     line = lines[i]
             elif "Ground to excited state transition velocity" in lines[i]:
@@ -1325,6 +1333,18 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line and line.split()[0].isdigit():
                     oscillator_vel.append(float(line.split()[-1]))
+                    dipole_moments_vel.append(
+                        [float(x) for x in line.split()[1:4]]
+                    )
+                    i += 1
+                    line = lines[i]
+            elif "Ground to excited state transition magnetic dipole" in lines[i]:
+                i += 2
+                line = lines[i]
+                while line and line.split()[0].isdigit():
+                    magnetic_moments.append(
+                        [float(x) for x in line.split()[1:4]]
+                    )
                     i += 1
                     line = lines[i]
             elif "R(length)" in lines[i]:
@@ -1346,23 +1366,40 @@ class ValenceExcitations(Signals):
                     r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+(\d+\.\d+)",
                     lines[i],
                 )
-                multiplicity.append(excitation_data.group(1))
-                symmetry.append(excitation_data.group(2))
-                nrgs.append(float(excitation_data.group(3)))
+                # sometimes gaussian cannot determine the symmetry
+                if excitation_data is None:
+                    excitation_data = re.search(
+                        r"Excited State\s*\d+:\s*[\S]+-?Sym\s+(\d+\.\d+)",
+                        lines[i],
+                    )
+                    multiplicity.append(None)
+                    symmetry.append(None)
+                    nrgs.append(float(excitation_data.group(2)))
+                else:
+                    multiplicity.append(excitation_data.group(1))
+                    symmetry.append(excitation_data.group(2))
+                    nrgs.append(float(excitation_data.group(3)))
                 i += 1
             else:
                 i += 1
 
-        for nrg, rot_len, rot_vel, osc_len, osc_vel, sym, mult in zip(
+        for nrg, rot_len, rot_vel, osc_len, osc_vel, sym, mult, dip_vec, dip_vec_vel, mag_mom in zip(
             nrgs, rotatory_str_len, rotatory_str_vel, oscillator_str,
-            oscillator_vel, symmetry, multiplicity,
+            oscillator_vel, symmetry, multiplicity, dipole_moments_len,
+            dipole_moments_vel, magnetic_moments,
         ):
             self.data.append(
                 ValenceExcitation(
-                    nrg, rotatory_str_len=rot_len,
-                    rotatory_str_vel=rot_vel, oscillator_str=osc_len,
-                    oscillator_str_vel=osc_vel, symmetry=sym,
+                    nrg,
+                    rotatory_str_len=rot_len,
+                    rotatory_str_vel=rot_vel,
+                    oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel,
+                    symmetry=sym,
                     multiplicity=mult,
+                    dipole_len_vec=dip_vec,
+                    dipole_vel_vec=dip_vec_vel,
+                    magnetic_mom=mag_mom,
                 )
             )
 
