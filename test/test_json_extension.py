@@ -34,7 +34,7 @@ class TestJSON(TestWithTimer):
 
     def atom_equal(self, ref, test, skip=[]):
         for key, val in ref.__dict__.items():
-            if key in skip:
+            if key in skip or key.startswith("_"):
                 continue
             try:
                 if key == "coords":

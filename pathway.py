@@ -14,6 +14,7 @@ class Pathway:
         interpolation="clampedcubic",
         other_vars=None,
         x_vals=None,
+        weights=None,
         **interpolator_kwargs
     ):
         self.coords = coordinates
@@ -22,6 +23,7 @@ class Pathway:
         self._interpolation = None
         self._other_vars_interpolation = None
         self._region_lengths = None
+        self.weights = weights
         
         if x_vals is None:
             x_vals = np.arange(0, len(self.coords))
@@ -34,6 +36,11 @@ class Pathway:
         n_nodes = len(self.coords)
         n_atoms = len(self.coords[0])
         coords = np.reshape(self.coords, (n_nodes, 3 * n_atoms))
+        if self.weights is None:
+            self.weights = np.ones(n_atoms)
+        weights = np.repeat(self.weights, 3)
+        for i in range(0, n_nodes):
+            coords[i] *= weights
 
         if self.other_vars:
             self._other_vars_interpolation = dict()
@@ -125,10 +132,11 @@ class Pathway:
         interpolated_coords = np.array([
             coord(s) for coord in self._interpolation
         ])
+        interpolated_coords
         interpolated_coords = interpolated_coords.reshape(
             (len(interpolated_coords) // 3, 3)
         )
-        return interpolated_coords
+        return interpolated_coords / self.weights[:, np.newaxis]
     
     def interpolate_geometry(self, t, geom):
         geom = geom.copy()
@@ -151,4 +159,4 @@ class Pathway:
         tangent = tangent.reshape(
             (len(tangent) // 3, 3)
         )
-        return tangent
+        return tangent / self.weights[:, np.newaxis]

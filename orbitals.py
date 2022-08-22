@@ -68,8 +68,8 @@ class Orbitals:
             )
 
     def _load_fchk_data(self, filereader):
-        from scipy.special import factorial2
-
+        self.alpha_occupancies = None
+        self.beta_occupancies = None
         if "Coordinates of each shell" in filereader.other:
             self.shell_coords = np.reshape(
                 filereader.other["Coordinates of each shell"],
@@ -683,6 +683,8 @@ class Orbitals:
             self.n_beta = filereader.other["Number of beta electrons"]
 
     def _load_nbo_data(self, filereader):
+        self.alpha_occupancies = None
+        self.beta_occupancies = None
         self.basis_functions = []
         self.exponents = np.array(filereader.other["exponents"])
         self.alpha_coefficients = np.array(filereader.other["alpha_coefficients"])
@@ -1167,6 +1169,8 @@ class Orbitals:
         self.shell_coords = np.array(self.shell_coords)
 
     def _load_orca_out_data(self, filereader):
+        self.alpha_occupancies = None
+        self.beta_occupancies = None
         self.shell_coords = []
         self.basis_functions = []
         self.alpha_nrgs = np.array(filereader.other["alpha_nrgs"])
@@ -1208,6 +1212,8 @@ class Orbitals:
         # shell, but they should be the same as the atom coordinates
         for atom in filereader.atoms:
             ele = atom.element
+            if ele not in filereader.other["basis_set_by_ele"]:
+                continue
             for shell_type, n_prim, exponents, con_coeff in filereader.other[
                 "basis_set_by_ele"
             ][ele]:
@@ -1546,6 +1552,14 @@ class Orbitals:
             self.n_alpha = filereader.other["n_alpha"]
             self.n_beta = filereader.other["n_beta"]
 
+        if "alpha_occupancies" in filereader.other:
+            self.alpha_occupancies = filereader.other["alpha_occupancies"]
+
+        if "beta_occupancies" in filereader.other and filereader.other["beta_occupancies"]:
+            self.beta_occupancies = filereader.other["beta_occupancies"]
+        elif "alpha_occupancies" in filereader.other:
+            self.alpha_occupancies = [occ / 2 for occ in self.alpha_occupancies]
+
     def _get_value(self, coords, arr):
         """returns value for the MO coefficients in arr"""
         ao = 0
@@ -1673,23 +1687,27 @@ class Orbitals:
                     orbitals
         beta_occ - same at alpha_occ, but for beta electrons
         """
+
+        # set default occupancy
+        if alpha_occ is None:
+            if self.alpha_occupancies:
+                alpha_occ = self.alpha_occupancies
+            else:
+                if not self.n_alpha:
+                    self.LOG.warning("number of alpha electrons was not read")
+                alpha_occ = np.zeros(self.n_mos, dtype=int)
+                alpha_occ[0:self.n_alpha] = 1
+        if beta_occ is None and not self.alpha_occupancies:
+            beta_occ = np.zeros(self.n_mos, dtype=int)
+            beta_occ[0:self.n_beta] = 1
+        
         if low_mem:
             return self._low_mem_density_value(
                 coords,
+                alpha_occ,
+                beta_occ,
                 n_jobs=n_jobs,
-                alpha_occ=alpha_occ,
-                beta_occ=beta_occ,
             )
-        
-        # set default occupancy
-        if alpha_occ is None:
-            if not self.n_alpha:
-                self.LOG.warning("number of alpha electrons was not read")
-            alpha_occ = np.zeros(self.n_mos, dtype=int)
-            alpha_occ[0:self.n_alpha] = 1
-        if beta_occ is None:
-            beta_occ = np.zeros(self.n_mos, dtype=int)
-            beta_occ[0:self.n_beta] = 1
         
         # val is output data
         # func_vals is the value of each basis function
@@ -1730,7 +1748,7 @@ class Orbitals:
             if occ == 0:
                 continue
             val += occ * np.dot(data.T, self.alpha_coefficients[i]) ** 2
-        
+
         if self.beta_coefficients is not None:
             for i, occ in enumerate(beta_occ):
                 if occ == 0:
@@ -1744,24 +1762,15 @@ class Orbitals:
     def _low_mem_density_value(
         self,
         coords,
+        alpha_occ,
+        beta_occ,
         n_jobs=1,
-        alpha_occ=None,
-        beta_occ=None
     ):
         """
         returns the eletron density
         same at self.density_value, but uses less memory at
         the cost of performance
         """
-        # set initial occupancies
-        if alpha_occ is None:
-            if not self.n_alpha:
-                self.LOG.warning("number of alpha electrons was not read")
-            alpha_occ = np.zeros(self.n_mos, dtype=int)
-            alpha_occ[0:self.n_alpha] = 1
-        if beta_occ is None:
-            beta_occ = np.zeros(self.n_mos, dtype=int)
-            beta_occ[0:self.n_beta] = 1
 
         # val is output array
         if coords.ndim == 1:

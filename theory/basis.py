@@ -1216,6 +1216,12 @@ class BasisSet:
                             if element in elements_without_basis[basis.aux_type]:
                                 elements_without_basis[basis.aux_type].remove(element)
 
+            for aux in elements_without_basis:
+                try:
+                    elements_without_basis[aux].remove("X")
+                except ValueError:
+                    pass
+
             if any(
                 elements_without_basis[aux]
                 for aux in elements_without_basis.keys()

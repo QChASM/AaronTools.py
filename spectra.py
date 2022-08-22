@@ -667,7 +667,7 @@ class Signals:
 class HarmonicVibration(Signal):
     x_attr = "frequency"
     required_attrs = (
-        "intensity", "vector", "symmetry", "rotation", "raman_activity", "forcek",
+        "intensity", "vector", "symmetry", "rotation", "raman_activity", "forcek", "red_mass",
     )
 
 
@@ -700,7 +700,22 @@ class Frequency(Signals):
         self.by_frequency = {}
         self.is_TS = None
         self.sort_frequencies()
-
+        
+        if self.data and not self.data[-1].forcek and "atoms" in kwargs:
+            atoms = kwargs["atoms"]
+            for mode in self.data:
+                norm = np.linalg.norm(mode.vector)
+                disp = mode.vector / norm
+                mu = 0
+                for i in range(0, len(mode.vector)):
+                    mu += np.dot(disp[i], disp[i]) * atoms[i].mass
+                if not mode.red_mass:
+                    mode.red_mass = mu
+                k = 4 * np.pi ** 2 * mode.frequency ** 2
+                k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
+                k *= UNIT.AMU_TO_KG * 1e-2
+                mode.forcek = k
+    
     def parse_gaussian_lines(
         self, lines, *args, hpmodes=None, harmonic=True, **kwargs
     ):
@@ -777,7 +792,7 @@ class Frequency(Signals):
                 (hpmodes and "---" in line) or (not hpmodes and "--" in line)
             ):
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].intensity = float(intensities[i])
                 continue
 
@@ -947,13 +962,13 @@ class Frequency(Signals):
 
             if "IR Intens:" in line:
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].intensity = float(intensities[i])
                 continue
 
             if "Raman Intens:" in line:
                 intensities = float_num.findall(line)
-                for i in range(-len(force_constants), 0, 1):
+                for i in range(-len(intensities), 0, 1):
                     self.data[i].raman_activity = float(intensities[i])
                 continue
 
@@ -989,6 +1004,9 @@ class Frequency(Signals):
             freq = line.split()[1]
             self.data += [HarmonicVibration(float(freq))]
 
+        atoms = kwargs["atoms"]
+        masses = np.array([atom.mass for atom in atoms])
+
         # all 3N modes are printed with six modes in each block
         # each column corresponds to one mode
         # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
@@ -1016,6 +1034,7 @@ class Frequency(Signals):
             data.vector = np.reshape(
                 displacements[:, k], (len(self.data) // 3, 3)
             )
+            
 
         # purge rotational and translational modes
         n_data = len(self.data)

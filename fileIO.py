@@ -633,6 +633,9 @@ class FileWriter:
         )
         s = header
         for atom in geom.atoms:
+            if atom.is_dummy:
+                s += fmt.format("DA", *atom.coords)
+                continue
             s += fmt.format(atom.element, *atom.coords)
 
         s += "*\n"
@@ -1263,9 +1266,10 @@ class FileReader:
                 oniom=oniom
             )
         elif isinstance(self.content, str):
-            #f = StringIO(self.content)
             if os.path.isfile(self.name):
                 f = open(self.name, "r", encoding="utf8")
+            elif len(self.content.splitlines()):
+                f = StringIO(self.content)
             else:
                 fname = ".".join([self.name, self.file_type])
                 fname = os.path.expanduser(fname)
@@ -1709,7 +1713,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="psi4"
+                        freq_str, hpmodes=False, style="psi4", atoms=self.atoms,
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -1929,6 +1933,8 @@ class FileReader:
                 line = line.strip()
                 atom_info = line.split()
                 element = atom_info[0]
+                if element == "-":
+                    element = "X"
                 coords = np.array([float(x) for x in atom_info[1:]])
                 rv += [Atom(element=element, coords=coords, name=str(i))]
 
@@ -2063,7 +2069,7 @@ class FileReader:
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="orca"
+                        freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                     )
 
                 elif line.startswith("Temperature"):
@@ -2515,7 +2521,7 @@ class FileReader:
                         freq_str += line
                         line = f.readline()
                     self.other["frequency"] = Frequency(
-                        freq_str, style="qchem",
+                        freq_str, style="qchem", atoms=self.atoms,
                     )
                     self.other["temperature"] = float(line.split()[4])
     
@@ -2665,7 +2671,7 @@ class FileReader:
             while len(line.split()) > 1:
                 line  = line.split()
                 if len(line) == 5:
-                    flag = not(bool(line[1]))
+                    flag = not bool(line[1])
                     a += 1
                     rv += [Atom(element=line[0], flag=flag, coords=line[2:], name=str(a))]
                 elif len(line) == 4:
@@ -3019,7 +3025,7 @@ class FileReader:
             if isotope.match(line):
                 ndx = int(isotope.match(line).group(1)) - 1
                 self.atoms[ndx]._mass = float(line.split()[-1])
-            
+
             # Frequencies
             if route is not None and "hpmodes" in route.lower():
                 self.other["hpmodes"] = True
