@@ -603,8 +603,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_gaussian()
+                job_dict, job_warnings = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         if (
             GAUSSIAN_COMMENT not in other_kw_dict
@@ -785,8 +786,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_gaussian()
+                job_dict, job_warnings = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         other_kw_dict = combine_dicts(
             other_kw_dict, conditional_kwargs, dict2_conditional=True
@@ -858,20 +860,21 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
+        warnings = []
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_gaussian()
+                job_dict, job_warnings = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         other_kw_dict = combine_dicts(
             other_kw_dict, conditional_kwargs, dict2_conditional=True
         )
 
         out_str = ""
-        warnings = []
 
         # if method is not semi emperical, basis set might be gen or genecp
         # get basis info (will be written after constraints)
@@ -947,15 +950,15 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
+        warnings = []
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_orca()
+                job_dict, job_warnings = job.get_orca()
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
-
-        warnings = []
+                warnings.extend(job_warnings)
 
         # if method isn't semi-empirical, get basis info to write later
         if not self.method.is_semiempirical and self.basis is not None:
@@ -1109,15 +1112,15 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
+        warnings = []
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_orca()
+                job_dict, job_warnings = job.get_orca()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
-
-        warnings = []
+                warnings.extend(job_warnings)
 
         # if method isn't semi-empirical, get basis info to write later
         if not self.method.is_semiempirical and self.basis is not None:
@@ -1214,15 +1217,15 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
+        warnings = []
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_psi4()
+                job_dict, job_warnings = job.get_psi4()
                 other_kw_dict = combine_dicts(other_kw_dict, job_dict)
-
-        warnings = []
+                warnings.extend(job_warnings)
 
         # add implicit solvent
         if self.solvent is not None:
@@ -1340,8 +1343,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_psi4()
+                job_dict, job_warnings = job.get_psi4()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         other_kw_dict = combine_dicts(
             other_kw_dict, conditional_kwargs, dict2_conditional=True
@@ -1598,8 +1602,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_psi4()
+                job_dict, job_warnings = job.get_psi4()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         # add implicit solvent
         if self.solvent is not None:
@@ -2070,7 +2075,7 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_qchem()
+                job_dict, job_warnings = job.get_qchem()
                 if isinstance(job, FrequencyJob) and job.temperature != 298.15:
                     warnings.append(
                         "thermochemistry data in the output file might be for 298.15 K\n"
@@ -2245,8 +2250,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_qchem()
+                job_dict, job_warnings = job.get_qchem()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
 
         if (
             QCHEM_COMMENT not in other_kw_dict
@@ -2320,10 +2326,11 @@ class Theory:
                     job.geometry = self.geometry
 
                 if crest:
-                    job_dict = job.get_crest()
+                    job_dict, job_warnings = job.get_crest()
                 else:
-                    job_dict = job.get_xtb()
+                    job_dict, job_warnings = job.get_xtb()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
         
         if self.method is not None:
             func, warning = self.method.get_xtb()
@@ -2378,8 +2385,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_xtb()
+                job_dict, job_warnings = job.get_xtb()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
         
         if self.method is not None:
             func, warning = self.method.get_xtb()
@@ -2431,8 +2439,9 @@ class Theory:
                 if hasattr(job, "geometry"):
                     job.geometry = self.geometry
 
-                job_dict = job.get_crest()
+                job_dict, job_warnings = job.get_crest()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
+                warnings.extend(job_warnings)
         
         if self.method is not None:
             func, warning = self.method.get_crest()

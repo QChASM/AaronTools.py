@@ -460,6 +460,9 @@ class FileWriter:
         )
         s = header
         for atom in geom.atoms:
+            if atom.is_dummy:
+                s += fmt.format("DA", *atom.coords)
+                continue
             s += fmt.format(atom.element, *atom.coords)
 
         s += "*\n"
@@ -1363,7 +1366,7 @@ class FileReader:
                         n += 1
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="psi4"
+                        freq_str, hpmodes=False, style="psi4", atoms=self.atoms,
                     )
 
                 elif PSI4_NORM_FINISH in line:
@@ -1583,6 +1586,8 @@ class FileReader:
                 line = line.strip()
                 atom_info = line.split()
                 element = atom_info[0]
+                if element == "-":
+                    element = "X"
                 coords = np.array([float(x) for x in atom_info[1:]])
                 rv += [Atom(element=element, coords=coords, name=str(i))]
 
@@ -1717,7 +1722,7 @@ class FileReader:
                         line = f.readline()
 
                     self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="orca"
+                        freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                     )
 
                 elif line.startswith("Temperature"):
@@ -2169,7 +2174,7 @@ class FileReader:
                         freq_str += line
                         line = f.readline()
                     self.other["frequency"] = Frequency(
-                        freq_str, style="qchem",
+                        freq_str, style="qchem", atoms=self.atoms,
                     )
                     self.other["temperature"] = float(line.split()[4])
     

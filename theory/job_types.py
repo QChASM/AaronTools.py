@@ -12,6 +12,7 @@ from AaronTools.theory import (
     PSI4_BEFORE_GEOM,
     PSI4_COORDINATES,
     PSI4_JOB,
+    PSI4_AFTER_JOB,
     PSI4_OPTKING,
     PSI4_SETTINGS,
     PSI4_BEFORE_JOB,
@@ -85,6 +86,9 @@ def job_from_string(name, **kwargs):
         numerical = numerical or (ext and ext.startswith("num"))
         
         return ForceJob(numerical=numerical)
+    
+    if any(name.lower().startswith(x) for x in ["td"]):
+        return TDDFTJob(kwargs.get("roots", 10))
     
     raise ValueError("cannot determine job type from string: %s" % name)
 
@@ -516,7 +520,7 @@ class OptimizationJob(JobType):
             "constants": consts,
         }
 
-        return out
+        return out, []
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE, ORCA_BLOCKS"""
@@ -581,7 +585,7 @@ class OptimizationJob(JobType):
             geom_block += "    end"
             out[ORCA_BLOCKS] = {"geom": [geom_block]}
 
-        return out
+        return out, []
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB, PSI4_OPTKING, PSI4_BEFORE_GEOM"""
@@ -810,7 +814,7 @@ class OptimizationJob(JobType):
                 "variables": vars,
             }
 
-        return out
+        return out, []
 
     def get_xtb(self):
         """
@@ -867,7 +871,7 @@ class OptimizationJob(JobType):
         else:
             out[XTB_COMMAND_LINE] = {"opt": []}
         
-        return out
+        return out, []
 
     def get_sqm(self):
         """returns a dict(), warnings for optimization jobs"""
@@ -999,7 +1003,7 @@ class OptimizationJob(JobType):
                 constraints += "    ENDCONSTRAINT"
                 out[QCHEM_SETTINGS]["opt"].append(constraints)
         
-        return out
+        return out, []
 
     @staticmethod
     def resolve_error(error, theory, exec_type, geometry=None):
@@ -1091,7 +1095,7 @@ class FrequencyJob(JobType):
         if self.numerical:
             out[GAUSSIAN_ROUTE]["Freq"].append("Numerical")
 
-        return out
+        return out, []
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
@@ -1101,7 +1105,7 @@ class FrequencyJob(JobType):
         else:
             out[ORCA_ROUTE] = ["Freq"]
 
-        return out
+        return out, []
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
@@ -1112,7 +1116,7 @@ class FrequencyJob(JobType):
         if self.numerical:
             out[PSI4_JOB]["frequencies"].append('dertype="gradient"')
 
-        return out
+        return out, []
 
     def get_sqm(self):
         raise NotImplementedError("cannot build frequnecy job input for sqm")
@@ -1122,14 +1126,14 @@ class FrequencyJob(JobType):
         if self.numerical:
             out[QCHEM_REM]["FD_DERIVATIVE_TYPE"] = "1"
 
-        return out
+        return out, []
 
     def get_xtb(self):
         out = {
             XTB_COMMAND_LINE: {"hess": []},
             XTB_CONTROL_BLOCKS: {"thermo": ["temp=%.2f" % self.temperature]},
         }
-        return out
+        return out, []
 
     @staticmethod
     def resolve_error(error, theory, exec_type, geometry=None):
@@ -1162,24 +1166,24 @@ class SinglePointJob(JobType):
 
     def get_gaussian(self):
         """returns a dict with keys: GAUSSIAN_ROUTE"""
-        return {GAUSSIAN_ROUTE: {"SP": []}}
+        return {GAUSSIAN_ROUTE: {"SP": []}}, []
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
-        return {ORCA_ROUTE: ["SP"]}
+        return {ORCA_ROUTE: ["SP"]}, []
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
-        return {PSI4_JOB: {"energy": []}}
+        return {PSI4_JOB: {"energy": []}}, []
     
     def get_sqm(self):
         """returns a dict with keys: SQM_QMMM"""
-        return {SQM_QMMM: {"maxcyc": ["0"]}}
+        return {SQM_QMMM: {"maxcyc": ["0"]}}, []
 
     def get_qchem(self):
         out = {QCHEM_REM: {"JOB_TYPE": "SP"}}
         
-        return out
+        return out, []
 
 
 class ForceJob(JobType):
@@ -1194,26 +1198,26 @@ class ForceJob(JobType):
         out = {GAUSSIAN_ROUTE: {"force": []}}
         if self.numerical:
             out[GAUSSIAN_ROUTE]["force"].append("EnGrad")
-        return out
+        return out, []
 
     def get_orca(self):
         """returns a dict with keys: ORCA_ROUTE"""
-        return {ORCA_ROUTE: ["NumGrad" if self.numerical else "EnGrad"]}
+        return {ORCA_ROUTE: ["NumGrad" if self.numerical else "EnGrad"]}, []
 
     def get_psi4(self):
         """returns a dict with keys: PSI4_JOB"""
         out = {PSI4_JOB: {"gradient": []}}
         if self.numerical:
             out[PSI4_JOB]["gradient"].append("dertype='energy'")
-        return out
+        return out, []
 
     def get_qchem(self):
         out = {QCHEM_REM: {"JOB_TYPE": "Force"}}
         
-        return out
+        return out, []
 
     def get_xtb(self):
-        return {XTB_COMMAND_LINE: {"grad": []}}
+        return {XTB_COMMAND_LINE: {"grad": []}}, []
 
 
 class ConformerSearchJob(JobType):
@@ -1300,4 +1304,65 @@ class ConformerSearchJob(JobType):
             out[XTB_COMMAND_LINE] = {}
             out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
 
-        return out
+        return out, []
+
+
+class TDDFTJob(JobType):
+    def __init__(self, roots, initial_state=0, compute_nacmes=False):
+        self.initial_state = initial_state
+        self.roots = roots
+        self.compute_nacmes = compute_nacmes
+    
+    def get_gaussian(self):
+        out = dict()
+        warnings = []
+        out[GAUSSIAN_ROUTE] = {
+            "Root": self.initial_state,
+            "NStates": self.roots,
+        }
+        if self.compute_nacmes:
+            warnings.append(
+                "nonadiabatic matrix elements are not supported for Gaussian"
+            )
+        return out, warnings
+    
+    def get_orca(self):
+        out = dict()
+        out[ORCA_BLOCKS] = {
+            "TDDFT": [
+                "IRoot %i" % self.initial_state,
+                "NRoots %i" % self.roots,
+            ]
+        }
+        
+        if self.compute_nacmes:
+            out[ORCA_BLOCKS]["TDDFT"].extend([
+                "NAMCE True",
+                "ETF True",
+            ])
+        return out, []
+    
+    def get_psi4(self):
+        out = dict()
+        warnings = []
+        out[PSI4_BEFORE_GEOM] = [
+            "from psi4.driver.procrouting.response.scf_response import tdscf_excitations"
+        ]
+        out[PSI4_SETTINGS] = {
+            "save_jk": "true",
+        }
+        out[PSI4_JOB] = {"energy": ["return_wfn=True"]}
+        out[PSI4_AFTER_JOB] = [
+            "tdscf_excitations(wfn, states=%i)" % self.roots,
+        ]
+        
+        if self.initial_state:
+            warnings.append("only initial state being the ground state is supported")
+        if self.compute_nacmes:
+            warnings.append("nonadiabatic matrix elements are not supported for Psi4")
+        return out, warnings
+    
+    def get_qchem(self):
+        raise NotImplementedError("we currently don't support TD-DFT for Q-Chem")
+    
+    
