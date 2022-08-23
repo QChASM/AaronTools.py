@@ -1259,8 +1259,9 @@ class FileReader:
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
                     coords *= UNIT.A0_TO_BOHR
-                rv += [Atom(element=element, coords=coords, name=str(i))]
-                mass += float(atom_info[-1])
+                atom_mass = float(atom_info[-1])
+                rv += [Atom(element=element, coords=coords, mass=atom_mass, name=str(i))]
+                mass += atom_mass
 
                 line = f.readline()
                 n += 1
@@ -2323,13 +2324,14 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
+                element = line[0].split("(")[0]
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
-                    rv += [Atom(element=line[0], flag=flag, coords=line[2:], name=str(a))]
+                    rv += [Atom(element=element, flag=flag, coords=line[2:], name=str(a))]
                 elif len(line) == 4:
                     a += 1
-                    rv += [Atom(element=line[0], coords=line[1:], name=str(a))]
+                    rv += [Atom(element=element, coords=line[1:], name=str(a))]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -2525,6 +2527,7 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
+            
             # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
@@ -2583,7 +2586,7 @@ class FileReader:
                 if "hpmodes" not in self.other:
                     self.other["hpmodes"] = False
                 self.other["frequency"] = Frequency(
-                    freq_str, hpmodes=self.other["hpmodes"]
+                    freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                 )
 
             if "Anharmonic Infrared Spectroscopy" in line:
@@ -2660,6 +2663,10 @@ class FileReader:
                     uv_vis, style="gaussian"
                 )
 
+            if line.startswith(" S**2 before annihilation"):
+                self.other["S^2 before"] = float(line.split()[3].strip(","))
+                self.other["S^2 annihilated"] = float(line.split()[-1])
+            
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(

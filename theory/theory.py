@@ -319,7 +319,15 @@ class Theory:
                     )
         
         return self.__class__(**new_dict, **new_kwargs)
- 
+
+    def add_kwargs(self, **kwargs):
+        """
+        add kwargs to the theory
+        """
+        self.kwargs = combine_dicts(
+            kwargs, self.kwargs
+        )
+
     def make_header(
         self,
         geom=None,

@@ -701,16 +701,22 @@ class Frequency(Signals):
         self.is_TS = None
         self.sort_frequencies()
         
-        if self.data and not self.data[-1].forcek and "atoms" in kwargs:
+        # some software doesn't print reduced mass or force constants
+        # we can calculate them if we have atom with mass, displacement
+        # vectors, and vibrational frequencies
+        if self.data and (
+            not self.data[-1].forcek or
+            not self.data[-1].red_mass
+        ) and "atoms" in kwargs:
             atoms = kwargs["atoms"]
             for mode in self.data:
-                norm = np.linalg.norm(mode.vector)
+                norm = sum(np.sum(mode.vector ** 2, axis=1))
                 disp = mode.vector / norm
+                mode.vector = disp
                 mu = 0
                 for i in range(0, len(mode.vector)):
                     mu += np.dot(disp[i], disp[i]) * atoms[i].mass
-                if not mode.red_mass:
-                    mode.red_mass = mu
+                mode.red_mass = mu
                 k = 4 * np.pi ** 2 * mode.frequency ** 2
                 k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
                 k *= UNIT.AMU_TO_KG * 1e-2
