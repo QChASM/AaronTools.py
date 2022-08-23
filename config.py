@@ -907,8 +907,10 @@ class Config(configparser.ConfigParser):
                         )
                 # adjust structure attributes
                 if structure is not None:
-                    if "name" in self["Job"]:
+                    if self.has_option("Job", "name"):
                         structure.name = self["Job"]["name"]
+                    elif self.has_option("","name"):
+                        structure.name = self["DEFAULT"]["name"]
                     if "Geometry" in self and "comment" in self["Geometry"]:
                         structure.comment = self["Geometry"]["comment"]
                         structure.parse_comment()
@@ -965,7 +967,7 @@ class Config(configparser.ConfigParser):
             padding = 0
         for suffix in structure_dict:
             geom = structure_dict[suffix]
-            if suffix:
+            if suffix and self.has_option("Job", "name"):
                 geom.name = "{}.{}".format(
                     self["Job"]["name"], suffix.zfill(padding)
                 )
