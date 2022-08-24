@@ -1259,8 +1259,9 @@ class FileReader:
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
                     coords *= UNIT.A0_TO_BOHR
-                rv += [Atom(element=element, coords=coords, name=str(i))]
-                mass += float(atom_info[-1])
+                atom_mass = float(atom_info[-1])
+                rv += [Atom(element=element, coords=coords, mass=atom_mass, name=str(i))]
+                mass += atom_mass
 
                 line = f.readline()
                 n += 1
@@ -1648,29 +1649,29 @@ class FileReader:
                     # as E(MP2) for CC jobs
                     if nrg_type == "MP2":
                         nrg_type = "MP2 CORR"
-                    self.other["E(%s)" % nrg_type] = float(nrg.group(2))
+                        self.other["E(%s)" % nrg_type] = float(nrg.group(2))
 
-                if line.startswith("FINAL SINGLE POINT ENERGY"):
-                    # if the wavefunction doesn't converge, ORCA prints a message next
-                    # to the energy so we can't use line.split()[-1]
-                    self.other["energy"] = float(line.split()[4])
+                        if line.startswith("FINAL SINGLE POINT ENERGY"):
+                            # if the wavefunction doesn't converge, ORCA prints a message next
+                            # to the energy so we can't use line.split()[-1]
+                            self.other["energy"] = float(line.split()[4])
 
-                if line.startswith("TOTAL SCF ENERGY"):
-                    self.skip_lines(f, 2)
-                    line = f.readline()
-                    n += 3
-                    self.other["SCF energy"] = float(line.split()[3])
+                        if line.startswith("TOTAL SCF ENERGY"):
+                            self.skip_lines(f, 2)
+                            line = f.readline()
+                            n += 3
+                            self.other["SCF energy"] = float(line.split()[3])
 
-                elif "TOTAL ENERGY:" in line:
-                    item = line.split()[-5] + " energy"
-                    self.other[item] = float(line.split()[-2])
+                        elif "TOTAL ENERGY:" in line:
+                            item = line.split()[-5] + " energy"
+                            self.other[item] = float(line.split()[-2])
 
-                elif "CORRELATION ENERGY" in line and "Eh" in line:
-                    item = line.split()[-6] + " correlation energy"
-                    self.other[item] = float(line.split()[-2])
-                
-                elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
-                    nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
+                        elif "CORRELATION ENERGY" in line and "Eh" in line:
+                            item = line.split()[-6] + " correlation energy"
+                            self.other[item] = float(line.split()[-2])
+                        
+                        elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
+                            nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                     self.other["energy"] = float(nrg.group(2))
                     self.other[nrg.group(1)] = float(nrg.group(2))
 
@@ -2323,13 +2324,14 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
+                element = line[0].split("(")[0]
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
-                    rv += [Atom(element=line[0], flag=flag, coords=line[2:], name=str(a))]
+                    rv += [Atom(element=element, flag=flag, coords=line[2:], name=str(a))]
                 elif len(line) == 4:
                     a += 1
-                    rv += [Atom(element=line[0], coords=line[1:], name=str(a))]
+                    rv += [Atom(element=element, coords=line[1:], name=str(a))]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -2525,6 +2527,7 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
+            
             # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
@@ -2546,9 +2549,11 @@ class FileReader:
                 # * E(B2PLYPD3) = -76.353361915801
                 # very similar names for very different energies...
                 if nrg_match:
-                    self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
-                    self.other[nrg_match.group(1)] = self.other["energy"]
-            
+                    nrg = float(nrg_match.group(2).replace("D", "E"))
+                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
+                        self.other["energy"] = nrg
+                    self.other[nrg_match.group(1)] = nrg
+
             # CC energy
             if line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))
@@ -2598,7 +2603,7 @@ class FileReader:
                 if "hpmodes" not in self.other:
                     self.other["hpmodes"] = False
                 self.other["frequency"] = Frequency(
-                    freq_str, hpmodes=self.other["hpmodes"]
+                    freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                 )
 
             if "Anharmonic Infrared Spectroscopy" in line:
@@ -2675,6 +2680,10 @@ class FileReader:
                     uv_vis, style="gaussian"
                 )
 
+            if line.startswith(" S**2 before annihilation"):
+                self.other["S^2 before"] = float(line.split()[3].strip(","))
+                self.other["S^2 annihilated"] = float(line.split()[-1])
+            
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(

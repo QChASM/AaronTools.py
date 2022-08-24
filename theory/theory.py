@@ -282,7 +282,7 @@ class Theory:
             # print("solvent")
             return False
         if self.processors != other.processors:
-            # print("procs")
+            # print("procs", self.processors, other.processors)
             return False
         if self.memory != other.memory:
             # print("mem")
@@ -319,7 +319,15 @@ class Theory:
                     )
         
         return self.__class__(**new_dict, **new_kwargs)
- 
+
+    def add_kwargs(self, **kwargs):
+        """
+        add kwargs to the theory
+        """
+        self.kwargs = combine_dicts(
+            kwargs, self.kwargs
+        )
+
     def make_header(
         self,
         geom=None,
@@ -644,9 +652,11 @@ class Theory:
         out_str = ""
 
         # processors, memory, and other link 0 stuff
+        print(self.processors)
         if self.processors is not None:
             out_str += "%%NProcShared=%i\n" % self.processors
 
+        print(self.memory)
         if self.memory:
             out_str += "%%Mem=%iGB\n" % self.memory
 
