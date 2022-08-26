@@ -903,18 +903,18 @@ class OptimizationJob(JobType):
             z_atoms = []
             xyz_atoms = []
 
-            if "x" in self.constraints:
+            if "x" in self.constraints and self.constraints["x"]:
                 x_atoms = self.geometry.find(self.constraints["x"])
 
 
-            if "y" in self.constraints:
+            if "y" in self.constraints and self.constraints["y"]:
                 y_atoms = self.geometry.find(self.constraints["y"])
 
 
-            if "z" in self.constraints:
+            if "z" in self.constraints and self.constraints["z"]:
                 z_atoms = self.geometry.find(self.constraints["z"])
 
-            if "atoms" in self.constraints:
+            if "atoms" in self.constraints and self.constraints["atoms"]:
                 xyz_atoms = self.geometry.find(self.constraints["atoms"])
 
             if any([x_atoms, y_atoms, z_atoms, xyz_atoms]):
@@ -1308,7 +1308,7 @@ class ConformerSearchJob(JobType):
 
 
 class TDDFTJob(JobType):
-    def __init__(self, roots, initial_state=0, compute_nacmes=False):
+    def __init__(self, roots, root_of_interest=0, compute_nacmes=False):
         self.initial_state = initial_state
         self.roots = roots
         self.compute_nacmes = compute_nacmes

@@ -652,11 +652,9 @@ class Theory:
         out_str = ""
 
         # processors, memory, and other link 0 stuff
-        print(self.processors)
         if self.processors is not None:
             out_str += "%%NProcShared=%i\n" % self.processors
 
-        print(self.memory)
         if self.memory:
             out_str += "%%Mem=%iGB\n" % self.memory
 
