@@ -1300,7 +1300,7 @@ class Geometry:
 
         return atoms
 
-    def refresh_connected(self, targets=None, threshold=None):
+    def refresh_connected(self, targets=None, threshold=0.3):
         """
         reset connected atoms
         atoms are connected if their distance from each other is less than
@@ -1312,23 +1312,35 @@ class Geometry:
         else:
             targets = self.find(targets)
         
-        # reset the connectivity
+        # reset the connectivity and make sure each atom has a covalent radius
         for a in targets:
+            if a._radii is None:
+                a._set_radii()
             if targets is not self.atoms:
                 for b in a.connected:
                     b.connected.discard(a)
             a.connected = set([])
 
-        D = distance_matrix(
-            self.coordinates(targets), self.coordinates(targets)
-        )
+        coords = self.coordinates(targets)
 
-        # determine connectivity
-        for i, a in enumerate(targets):
-            for j, b in enumerate(targets[:i]):
-                if a.dist_is_connected(b, D[i, j], threshold):
-                    a.add_bond_to(b)
-
+        # get a distance matrix and a matrix with the max distance
+        # each atom can be from another atom and still be connected to it
+        D = distance_matrix(coords, coords)
+        max_connected_dist = np.zeros((len(targets), len(targets)))
+        for i, atom1 in enumerate(targets):
+            for j, atom2 in enumerate(targets[:i]):
+                max_connected_dist[i, j] = atom1._radii + atom2._radii + threshold
+        
+        # wherever distance < max connected distance, that pair
+        # of atoms is connected
+        # we only filled the lower triangle for max_connected_dist, so
+        # the upper triangle is all zeros
+        # np.tril basically discards the upper triangle, and
+        # nonzero gives the indices of all True values
+        connected = np.tril(D < max_connected_dist).nonzero()
+        for (ndx1, ndx2) in zip(*connected):
+            targets[ndx1].add_bond_to(targets[ndx2])
+        
     def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
