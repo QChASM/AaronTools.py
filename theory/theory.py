@@ -662,9 +662,14 @@ class Theory:
             for key in other_kw_dict[GAUSSIAN_PRE_ROUTE]:
                 out_str += "%%%s" % key
                 if other_kw_dict[GAUSSIAN_PRE_ROUTE][key]:
-                    out_str += "=%s" % ",".join(
-                        other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
-                    )
+                    if not any(key.lower() == x for x in ["kjob", "subst"]):
+                        out_str += "=%s" % ",".join(
+                            other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
+                        )
+                    else:
+                        out_str += " %s" % ",".join(
+                            other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
+                        )
 
                 if not out_str.endswith("\n"):
                     out_str += "\n"
@@ -733,7 +738,10 @@ class Theory:
                         or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                     )
                 ):
-                    out_str += "=("
+                    if option.lower() == "iop":
+                        out_str += "("
+                    else:
+                        out_str += "=("
                     for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
                         opt = x.split("=")[0]
                         if opt not in known_opts:

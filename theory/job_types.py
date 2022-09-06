@@ -1309,7 +1309,7 @@ class ConformerSearchJob(JobType):
 
 class TDDFTJob(JobType):
     def __init__(self, roots, root_of_interest=0, compute_nacmes=False):
-        self.initial_state = initial_state
+        self.root_of_interest = root_of_interest
         self.roots = roots
         self.compute_nacmes = compute_nacmes
     
@@ -1317,8 +1317,10 @@ class TDDFTJob(JobType):
         out = dict()
         warnings = []
         out[GAUSSIAN_ROUTE] = {
-            "Root": self.initial_state,
-            "NStates": self.roots,
+            "TD": [
+                "Root=%i" % self.root_of_interest,
+                "NStates=%i" % self.roots,
+            ]
         }
         if self.compute_nacmes:
             warnings.append(
@@ -1330,7 +1332,7 @@ class TDDFTJob(JobType):
         out = dict()
         out[ORCA_BLOCKS] = {
             "TDDFT": [
-                "IRoot %i" % self.initial_state,
+                "IRoot %i" % self.root_of_interest,
                 "NRoots %i" % self.roots,
             ]
         }
@@ -1356,7 +1358,7 @@ class TDDFTJob(JobType):
             "tdscf_excitations(wfn, states=%i)" % self.roots,
         ]
         
-        if self.initial_state:
+        if self.root_of_interest:
             warnings.append("only initial state being the ground state is supported")
         if self.compute_nacmes:
             warnings.append("nonadiabatic matrix elements are not supported for Psi4")
