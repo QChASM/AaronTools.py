@@ -292,5 +292,7 @@ class SubmitProcess:
                 filename = "ORCA_template.txt"
             elif self.exe == "in":
                 filename = "Psi4_template.txt"
+            elif self.exe == "inq":
+                filename = "QChem_template.txt"
 
         self.template = environment.get_template(filename)

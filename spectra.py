@@ -1769,6 +1769,8 @@ class ValenceExcitations(Signals):
                     data_max = wavelength
             centers = [(data_min + data_max) / 2]
             widths = [1.5 * (data_max - data_min)]
+            if widths[0] == 0:
+                widths = [4 * fwhm]
 
         change_x_unit_func = None
         x_label = "wavelength (nm)"
