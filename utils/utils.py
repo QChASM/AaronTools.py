@@ -275,9 +275,11 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
                     d2[key_2],
                     case_sensitive=case_sensitive,
                 )
+            elif isinstance(d1[case_key], list) and isinstance(d2[key_2], list):
+                out[key] = [item for item in [*d1[case_key], *d2[key_2]]]
             else:
                 try:
-                    out[key] = deepcopy(d1[case_key]) + deepcopy(d2[key_2])
+                    out[key] = deepcopy(d1[case_key]) - deepcopy(d2[key_2])
                 except TypeError:
                     out[key] = resolve_concatenation(d1[case_key], d2[key_2])
 
@@ -287,6 +289,84 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
             # if it's only in d2, add item to out
             if key in keys_2 and key not in keys_1:
                 out[case_key] = d2[case_key]
+
+    return out
+
+
+def subtract_dicts(*args, case_sensitive=False):
+    """removes items in d2 from d1 to return a new dictionary
+    """
+    from copy import deepcopy
+
+    d1 = args[0]
+    d2 = args[1:]
+    if len(d2) > 1:
+        d2 = combine_dicts(
+            d2[0],
+            *d2[1:],
+            case_sensitive=case_sensitive,
+            dict2_conditional=False
+        )
+    else:
+        d2 = d2[0]
+
+    out = OrderedDict()
+    case_keys_1 = list(d1.keys())
+    case_keys_2 = list(d2.keys())
+    if case_sensitive:
+        keys_1 = case_keys_1
+        keys_2 = case_keys_2
+    else:
+        keys_1 = [
+            key.lower() if isinstance(key, str) else key for key in case_keys_1
+        ]
+        keys_2 = [
+            key.lower() if isinstance(key, str) else key for key in case_keys_2
+        ]
+
+    # go through keys from d1
+    for case_key, key in zip(case_keys_1, keys_1):
+        # if the key is only in d1, add the item to out
+        if key in keys_1 and key not in keys_2:
+            out[case_key] = deepcopy(d1[case_key])
+        # if the key is in both, combine the items
+        elif key in keys_1 and key in keys_2:
+            key_2 = case_keys_2[keys_2.index(key)]
+            if isinstance(d1[case_key], dict) and isinstance(d2[key_2], dict):
+                out[key] = subtract_dicts(
+                    d1[case_key],
+                    d2[key_2],
+                    case_sensitive=case_sensitive,
+                )
+            else:
+                try:
+                    out[key] = deepcopy(d1[case_key]) - deepcopy(d2[key_2])
+                except TypeError:
+                    out.setdefault(key, type(d1[case_key])())
+                    if isinstance(d1[case_key], list):
+                        if case_sensitive:
+                            for item in d1[case_key]:
+                                if d1[case_key] not in d2[key_2]:
+                                    out[key].append(d1[case_key])
+                        else:
+                            items = d2[key_2]
+                            if isinstance(items, str) or not hasattr(items, "__iter__"):
+                                items = [items]
+                            case_items = [x.lower() if isinstance(x, str) else x for x in items]
+                            for item in d1[case_key]:
+                                if isinstance(item, str) and item.lower() in case_items:
+                                    continue
+                                elif item in case_items:
+                                    continue
+                                out[key].append(item)
+                    
+                    elif hasattr(d1[case_key], "__sub__"):
+                        try:
+                            out[key] = d1[case_key] - d2[key_2]
+                        except TypeError:
+                            raise TypeError("cannot subtract %s from %s" % (
+                                repr(d2[key_2]), repr(d1[case_key])
+                            ))
 
     return out
 

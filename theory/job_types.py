@@ -152,6 +152,18 @@ class JobType:
             there are close contacts
         """
 
+        if error.upper() == "OMO_UMO_GAP":
+            # small HOMO LUMO gap - don't look at the HOMO LUMO gap
+            if exec_type.lower() == "gaussian":
+                out_theory = theory.copy()
+                out_theory.add_kwargs(
+                    GAUSSIAN_ROUTE={
+                        "IOp": ["8/11=1"], # only warn about small energy gap
+                        "guess": ["TightConvergence"] # tighten convergence to try to offset error
+                    }
+                )
+                return out_theory
+
         if error.upper() == "CLASH":
             # if there is a clash, rotate substituents to mitigate clashing
             if geometry:
@@ -165,11 +177,8 @@ class JobType:
             if exec_type.lower() == "gaussian":
                 # SCF convergence issue, try different SCF algorithm
                 out_theory = theory.copy()
-                out_theory.kwargs = combine_dicts(
-                     {
-                        GAUSSIAN_ROUTE: {"scf": ["xqc"]}
-                    },
-                    out_theory.kwargs
+                out_theory.add_kwargs(
+                   GAUSSIAN_ROUTE={"scf": ["xqc"]}
                 )
                 return out_theory
 
@@ -177,12 +186,9 @@ class JobType:
                 # SCF convergence issue, orca recommends ! SlowConv
                 # and increasing SCF iterations
                 out_theory = theory.copy()
-                out_theory.kwargs = combine_dicts(
-                     {
-                        ORCA_ROUTE: ["SlowConv"],
-                        ORCA_BLOCKS: {"scf": ["MaxIter 500"]}
-                    },
-                    out_theory.kwargs
+                out_theory.add_kwargs(
+                    ORCA_ROUTE=["SlowConv"],
+                    ORCA_BLOCKS={"scf": ["MaxIter 500"]}
                 )
                 return out_theory
         

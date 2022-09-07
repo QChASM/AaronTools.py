@@ -1380,7 +1380,7 @@ class ValenceExcitations(Signals):
                     )
                     multiplicity.append(None)
                     symmetry.append(None)
-                    nrgs.append(float(excitation_data.group(2)))
+                    nrgs.append(float(excitation_data.group(1)))
                 else:
                     multiplicity.append(excitation_data.group(1))
                     symmetry.append(excitation_data.group(2))
