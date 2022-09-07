@@ -311,11 +311,13 @@ class OptimizationJob(JobType):
                     )
             out[GAUSSIAN_CONSTRAINTS] = []
 
+            dummies = np.cumsum([1 if atom.is_dummy else 0 for atom in self.geometry.atoms], dtype=int)
+
             if "x" in self.constraints and self.constraints["x"]:
                 x_atoms = self.geometry.find(self.constraints["x"])
                 for i, atom in enumerate(self.geometry.atoms):
                     if atom in x_atoms:
-                        var_name = "x%i" % (i + 1)
+                        var_name = "x%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[0]))
                         coords[i] = [var_name, coords[i][1], coords[i][2]]
 
@@ -327,7 +329,7 @@ class OptimizationJob(JobType):
                 y_atoms = self.geometry.find(self.constraints["y"])
                 for i, atom in enumerate(self.geometry.atoms):
                     if atom in y_atoms:
-                        var_name = "y%i" % (i + 1)
+                        var_name = "y%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[1]))
                         coords[i] = [coords[i][0], var_name, coords[i][2]]
 
@@ -339,7 +341,7 @@ class OptimizationJob(JobType):
                 z_atoms = self.geometry.find(self.constraints["z"])
                 for i, atom in enumerate(self.geometry.atoms):
                     if atom in z_atoms:
-                        var_name = "z%i" % (i + 1)
+                        var_name = "z%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[2]))
                         coords[i] = [coords[i][0], coords[i][1], var_name]
 
@@ -420,7 +422,7 @@ class OptimizationJob(JobType):
                     self.LOG.warning(e)
                     atoms = []
                 for atom in atoms:
-                    ndx = self.geometry.atoms.index(atom) + 1
+                    ndx = self.geometry.atoms.index(atom) + 1 - dummies[ndx]
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
                     else:
@@ -455,7 +457,9 @@ class OptimizationJob(JobType):
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 -= dummies[ndx1]
                     ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx2 -= dummies[ndx2]
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "B %2i %2i F" % (ndx1, ndx2)
@@ -473,8 +477,11 @@ class OptimizationJob(JobType):
                 for constraint in self.constraints["angles"]:
                     atom1, atom2, atom3 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 -= dummies[ndx1]
                     ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx2 -= dummies[ndx2]
                     ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx3 -= dummies[ndx3]
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
@@ -492,9 +499,13 @@ class OptimizationJob(JobType):
                 for constraint in self.constraints["torsions"]:
                     atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
                     ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 -= dummies[ndx1]
                     ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx2 -= dummies[ndx2]
                     ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx3 -= dummies[ndx3]
                     ndx4 = self.geometry.atoms.index(atom4) + 1
+                    ndx4 -= dummies[ndx4]
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)

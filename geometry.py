@@ -1286,10 +1286,12 @@ class Geometry:
         else:
             atoms = self.find(atoms)
 
+        ndx = {atom: i for i, atom in enumerate(atoms)}
+
         connectivity = []
         for a in atoms:
             connectivity += [
-                [atoms.index(i) for i in a.connected if i in atoms]
+                [ndx[i] for i in a.connected if i in ndx]
             ]
         if copy:
             atoms = [a.copy() for a in atoms]
@@ -1340,7 +1342,7 @@ class Geometry:
         connected = np.tril(D < max_connected_dist).nonzero()
         for (ndx1, ndx2) in zip(*connected):
             targets[ndx1].add_bond_to(targets[ndx2])
-        
+
     def refresh_ranks(self, invariant=True):
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
@@ -1861,10 +1863,10 @@ class Geometry:
             path = utils.shortest_path(self, a1, a2)
         else:
             avoid = self.find(avoid)
+            ndx = {atom: i for i, atom in enumerate(self.atoms)}
             graph = [
                 [
-                    self.atoms.index(j)
-                    for j in i.connected
+                    ndx[j] for j in i.connected
                     if j in self.atoms and j not in avoid
                 ]
                 if i not in avoid
@@ -1872,7 +1874,7 @@ class Geometry:
                 for i in self.atoms
             ]
             path = utils.shortest_path(
-                graph, self.atoms.index(a1), self.atoms.index(a2)
+                graph, ndx[a1], ndx[a2]
             )
         if not path:
             raise LookupError(
