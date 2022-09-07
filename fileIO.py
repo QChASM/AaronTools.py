@@ -46,6 +46,7 @@ NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
 ERROR = {
+    "SCF has not converged.  Gradients and post-SCF results would be GARBAGE!!": "SCF_CONV",
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
     "Error termination request processed by link 9999": "CONV_LINK",
