@@ -279,7 +279,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
                 out[key] = [item for item in [*d1[case_key], *d2[key_2]]]
             else:
                 try:
-                    out[key] = deepcopy(d1[case_key]) - deepcopy(d2[key_2])
+                    out[key] = deepcopy(d1[case_key]) + deepcopy(d2[key_2])
                 except TypeError:
                     out[key] = resolve_concatenation(d1[case_key], d2[key_2])
 
