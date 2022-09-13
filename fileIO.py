@@ -46,6 +46,8 @@ NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
 ERROR = {
+    "Fatal Problem: The smallest alpha delta epsilon is": "OMO_UMO_GAP",
+    "SCF has not converged.  Gradients and post-SCF results would be GARBAGE!!": "SCF_CONV",
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
     "Error termination request processed by link 9999": "CONV_LINK",
@@ -214,7 +216,7 @@ class FileWriter:
             elif style.lower() == "sqm":
                 style = "sqmin"
             elif style.lower() == "qchem":
-                style = "inp"
+                style = "inq"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -2258,9 +2260,32 @@ class FileReader:
                         excite_s, style="qchem",
                     )
                 
+                if line.startswith(" Gradient of SCF Energy"):
+                    # why on earth do they print the gradient like this
+                    gradient = np.zeros((len(self.atoms), 3))
+                    n_blocks = int(np.ceil(len(self.atoms) / 6))
+                    # printed in groups of up to six atoms
+                    # there are 3 rows in each block, one for each of X, Y, and Z
+                    # component of the gradient
+                    # each column is for one of the (up to) six atoms
+                    for i in range(0, n_blocks):
+                        self.skip_lines(f, 1)
+                        n += 1
+                        # start and stop are atom index range for this block
+                        start = 6 * i
+                        stop = min(6 * (i + 1) , len(self.atoms))
+                        for j in range(0, 3):
+                            line = f.readline()
+                            n += 1
+                            dx = [float(x) for x in line.split()[1:]]
+                            for k, l in enumerate(range(start, stop)):
+                                gradient[l, j] = dx[k]
+
+                    self.other["forces"] = -gradient
+                
                 if "Thank you very much for using Q-Chem" in line:
                     self.other["finished"] = True
-                
+
                 line = f.readline()
                 n += 1
         

@@ -38,7 +38,7 @@ from AaronTools.theory import (
     FrequencyJob,
     job_from_string,
 )
-from AaronTools.utils.utils import combine_dicts
+from AaronTools.utils.utils import combine_dicts, subtract_dicts
 
 from AaronTools.theory.basis import ECP, BasisSet
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
@@ -324,8 +324,32 @@ class Theory:
         """
         add kwargs to the theory
         """
+        new_kwargs = dict()
+        for keyword in kwargs.keys():
+            try:
+                new_kw = eval(keyword)
+                new_kwargs[new_kw] = kwargs[keyword]
+            except NameError:
+                new_kwargs[keyword] = kwargs[keyword]
+
         self.kwargs = combine_dicts(
-            kwargs, self.kwargs
+            new_kwargs, self.kwargs
+        )
+
+    def remove_kwargs(self, **kwargs):
+        """
+        add kwargs to the theory
+        """
+        new_kwargs = dict()
+        for keyword in kwargs.keys():
+            try:
+                new_kw = eval(keyword)
+                new_kwargs[new_kw] = kwargs[keyword]
+            except NameError:
+                new_kwargs[keyword] = kwargs[keyword]
+
+        self.kwargs = subtract_dicts(
+            self.kwargs, new_kwargs
         )
 
     def make_header(
