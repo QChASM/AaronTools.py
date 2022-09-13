@@ -1997,6 +1997,25 @@ class FileReader:
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
 
+                elif line.startswith("OVERLAP MATRIX"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    n_blocks = int(np.ceil(self.other["n_basis"] / 6))
+                    ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
+                    
+                    for i in range(0, n_blocks):
+                        line = f.readline()
+                        n += 1
+                        start = 6 * i
+                        stop = min(6 * (i + 1), self.other["n_basis"])
+                        for j in range(0, self.other["n_basis"]):
+                            line = f.readline()
+                            n += 1
+                            data = [float(x) for x in line.split()[1:]]
+                            ao_overlap[j, start:stop] = data
+                    
+                    self.other["ao_overlap"] = ao_overlap
+
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
 
