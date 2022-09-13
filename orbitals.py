@@ -1205,7 +1205,7 @@ class Orbitals:
         i_norm = lambda a, l=6: gau_norm(a, l)
 
         # ORCA order differs from FCHK in a few places:
-        # pz, px, py instead of ox, py, pz
+        # pz, px, py instead of px, py, pz
         # f(3xy^2 - x^3) instead of f(x^3 - 3xy^2)
         # f(y^3 - 3x^2y) instead of f(3x^2y - y^3)
         # ORCA doesn't seem to print the coordinates of each

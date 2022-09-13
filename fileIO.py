@@ -1896,6 +1896,9 @@ class FileReader:
                         line = f.readline()
                         n += 1
 
+                elif "Basis Dimension" in line:
+                    self.other["n_basis"] = int(line.split()[-1])
+
                 elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
                     s = ""
                     done = False
