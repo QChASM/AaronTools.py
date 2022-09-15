@@ -1394,7 +1394,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         if mo_coeffs[0] != 0:
                             z4 = (35 * (z ** 4) - 30 * (r2 * z ** 2) + 3 * r2 ** 2) / 8
@@ -1439,7 +1439,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         z2 = z ** 2
                         if mo_coeffs[0] != 0:
@@ -1489,7 +1489,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         z2 = z ** 2
                         if mo_coeffs[0] != 0:

@@ -1865,13 +1865,22 @@ class FileReader:
                     n += 1
                     self.other["basis_set_by_ele"] = dict()
                     while "--" not in line and line != "":
+                        members = re.search("Members:([\S\s]+)", line)
                         new_gto = re.search("NewGTO\s+(\S+)", line)
+                        ele = None
+                        names = None
                         if new_gto:
                             ele = new_gto.group(1)
+                        elif members:
+                            names = map(int, members.group(1).split()[1::2])
+                            line = f.readline()
+                            n += 1
+                        
+                        if new_gto or members:
                             line = f.readline()
                             n += 1
                             primitives = []
-                            while "end" not in line and line != "":
+                            while "end" not in line and line.strip():
                                 shell_type, n_prim = line.split()
                                 n_prim = int(n_prim)
                                 exponents = []
@@ -1894,7 +1903,11 @@ class FileReader:
                                 )
                                 line = f.readline()
                                 n += 1
-                            self.other["basis_set_by_ele"][ele] = primitives
+                            if ele:
+                                self.other["basis_set_by_ele"][ele] = primitives
+                            else:
+                                for name in names:
+                                    self.other["basis_set_by_ele"][name] = primitives
                         line = f.readline()
                         n += 1
 
