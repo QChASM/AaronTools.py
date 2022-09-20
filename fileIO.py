@@ -1664,6 +1664,18 @@ class FileReader:
                     n += 3
                     self.other["SCF energy"] = float(line.split()[3])
 
+                elif "E(SOC CIS)" in line:
+                    self.other["SOC CIS/TD energy correction"] = float(line.split()[3])
+
+                elif "DE(CIS)" in line:
+                    self.other["CIS/TD energy correction"] = float(line.split()[2])
+
+                elif "Dispersion correction" in line:
+                    try:
+                        self.other["dispersion correction"] = float(line.split()[2])
+                    except ValueError:
+                        pass
+
                 elif "TOTAL ENERGY:" in line:
                     item = line.split()[-5] + " energy"
                     self.other[item] = float(line.split()[-2])

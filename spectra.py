@@ -1295,6 +1295,9 @@ class ValenceExcitation(Signal):
         return self.rotatory_str_vel * self.excitation_energy
 
 
+class SOCExcitation(ValenceExcitation):
+    pass
+
 class TransientExcitation(ValenceExcitation):
     x_attr = "excitation_energy"
     required_attrs = (
@@ -1369,13 +1372,13 @@ class ValenceExcitations(Signals):
                     line = lines[i]
             elif re.search(r"Excited State\s*\d+:", lines[i]):
                 excitation_data = re.search(
-                    r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+(\d+\.\d+)",
+                    r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+-?(\d+\.\d+)",
                     lines[i],
                 )
                 # sometimes gaussian cannot determine the symmetry
                 if excitation_data is None:
                     excitation_data = re.search(
-                        r"Excited State\s*\d+:\s*[\S]+-?Sym\s+(\d+\.\d+)",
+                        r"Excited State\s*\d+:\s*[\S]+-?Sym\s+-?(\d+\.\d+)",
                         lines[i],
                     )
                     multiplicity.append(None)
@@ -1420,6 +1423,11 @@ class ValenceExcitations(Signals):
         multiplicity = []
         mult = "Singlet"
         
+        soc_nrgs = []
+        soc_oscillator_str = []
+        soc_oscillator_vel = []
+        soc_rotatory_str_len = []
+
         transient_oscillator_str = []
         transient_oscillator_vel = []
         transient_rot_str = []
@@ -1442,36 +1450,64 @@ class ValenceExcitations(Signals):
                 nrgs.append(float(info.group(1)))
                 multiplicity.append(mult)
                 i += 1
-            elif "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SOC" not in line and "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    oscillator_str.append(float(info[3]))
+                    if info[3] == "spin":
+                        oscillator_str.append(0)
+                    else:
+                        oscillator_str.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    oscillator_vel.append(float(info[3]))
+                    if info[3] == "spin":
+                        oscillator_vel.append(0)
+                    else:
+                        oscillator_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif line.endswith("CD SPECTRUM") and "TRANSIENT" not in line:
+            elif (
+                line.endswith("CD SPECTRUM") and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    rotatory_str_len.append(float(info[3]))
+                    if info[3] == "spin":
+                        rotatory_str_len.append(0)
+                    else:
+                        rotatory_str_len.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    rotatory_str_vel.append(float(info[3]))
+                    if info[3] == "spin":
+                        rotatory_str_vel.append(0)
+                    else:
+                        rotatory_str_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1507,7 +1543,43 @@ class ValenceExcitations(Signals):
                     corr.append(float(info[-1]))
                     i += 1
                     line = lines[i]
-                
+        
+            elif line.startswith("Eigenvalues of the SOC matrix:"):
+                i += 4
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_nrgs.append(float(info[-1]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_str.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_vel.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED CD SPECTRUM" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_rotatory_str_len.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
             else:
                 i += 1
 
@@ -1546,6 +1618,23 @@ class ValenceExcitations(Signals):
                 self.transient_data = []
             self.transient_data.append(
                 TransientExcitation(
+                    nrg,
+                    rotatory_str_len=rot_len,
+                    oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel,
+                )
+            )
+
+        for nrg, rot_len, osc_len, osc_vel in zip(
+            soc_nrgs,
+            soc_rotatory_str_len,
+            soc_oscillator_str,
+            soc_oscillator_vel,
+        ):
+            if not hasattr(self, "spin_orbit_data") or not self.spin_orbit_data:
+                self.spin_orbit_data = []
+            self.spin_orbit_data.append(
+                SOCExcitation(
                     nrg,
                     rotatory_str_len=rot_len,
                     oscillator_str=osc_len,
