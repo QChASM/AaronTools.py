@@ -700,6 +700,8 @@ class Config(configparser.ConfigParser):
 
         kwargs = self.get_other_kwargs(section=section)
         theory = Theory(*self._args, geometry=geometry, **kwargs)
+        theory.processors = self["Job"].getint("procs", fallback=None)
+        theory.memory = self["Job"].getint("exec_memory", fallback=None)
 
         # build ImplicitSolvent object
         if self[section].get("solvent", fallback="gas") == "gas":

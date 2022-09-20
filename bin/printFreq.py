@@ -111,7 +111,7 @@ if __name__ == "__main__":
         nargs="*",
         help="Specify what additional information to show\n"
         "Some info may not be available for certain file formats",
-        choices=["intensity", "vector", "forcek",
+        choices=["intensity", "vector", "forcek", "red_mass",
         "symmetry", "delta_anh", "harmonic_frequency",
         "harmonic_intensity", "rotation", "raman_activity"],
         default=[],

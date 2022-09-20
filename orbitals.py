@@ -1205,7 +1205,7 @@ class Orbitals:
         i_norm = lambda a, l=6: gau_norm(a, l)
 
         # ORCA order differs from FCHK in a few places:
-        # pz, px, py instead of ox, py, pz
+        # pz, px, py instead of px, py, pz
         # f(3xy^2 - x^3) instead of f(x^3 - 3xy^2)
         # f(y^3 - 3x^2y) instead of f(3x^2y - y^3)
         # ORCA doesn't seem to print the coordinates of each
@@ -1394,7 +1394,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         if mo_coeffs[0] != 0:
                             z4 = (35 * (z ** 4) - 30 * (r2 * z ** 2) + 3 * r2 ** 2) / 8
@@ -1439,7 +1439,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         z2 = z ** 2
                         if mo_coeffs[0] != 0:
@@ -1489,7 +1489,7 @@ class Orbitals:
                         alpha=exponents, con_coeffs=con_coeff, norms=norms
                     ):
                         e_r2 = np.exp(np.outer(-alpha, r2))
-                        s_val = np.dot(con_coeff * norms, e_r2)
+                        s_val = np.dot(con_coeffs * norms, e_r2)
                         res = np.zeros(len(r2))
                         z2 = z ** 2
                         if mo_coeffs[0] != 0:

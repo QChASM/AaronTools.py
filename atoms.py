@@ -270,10 +270,14 @@ class Atom:
 
     @property
     def is_dummy(self):
-        return re.match("(X$|[A-Z][a-z]?-Bq|Bq)", self.element) is not None
+        return re.match("X$", self.element) is not None
+
+    @property
+    def is_ghost(self):
+        return re.match("([A-Z][a-z]?-Bq|Bq)", self.element) is not None
 
     def reset(self):
-        if self.is_dummy:
+        if self.is_dummy or self.is_ghost:
             self._vdw = 0
             self._connectivity = 1000
             self._saturation = 0
@@ -425,7 +429,7 @@ class Atom:
             return self._mass
         if self.element in MASS:
             return MASS[self.element]
-        elif not self.is_dummy:
+        elif not (self.is_dummy or self.is_ghost):
             self.LOG.warning("no mass for %s" % self.element)
         return 0
 

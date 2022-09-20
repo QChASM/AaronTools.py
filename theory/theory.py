@@ -41,8 +41,8 @@ from AaronTools.theory import (
     FrequencyJob,
     job_from_string,
 )
-from AaronTools.utils.utils import combine_dicts
-from AaronTools.theory.basis import ECP, Basis, BasisSet
+from AaronTools.utils.utils import combine_dicts, subtract_dicts
+from AaronTools.theory.basis import ECP, BasisSet
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.grid import IntegrationGrid
 from AaronTools.theory.job_types import JobType, SinglePointJob
@@ -453,7 +453,7 @@ class Theory:
             # print("solvent")
             return False
         if self.processors != other.processors:
-            # print("procs")
+            # print("procs", self.processors, other.processors)
             return False
         if self.memory != other.memory:
             # print("mem")
@@ -490,7 +490,39 @@ class Theory:
                     )
         
         return self.__class__(**new_dict, **new_kwargs)
- 
+
+    def add_kwargs(self, **kwargs):
+        """
+        add kwargs to the theory
+        """
+        new_kwargs = dict()
+        for keyword in kwargs.keys():
+            try:
+                new_kw = eval(keyword)
+                new_kwargs[new_kw] = kwargs[keyword]
+            except NameError:
+                new_kwargs[keyword] = kwargs[keyword]
+
+        self.kwargs = combine_dicts(
+            new_kwargs, self.kwargs
+        )
+
+    def remove_kwargs(self, **kwargs):
+        """
+        add kwargs to the theory
+        """
+        new_kwargs = dict()
+        for keyword in kwargs.keys():
+            try:
+                new_kw = eval(keyword)
+                new_kwargs[new_kw] = kwargs[keyword]
+            except NameError:
+                new_kwargs[keyword] = kwargs[keyword]
+
+        self.kwargs = subtract_dicts(
+            self.kwargs, new_kwargs
+        )
+
     def make_header(
         self,
         geom=None,
@@ -881,9 +913,14 @@ class Theory:
             for key in other_kw_dict[GAUSSIAN_PRE_ROUTE]:
                 out_str += "%%%s" % key
                 if other_kw_dict[GAUSSIAN_PRE_ROUTE][key]:
-                    out_str += "=%s" % ",".join(
-                        other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
-                    )
+                    if not any(key.lower() == x for x in ["kjob", "subst"]):
+                        out_str += "=%s" % ",".join(
+                            other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
+                        )
+                    else:
+                        out_str += " %s" % ",".join(
+                            other_kw_dict[GAUSSIAN_PRE_ROUTE][key]
+                        )
 
                 if not out_str.endswith("\n"):
                     out_str += "\n"
@@ -1032,7 +1069,10 @@ class Theory:
                         or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
                     )
                 ):
-                    out_str += "=("
+                    if option.lower() == "iop":
+                        out_str += "("
+                    else:
+                        out_str += "=("
                     for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
                         opt = x.split("=")[0]
                         if opt not in known_opts:

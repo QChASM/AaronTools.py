@@ -56,6 +56,8 @@ NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
 ERROR = {
+    "Fatal Problem: The smallest alpha delta epsilon is": "OMO_UMO_GAP",
+    "SCF has not converged.  Gradients and post-SCF results would be GARBAGE!!": "SCF_CONV",
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
     "Error termination request processed by link 9999": "CONV_LINK",
@@ -227,7 +229,7 @@ class FileWriter:
             elif style.lower() == "sqm":
                 style = "sqmin"
             elif style.lower() == "qchem":
-                style = "inp"
+                style = "inq"
             elif style.lower() == "pdb":
                 style = "pdb"
             else:
@@ -1606,8 +1608,9 @@ class FileReader:
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
                     coords *= UNIT.A0_TO_BOHR
-                rv += [Atom(element=element, coords=coords, name=str(i))]
-                mass += float(atom_info[-1])
+                atom_mass = float(atom_info[-1])
+                rv += [Atom(element=element, coords=coords, mass=atom_mass, name=str(i))]
+                mass += atom_mass
 
                 line = f.readline()
                 n += 1
@@ -1995,7 +1998,7 @@ class FileReader:
                     # as E(MP2) for CC jobs
                     if nrg_type == "MP2":
                         nrg_type = "MP2 CORR"
-                    self.other["E(%s)" % nrg_type] = float(nrg.group(2))
+                        self.other["E(%s)" % nrg_type] = float(nrg.group(2))
 
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
@@ -2209,13 +2212,22 @@ class FileReader:
                     n += 1
                     self.other["basis_set_by_ele"] = dict()
                     while "--" not in line and line != "":
+                        members = re.search("Members:([\S\s]+)", line)
                         new_gto = re.search("NewGTO\s+(\S+)", line)
+                        ele = None
+                        names = None
                         if new_gto:
                             ele = new_gto.group(1)
+                        elif members:
+                            names = map(int, members.group(1).split()[1::2])
+                            line = f.readline()
+                            n += 1
+                        
+                        if new_gto or members:
                             line = f.readline()
                             n += 1
                             primitives = []
-                            while "end" not in line and line != "":
+                            while "end" not in line and line.strip():
                                 shell_type, n_prim = line.split()
                                 n_prim = int(n_prim)
                                 exponents = []
@@ -2238,9 +2250,16 @@ class FileReader:
                                 )
                                 line = f.readline()
                                 n += 1
-                            self.other["basis_set_by_ele"][ele] = primitives
+                            if ele:
+                                self.other["basis_set_by_ele"][ele] = primitives
+                            else:
+                                for name in names:
+                                    self.other["basis_set_by_ele"][name] = primitives
                         line = f.readline()
                         n += 1
+
+                elif "Basis Dimension" in line:
+                    self.other["n_basis"] = int(line.split()[-1])
 
                 elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
                     s = ""
@@ -2337,6 +2356,25 @@ class FileReader:
 
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
+
+                elif line.startswith("OVERLAP MATRIX"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    n_blocks = int(np.ceil(self.other["n_basis"] / 6))
+                    ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
+                    
+                    for i in range(0, n_blocks):
+                        line = f.readline()
+                        n += 1
+                        start = 6 * i
+                        stop = min(6 * (i + 1), self.other["n_basis"])
+                        for j in range(0, self.other["n_basis"]):
+                            line = f.readline()
+                            n += 1
+                            data = [float(x) for x in line.split()[1:]]
+                            ao_overlap[j, start:stop] = data
+                    
+                    self.other["ao_overlap"] = ao_overlap
 
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True
@@ -2601,9 +2639,32 @@ class FileReader:
                         excite_s, style="qchem",
                     )
                 
+                if line.startswith(" Gradient of SCF Energy"):
+                    # why on earth do they print the gradient like this
+                    gradient = np.zeros((len(self.atoms), 3))
+                    n_blocks = int(np.ceil(len(self.atoms) / 6))
+                    # printed in groups of up to six atoms
+                    # there are 3 rows in each block, one for each of X, Y, and Z
+                    # component of the gradient
+                    # each column is for one of the (up to) six atoms
+                    for i in range(0, n_blocks):
+                        self.skip_lines(f, 1)
+                        n += 1
+                        # start and stop are atom index range for this block
+                        start = 6 * i
+                        stop = min(6 * (i + 1) , len(self.atoms))
+                        for j in range(0, 3):
+                            line = f.readline()
+                            n += 1
+                            dx = [float(x) for x in line.split()[1:]]
+                            for k, l in enumerate(range(start, stop)):
+                                gradient[l, j] = dx[k]
+
+                    self.other["forces"] = -gradient
+                
                 if "Thank you very much for using Q-Chem" in line:
                     self.other["finished"] = True
-                
+
                 line = f.readline()
                 n += 1
         
@@ -2670,13 +2731,14 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
+                element = line[0].split("(")[0]
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
-                    rv += [Atom(element=line[0], flag=flag, coords=line[2:], name=str(a))]
+                    rv += [Atom(element=element, flag=flag, coords=line[2:], name=str(a))]
                 elif len(line) == 4:
                     a += 1
-                    rv += [Atom(element=line[0], coords=line[1:], name=str(a))]
+                    rv += [Atom(element=element, coords=line[1:], name=str(a))]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -2983,6 +3045,7 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
+            
             # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
@@ -3004,8 +3067,10 @@ class FileReader:
                 # * E(B2PLYPD3) = -76.353361915801
                 # very similar names for very different energies...
                 if nrg_match:
-                    self.other["energy"] = float(nrg_match.group(2).replace("D", "E"))
-                    self.other[nrg_match.group(1)] = self.other["energy"]
+                    nrg = float(nrg_match.group(2).replace("D", "E"))
+                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
+                        self.other["energy"] = nrg
+                    self.other[nrg_match.group(1)] = nrg
 
             # CC energy
             if line.startswith(" CCSD(T)= "):
@@ -3026,6 +3091,23 @@ class FileReader:
                 ndx = int(isotope.match(line).group(1)) - 1
                 self.atoms[ndx]._mass = float(line.split()[-1])
 
+            # basis set details
+            if line.startswith(" NBasis") and "NFC" in line:
+                n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
+                self.other["n_basis"] = n_basis
+                n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
+                self.other["n_frozen"] = n_frozen
+            
+            if line.startswith(" NROrb"):
+                n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
+                self.other["n_occupied_alpha"] = n_occupied_alpha
+                n_occupied_beta = int(re.search(" NOB=\s*(\d+)", line).group(1))
+                self.other["n_occupied_beta"] = n_occupied_beta
+                n_virtual_alpha = int(re.search(" NVA=\s*(\d+)", line).group(1))
+                self.other["n_virtual_alpha"] = n_virtual_alpha
+                n_virtual_beta = int(re.search(" NVB=\s*(\d+)", line).group(1))
+                self.other["n_virtual_beta"] = n_virtual_beta
+
             # Frequencies
             if route is not None and "hpmodes" in route.lower():
                 self.other["hpmodes"] = True
@@ -3039,7 +3121,7 @@ class FileReader:
                 if "hpmodes" not in self.other:
                     self.other["hpmodes"] = False
                 self.other["frequency"] = Frequency(
-                    freq_str, hpmodes=self.other["hpmodes"]
+                    freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                 )
 
             if "Anharmonic Infrared Spectroscopy" in line:
@@ -3116,6 +3198,10 @@ class FileReader:
                     uv_vis, style="gaussian"
                 )
 
+            if line.startswith(" S**2 before annihilation"):
+                self.other["S^2 before"] = float(line.split()[3].strip(","))
+                self.other["S^2 annihilated"] = float(line.split()[-1])
+            
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(

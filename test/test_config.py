@@ -116,6 +116,8 @@ class TestConfig(TestWithTimer):
         geoms = config.get_template()
         geom = geoms[0][0]
         ref = Theory(
+            processors=14,
+            memory=28,
             method="b3lyp",
             basis="6-31G",
             solvent=ImplicitSolvent("PCM", "water"),
@@ -138,6 +140,8 @@ class TestConfig(TestWithTimer):
         geoms = config.get_template()
         geom = geoms[0][0]
         ref = Theory(
+            processors=14,
+            memory=28,
             method="b3lyp",
             basis="zora-def2-tzvp aux J sarc Pt sarc-zora-tzvp",
             job_type="energy",
