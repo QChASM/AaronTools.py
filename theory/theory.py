@@ -42,7 +42,7 @@ from AaronTools.theory import (
     job_from_string,
 )
 from AaronTools.utils.utils import combine_dicts, subtract_dicts
-from AaronTools.theory.basis import ECP, BasisSet
+from AaronTools.theory.basis import ECP, Basis, BasisSet
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.grid import IntegrationGrid
 from AaronTools.theory.job_types import JobType, SinglePointJob
@@ -91,6 +91,9 @@ class Theory:
         "high_basis",
         "medium_basis",
         "low_basis",
+        "high_ecp",
+        "medium_ecp",
+        "low_ecp"
     ]
 
     # if there's a setting that should be an array and Psi4 errors out
@@ -159,6 +162,9 @@ class Theory:
         high_method=None,
         medium_method=None,
         low_method=None,
+        high_ecp=None,
+        medium_ecp=None,
+        low_ecp=None,
         high_basis=None,
         medium_basis=None,
         low_basis=None,
@@ -321,6 +327,8 @@ class Theory:
                         basis.oniom_layer = "H"
             else:
                 self.high_basis = high_basis
+            if high_ecp is not None:
+                self.high_basis.ecp = BasisSet(ecp=high_ecp).ecp
 
         if medium_basis is not None:
             if isinstance(medium_basis, Basis):
@@ -338,6 +346,8 @@ class Theory:
                         basis.oniom_layer = "M"
             else:
                 self.medium_basis = medium_basis
+            if medium_ecp is not None:
+                self.medium_basis.ecp = BasisSet(ecp=medium_ecp).ecp
 
         if low_basis is not None:
             if isinstance(low_basis, Basis):
@@ -354,6 +364,8 @@ class Theory:
                         basis.oniom_layer = "L"
             else:
                 self.low_basis = low_basis
+            if low_ecp is not None:
+                self.low_basis.ecp = BasisSet(ecp=low_ecp).ecp
 
         if self.basis is None and any((self.high_basis is not None, self.medium_basis is not None, self.low_basis is not None)):
             if self.high_basis is not None and self.medium_basis is not None and self.low_basis is not None:
@@ -803,7 +815,7 @@ class Theory:
                     self.medium_basis = BasisSet(kwargs[keyword])
 
                 elif keyword == "low_basis":
-                    self.basis = BasisSet(kwargs[keyword])
+                    self.low_basis = BasisSet(kwargs[keyword])
 
                 elif keyword == "grid":
                     self.grid = IntegrationGrid(kwargs[keyword])
@@ -1324,15 +1336,17 @@ class Theory:
             warnings.append("no basis specfied")
 
         elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
-            if self.high_method is not None and not self.high_method.is_semiempirical and self.high_basis is not None:
-                high_basis_info, high_warnings = self.high_basis.get_gaussian_basis_info()
-            if self.medium_method is not None and not self.medium_method.is_semiempirical and self.medium_basis is not None:
-                medium_basis_info = {} # medium_warnings = self.medium_basis.get_gaussian_basis_info()
-            if self.low_method is not None and not self.low_method.is_semiempirical and self.low_basis is not None:
-                low_basis_info = {} # low_warnings = self.low_basis.get_gaussian_basis_info()
+            #if self.high_method is not None and not self.high_method.is_semiempirical and self.high_basis is not None:
+            #    high_basis_info, high_warnings = self.high_basis.get_gaussian_basis_info()
+            #if self.medium_method is not None and not self.medium_method.is_semiempirical and self.medium_basis is not None:
+            #    medium_basis_info = {} # medium_warnings = self.medium_basis.get_gaussian_basis_info()
+            #if self.low_method is not None and not self.low_method.is_semiempirical and self.low_basis is not None:
+            #    low_basis_info = {} # low_warnings = self.low_basis.get_gaussian_basis_info()
 
-            basis_info = {} #list((high_basis_info, medium_basis_info, low_basis_info))
+            #basis_info = {} #list((high_basis_info, medium_basis_info, low_basis_info))
             #warnings = list((high_basis_warnings, medium_basis_warnings, low_basis_warnings))
+
+            basis_info, warnings = self.basis.get_gaussian_basis_info()
 
         elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)) and self.high_basis is None and self.medium_basis is None and self.low_basis is None:
             basis_info = {}
@@ -1355,8 +1369,10 @@ class Theory:
             #param_file = param_path_list[len(param_path_list)-1]
             out_str += "@%s" % param_path
             if GAUSSIAN_GEN_BASIS in basis_info:
-                raise NotImplementedError("basis=gen cannot be used with paramater files")
-            elif GAUSSIAN_GEN_ECP in basis_info:
+                self.LOG.warning("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
+                if GAUSSIAN_CONSTRAINTS in other_kw_dict:
+                    self.LOG.warning("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
+            if GAUSSIAN_GEN_ECP in basis_info:
                 out_str += "\n"
             else:
                 out_str += "\n\n"
