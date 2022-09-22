@@ -1877,13 +1877,22 @@ class FileReader:
                     n += 1
                     self.other["basis_set_by_ele"] = dict()
                     while "--" not in line and line != "":
+                        members = re.search("Members:([\S\s]+)", line)
                         new_gto = re.search("NewGTO\s+(\S+)", line)
+                        ele = None
+                        names = None
                         if new_gto:
                             ele = new_gto.group(1)
+                        elif members:
+                            names = map(int, members.group(1).split()[1::2])
+                            line = f.readline()
+                            n += 1
+                        
+                        if new_gto or members:
                             line = f.readline()
                             n += 1
                             primitives = []
-                            while "end" not in line and line != "":
+                            while "end" not in line and line.strip():
                                 shell_type, n_prim = line.split()
                                 n_prim = int(n_prim)
                                 exponents = []
@@ -1906,9 +1915,16 @@ class FileReader:
                                 )
                                 line = f.readline()
                                 n += 1
-                            self.other["basis_set_by_ele"][ele] = primitives
+                            if ele:
+                                self.other["basis_set_by_ele"][ele] = primitives
+                            else:
+                                for name in names:
+                                    self.other["basis_set_by_ele"][name] = primitives
                         line = f.readline()
                         n += 1
+
+                elif "Basis Dimension" in line:
+                    self.other["n_basis"] = int(line.split()[-1])
 
                 elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
                     s = ""
@@ -2053,6 +2069,25 @@ class FileReader:
 
                 elif line.startswith("N(Beta)  "):
                     self.other["n_beta"] = int(np.rint(float(line.split()[2])))
+
+                elif line.startswith("OVERLAP MATRIX"):
+                    self.skip_lines(f, 1)
+                    n += 1
+                    n_blocks = int(np.ceil(self.other["n_basis"] / 6))
+                    ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
+                    
+                    for i in range(0, n_blocks):
+                        line = f.readline()
+                        n += 1
+                        start = 6 * i
+                        stop = min(6 * (i + 1), self.other["n_basis"])
+                        for j in range(0, self.other["n_basis"]):
+                            line = f.readline()
+                            n += 1
+                            data = [float(x) for x in line.split()[1:]]
+                            ao_overlap[j, start:stop] = data
+                    
+                    self.other["ao_overlap"] = ao_overlap
 
                 elif ORCA_NORM_FINISH in line:
                     self.other["finished"] = True

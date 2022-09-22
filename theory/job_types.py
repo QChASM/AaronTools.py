@@ -421,8 +421,8 @@ class OptimizationJob(JobType):
                 except LookupError as e:
                     self.LOG.warning(e)
                     atoms = []
-                for atom in atoms:
-                    ndx = self.geometry.atoms.index(atom) + 1 - dummies[ndx]
+                for i, atom in enumerate(atoms):
+                    ndx = self.geometry.atoms.index(atom) + 1 - dummies[i]
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append("%2i F" % ndx)
                     else:
