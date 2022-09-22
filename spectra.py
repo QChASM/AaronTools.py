@@ -1446,7 +1446,7 @@ class ValenceExcitations(Signals):
                 nrgs.append(float(info.group(1)))
                 i += 1
             elif line.startswith("STATE"):
-                info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(\d+\.\d+)", line)
+                info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line)
                 nrgs.append(float(info.group(1)))
                 multiplicity.append(mult)
                 i += 1

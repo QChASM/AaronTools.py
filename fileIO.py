@@ -1665,10 +1665,10 @@ class FileReader:
                     self.other["SCF energy"] = float(line.split()[3])
 
                 elif "E(SOC CIS)" in line:
-                    self.other["SOC CIS/TD energy correction"] = float(line.split()[3])
+                    self.other["SOC CIS/TD root energy"] = float(line.split()[3])
 
                 elif "DE(CIS)" in line:
-                    self.other["CIS/TD energy correction"] = float(line.split()[2])
+                    self.other["CIS/TD root energy"] = float(line.split()[2])
 
                 elif "Dispersion correction" in line:
                     try:
@@ -1924,6 +1924,54 @@ class FileReader:
                             line == ""
                         ):
                             done = True
+                        if "SOC stabilization of the ground state" in line:
+                            self.other["SOC GS stabilization energy"] = float(line[39:48]) / UNIT.HART_TO_EV
+                        if "CALCULATED SOCME BETWEEN" in line:
+                            # SOC in cm^-1
+                            self.skip_lines(f, 4)
+                            n += 5
+                            line = f.readline()
+                            soc_x = []
+                            soc_y = []
+                            soc_z = []
+                            while line.strip():
+                                re_z = float(line[23:30])
+                                im_z = float(line[32:40])
+                                soc_z.append(complex(re_z, im_z))
+                                re_x = float(line[47:54])
+                                im_x = float(line[56:64])
+                                soc_x.append(complex(re_x, im_x))
+                                re_y = float(line[71:78])
+                                im_y = float(line[80:88])
+                                soc_y.append(complex(re_y, im_y))
+                                line = f.readline()
+                                n += 1
+                            # determine number of roots
+                            roots = int(np.sqrt(1 + 4 * len(soc_x)) - 1)
+                            # +1 for ground state
+                            n_gs = int(roots / 2 + 1)
+                            n_flipped = int(roots / 2)
+                            socme_dim = n_gs + n_flipped
+                            self.other["soc x"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                            self.other["soc y"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                            self.other["soc z"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                            ndx = 0
+                            for i in range(0, n_flipped):
+                                for j in range(0, n_gs):
+                                    self.other["soc x"][n_gs + i, j] = soc_x[ndx]
+                                    self.other["soc x"][j, n_gs + i] = soc_x[ndx]
+                                    self.other["soc y"][n_gs + i, j] = soc_y[ndx]
+                                    self.other["soc y"][j, n_gs + i] = soc_y[ndx]
+                                    self.other["soc z"][n_gs + i, j] = soc_z[ndx]
+                                    self.other["soc z"][j, n_gs + i] = soc_z[ndx]
+                                    ndx += 1
+
+                            self.other["soc (cm^-1)"] = np.sqrt(
+                                self.other["soc x"].real ** 2 + self.other["soc x"].imag ** 2 +
+                                self.other["soc y"].real ** 2 + self.other["soc y"].imag ** 2 +
+                                self.other["soc z"].real ** 2 + self.other["soc z"].imag ** 2
+                            )
+
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
 
                 elif line.startswith("MOLECULAR ORBITALS"):
