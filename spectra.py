@@ -1280,23 +1280,32 @@ class ValenceExcitation(Signal):
 
     @property
     def dipole_str_len(self):
+        if self.oscillator_str is None:
+            return None
         return self.oscillator_str / self.excitation_energy
 
     @property
     def dipole_str_vel(self):
+        if self.oscillator_str_vel is None:
+            return None
         return self.oscillator_str_vel / self.excitation_energy
 
     @property
     def delta_abs_len(self):
+        if self.rotatory_str_len is None:
+            return None
         return self.rotatory_str_len * self.excitation_energy
 
     @property
     def delta_abs_vel(self):
+        if self.rotatory_str_vel is None:
+            return None
         return self.rotatory_str_vel * self.excitation_energy
 
 
 class SOCExcitation(ValenceExcitation):
     pass
+
 
 class TransientExcitation(ValenceExcitation):
     x_attr = "excitation_energy"
@@ -1311,6 +1320,7 @@ class TransientExcitation(ValenceExcitation):
 class ValenceExcitations(Signals):
     def __init__(self, *args, **kwargs):
         self.transient_data = None
+        self.spin_orbit_data = None
         super().__init__(*args, **kwargs)
 
     def parse_gaussian_lines(self, lines, *args, **kwargs):

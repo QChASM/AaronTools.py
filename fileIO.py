@@ -1481,7 +1481,7 @@ class FileReader:
                             self.other[item] = val
 
                 elif "SCF energy" in line:
-                    self.other["SCF energy"] = float(line.split()[-1])
+                    self.other["scf_energy"] = float(line.split()[-1])
 
                 elif "correlation energy" in line and "=" in line:
                     item = line.split("=")[0].strip()
@@ -1662,7 +1662,7 @@ class FileReader:
                     self.skip_lines(f, 2)
                     line = f.readline()
                     n += 3
-                    self.other["SCF energy"] = float(line.split()[3])
+                    self.other["scf_energy"] = float(line.split()[3])
 
                 elif "E(SOC CIS)" in line:
                     self.other["SOC CIS/TD root energy"] = float(line.split()[3])
@@ -1672,7 +1672,7 @@ class FileReader:
 
                 elif "Dispersion correction" in line:
                     try:
-                        self.other["dispersion correction"] = float(line.split()[2])
+                        self.other["dispersion correction energy"] = float(line.split()[2])
                     except ValueError:
                         pass
 
