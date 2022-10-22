@@ -2729,6 +2729,7 @@ class Geometry:
         self,
         center=None,
         key_atoms=None,
+        targets=None,
         radii="umn",
         radius=3.5,
         oop_vector=None,
@@ -2801,17 +2802,20 @@ class Geometry:
         else:
             key_atoms = self.find(key_atoms)
 
-        targets = []
-        for key in key_atoms:
-            if key not in targets:
-                if isinstance(center, Atom) or (
-                    hasattr(center, "__iter__")
-                    and all(isinstance(a, Atom) for a in center)
-                ):
-                    targets.extend(self.get_fragment(key, center))
-
-                else:
-                    targets.extend(self.get_all_connected(key))
+        if targets is None:
+            targets = []
+            for key in key_atoms:
+                if key not in targets:
+                    if isinstance(center, Atom) or (
+                        hasattr(center, "__iter__")
+                        and all(isinstance(a, Atom) for a in center)
+                    ):
+                        targets.extend(self.get_fragment(key, center))
+    
+                    else:
+                        targets.extend(self.get_all_connected(key))
+        else:
+            targets = self.find(targets)
 
         if oop_vector is None:
             oop_vector = np.zeros(3)
@@ -2843,18 +2847,23 @@ class Geometry:
         atoms_within_radius = []
         radius_list = []
         for i, atom in enumerate(targets):
-            if (
-                shape == "circle"
-                and dist_ip[i] - radii_dict[atom.element] < radius
-            ):
-                atoms_within_radius.append(atom)
-                radius_list.append(radii_dict[atom.element])
-            elif (
-                shape == "square"
-                and dist_ip[i] - radii_dict[atom.element] < np.sqrt(2) * radius
-            ):
-                atoms_within_radius.append(atom)
-                radius_list.append(radii_dict[atom.element])
+            try:
+                if (
+                    shape == "circle"
+                    and dist_ip[i] - radii_dict[atom.element] < radius
+                ):
+                    atoms_within_radius.append(atom)
+                    radius_list.append(radii_dict[atom.element])
+                elif (
+                    shape == "square"
+                    and dist_ip[i] - radii_dict[atom.element] < np.sqrt(2) * radius
+                ):
+                    atoms_within_radius.append(atom)
+                    radius_list.append(radii_dict[atom.element])
+            except KeyError:
+                raise KeyError("%s radii has no radius for %s" % (
+                    radii, atom.element
+                ))
 
         atom_coords = np.dot(
             self.coordinates(atoms_within_radius) - center_coords, basis
@@ -3997,11 +4006,26 @@ class Geometry:
             for t in target:
                 attached_to = attached_to | (t.connected - set(target))
             # find smallest fragment
-            for e in attached_to:
-                frag = geom.get_fragment(target, e)
+            frags = [set(geom.get_fragment(target, e)) for e in attached_to]
+            for e, frag in zip(attached_to, frags):
+                if any(e in a.connected for a in frag - set(target)):
+                    continue
                 if smallest_frag is None or len(frag) < len(smallest_frag):
                     smallest_frag = frag
                     smallest_attached_to = e
+            if smallest_frag is None:
+                n_bonds = sum([len(t.connected) for t in target])
+                raise RuntimeError(
+                    "could not determine a suitable group to replace with "
+                    "the new substituent\n"
+                    "the target atom (%s) should have only one bond "
+                    "to the rest of the molecule\n" 
+                    "the target atom(s) have %i bonds%s" % (
+                        str(target),
+                        n_bonds,
+                        ", but they are all part of a ring system" if n_bonds else "",
+                    )
+                )
             attached_to = [smallest_attached_to]
         if len(attached_to) != 1:
             raise NotImplementedError(

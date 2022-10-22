@@ -59,6 +59,16 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
+    "-t",
+    "--targets",
+    default=None,
+    required=False,
+    dest="targets",
+    help="atoms to include in the steric map\n" +
+    "default:determine based on key atoms",
+)
+
+steric_parser.add_argument(
     "-c",
     "--center",
     action="append",
@@ -242,6 +252,7 @@ for f in glob_files(args.infile, parser=steric_parser):
     x, y, z, min_alt, max_alt, basis, targets = geom.steric_map(
         center=args.center,
         key_atoms=args.key,
+        targets=args.targets,
         radii=args.radii,
         return_basis=True,
         num_pts=args.num_pts,

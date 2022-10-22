@@ -72,6 +72,7 @@ ERROR = {
 }
 
 ERROR_ORCA = {
+    "ORCA finished by error termination in SCF": "SCF_CONV",
     "SCF NOT CONVERGED AFTER": "SCF_CONV",
     # ORCA doesn't actually exit if the SCF doesn't converge...
     # "CONV_CDS": "",
@@ -1644,6 +1645,7 @@ class FileReader:
                 n += 1
                 continue
             else:
+
                 nrg = nrg_regex.match(line)
                 if nrg is not None:
                     nrg_type = nrg.group(1)
@@ -2116,6 +2118,9 @@ class FileReader:
                                 self.other["error_msg"] += line.strip() + "\n"
                                 line = f.readline()
                                 n += 1
+                            if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
+                                del self.other["error"]
+                                del self.other["error_msg"]
 
                 line = f.readline()
                 n += 1
