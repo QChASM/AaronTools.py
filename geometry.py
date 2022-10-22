@@ -2853,13 +2853,13 @@ class Geometry:
                     and dist_ip[i] - radii_dict[atom.element] < radius
                 ):
                     atoms_within_radius.append(atom)
-                    radius_list.append(radii_dict[atom.element])
+                    radius_list.append(radii_dict[atom.element] ** 2)
                 elif (
                     shape == "square"
                     and dist_ip[i] - radii_dict[atom.element] < np.sqrt(2) * radius
                 ):
                     atoms_within_radius.append(atom)
-                    radius_list.append(radii_dict[atom.element])
+                    radius_list.append(radii_dict[atom.element] ** 2)
             except KeyError:
                 raise KeyError("%s radii has no radius for %s" % (
                     radii, atom.element
@@ -2871,29 +2871,21 @@ class Geometry:
 
         x = np.linspace(-radius, radius, num=num_pts)
         y = np.linspace(-radius, radius, num=num_pts)
+        xs, ys = np.meshgrid(x, y)
+        if shape == "circle":
+            pt_in_shape = xs ** 2 + ys ** 2 < radius ** 2
+        else:
+            pt_in_shape = np.ones((num_pts, num_pts), dtype=bool)
         z = -1000 * np.ones((num_pts, num_pts))
-        max_alt = None
-        min_alt = None
-        for i in range(0, num_pts):
-            for j in range(0, num_pts):
-                if shape == "circle" and x[i] ** 2 + y[j] ** 2 > radius ** 2:
-                    continue
-                for k in range(0, len(atoms_within_radius)):
-                    w = np.sqrt(
-                        (x[i] - atom_coords[k][0]) ** 2
-                        + (y[j] - atom_coords[k][1]) ** 2
-                    )
-                    if w < radius_list[k]:
-                        h = np.sqrt(radius_list[k] ** 2 - w ** 2)
-                        alt = atom_coords[k, 2] + h
-                        # matplotlib mirrors z?
-                        if alt > z[j, i]:
-                            z[j, i] = alt
-                            if max_alt is None or alt > max_alt:
-                                max_alt = alt
+        
+        for k in range(0, len(atoms_within_radius)):
+            w = (xs - atom_coords[k][0]) ** 2 + (ys - atom_coords[k][1]) ** 2
+            ndx = np.logical_and(pt_in_shape, w < radius_list[k])
+            alt = np.sqrt(radius_list[k] - w) + atom_coords[k, 2]
+            z[ndx] = np.maximum(z[ndx], alt[ndx])
 
-                            if min_alt is None or alt < min_alt:
-                                min_alt = alt
+        min_alt = np.min(z[z > -1000])
+        max_alt = np.max(z)
 
         if return_basis:
             return x, y, z, min_alt, max_alt, basis, atoms_within_radius

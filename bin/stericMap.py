@@ -153,6 +153,32 @@ steric_parser.add_argument(
 )
 
 steric_parser.add_argument(
+    "-l", "--levels",
+    default=20,
+    type=int,
+    dest="levels",
+    help="contour levels in the steric map\n"
+    "default: 20",
+)
+
+steric_parser.add_argument(
+    "-nl", "--no-lines",
+    default=False,
+    action="store_true",
+    dest="no_lines",
+    help="do not add contour lines to the plot",
+)
+
+steric_parser.add_argument(
+    "-cmap", "--color-map",
+    default="jet",
+    type=str,
+    dest="cmap",
+    help="color map name for the contour plot\n"
+    "default: jet",
+)
+
+steric_parser.add_argument(
     "-p", "--projection-shape",
     choices=("circle", "square"),
     default="circle",
@@ -286,7 +312,7 @@ for f in glob_files(args.infile, parser=steric_parser):
         max_alt = args.max
 
     fig, ax = plt.subplots()
-    cmap = copy.copy(plt.cm.get_cmap("jet"))
+    cmap = copy.copy(plt.cm.get_cmap(args.cmap))
     cmap.set_under("w")
     steric_map = ax.contourf(
         x,
@@ -294,16 +320,17 @@ for f in glob_files(args.infile, parser=steric_parser):
         z,
         extend="min",
         cmap=cmap,
-        levels=np.linspace(min_alt, max_alt, num=20),
+        levels=np.linspace(min_alt, max_alt, num=args.levels),
     )
-    steric_lines = ax.contour(
-        x,
-        y,
-        z,
-        extend="min",
-        colors="k",
-        levels=np.linspace(min_alt, max_alt, num=20),
-    )
+    if not args.no_lines:
+        steric_lines = ax.contour(
+            x,
+            y,
+            z,
+            extend="min",
+            colors="k",
+            levels=np.linspace(min_alt, max_alt, num=args.levels),
+        )
     bar = fig.colorbar(steric_map, format="%.1f")
     bar.set_label("altitude (Å)")
     ax.set_aspect("equal")
@@ -343,3 +370,4 @@ for f in glob_files(args.infile, parser=steric_parser):
         if "$INFILE" in outfile:
             outfile = outfile.replace("$INFILE", get_filename(f))
         plt.savefig(outfile, dpi=500)
+
