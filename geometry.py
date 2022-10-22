@@ -2873,16 +2873,19 @@ class Geometry:
         y = np.linspace(-radius, radius, num=num_pts)
         xs, ys = np.meshgrid(x, y)
         if shape == "circle":
-            pt_in_shape = xs ** 2 + ys ** 2 < radius ** 2
+            pt_in_shape = (xs ** 2 + ys ** 2) < radius ** 2
+            xs = xs[pt_in_shape]
+            ys = ys[pt_in_shape]
         else:
             pt_in_shape = np.ones((num_pts, num_pts), dtype=bool)
         z = -1000 * np.ones((num_pts, num_pts))
-        
+        w = np.empty((num_pts, num_pts))
+        w[:] = np.nan
         for k in range(0, len(atoms_within_radius)):
-            w = (xs - atom_coords[k][0]) ** 2 + (ys - atom_coords[k][1]) ** 2
-            ndx = np.logical_and(pt_in_shape, w < radius_list[k])
-            alt = np.sqrt(radius_list[k] - w) + atom_coords[k, 2]
-            z[ndx] = np.maximum(z[ndx], alt[ndx])
+            w[pt_in_shape] = (xs - atom_coords[k][0]) ** 2 + (ys - atom_coords[k][1]) ** 2
+            ndx = w < radius_list[k]
+            alt = np.sqrt(radius_list[k] - w[ndx]) + atom_coords[k, 2]
+            z[ndx] = np.maximum(z[ndx], alt)
 
         min_alt = np.min(z[z > -1000])
         max_alt = np.max(z)
