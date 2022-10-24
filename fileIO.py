@@ -1992,6 +1992,20 @@ class FileReader:
 
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
 
+                if "INPUT FILE" in line:
+                    try:
+                        coord_match = re.compile("\*\s*(xyz|int|gzmat)\s+-?\d+\s+(\d+)", re.IGNORECASE)
+                        while "****END OF INPUT****" not in line:
+                            line = f.readline()
+                            n += 1
+                            if "mult" in line.lower():
+                                self.other["multiplicity"] = int(float(line.split()[-1]))
+                            if coord_match.match(line):
+                                self.other["multiplicity"] = int(coord_match.match(line).group(2))
+
+                    except ValueError:
+                        pass
+
                 elif line.startswith("MOLECULAR ORBITALS"):
                     # read molecular orbitals
                     self.skip_lines(f, 1)
@@ -2006,7 +2020,7 @@ class FileReader:
                     at_info = re.compile(
                         "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
                     )
-                    if self.other["multiplicity"] != 1:
+                    if "multiplicity" in self.other and self.other["multiplicity"] != 1:
                         args = [
                             ("alpha_coefficients", "beta_coefficients"),
                             ("alpha_nrgs", "beta_nrgs"),
