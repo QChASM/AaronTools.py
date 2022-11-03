@@ -962,6 +962,8 @@ class FileWriter:
 
     @classmethod
     def write_pdb(cls, geom, append, outfile=None, qt=False):
+        if not isinstance(geom.atoms[0], OniomAtom):
+            geom = geom.make_oniom()
         mode = "a" if append else "w"
         if "model_2" in geom.other.keys():
             models = True
@@ -970,7 +972,7 @@ class FileWriter:
         s = ""
         def spaced(spac, val, align="right"):
             if not isinstance(val, str):
-                val = str(val)
+                val = str(val).strip()
             val_predecimal = len(val.split(".")[0])
             writ_space = spac
             if len(val) > writ_space:
@@ -982,6 +984,19 @@ class FileWriter:
                 rv = spaces+val
             elif align=="left":
                 rv = val+spaces
+            elif align=="atomtype":
+                if len(val) == 1:
+                    rv = sp + val + (n-1)*sp
+                elif len(val) in [2,3]:
+                    if val[0].isalpha() and val[1].isalpha():
+                        rv = val+spaces
+                    if val[0].isalpha() and val[1].isdigit():
+                        if len(val)==3:
+                            rv = spaces+val
+                        else:
+                            rv = sp + val + sp
+                else:
+                    rv = val+spaces
             return rv
 
         connectivity = []
@@ -1009,23 +1024,25 @@ class FileWriter:
                 else:
                     s += "HETATM"
                 s += spaced(serial_spac, str(i+1))
+                s += " "
                 if qt==True:
                     s += spaced(atom_spac, atom.element)
                 else:
-                    s += spaced(atom_spac, atom.atomtype)
+                    s += spaced(atom_spac, atom.atomtype, align="atomtype")
                 s += " "
                 s += spaced(res_spac, atom.res)
                 s += 10 * " "
                 for coord in atom.coords:
                     s += spaced(coord_spac, coord)
                 if qt == False:
-                    s += 26*" "
+                    s += 22*" "
                     s += spaced(ele_spac, atom.element)
-                    s += "{: 4.2f}".format(atom.charge)
+                    if hasattr(atom, "charge") and atom.charge != None and atom.charge != "":
+                        s += "{: 4.2f}".format(atom.charge)
                 else:
                     s += 12 * " "
                     s += spaced(charge_spac, atom.charge, align="left")
-                    s += spaced(ele_spac, atom.atomtype)
+                    s += spaced(ele_spac, atom.element)
                 s += "\n"
             return s
 
@@ -1060,7 +1077,7 @@ class FileWriter:
         for connection in connectivity:
             s += "CONECT"
             for connect in connection: 
-                s += spaced(con_spac, connect.index)
+                s += spaced(con_spac, connect.index+1)
             s += "\n"
 
         if outfile is None:

@@ -884,8 +884,10 @@ class Theory:
         ):
             if self.geometry.comment:
                 other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.comment]
-            else:
+            elif self.geometry.name:
                 other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
+            else:
+                other_kw_dict[GAUSSIAN_COMMENT] = "comment"
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
@@ -1193,13 +1195,13 @@ class Theory:
                 has_frozen = True
                 break
         test_atom = self.geometry.atoms[0]
-        if hasattr(test_atom, "layer"):
+        if self.method is None and self.high_method is not None:
             oniom = True
         if hasattr(test_atom, "atomtype"):
-            if atom.atomtype != "":
+            if atom.atomtype != "" and oniom==True:
                 has_type = True
         if hasattr(test_atom, "charge"):
-            if atom.charge != "":
+            if atom.charge != "" and atom.charge != None:
                 has_charge = True
         for atom, coord in zip(
             self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]

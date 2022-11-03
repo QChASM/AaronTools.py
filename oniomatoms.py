@@ -3,7 +3,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info={}, res = "", atom=None):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info=None, res = "", atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
         atomtype = str(atomtype).strip()
@@ -27,8 +27,10 @@ class OniomAtom(Atom):
                 self.atomtype = atom.atomtype
             else:
                 self.atomtype = atomtype
-            if hasattr(atom, "link_info") and link_info == {}:
+            if hasattr(atom, "link_info") and link_info == None:
                 self.link_info = atom.link_info
+            elif not hasattr(atom, "link_info") and link_info == None:
+                self.link_info = dict()
             else:
                 self.link_info = link_info
             if coords:
@@ -76,17 +78,19 @@ class OniomAtom(Atom):
                 self.tags = tags
             else:
                 self.tags = set([tags])
-
-            self.link_info = link_info
+            if link_info == None:
+                self.link_info = dict()
+            else:
+                self.link_info = link_info
             self.connected = set([])
             self.constraint = set([])
             self._rank = None
             self.res = res
-            charge=str(charge).strip()
-            if charge == "":
+            #charge=str(charge).strip()
+            if charge == "" or charge == None:
                 pass
             else:
-                self.charge = float(charge)
+                self.charge = float(str(charge).strip)
             self.layer=layer
             self.atomtype=atomtype
 
@@ -119,7 +123,7 @@ class OniomAtom(Atom):
 
         if self.layer == "H" and other.layer != "H":
             return True
-        elif self.layer == "M" and other.layer == "L":
+        elif self.layer == "M" and other.layer not in ("H", "M"):
             return True
         else:
             return False
