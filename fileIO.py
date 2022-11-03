@@ -2000,8 +2000,8 @@ class FileReader:
                             n += 1
                             if "mult" in line.lower():
                                 self.other["multiplicity"] = int(float(line.split()[-1]))
-                            if coord_match.match(line):
-                                self.other["multiplicity"] = int(coord_match.match(line).group(2))
+                            if coord_match.search(line):
+                                self.other["multiplicity"] = int(coord_match.search(line).group(2))
 
                     except ValueError:
                         pass
