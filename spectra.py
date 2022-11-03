@@ -704,23 +704,30 @@ class Frequency(Signals):
         # some software doesn't print reduced mass or force constants
         # we can calculate them if we have atom with mass, displacement
         # vectors, and vibrational frequencies
-        if self.data and (
-            not self.data[-1].forcek or
-            not self.data[-1].red_mass
-        ) and "atoms" in kwargs:
-            atoms = kwargs["atoms"]
-            for mode in self.data:
-                norm = sum(np.sum(mode.vector ** 2, axis=1))
-                disp = mode.vector / norm
-                mode.vector = disp
-                mu = 0
-                for i in range(0, len(mode.vector)):
-                    mu += np.dot(disp[i], disp[i]) * atoms[i].mass
-                mode.red_mass = mu
-                k = 4 * np.pi ** 2 * mode.frequency ** 2
-                k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
-                k *= UNIT.AMU_TO_KG * 1e-2
-                mode.forcek = k
+        try:
+            if self.data and (
+                not self.data[-1].forcek or
+                not self.data[-1].red_mass
+            ) and "atoms" in kwargs:
+                atoms = kwargs["atoms"]
+                for mode in self.data:
+                    norm = sum(np.sum(mode.vector ** 2, axis=1))
+                    disp = mode.vector / norm
+                    mode.vector = disp
+                    mu = 0
+                    for i in range(0, len(mode.vector)):
+                        mu += np.dot(disp[i], disp[i]) * atoms[i].mass
+                    mode.red_mass = mu
+                    k = 4 * np.pi ** 2 * mode.frequency ** 2
+                    k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
+                    k *= UNIT.AMU_TO_KG * 1e-2
+                    mode.forcek = k
+        except IndexError:
+            # some software can compute frequencies with a user-supplied
+            # hessian, so it never prints the structure
+            # ORCA can do this. It will print the input structure, but
+            # we don't parse that
+            pass
     
     def parse_gaussian_lines(
         self, lines, *args, hpmodes=None, harmonic=True, **kwargs
@@ -1280,19 +1287,31 @@ class ValenceExcitation(Signal):
 
     @property
     def dipole_str_len(self):
+        if self.oscillator_str is None:
+            return None
         return self.oscillator_str / self.excitation_energy
 
     @property
     def dipole_str_vel(self):
+        if self.oscillator_str_vel is None:
+            return None
         return self.oscillator_str_vel / self.excitation_energy
 
     @property
     def delta_abs_len(self):
+        if self.rotatory_str_len is None:
+            return None
         return self.rotatory_str_len * self.excitation_energy
 
     @property
     def delta_abs_vel(self):
+        if self.rotatory_str_vel is None:
+            return None
         return self.rotatory_str_vel * self.excitation_energy
+
+
+class SOCExcitation(ValenceExcitation):
+    pass
 
 
 class TransientExcitation(ValenceExcitation):
@@ -1308,6 +1327,7 @@ class TransientExcitation(ValenceExcitation):
 class ValenceExcitations(Signals):
     def __init__(self, *args, **kwargs):
         self.transient_data = None
+        self.spin_orbit_data = None
         super().__init__(*args, **kwargs)
 
     def parse_gaussian_lines(self, lines, *args, **kwargs):
@@ -1369,13 +1389,13 @@ class ValenceExcitations(Signals):
                     line = lines[i]
             elif re.search(r"Excited State\s*\d+:", lines[i]):
                 excitation_data = re.search(
-                    r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+(\d+\.\d+)",
+                    r"Excited State\s*\d+:\s*([\D]+)-([\S]+)\s+-?(\d+\.\d+)",
                     lines[i],
                 )
                 # sometimes gaussian cannot determine the symmetry
                 if excitation_data is None:
                     excitation_data = re.search(
-                        r"Excited State\s*\d+:\s*[\S]+-?Sym\s+(\d+\.\d+)",
+                        r"Excited State\s*\d+:\s*[\S]+-?Sym\s+-?(\d+\.\d+)",
                         lines[i],
                     )
                     multiplicity.append(None)
@@ -1420,6 +1440,11 @@ class ValenceExcitations(Signals):
         multiplicity = []
         mult = "Singlet"
         
+        soc_nrgs = []
+        soc_oscillator_str = []
+        soc_oscillator_vel = []
+        soc_rotatory_str_len = []
+
         transient_oscillator_str = []
         transient_oscillator_vel = []
         transient_rot_str = []
@@ -1438,40 +1463,68 @@ class ValenceExcitations(Signals):
                 nrgs.append(float(info.group(1)))
                 i += 1
             elif line.startswith("STATE"):
-                info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(\d+\.\d+)", line)
+                info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line)
                 nrgs.append(float(info.group(1)))
                 multiplicity.append(mult)
                 i += 1
-            elif "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SOC" not in line and "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    oscillator_str.append(float(info[3]))
+                    if info[3] == "spin":
+                        oscillator_str.append(0)
+                    else:
+                        oscillator_str.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    oscillator_vel.append(float(info[3]))
+                    if info[3] == "spin":
+                        oscillator_vel.append(0)
+                    else:
+                        oscillator_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif line.endswith("CD SPECTRUM") and "TRANSIENT" not in line:
+            elif (
+                line.endswith("CD SPECTRUM") and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    rotatory_str_len.append(float(info[3]))
+                    if info[3] == "spin":
+                        rotatory_str_len.append(0)
+                    else:
+                        rotatory_str_len.append(float(info[3]))
                     i += 1
                     line = lines[i]
-            elif "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and "TRANSIENT" not in line:
+            elif (
+                "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
+                "TRANSIENT" not in line and
+                "SPIN ORBIT" not in line
+            ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    rotatory_str_vel.append(float(info[3]))
+                    if info[3] == "spin":
+                        rotatory_str_vel.append(0)
+                    else:
+                        rotatory_str_vel.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1507,7 +1560,43 @@ class ValenceExcitations(Signals):
                     corr.append(float(info[-1]))
                     i += 1
                     line = lines[i]
-                
+        
+            elif line.startswith("Eigenvalues of the SOC matrix:"):
+                i += 4
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_nrgs.append(float(info[-1]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_str.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_vel.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SPIN ORBIT CORRECTED CD SPECTRUM" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_rotatory_str_len.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
             else:
                 i += 1
 
@@ -1546,6 +1635,23 @@ class ValenceExcitations(Signals):
                 self.transient_data = []
             self.transient_data.append(
                 TransientExcitation(
+                    nrg,
+                    rotatory_str_len=rot_len,
+                    oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel,
+                )
+            )
+
+        for nrg, rot_len, osc_len, osc_vel in zip(
+            soc_nrgs,
+            soc_rotatory_str_len,
+            soc_oscillator_str,
+            soc_oscillator_vel,
+        ):
+            if not hasattr(self, "spin_orbit_data") or not self.spin_orbit_data:
+                self.spin_orbit_data = []
+            self.spin_orbit_data.append(
+                SOCExcitation(
                     nrg,
                     rotatory_str_len=rot_len,
                     oscillator_str=osc_len,
