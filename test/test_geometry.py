@@ -900,6 +900,9 @@ class TestGeometry(TestWithTimer):
     def test_define_layer(self):
         g = Geometry(TestGeometry.pd_1)
         h = Geometry(TestGeometry.pd_2)
+        for atom in g.atoms:
+            atom.layer = ""
+            atom.link_info = {}
         g.define_layer("H", g.atoms[0], 4)
         g.define_layer("L", "!H", 5)
         counter = 0

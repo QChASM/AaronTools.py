@@ -90,7 +90,7 @@ class OniomAtom(Atom):
             if charge == "" or charge == None:
                 pass
             else:
-                self.charge = float(str(charge).strip)
+                self.charge = float(str(charge).strip())
             self.layer=layer
             self.atomtype=atomtype
 
