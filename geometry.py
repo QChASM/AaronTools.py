@@ -1481,7 +1481,7 @@ class Geometry:
             while max(ranks) >= len(ranks):
                 for i in range(1, max(ranks) + 1):
                     if ranks.count(i - 1) == 0:
-                        for j in range(1, max(ranks)):
+                        for j in range(1, len(ranks)):
                             if ranks[j] >= i:
                                 ranks[j] -= 1
 

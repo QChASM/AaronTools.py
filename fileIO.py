@@ -1223,7 +1223,7 @@ class FileReader:
                     info = lines[i].split()
                     # name = info[1]
                     coords = np.array([float(x) for x in info[2:5]])
-                    element = re.match("([A-Za-z]+)", info[5]).group(1)
+                    element = re.match("([A-Z][a-z]?)", info[1]).group(1)
                     atoms.append(
                         Atom(element=element, coords=coords, name=str(j + 1))
                     )
@@ -2444,7 +2444,7 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
-                element = line[0].split("(")[0]
+                element = line[0].split("(")[0].split("-")[0]
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
@@ -2673,6 +2673,9 @@ class FileReader:
                     if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
                         self.other["energy"] = nrg
                     self.other[nrg_match.group(1)] = nrg
+
+            if line.startswith(" Energy= "):
+                self.other["energy"] = float(line.split()[1])
 
             # CC energy
             if line.startswith(" CCSD(T)= "):
@@ -2959,6 +2962,22 @@ class FileReader:
                     charges.append(float(line.split()[2]))
                     self.atoms[i].charge = float(line.split()[2])
                 self.other[charge_match.group(1) + " Charges"] = charges
+
+            if "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
+                self.skip_lines(f, 1)
+                n += 1
+                cm5_charges = []
+                hirshfeld_charges = []
+                for i in range(0, len(self.atoms)):
+                    line = f.readline()
+                    n += 1
+                    data = line.split()
+                    hirshfeld = float(data[2])
+                    cm5 = float(data[7])
+                    hirshfeld_charges.append(hirshfeld)
+                    cm5_charges.append(cm5)
+                self.other["Hirshfeld Charges"] = hirshfeld_charges
+                self.other["CM5 Charges"] = cm5_charges
 
             # capture errors
             # only keep first error, want to fix one at a time

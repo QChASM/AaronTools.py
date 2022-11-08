@@ -131,20 +131,26 @@ class TestWithTimer(unittest.TestCase):
             status = "ok"
         TestWithTimer.last_errors = TestWithTimer.errors
         TestWithTimer.last_fails = TestWithTimer.fails
+        
+        if TestWithTimer.last_result is None:
+            print("Skipped some tests in %.4s    %s" % (TestWithTimer.total_time, status))
 
-        print(
-            "Ran %d test in %.4fs  %s"
-            % (
-                TestWithTimer.last_result.testsRun - TestWithTimer.test_count,
-                TestWithTimer.total_time,
-                status,
+        else:
+            print(
+                "Ran %d tests in %.4fs  %s"
+                % (
+                    TestWithTimer.last_result.testsRun - TestWithTimer.test_count,
+                    TestWithTimer.total_time,
+                    status,
+                )
             )
-        )
-        TestWithTimer.test_count = TestWithTimer.last_result.testsRun
+            TestWithTimer.test_count = TestWithTimer.last_result.testsRun
         print(unittest.TextTestResult.separator2)
 
     @classmethod
     def get_status(cls):
+        if TestWithTimer.last_result is None:
+            return "skipped"
         if TestWithTimer.errors != len(TestWithTimer.last_result.errors):
             status = "ERROR"
         elif TestWithTimer.fails != len(TestWithTimer.last_result.failures):

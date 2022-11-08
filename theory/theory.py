@@ -957,7 +957,7 @@ class Theory:
         if GAUSSIAN_POST in other_kw_dict:
             for item in other_kw_dict[GAUSSIAN_POST]:
                 out_str += item
-                out_str += " "
+                out_str += "\n"
 
             out_str += "\n"
 
