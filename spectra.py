@@ -704,23 +704,30 @@ class Frequency(Signals):
         # some software doesn't print reduced mass or force constants
         # we can calculate them if we have atom with mass, displacement
         # vectors, and vibrational frequencies
-        if self.data and (
-            not self.data[-1].forcek or
-            not self.data[-1].red_mass
-        ) and "atoms" in kwargs:
-            atoms = kwargs["atoms"]
-            for mode in self.data:
-                norm = sum(np.sum(mode.vector ** 2, axis=1))
-                disp = mode.vector / norm
-                mode.vector = disp
-                mu = 0
-                for i in range(0, len(mode.vector)):
-                    mu += np.dot(disp[i], disp[i]) * atoms[i].mass
-                mode.red_mass = mu
-                k = 4 * np.pi ** 2 * mode.frequency ** 2
-                k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
-                k *= UNIT.AMU_TO_KG * 1e-2
-                mode.forcek = k
+        try:
+            if self.data and (
+                not self.data[-1].forcek or
+                not self.data[-1].red_mass
+            ) and "atoms" in kwargs:
+                atoms = kwargs["atoms"]
+                for mode in self.data:
+                    norm = sum(np.sum(mode.vector ** 2, axis=1))
+                    disp = mode.vector / norm
+                    mode.vector = disp
+                    mu = 0
+                    for i in range(0, len(mode.vector)):
+                        mu += np.dot(disp[i], disp[i]) * atoms[i].mass
+                    mode.red_mass = mu
+                    k = 4 * np.pi ** 2 * mode.frequency ** 2
+                    k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
+                    k *= UNIT.AMU_TO_KG * 1e-2
+                    mode.forcek = k
+        except IndexError:
+            # some software can compute frequencies with a user-supplied
+            # hessian, so it never prints the structure
+            # ORCA can do this. It will print the input structure, but
+            # we don't parse that
+            pass
     
     def parse_gaussian_lines(
         self, lines, *args, hpmodes=None, harmonic=True, **kwargs

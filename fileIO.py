@@ -72,6 +72,7 @@ ERROR = {
 }
 
 ERROR_ORCA = {
+    "ORCA finished by error termination in SCF": "SCF_CONV",
     "SCF NOT CONVERGED AFTER": "SCF_CONV",
     # ORCA doesn't actually exit if the SCF doesn't converge...
     # "CONV_CDS": "",
@@ -327,6 +328,7 @@ class FileWriter:
         cls, geom, outfile=None, **kwargs
     ):
         from AaronTools.finders import ChiralCenters
+        from AaronTools.const import ELECTRONEGATIVITY
         
         elements = geom.element_counts()
         s = ""
@@ -349,27 +351,188 @@ class FileWriter:
                 0 # if not hasattr(atom, "_saturation") else len(atom.connected) - atom._saturation,
             )
             n_bonds += len(atom.connected)
-            for atom2 in atom.connected:
-                ndx2 = geom.atoms.index(atom2)
-                if ndx2 < i:
-                    continue
-                
-                bond_block += "%3i%3i%3i  0  0  0  0\n" % (
-                    i + 1, ndx2 + 1, bond_order_to_code(atom.bond_order(atom2))
-                )
-        
+ 
         try:
             geom.find(ChiralCenters())
             chiral = True
         except LookupError:
             chiral = False
-        
+
         s += "%3i%3i  0  0%3i  0  0  0  0  0  0 V2000\n" % (
             len(geom.atoms),
             n_bonds // 2,
             1 if chiral else 0,
         )
         s += atom_block
+
+        # determine bond info
+        # need to be extra careful with aromatic bonds b/c
+        # sometimes conjugated bonds look like aromatic to AaronTools
+        # only atoms in a ring should have aromatic bonds, and those
+        # bonds should only be to atoms in the same ring
+        rings = []
+        bonds = dict()
+        ndx = {atom: i for i, atom in enumerate(geom.atoms)}
+        for atom in geom.atoms:
+            for i, atom2 in enumerate(atom.connected):
+                bond_order = atom.bond_order(atom2)
+                if ndx[atom] < ndx[atom2]:
+                    bonds[(atom, atom2)] = bond_order
+                for atom3 in list(atom.connected)[:i]:
+                    try:
+                        path = geom.shortest_path(atom2, atom3, avoid=atom)
+                        rings.append(set([*path, atom]))
+                    except LookupError:
+                        pass
+
+        for bond, order in bonds.items():
+            if order == 1.5:
+                for ring in rings:
+                    if len(ring.intersection(bond)) == 2:
+                        break
+                    elif len(ring.intersection(bond)) == 1:
+                        bonds[bond] = 1
+                        break
+                else:
+                    # flip the sign to show that this is something AaronTools
+                    # says is aromatic, but isn't in a ring
+                    if bonds[bond] == 1.5:
+                        bonds[bond] *= -1
+
+        # group delocalized bonds together
+        contiguous_aro_bonds = []
+        for bond, order in bonds.items():
+            if order < 0:
+                for group in contiguous_aro_bonds:
+                    if group.intersection(bond):
+                        group.update(bond)
+                        break
+                else:
+                    contiguous_aro_bonds.append(set(bond))
+
+        for i, group in enumerate(contiguous_aro_bonds):
+            pass
+            # print(i)
+            # for atom in group:
+            #     print(atom)
+            # print("\n\n")
+        
+        # combine groups of delocalized bonds if they overlap
+        overlapping_groups = False
+        for i, group1 in enumerate(contiguous_aro_bonds):
+            for group2 in contiguous_aro_bonds[:i]:
+                if group1.intersection(group2):
+                    overlapping_groups = True
+        while overlapping_groups:
+            overlapping_groups = False
+            for i, group1 in enumerate(contiguous_aro_bonds):
+                found_overlap = False
+                for j, group2 in enumerate(contiguous_aro_bonds[:i]):
+                    if group1.intersection(group2):
+                        group1.update(group2)
+                        found_overlap = True
+                        contiguous_aro_bonds.pop(j)
+                        break
+                if found_overlap:
+                    break
+            
+            for i, group1 in enumerate(contiguous_aro_bonds):
+                for group2 in contiguous_aro_bonds[:i]:
+                    if group1.intersection(group2):
+                        overlapping_groups = True
+                
+        
+        # finding the longest path from one atom to another in a group
+        # will give us the chain in order
+        for group in contiguous_aro_bonds:
+            longest_path = []
+            for i, atom1 in enumerate(group):
+                for atom2 in list(group)[:i]:
+                    avoid = [atom for atom in atom1.connected if atom not in group]
+                    avoid.extend([atom for atom in atom2.connected if atom not in group])
+                    path = geom.shortest_path(
+                        atom1, atom2, avoid,
+                    )
+                    if len(path) > len(longest_path):
+                        longest_path = path
+            
+            # there might be branches coming off of the main chain
+            branches = [longest_path]
+            excluded = group - set(longest_path)
+            included = group.intersection(longest_path)
+            while excluded:
+                for branch in branches:
+                    for atom in branch[1:-1]:
+                        branch_added = False
+                        for atom2 in atom.connected.intersection(excluded):
+                            longest_path = []
+                            for atom3 in excluded - set([atom2]):
+                                try:
+                                    path = geom.shortest_path(
+                                        atom2, atom3, avoid=included,
+                                    )
+                                    if len(path) > len(longest_path):
+                                        longest_path = path
+                                except LookupError:
+                                    pass
+                            if longest_path:
+                                branches.append(longest_path)
+                                branch_added = True
+                                break
+                        if branch_added:
+                            excluded = excluded - set(branches[-1])
+                            included = included.union(set(branches[-1]))
+            
+            for branch in branches:
+                # if a branch one has two atoms (one bond), look
+                # at the neighbors of this to determine a better
+                # bond order
+                if len(branch) == 2:
+                    branch_bond = (branch[0], branch[1])
+                    if ndx[branch[0]] > ndx[branch[1]]:
+                        branch_bond = (branch[1], branch[0])
+                    total_diff = 0
+                    for atom in branch:
+                        for neighbor in atom.connected - set(branch):
+                            total_diff += neighbor._saturation
+                            for neighbor2 in neighbor.connected:
+                                bond = (neighbor, neighbor2)
+                                if ndx[neighbor] > ndx[neighbor2]:
+                                    bond = (neighbor2, neighbor)
+                                if bonds[bond] > 0:
+                                    total_diff -= bonds[bond]
+                                else:
+                                    total_diff -= 1
+
+                    if total_diff <= 1:
+                        bonds[branch_bond] = 1
+                    continue
+            
+                # for longer chains, just alternate double and single bonds
+                # favor double bonds at the more electronegative side of the chain?
+                # maybe there's a better way
+                start_e_nrg = sum(ELECTRONEGATIVITY[atom.element] for atom in branch[:2])
+                end_e_nrg = sum(ELECTRONEGATIVITY[atom.element] for atom in branch[-2:])
+                if end_e_nrg > start_e_nrg:
+                    branch.reverse()
+                for i, atom in enumerate(branch[:-1]):
+                    atom2 = branch[i + 1]
+                    bond = (atom, atom2)
+                    if ndx[atom] > ndx[atom2]:
+                        bond = (atom2, atom)
+                    
+                    if i % 2 == 0:
+                        bonds[bond] = 2
+                    else:
+                        bonds[bond] = 1
+                
+        for bond in bonds:
+            # print(bond, bonds[bond])
+            bond_block += "%3i%3i%3i  0  0  0  0\n" % (
+                ndx[bond[0]] + 1, ndx[bond[1]] + 1, bond_order_to_code(bonds[bond])
+            )
+        
+            
         s += bond_block
         s += "M  END\n"
         
@@ -1644,6 +1807,7 @@ class FileReader:
                 n += 1
                 continue
             else:
+
                 nrg = nrg_regex.match(line)
                 if nrg is not None:
                     nrg_type = nrg.group(1)
@@ -1990,6 +2154,20 @@ class FileReader:
 
                     self.other["uv_vis"] = ValenceExcitations(s, style="orca")
 
+                if "INPUT FILE" in line:
+                    try:
+                        coord_match = re.compile("\*\s*(xyz|int|gzmat)\s+-?\d+\s+(\d+)", re.IGNORECASE)
+                        while "****END OF INPUT****" not in line:
+                            line = f.readline()
+                            n += 1
+                            if "mult" in line.lower():
+                                self.other["multiplicity"] = int(float(line.split()[-1]))
+                            if coord_match.search(line):
+                                self.other["multiplicity"] = int(coord_match.search(line).group(2))
+
+                    except ValueError:
+                        pass
+
                 elif line.startswith("MOLECULAR ORBITALS"):
                     # read molecular orbitals
                     self.skip_lines(f, 1)
@@ -2004,7 +2182,7 @@ class FileReader:
                     at_info = re.compile(
                         "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
                     )
-                    if self.other["multiplicity"] != 1:
+                    if "multiplicity" in self.other and self.other["multiplicity"] != 1:
                         args = [
                             ("alpha_coefficients", "beta_coefficients"),
                             ("alpha_nrgs", "beta_nrgs"),
@@ -2116,6 +2294,9 @@ class FileReader:
                                 self.other["error_msg"] += line.strip() + "\n"
                                 line = f.readline()
                                 n += 1
+                            if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
+                                del self.other["error"]
+                                del self.other["error_msg"]
 
                 line = f.readline()
                 n += 1
