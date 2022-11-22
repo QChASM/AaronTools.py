@@ -332,7 +332,6 @@ H    -1.46740   1.39172  -0.71711
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
 
-
     def test_write_in(self):
         """write psi4 input file"""
         # like gaussian input files, this compares exact output
