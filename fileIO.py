@@ -2176,29 +2176,21 @@ class FileReader:
                     self.skip_lines(f, 1)
                     n += 1
                     line = f.readline()
-                    self.other["alpha_coefficients"] = []
-                    self.other["beta_coefficients"] = []
-                    self.other["alpha_nrgs"] = []
-                    self.other["beta_nrgs"] = []
-                    self.other["alpha_occupancies"] = []
-                    self.other["beta_occupancies"] = []
                     at_info = re.compile(
                         "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
                     )
-                    if "multiplicity" in self.other and self.other["multiplicity"] != 1:
-                        args = [
-                            ("alpha_coefficients", "beta_coefficients"),
-                            ("alpha_nrgs", "beta_nrgs"),
-                            ("alpha_occupancies", "beta_occupancies"),
-                        ]
-                    else:
-                        args = [
-                            ("alpha_coefficients",),
-                            ("alpha_nrgs",),
-                            ("alpha_occupancies",),
-                        ]
+                    args = [
+                        ("alpha_coefficients", "beta_coefficients"),
+                        ("alpha_nrgs", "beta_nrgs"),
+                        ("alpha_occupancies", "beta_occupancies"),
+                    ]
 
                     for coeff_name, nrg_name, occ_name in zip(*args):
+                        if not line.strip():
+                            break
+                        self.other[coeff_name] = []
+                        self.other[nrg_name] = []
+                        self.other[occ_name] = []
                         self.other["shell_to_atom"] = []
                         mo_coefficients = []
                         orbit_nrgs = []
@@ -2238,6 +2230,7 @@ class FileReader:
                             line = f.readline()
                             n += 1
                         self.other[coeff_name].extend(mo_coefficients)
+                        line = f.readline()
                         line = f.readline()
 
                 elif line.startswith("N(Alpha)  "):
@@ -2691,9 +2684,10 @@ class FileReader:
                     a += 1
                     coords = np.zeros(3)
                     info = line.split()
+                    element = info[0].split("(")[0].split("-")[0].rstrip("1234567890")
                     rv += [
                         Atom(
-                            element=info[0].split("-")[0],
+                            element=element,
                             name=str(a),
                             coords=coords,
                         )
@@ -2837,7 +2831,7 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
-                element = line[0].split("(")[0].split("-")[0]
+                element = line[0].split("(")[0].split("-")[0].rstrip("1234567890")
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1

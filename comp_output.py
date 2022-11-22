@@ -371,7 +371,7 @@ class CompOutput:
                 )
             )
 
-            weights = weight = 1 / (1 + (v0 / freqs) ** 4)
+            weights = 1 / (1 + (v0 / freqs) ** 4)
 
             Sv = np.sum(
                 weights
