@@ -1677,7 +1677,7 @@ class Orbitals:
         alpha_occ=None,
         beta_occ=None,
         low_mem=False,
-        spin=True
+        spin=False
     ):
         """
         returns the eletron density
@@ -1689,8 +1689,6 @@ class Orbitals:
         beta_occ - same at alpha_occ, but for beta electrons
         spin - plot spin density
         """
-
-        print(spin)
 
         # set default occupancy
         if alpha_occ is None:
