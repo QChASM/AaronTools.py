@@ -1209,7 +1209,7 @@ class FileReader:
 
     def __delitem__(self, key):
         if hasattr(self, key):
-            del self.key
+            delattr(self, key)
         if key in self.other:
             del self.other["key"]
     
