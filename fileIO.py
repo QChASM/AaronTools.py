@@ -20,6 +20,9 @@ from AaronTools.utils.utils import (
     is_int,
     is_num,
     float_num,
+    perp_vector,
+    rotation_matrix,
+    angle_between_vectors,
 )
 
 read_types = [
@@ -501,6 +504,7 @@ class FileWriter:
         cls, geom, outfile=None, **kwargs
     ):
         from AaronTools.finders import ChiralCenters
+        from AaronTools.const import ELECTRONEGATIVITY
         
         elements = geom.element_counts()
         s = ""
@@ -523,27 +527,188 @@ class FileWriter:
                 0 # if not hasattr(atom, "_saturation") else len(atom.connected) - atom._saturation,
             )
             n_bonds += len(atom.connected)
-            for atom2 in atom.connected:
-                ndx2 = geom.atoms.index(atom2)
-                if ndx2 < i:
-                    continue
-                
-                bond_block += "%3i%3i%3i  0  0  0  0\n" % (
-                    i + 1, ndx2 + 1, bond_order_to_code(atom.bond_order(atom2))
-                )
-        
+ 
         try:
             geom.find(ChiralCenters())
             chiral = True
         except LookupError:
             chiral = False
-        
+
         s += "%3i%3i  0  0%3i  0  0  0  0  0  0 V2000\n" % (
             len(geom.atoms),
             n_bonds // 2,
             1 if chiral else 0,
         )
         s += atom_block
+
+        # determine bond info
+        # need to be extra careful with aromatic bonds b/c
+        # sometimes conjugated bonds look like aromatic to AaronTools
+        # only atoms in a ring should have aromatic bonds, and those
+        # bonds should only be to atoms in the same ring
+        rings = []
+        bonds = dict()
+        ndx = {atom: i for i, atom in enumerate(geom.atoms)}
+        for atom in geom.atoms:
+            for i, atom2 in enumerate(atom.connected):
+                bond_order = atom.bond_order(atom2)
+                if ndx[atom] < ndx[atom2]:
+                    bonds[(atom, atom2)] = bond_order
+                for atom3 in list(atom.connected)[:i]:
+                    try:
+                        path = geom.shortest_path(atom2, atom3, avoid=atom)
+                        rings.append(set([*path, atom]))
+                    except LookupError:
+                        pass
+
+        for bond, order in bonds.items():
+            if order == 1.5:
+                for ring in rings:
+                    if len(ring.intersection(bond)) == 2:
+                        break
+                    elif len(ring.intersection(bond)) == 1:
+                        bonds[bond] = 1
+                        break
+                else:
+                    # flip the sign to show that this is something AaronTools
+                    # says is aromatic, but isn't in a ring
+                    if bonds[bond] == 1.5:
+                        bonds[bond] *= -1
+
+        # group delocalized bonds together
+        contiguous_aro_bonds = []
+        for bond, order in bonds.items():
+            if order < 0:
+                for group in contiguous_aro_bonds:
+                    if group.intersection(bond):
+                        group.update(bond)
+                        break
+                else:
+                    contiguous_aro_bonds.append(set(bond))
+
+        for i, group in enumerate(contiguous_aro_bonds):
+            pass
+            # print(i)
+            # for atom in group:
+            #     print(atom)
+            # print("\n\n")
+        
+        # combine groups of delocalized bonds if they overlap
+        overlapping_groups = False
+        for i, group1 in enumerate(contiguous_aro_bonds):
+            for group2 in contiguous_aro_bonds[:i]:
+                if group1.intersection(group2):
+                    overlapping_groups = True
+        while overlapping_groups:
+            overlapping_groups = False
+            for i, group1 in enumerate(contiguous_aro_bonds):
+                found_overlap = False
+                for j, group2 in enumerate(contiguous_aro_bonds[:i]):
+                    if group1.intersection(group2):
+                        group1.update(group2)
+                        found_overlap = True
+                        contiguous_aro_bonds.pop(j)
+                        break
+                if found_overlap:
+                    break
+            
+            for i, group1 in enumerate(contiguous_aro_bonds):
+                for group2 in contiguous_aro_bonds[:i]:
+                    if group1.intersection(group2):
+                        overlapping_groups = True
+                
+        
+        # finding the longest path from one atom to another in a group
+        # will give us the chain in order
+        for group in contiguous_aro_bonds:
+            longest_path = []
+            for i, atom1 in enumerate(group):
+                for atom2 in list(group)[:i]:
+                    avoid = [atom for atom in atom1.connected if atom not in group]
+                    avoid.extend([atom for atom in atom2.connected if atom not in group])
+                    path = geom.shortest_path(
+                        atom1, atom2, avoid,
+                    )
+                    if len(path) > len(longest_path):
+                        longest_path = path
+            
+            # there might be branches coming off of the main chain
+            branches = [longest_path]
+            excluded = group - set(longest_path)
+            included = group.intersection(longest_path)
+            while excluded:
+                for branch in branches:
+                    for atom in branch[1:-1]:
+                        branch_added = False
+                        for atom2 in atom.connected.intersection(excluded):
+                            longest_path = []
+                            for atom3 in excluded - set([atom2]):
+                                try:
+                                    path = geom.shortest_path(
+                                        atom2, atom3, avoid=included,
+                                    )
+                                    if len(path) > len(longest_path):
+                                        longest_path = path
+                                except LookupError:
+                                    pass
+                            if longest_path:
+                                branches.append(longest_path)
+                                branch_added = True
+                                break
+                        if branch_added:
+                            excluded = excluded - set(branches[-1])
+                            included = included.union(set(branches[-1]))
+            
+            for branch in branches:
+                # if a branch one has two atoms (one bond), look
+                # at the neighbors of this to determine a better
+                # bond order
+                if len(branch) == 2:
+                    branch_bond = (branch[0], branch[1])
+                    if ndx[branch[0]] > ndx[branch[1]]:
+                        branch_bond = (branch[1], branch[0])
+                    total_diff = 0
+                    for atom in branch:
+                        for neighbor in atom.connected - set(branch):
+                            total_diff += neighbor._saturation
+                            for neighbor2 in neighbor.connected:
+                                bond = (neighbor, neighbor2)
+                                if ndx[neighbor] > ndx[neighbor2]:
+                                    bond = (neighbor2, neighbor)
+                                if bonds[bond] > 0:
+                                    total_diff -= bonds[bond]
+                                else:
+                                    total_diff -= 1
+
+                    if total_diff <= 1:
+                        bonds[branch_bond] = 1
+                    continue
+            
+                # for longer chains, just alternate double and single bonds
+                # favor double bonds at the more electronegative side of the chain?
+                # maybe there's a better way
+                start_e_nrg = sum(ELECTRONEGATIVITY[atom.element] for atom in branch[:2])
+                end_e_nrg = sum(ELECTRONEGATIVITY[atom.element] for atom in branch[-2:])
+                if end_e_nrg > start_e_nrg:
+                    branch.reverse()
+                for i, atom in enumerate(branch[:-1]):
+                    atom2 = branch[i + 1]
+                    bond = (atom, atom2)
+                    if ndx[atom] > ndx[atom2]:
+                        bond = (atom2, atom)
+                    
+                    if i % 2 == 0:
+                        bonds[bond] = 2
+                    else:
+                        bonds[bond] = 1
+                
+        for bond in bonds:
+            # print(bond, bonds[bond])
+            bond_block += "%3i%3i%3i  0  0  0  0\n" % (
+                ndx[bond[0]] + 1, ndx[bond[1]] + 1, bond_order_to_code(bonds[bond])
+            )
+        
+            
         s += bond_block
         s += "M  END\n"
         
@@ -1357,7 +1522,7 @@ class FileReader:
 
     def __delitem__(self, key):
         if hasattr(self, key):
-            del self.key
+            delattr(self, key)
         if key in self.other:
             del self.other["key"]
     
@@ -2375,29 +2540,21 @@ class FileReader:
                     self.skip_lines(f, 1)
                     n += 1
                     line = f.readline()
-                    self.other["alpha_coefficients"] = []
-                    self.other["beta_coefficients"] = []
-                    self.other["alpha_nrgs"] = []
-                    self.other["beta_nrgs"] = []
-                    self.other["alpha_occupancies"] = []
-                    self.other["beta_occupancies"] = []
                     at_info = re.compile(
                         "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
                     )
-                    if "multiplicity" in self.other and self.other["multiplicity"] != 1:
-                        args = [
-                            ("alpha_coefficients", "beta_coefficients"),
-                            ("alpha_nrgs", "beta_nrgs"),
-                            ("alpha_occupancies", "beta_occupancies"),
-                        ]
-                    else:
-                        args = [
-                            ("alpha_coefficients",),
-                            ("alpha_nrgs",),
-                            ("alpha_occupancies",),
-                        ]
+                    args = [
+                        ("alpha_coefficients", "beta_coefficients"),
+                        ("alpha_nrgs", "beta_nrgs"),
+                        ("alpha_occupancies", "beta_occupancies"),
+                    ]
 
                     for coeff_name, nrg_name, occ_name in zip(*args):
+                        if not line.strip():
+                            break
+                        self.other[coeff_name] = []
+                        self.other[nrg_name] = []
+                        self.other[occ_name] = []
                         self.other["shell_to_atom"] = []
                         mo_coefficients = []
                         orbit_nrgs = []
@@ -2437,6 +2594,7 @@ class FileReader:
                             line = f.readline()
                             n += 1
                         self.other[coeff_name].extend(mo_coefficients)
+                        line = f.readline()
                         line = f.readline()
 
                 elif line.startswith("N(Alpha)  "):
@@ -2802,6 +2960,52 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def set_angle(atom1, atom2, atom3, target_angle):
+            b1 = atom1.coords - atom2.coords
+            b2 = atom3.coords - atom2.coords
+            current_angle = angle_between_vectors(b1, b2)
+            d_theta = target_angle - current_angle
+            coords = np.array([
+                b1,
+                [0, 0, 0],
+                b2,
+            ])
+            v = perp_vector(coords)
+            R = rotation_matrix(d_theta, v)
+            atom3.coords -= atom2.coords
+            atom3.coords = np.dot(R, atom3.coords)
+            atom3.coords += atom2.coords
+            b1 = atom1.coords - atom2.coords
+            b2 = atom3.coords - atom2.coords
+            current_angle = angle_between_vectors(b1, b2)
+            return abs(current_angle - target_angle) < 1e-5
+
+        def set_torsion(atom1, atom2, atom3, atom4, target_angle):
+            b1 = atom4.coords - atom3.coords
+            b2 = atom3.coords - atom2.coords
+            b3 = atom2.coords - atom1.coords
+            v1 = np.cross(b1, b2)
+            v2 = np.cross(b2, b3)
+            current_angle = -np.arctan2(
+                np.dot(b2, np.cross(v1, v2)),
+                np.linalg.norm(b2) * np.dot(v1, v2)
+            )
+            da = target_angle - current_angle
+            R = rotation_matrix(-da, atom2.coords - atom3.coords)
+            atom4.coords -= atom3.coords
+            atom4.coords = np.dot(R, atom4.coords)
+            atom4.coords += atom3.coords
+            b1 = atom4.coords - atom3.coords
+            b2 = atom3.coords - atom2.coords
+            b3 = atom2.coords - atom1.coords
+            v1 = np.cross(b1, b2)
+            v2 = np.cross(b2, b3)
+            current_angle = -np.arctan2(
+                np.dot(b2, np.cross(v1, v2)),
+                np.linalg.norm(b2) * np.dot(v1, v2)
+            )
+            return abs(current_angle - target_angle) < 1e-5
+
         def get_input(f, n):
             rv = []
             line = f.readline()
@@ -2815,19 +3019,183 @@ class FileReader:
             line = f.readline()
             n += 1
             a = 0
-            if len(line.split()) == 1:
-                # internal coordinate z-matrix
-                # not parsed
+            info = line.split()
+            if len(line.split()) == 1 or any(info[1] == x for x in ["0", "-1"]):
+                # parse z matrix input
+                # z matrices can have variables, we'll need to interpolate those
+                variables = dict()
+                reading_molecule = True
+                molecule_data = ""
                 while line.split():
-                    line = line.split()
-                    rv += [Atom(element=line[0], name=str(a), coords=np.zeros(3))]
-                    a += 1
+                    if "Variables:" in line or "Constants:" in line:
+                        # switch from reading molecule to reading variables
+                        # variable list comes after atoms
+                        reading_molecule = False
+                    
+                    if reading_molecule:
+                        molecule_data += line
+                    else:
+                        try:
+                            var, value = line.split()
+                            variables[var] = value
+                        except ValueError:
+                            pass
+                    
                     line = f.readline()
+                
+                for i, line in enumerate(molecule_data.splitlines()):
+                    # get coordinates for molecule
+                    a += 1
+                    coords = np.zeros(3)
+                    info = line.split()
+                    element = info[0].split("(")[0].split("-")[0].rstrip("1234567890")
+                    rv += [
+                        Atom(
+                            element=element,
+                            name=str(a),
+                            coords=coords,
+                        )
+                    ]
+
+
+                    # first atom, leave it at the origin
+                    if len(info) == 1:
+                        continue
+
+                    bond_ndx = int(info[1])
+                    # if the first thing is > 0, it defines a distance
+                    # between this atom and the bond_ndx atom
+                    # otherwise, it is cartesian coordinates
+                    if bond_ndx <= 0:
+                        # if bond_ndx < 0:
+                        #     rv[-1].flag = True
+                        # if the number after the element is 0, then
+                        # the input is cartesian coordinates
+                        coords = info[2:]
+                        for j, coord in enumerate(coords):
+                            try:
+                                coords[j] = variables[coord]
+                            except KeyError:
+                                pass
+                        coords = [float(coord) for coord in coords]
+                        rv[-1].coords = np.array(coords)
+                        continue
+
+                    bond_ndx -= 1
+                    rv[-1].coords += rv[bond_ndx].coords
+                    bond_length = info[2]
+                    sign = 1
+                    # interpolate variable
+                    try:
+                        bond_length = variables[bond_length]
+                    except KeyError:
+                        try:
+                            # these might have a minus sign
+                            bond_length = variables[bond_length.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    # convert text to float and fix sign
+                    bond_length = sign * float(bond_length)
+                    rv[-1].coords[2] += bond_length
+                    # only bond length was defined (i.e. 2nd atom in z matrix input)
+                    # go on to next atom
+                    if len(info) < 4:
+                        continue
+                    
+                    # similar process for angles
+                    angle_ndx = int(info[3]) - 1
+                    target_angle = info[4]
+                    sign = 1
+                    try:
+                        target_angle = variables[target_angle]
+                    except KeyError:
+                        try:
+                            target_angle = variables[target_angle.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    target_angle = sign * float(target_angle)
+                    target_angle = np.deg2rad(target_angle)
+                    angle_set = False
+                    # for whatever reason, this doesn't work on the first try a lot
+                    j = 0
+                    while not angle_set and j < 10:
+                        angle_set = set_angle(rv[angle_ndx], rv[bond_ndx], rv[-1], target_angle)
+                        j += 1
+
+                    # if there's no torsion info, go to next atom
+                    if len(info) < 6:
+                        continue
+
+                    coord_code = 0
+                    if len(info) >= 8:
+                        coord_code = int(info[7])
+
+                    # next entry can either be a 1-2-3 angle or a 1-2-3-4 angle
+                    if coord_code == 1:
+                        # coordinates are a bond length and two 1-2-3 angles
+                        angle_ndx = int(info[5]) - 1
+                        v = perp_vector([rv[-1].coords, rv[bond_ndx].coords, rv[angle_ndx].coords])
+                        current_angle = rv[bond_ndx].angle(rv[-1], rv[angle_ndx])
+                        target_angle = info[6]
+                        try:
+                            target_angle = variables[target_angle]
+                        except KeyError:
+                            try:
+                                target_angle = variables[target_angle.lstrip("-")]
+                                sign = -1
+                            except KeyError:
+                                pass
+                        target_angle = sign * float(target_angle)
+                        target_angle = np.deg2rad(target_angle)
+                        angle_set = False
+                        # for whatever reason, this doesn't work on the first try a lot
+                        j = 0
+                        while not angle_set and j < 10:
+                            angle_set = set_angle(rv[angle_ndx], rv[bond_ndx], rv[-1], target_angle)
+                            j += 1
+                        continue
+                    
+                    # 1-2-3-4 angle
+                    torsion_ndx = int(info[5]) - 1
+
+                    target_angle = info[6]
+                    try:
+                        target_angle = variables[target_angle]
+                    except KeyError:
+                        try:
+                            target_angle = variables[target_angle.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    target_angle = sign * float(target_angle)
+                    target_angle = np.deg2rad(target_angle)
+
+                    angle_set = False
+                    # this seems to always work on the first try
+                    j = 0
+                    while not angle_set and j < 10:
+                        angle_set = set_torsion(
+                            rv[torsion_ndx],
+                            rv[angle_ndx],
+                            rv[bond_ndx],
+                            rv[-1],
+                            target_angle,
+                        )
+                        j += 1
+
+
+                # print(len(rv))
+                # print("")
+                # for a in rv:
+                #     print(a.element, *a.coords)
+
                 return rv, n
 
             while len(line.split()) > 1:
                 line  = line.split()
-                element = line[0].split("(")[0]
+                element = line[0].split("(")[0].split("-")[0].rstrip("1234567890")
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
