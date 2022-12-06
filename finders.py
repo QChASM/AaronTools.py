@@ -963,3 +963,24 @@ class SpiroCenters(Finder):
                 matching_atoms.append(atom1)
 
         return matching_atoms
+
+class Resiude(Finder):
+    """all atoms in a given residue"""
+    def __init__(self, residue):
+        super().__init__()
+        
+        if not isinstance(residue, str):
+            residue = str(residue)
+        self.residue=residue
+
+    def get_matching_atoms(self, geometry):
+        matching_atoms = []
+        for atom in geometry.atoms:
+            if isinstance(atom, OniomAtom):
+                break
+            else:
+                raise AttributeError("atoms in % geometry have no attribute 'residue'" % geometry.name)
+        for atom in geometry.atoms:
+            if atom.residue == self.residue:
+                matching_atoms.append(atom)
+        return matching_atoms
