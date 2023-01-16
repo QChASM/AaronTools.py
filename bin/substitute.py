@@ -119,18 +119,18 @@ for infile in glob_files(args.infile, parser=substitute_parser):
         ndx_target = target_list[i]
         sub_name = "=".join(sub.split("=")[1:])
 
+        if sub_name.lower().startswith("iupac:"):
+            temp_sub_name = ":".join(sub_name.split(":")[1:])
+            sub = Substituent.from_string(temp_sub_name, form="iupac")
+        elif sub_name.lower().startswith("smiles:"):
+            temp_sub_name = ":".join(sub_name.split(":")[1:])
+            sub = Substituent.from_string(temp_sub_name, form="smiles")
+        else:
+            sub = Substituent(sub_name)
+    
         for target in ndx_target:
-            if sub_name.lower().startswith("iupac:"):
-                temp_sub_name = ":".join(sub_name.split(":")[1:])
-                sub = Substituent.from_string(temp_sub_name, form="iupac")
-            elif sub_name.lower().startswith("smiles:"):
-                temp_sub_name = ":".join(sub_name.split(":")[1:])
-                sub = Substituent.from_string(temp_sub_name, form="smiles")
-            else:
-                sub = Substituent(sub_name)
-
             # replace old substituent with new substituent
-            geom.substitute(sub, target, minimize=args.mini)
+            geom.substitute(sub.copy(), target, minimize=args.mini)
             geom.refresh_connected()
 
     if args.outfile:
