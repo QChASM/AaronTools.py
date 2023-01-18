@@ -470,12 +470,15 @@ def shortest_path(graph, start, end):
             [graph.atoms.index(j) for j in i.connected if j in graph.atoms]
             for i in graph.atoms
         ]
-    graph = [[i for i in j] for j in graph]
+    # I'm not sure why we were copying the graph
+    # blame me if this messes things up
+    # - Tony
+    # graph = [j[:] for j in graph]
 
     # initialize distance array, parent array, and set of unvisited nodes
-    dist = [np.inf for x in graph]
-    parent = [-1 for x in graph]
-    unvisited = set([i for i in range(len(graph))])
+    dist = (np.inf * np.ones(len(graph))).tolist()
+    parent = (-1 * np.ones(len(graph))).tolist()
+    unvisited = set(np.arange(0, len(graph), dtype=int))
 
     dist[start] = 0
     current = start

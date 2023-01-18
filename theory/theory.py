@@ -835,11 +835,6 @@ class Theory:
         if GAUSSIAN_COORDINATES not in other_kw_dict:
             other_kw_dict[GAUSSIAN_COORDINATES] = {}
 
-        if "coords" not in other_kw_dict[GAUSSIAN_COORDINATES]:
-            other_kw_dict[GAUSSIAN_COORDINATES][
-                "coords"
-            ] = self.geometry.coords
-
         s = ""
 
         # atom specs need flag column before coords if any atoms frozen
@@ -848,22 +843,25 @@ class Theory:
             if atom.flag:
                 has_frozen = True
                 break
-        for atom, coord in zip(
-            self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
-        ):
+        for i, atom in enumerate(self.geometry.atoms):
             s += "%-2s" % atom.element
             if has_frozen:
                 s += " % 2d" % (-1 if atom.flag else 0)
-            for val in coord:
-                s += "  "
-                if isinstance(val, float):
-                    s += " %9.5f" % val
-                elif isinstance(val, str):
-                    s += " %5s" % val
-                elif isinstance(val, int):
-                    s += " %3i" % val
-                else:
-                    warnings.append("unknown coordinate type: %s" % type(val))
+            try:
+                coord = other_kw_dict[GAUSSIAN_COORDINATES]["coords"][i]
+                for val in coord:
+                    s += "  "
+                    if isinstance(val, float):
+                        s += " %9.5f" % val
+                    elif isinstance(val, str):
+                        s += " %5s" % val
+                    elif isinstance(val, int):
+                        s += " %3i" % val
+                    else:
+                        warnings.append("unknown coordinate type: %s" % type(val))
+            except KeyError:
+                coord = tuple(atom.coords)
+                s += "   %9.5f   %9.5f   %9.5f" % coord
             s += "\n"
 
         if (
