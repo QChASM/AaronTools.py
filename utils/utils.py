@@ -859,4 +859,23 @@ def available_memory():
     from psutil import virtual_memory
     return virtual_memory().free
 
+def unique_combinations(*args):
+    total = 1
+    mod_array = []
+    for arg in args:
+        n_options = len(arg)
+        mod_array = [n_options * x for x in mod_array]
+        mod_array.append(1)
+        total *= n_options
+    
+    output = []
+    for i in range(0, total):
+        output.append([])
+        for j, arg in enumerate(args):
+            ndx = int(i / mod_array[j]) % len(arg)
+            option = arg[ndx]
+            output[-1].append(option)
+    
+    return output
+
 float_num = re.compile("[-+]?\d+\.?\d*")
