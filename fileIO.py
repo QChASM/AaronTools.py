@@ -19,6 +19,9 @@ from AaronTools.utils.utils import (
     is_int,
     is_num,
     float_num,
+    perp_vector,
+    rotation_matrix,
+    angle_between_vectors,
 )
 
 read_types = [
@@ -1206,7 +1209,7 @@ class FileReader:
 
     def __delitem__(self, key):
         if hasattr(self, key):
-            del self.key
+            delattr(self, key)
         if key in self.other:
             del self.other["key"]
     
@@ -1729,11 +1732,14 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_orca_out(self, f, get_all=False, just_geom=True):
+    def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False):
         """read orca output file"""
 
         nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
         opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
+
+        is_scan_job = False
+        step_converged = False
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -1793,7 +1799,14 @@ class FileReader:
                 )
             
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
-                if get_all and len(self.atoms) > 0:
+                if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
                     self.all_geom += [
@@ -1801,6 +1814,7 @@ class FileReader:
                     ]
 
                 self.atoms, n = get_atoms(f, n)
+                step_converged = False
 
             if just_geom:
                 line = f.readline()
@@ -1852,6 +1866,12 @@ class FileReader:
                     nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                     self.other["energy"] = float(nrg.group(2))
                     self.other[nrg.group(1)] = float(nrg.group(2))
+
+                elif "*    Relaxed Surface Scan    *" in line:
+                    is_scan_job = True
+
+                elif "THE OPTIMIZATION HAS CONVERGED" in line:
+                    step_converged = True
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
@@ -2173,29 +2193,21 @@ class FileReader:
                     self.skip_lines(f, 1)
                     n += 1
                     line = f.readline()
-                    self.other["alpha_coefficients"] = []
-                    self.other["beta_coefficients"] = []
-                    self.other["alpha_nrgs"] = []
-                    self.other["beta_nrgs"] = []
-                    self.other["alpha_occupancies"] = []
-                    self.other["beta_occupancies"] = []
                     at_info = re.compile(
                         "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
                     )
-                    if "multiplicity" in self.other and self.other["multiplicity"] != 1:
-                        args = [
-                            ("alpha_coefficients", "beta_coefficients"),
-                            ("alpha_nrgs", "beta_nrgs"),
-                            ("alpha_occupancies", "beta_occupancies"),
-                        ]
-                    else:
-                        args = [
-                            ("alpha_coefficients",),
-                            ("alpha_nrgs",),
-                            ("alpha_occupancies",),
-                        ]
+                    args = [
+                        ("alpha_coefficients", "beta_coefficients"),
+                        ("alpha_nrgs", "beta_nrgs"),
+                        ("alpha_occupancies", "beta_occupancies"),
+                    ]
 
                     for coeff_name, nrg_name, occ_name in zip(*args):
+                        if not line.strip():
+                            break
+                        self.other[coeff_name] = []
+                        self.other[nrg_name] = []
+                        self.other[occ_name] = []
                         self.other["shell_to_atom"] = []
                         mo_coefficients = []
                         orbit_nrgs = []
@@ -2235,6 +2247,7 @@ class FileReader:
                             line = f.readline()
                             n += 1
                         self.other[coeff_name].extend(mo_coefficients)
+                        line = f.readline()
                         line = f.readline()
 
                 elif line.startswith("N(Alpha)  "):
@@ -2600,6 +2613,52 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def set_angle(atom1, atom2, atom3, target_angle):
+            b1 = atom1.coords - atom2.coords
+            b2 = atom3.coords - atom2.coords
+            current_angle = angle_between_vectors(b1, b2)
+            d_theta = target_angle - current_angle
+            coords = np.array([
+                b1,
+                [0, 0, 0],
+                b2,
+            ])
+            v = perp_vector(coords)
+            R = rotation_matrix(d_theta, v)
+            atom3.coords -= atom2.coords
+            atom3.coords = np.dot(R, atom3.coords)
+            atom3.coords += atom2.coords
+            b1 = atom1.coords - atom2.coords
+            b2 = atom3.coords - atom2.coords
+            current_angle = angle_between_vectors(b1, b2)
+            return abs(current_angle - target_angle) < 1e-5
+
+        def set_torsion(atom1, atom2, atom3, atom4, target_angle):
+            b1 = atom4.coords - atom3.coords
+            b2 = atom3.coords - atom2.coords
+            b3 = atom2.coords - atom1.coords
+            v1 = np.cross(b1, b2)
+            v2 = np.cross(b2, b3)
+            current_angle = -np.arctan2(
+                np.dot(b2, np.cross(v1, v2)),
+                np.linalg.norm(b2) * np.dot(v1, v2)
+            )
+            da = target_angle - current_angle
+            R = rotation_matrix(-da, atom2.coords - atom3.coords)
+            atom4.coords -= atom3.coords
+            atom4.coords = np.dot(R, atom4.coords)
+            atom4.coords += atom3.coords
+            b1 = atom4.coords - atom3.coords
+            b2 = atom3.coords - atom2.coords
+            b3 = atom2.coords - atom1.coords
+            v1 = np.cross(b1, b2)
+            v2 = np.cross(b2, b3)
+            current_angle = -np.arctan2(
+                np.dot(b2, np.cross(v1, v2)),
+                np.linalg.norm(b2) * np.dot(v1, v2)
+            )
+            return abs(current_angle - target_angle) < 1e-5
+
         def get_input(f, n):
             rv = []
             line = f.readline()
@@ -2613,19 +2672,183 @@ class FileReader:
             line = f.readline()
             n += 1
             a = 0
-            if len(line.split()) == 1:
-                # internal coordinate z-matrix
-                # not parsed
+            info = line.split()
+            if len(line.split()) == 1 or any(info[1] == x for x in ["0", "-1"]):
+                # parse z matrix input
+                # z matrices can have variables, we'll need to interpolate those
+                variables = dict()
+                reading_molecule = True
+                molecule_data = ""
                 while line.split():
-                    line = line.split()
-                    rv += [Atom(element=line[0], name=str(a), coords=np.zeros(3))]
-                    a += 1
+                    if "Variables:" in line or "Constants:" in line:
+                        # switch from reading molecule to reading variables
+                        # variable list comes after atoms
+                        reading_molecule = False
+                    
+                    if reading_molecule:
+                        molecule_data += line
+                    else:
+                        try:
+                            var, value = line.split()
+                            variables[var] = value
+                        except ValueError:
+                            pass
+                    
                     line = f.readline()
+                
+                for i, line in enumerate(molecule_data.splitlines()):
+                    # get coordinates for molecule
+                    a += 1
+                    coords = np.zeros(3)
+                    info = line.split()
+                    element = info[0].split("(")[0].split("-")[0].rstrip("1234567890")
+                    rv += [
+                        Atom(
+                            element=element,
+                            name=str(a),
+                            coords=coords,
+                        )
+                    ]
+
+
+                    # first atom, leave it at the origin
+                    if len(info) == 1:
+                        continue
+
+                    bond_ndx = int(info[1])
+                    # if the first thing is > 0, it defines a distance
+                    # between this atom and the bond_ndx atom
+                    # otherwise, it is cartesian coordinates
+                    if bond_ndx <= 0:
+                        # if bond_ndx < 0:
+                        #     rv[-1].flag = True
+                        # if the number after the element is 0, then
+                        # the input is cartesian coordinates
+                        coords = info[2:]
+                        for j, coord in enumerate(coords):
+                            try:
+                                coords[j] = variables[coord]
+                            except KeyError:
+                                pass
+                        coords = [float(coord) for coord in coords]
+                        rv[-1].coords = np.array(coords)
+                        continue
+
+                    bond_ndx -= 1
+                    rv[-1].coords += rv[bond_ndx].coords
+                    bond_length = info[2]
+                    sign = 1
+                    # interpolate variable
+                    try:
+                        bond_length = variables[bond_length]
+                    except KeyError:
+                        try:
+                            # these might have a minus sign
+                            bond_length = variables[bond_length.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    # convert text to float and fix sign
+                    bond_length = sign * float(bond_length)
+                    rv[-1].coords[2] += bond_length
+                    # only bond length was defined (i.e. 2nd atom in z matrix input)
+                    # go on to next atom
+                    if len(info) < 4:
+                        continue
+                    
+                    # similar process for angles
+                    angle_ndx = int(info[3]) - 1
+                    target_angle = info[4]
+                    sign = 1
+                    try:
+                        target_angle = variables[target_angle]
+                    except KeyError:
+                        try:
+                            target_angle = variables[target_angle.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    target_angle = sign * float(target_angle)
+                    target_angle = np.deg2rad(target_angle)
+                    angle_set = False
+                    # for whatever reason, this doesn't work on the first try a lot
+                    j = 0
+                    while not angle_set and j < 10:
+                        angle_set = set_angle(rv[angle_ndx], rv[bond_ndx], rv[-1], target_angle)
+                        j += 1
+
+                    # if there's no torsion info, go to next atom
+                    if len(info) < 6:
+                        continue
+
+                    coord_code = 0
+                    if len(info) >= 8:
+                        coord_code = int(info[7])
+
+                    # next entry can either be a 1-2-3 angle or a 1-2-3-4 angle
+                    if coord_code == 1:
+                        # coordinates are a bond length and two 1-2-3 angles
+                        angle_ndx = int(info[5]) - 1
+                        v = perp_vector([rv[-1].coords, rv[bond_ndx].coords, rv[angle_ndx].coords])
+                        current_angle = rv[bond_ndx].angle(rv[-1], rv[angle_ndx])
+                        target_angle = info[6]
+                        try:
+                            target_angle = variables[target_angle]
+                        except KeyError:
+                            try:
+                                target_angle = variables[target_angle.lstrip("-")]
+                                sign = -1
+                            except KeyError:
+                                pass
+                        target_angle = sign * float(target_angle)
+                        target_angle = np.deg2rad(target_angle)
+                        angle_set = False
+                        # for whatever reason, this doesn't work on the first try a lot
+                        j = 0
+                        while not angle_set and j < 10:
+                            angle_set = set_angle(rv[angle_ndx], rv[bond_ndx], rv[-1], target_angle)
+                            j += 1
+                        continue
+                    
+                    # 1-2-3-4 angle
+                    torsion_ndx = int(info[5]) - 1
+
+                    target_angle = info[6]
+                    try:
+                        target_angle = variables[target_angle]
+                    except KeyError:
+                        try:
+                            target_angle = variables[target_angle.lstrip("-")]
+                            sign = -1
+                        except KeyError:
+                            pass
+                    target_angle = sign * float(target_angle)
+                    target_angle = np.deg2rad(target_angle)
+
+                    angle_set = False
+                    # this seems to always work on the first try
+                    j = 0
+                    while not angle_set and j < 10:
+                        angle_set = set_torsion(
+                            rv[torsion_ndx],
+                            rv[angle_ndx],
+                            rv[bond_ndx],
+                            rv[-1],
+                            target_angle,
+                        )
+                        j += 1
+
+
+                # print(len(rv))
+                # print("")
+                # for a in rv:
+                #     print(a.element, *a.coords)
+
                 return rv, n
 
             while len(line.split()) > 1:
                 line  = line.split()
-                element = line[0].split("(")[0].split("-")[0]
+                element = line[0].split("(")[0].split("-")[0].rstrip("1234567890")
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1

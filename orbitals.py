@@ -1175,7 +1175,7 @@ class Orbitals:
         self.basis_functions = []
         self.alpha_nrgs = np.array(filereader.other["alpha_nrgs"])
         self.alpha_coefficients = np.array(filereader.other["alpha_coefficients"])
-        if not filereader.other["beta_nrgs"]:
+        if "beta_nrgs" not in filereader.other or not filereader.other["beta_nrgs"]:
             self.beta_nrgs = None
             self.beta_coefficients = None
         else:
@@ -1677,6 +1677,7 @@ class Orbitals:
         alpha_occ=None,
         beta_occ=None,
         low_mem=False,
+        spin=False
     ):
         """
         returns the eletron density
@@ -1686,27 +1687,38 @@ class Orbitals:
                     if not specified, defaults to lowest self.n_alpha
                     orbitals
         beta_occ - same at alpha_occ, but for beta electrons
+        spin - plot spin density
         """
 
         # set default occupancy
         if alpha_occ is None:
             if self.alpha_occupancies:
-                alpha_occ = self.alpha_occupancies
+                alpha_occ = np.array(self.alpha_occupancies)
             else:
                 if not self.n_alpha:
                     self.LOG.warning("number of alpha electrons was not read")
                 alpha_occ = np.zeros(self.n_mos, dtype=int)
                 alpha_occ[0:self.n_alpha] = 1
-        if beta_occ is None and not self.alpha_occupancies:
-            beta_occ = np.zeros(self.n_mos, dtype=int)
-            beta_occ[0:self.n_beta] = 1
         
+        if beta_occ is None:
+            if self.beta_occupancies:
+                beta_occ = np.array(self.beta_occupancies)
+            else:
+                if not self.n_beta:
+                    self.LOG.warning("number of beta electrons was not read")
+                beta_occ = np.zeros(self.n_mos, dtype=int)
+                beta_occ[0:self.n_beta] = 1
+
+        if spin:
+            beta_occ = -1 * beta_occ
+
         if low_mem:
             return self._low_mem_density_value(
                 coords,
                 alpha_occ,
                 beta_occ,
                 n_jobs=n_jobs,
+                spin=spin,
             )
         
         # val is output data
@@ -1719,6 +1731,8 @@ class Orbitals:
             )
         else:
             val = np.zeros(len(coords))
+            if spin and self.beta_coefficients is None:
+                return val
             func_vals = np.zeros(
                 (self.n_mos, *coords.shape,)
             )
@@ -1765,6 +1779,7 @@ class Orbitals:
         alpha_occ,
         beta_occ,
         n_jobs=1,
+        spin=False,
     ):
         """
         returns the eletron density
@@ -1777,6 +1792,9 @@ class Orbitals:
             val = 0
         else:
             val = np.zeros(len(coords), dtype="float32")
+
+        if spin and self.beta_coefficients is None:
+            return val
 
         # calculate each occupied orbital
         # square it can add to output

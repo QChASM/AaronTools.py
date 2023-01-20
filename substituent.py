@@ -331,11 +331,9 @@ class Substituent(Geometry):
             angle = np.arccos(np.dot(bond, x_axis))
             geom.rotate(rot_axis, -angle)
         else:
-            try:
-                import rdkit
-            except ImportError:
-                # if the bonded_atom is already on the x axis, we will instead
-                # rotate about the y axis by 180 degrees
+            # if the bonded_atom is already on the x axis, check which direction and then
+            # rotate about the y axis by 180 degrees if needed
+            if bond[0] < 0:
                 angle = np.pi
                 geom.rotate(np.array([0.0, 1.0, 0.0]), -angle)
 
