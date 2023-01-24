@@ -857,7 +857,7 @@ def available_memory():
             return 1e6 * int(mem)
     
     from psutil import virtual_memory
-    return virtual_memory().free
+    return virtual_memory().available
 
 def unique_combinations(*args):
     total = 1
