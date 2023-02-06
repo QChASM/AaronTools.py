@@ -454,7 +454,36 @@ class BasisSet:
         Example:
             "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
         """
-        info = basis_str.split()
+        # split basis_str into words
+        # if there are quotes, whatever is inside the quotes is a word
+        # otherwise, whitespace determines words
+        info = list()
+        i = 0
+        word = ""
+        while i < len(basis_str):
+            s = basis_str[i]
+            for char in ["\"", "'"]:
+                if s == char:
+                    while i < len(basis_str):
+                        i += 1
+                        if basis_str[i] == char:
+                            break
+                        word += basis_str[i]
+                    info.append(word)
+                    word = ""
+                    i += 1
+                    break
+            else:
+                if word and s == " ":
+                    info.append(word)
+                    word = ""
+                else:
+                    word += s
+                i += 1
+
+        if word:
+            info.append(word)
+        
         i = 0
         basis_sets = []
         elements = []
@@ -690,14 +719,19 @@ class BasisSet:
                                         i += 1
                                         continue
 
-                                    ele = test.split()[0]
-                                    while i < len(lines):
-                                        if ele in basis.elements:
+                                    match = re.search("([A-Z][a-z]?)-ECP", lines[i], re.IGNORECASE)
+                                    if match and match.group(1).capitalize() in basis.elements:
+                                        ele = match.group(1)
+                                        out_str += "%s      0\n" % ele.upper()
+                                        while i < len(lines):
                                             out_str += lines[i]
 
-                                        if lines[i].startswith("****"):
-                                            break
-
+                                            i += 1
+                                            if i >= len(lines):
+                                                break
+                                            test_data = lines[i].split()
+                                            if len(test_data) == 2 and test_data[1] == "0":
+                                                break
                                         i += 1
 
                                     i += 1

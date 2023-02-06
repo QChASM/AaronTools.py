@@ -160,7 +160,8 @@ elif adjust_hs is True:
 else:
     adjust_structure = (adjust_hs, new_vsepr)
 
-for f in glob_files(args.infile, parser=element_parser):
+infiles = glob_files(args.infile, parser=element_parser)
+for f in infiles:
     if isinstance(f, str):
         if args.input_format is not None:
             infile = FileReader((f, args.input_format, None))
@@ -195,6 +196,6 @@ for f in glob_files(args.infile, parser=element_parser):
         outfile = args.outfile
         if "$INFILE" in outfile:
             outfile = outfile.replace("$INFILE", get_filename(f))
-        geom.write(append=True, outfile=outfile)
+        geom.write(append=f != infiles[0] and "$INFILE" not in outfile, outfile=outfile)
     else:
         print(geom.write(outfile=False))

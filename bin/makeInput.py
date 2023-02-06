@@ -600,6 +600,7 @@ for f in glob_files(args.infile, parser=theory_parser):
     if args.basis is not None:
         basis_sets = []
         for basis in args.basis:
+            basis = ["'%s'" % b if " " in b else b for b in basis]
             basis_sets.append(
                 BasisSet.parse_basis_str(" ".join(basis))[0]
             )
@@ -619,6 +620,7 @@ for f in glob_files(args.infile, parser=theory_parser):
     if args.ecp is not None:
         ecps = []
         for ecp in args.ecp:
+            ecp = ["'%s'" % b if " " in b else b for b in ecp]
             ecps.append(
                 BasisSet.parse_basis_str(" ".join(ecp), cls=ECP)[0]
             )
