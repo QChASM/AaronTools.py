@@ -476,8 +476,8 @@ def shortest_path(graph, start, end):
     # graph = [j[:] for j in graph]
 
     # initialize distance array, parent array, and set of unvisited nodes
-    dist = (np.inf * np.ones(len(graph))).tolist()
-    parent = (-1 * np.ones(len(graph))).tolist()
+    dist = (np.inf * np.ones(len(graph)))
+    parent = (-1 * np.ones(len(graph), dtype=int))
     unvisited = set(np.arange(0, len(graph), dtype=int))
 
     dist[start] = 0

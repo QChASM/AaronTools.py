@@ -460,6 +460,7 @@ class BasisSet:
         info = list()
         i = 0
         word = ""
+        basis_str = " ".join(basis_str.splitlines())
         while i < len(basis_str):
             s = basis_str[i]
             for char in ["\"", "'"]:
@@ -483,7 +484,7 @@ class BasisSet:
 
         if word:
             info.append(word)
-        
+
         i = 0
         basis_sets = []
         elements = []

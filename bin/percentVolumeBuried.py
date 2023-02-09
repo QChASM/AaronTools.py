@@ -69,7 +69,7 @@ vbur_parser.add_argument(
 
 vbur_parser.add_argument(
     "-v", "--vdw-radii",
-    default="umn",
+    default="bondi",
     choices=["umn", "bondi"],
     dest="radii",
     help="VDW radii to use in calculation\n" + 
@@ -79,7 +79,7 @@ vbur_parser.add_argument(
     "    Radii of Elements. Inorganic Materials 37, 871–885 (2001).\n" +
     "    (DOI: 10.1023/A:1011625728803)\n" + 
     "bondi: radii from J. Phys. Chem. 1964, 68, 3, 441–451 (DOI: 10.1021/j100785a001)\n" +
-    "Default: umn",
+    "Default: bondi",
 )
 
 vbur_parser.add_argument(
