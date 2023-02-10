@@ -7,7 +7,7 @@ from copy import deepcopy
 import concurrent.futures
 
 import numpy as np
-from scipy.spatial import distance_matrix
+from scipy.spatial import distance_matrix, distance
 
 import AaronTools
 from AaronTools import default_config as DEFAULT_CONFIG
@@ -1125,7 +1125,10 @@ class Geometry:
                 but were screened out using the && argument form
         """
 
-        def _find(arg):
+        found_atoms = set()
+        checkable_atoms = self.atoms
+
+        def _find(arg, checkable_atoms):
             """find a single atom"""
             # print(arg)
             if isinstance(arg, Atom):
@@ -1135,7 +1138,7 @@ class Geometry:
             rv = []
             if isinstance(arg, Finder):
                 # print("finder")
-                rv += arg.get_matching_atoms(self.atoms, self)
+                rv += arg.get_matching_atoms(checkable_atoms, self)
 
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
@@ -1144,12 +1147,12 @@ class Geometry:
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
                 test_name = re.compile("^" + test_name + "$")
                 # this is a name
-                for a in self.atoms:
+                for a in checkable_atoms:
                     if test_name.search(a.name) is not None:
                         rv += [a]
 
             elif arg == "all":
-                rv += [a for a in self.atoms]
+                rv += [a for a in checkable_atoms]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
                 # print("comma list")
@@ -1157,9 +1160,9 @@ class Geometry:
                 if len(list_style) > 1:
                     for i in list_style:
                         if len(i.split("-")) > 1:
-                            rv += _find_between(i)
+                            rv += _find_between(i, checkable_atoms)
                         else:
-                            rv += _find(i)
+                            rv += _find(i, checkable_atoms)
 
             elif (
                 isinstance(arg, str)
@@ -1167,7 +1170,7 @@ class Geometry:
                 and not re.search("[A-Za-z]", arg)
             ):
                 # print("range list")
-                rv += _find_between(arg)
+                rv += _find_between(arg, checkable_atoms)
 
             elif isinstance(arg, str) and arg in ELEMENTS:
                 # print("element")
@@ -1178,12 +1181,12 @@ class Geometry:
             else:
                 # print("tag")
                 # this is a tag
-                for a in self.atoms:
+                for a in checkable_atoms:
                     if arg in a.tags:
                         rv += [a]
             return rv
 
-        def _find_between(arg):
+        def _find_between(arg, checkable_atoms):
             """find sequence of atoms"""
 
             def _name2ints(name):
@@ -1191,8 +1194,8 @@ class Geometry:
                 return [int(i) for i in name]
 
             a1, a2 = tuple(arg.split("-"))
-            a1 = _find(a1)[0]
-            a2 = _find(a2)[0]
+            a1 = _find(a1, checkable_atoms)[0]
+            a2 = _find(a2, checkable_atoms)[0]
 
             rv = []
             for a in self.atoms:
@@ -1209,7 +1212,7 @@ class Geometry:
                         # don't want if test atom sorts after a2
                         break
                 else:
-                    rv += _find(a)
+                    rv += _find(a, checkable_atoms)
             return rv
 
         if len(args) == 1:
@@ -1222,10 +1225,15 @@ class Geometry:
                 # OR condition
                 tmp = []
                 for i in a:
-                    tmp += _find(i)
+                    found = _find(i, checkable_atoms)
+                    tmp += found
+                    found_atoms.update(found)
+                    checkable_atoms = list(set(checkable_atoms) - found_atoms)
                 rv += [tmp]
             else:
-                rv += [_find(a)]
+                rv += [_find(a, checkable_atoms)]
+                found_atoms.update(rv[-1])
+            checkable_atoms = list(found_atoms)
 
         # error if no atoms found (no error if AND filters out all found atoms)
         if len(rv) == 1:
@@ -1327,11 +1335,13 @@ class Geometry:
 
         # get a distance matrix and a matrix with the max distance
         # each atom can be from another atom and still be connected to it
-        D = distance_matrix(coords, coords)
-        max_connected_dist = np.zeros((len(targets), len(targets)))
+        D = distance.squareform(distance.pdist(coords, "sqeuclidean"))
+        n_atoms = len(targets)
+        max_connected_dist = np.zeros((n_atoms, n_atoms))
         for i, atom1 in enumerate(targets):
             for j, atom2 in enumerate(targets[:i]):
-                max_connected_dist[i, j] = atom1._radii + atom2._radii + threshold
+                max_connected_dist[i, j] = (atom1._radii + atom2._radii + threshold) ** 2
+        # max_connected_dist = max_connected_dist ** 2
         
         # wherever distance < max connected distance, that pair
         # of atoms is connected
@@ -2281,28 +2291,29 @@ class Geometry:
         else:
             sigmat = np.array(
                 [[a.rij(b) for a in self.atoms] for b in self.atoms]
-            )
+            ) ** 2
             epsmat = np.array(
                 [[a.eij(b) for a in self.atoms] for b in self.atoms]
-            )
+            ) ** 2
 
         if other is None or other is self:
-            D = distance_matrix(self.coords, self.coords)
+            D = distance.pdist(self.coords, "sqeuclidean")
+            D = distance.squareform(D)
             np.fill_diagonal(D, 1)
 
         else:
             if hasattr(other, "coords"):
-                D = distance_matrix(self.coords, other.coords)
+                D = distance.cdist(self.coords, other.coords, "sqeuclidean")
                 other = other.atoms
 
                 sigmat = np.array(
                     [[a.rij(b) for a in other] for b in self.atoms]
-                )
+                ) ** 2
                 epsmat = np.array(
                     [[a.eij(b) for a in other] for b in self.atoms]
-                )
+                ) ** 2
             else:
-                D = distance_matrix(
+                D = distance.cdist(
                     self.coords, np.array([a.coords for a in other])
                 )
 
@@ -2310,7 +2321,7 @@ class Geometry:
         self._epsmat = epsmat
 
         repmat = sigmat / D
-        repmat = repmat ** 2
+        # repmat = repmat ** 2
         repmat = repmat ** 3
         attmat = repmat ** 2
 
@@ -2516,7 +2527,7 @@ class Geometry:
         for atom in atoms_within_radius:
             radius_list.append(scale * radii_dict[atom.element])
 
-        radius_list = np.array(radius_list)
+        radius_list = np.array(radius_list) ** 2
         coords = self.coordinates(atoms_within_radius)
 
         # Monte-Carlo integration
@@ -2573,7 +2584,7 @@ class Geometry:
                 xyz += center_coords
                 # see if the point is inside of any atom's
                 # scaled VDW radius
-                D = distance_matrix(xyz, coords)
+                D = distance.cdist(xyz, coords, "sqeuclidean")
                 diff_mat = D - radius_list
                 if basis is None:
                     buried_points += np.sum(np.any(diff_mat <= 0, axis=1))
@@ -2680,7 +2691,7 @@ class Geometry:
                 if basis is not None:
                     map_agrid_r = np.dot(agrid_r, basis)
                 agrid_r += center_coords
-                D = distance_matrix(agrid_r, coords)
+                D = distance.cdist(agrid_r, coords, "sqeuclidean")
                 diff_mat = D - radius_list
                 mask = np.any(diff_mat <= 0, axis=1)
                 if basis is None:
