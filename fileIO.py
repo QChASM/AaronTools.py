@@ -1875,8 +1875,12 @@ class FileReader:
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
-                    self.skip_lines(f, 2)
-                    n += 2
+                    if "NUMERICAL" in line:
+                        self.skip_lines(f, 1)
+                        n += 1
+                    else:
+                        self.skip_lines(f, 2)
+                        n += 2
                     for i in range(0, len(self.atoms)):
                         n += 1
                         line = f.readline()
