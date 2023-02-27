@@ -163,7 +163,7 @@ class Method:
             return ({ORCA_ROUTE: ["wB97X-D3"]}, warnings)
         elif any(self.name.upper() == name for name in ["B97-D", "B97D"]):
             return ({ORCA_ROUTE: ["B97-D"]}, warnings)
-        elif self.name == "Gaussian's B3LYP":
+        elif self.name == "Gaussian's B3LYP" or self.name.lower() == "b3lyp/g":
             return ({ORCA_ROUTE: ["B3LYP/G", "NoCosx"]}, warnings)
         elif self.name.upper() == "M06-L":
             return ({ORCA_ROUTE: ["M06L"]}, warnings)
