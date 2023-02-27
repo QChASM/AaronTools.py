@@ -1054,16 +1054,14 @@ class Theory:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
 
-        out_str += "! "
+        out_str += "!"
         # method
         if self.method is not None:
-            func, warning = self.method.get_orca()
-            if warning is not None:
-                warnings.append(warning)
-            warning = self.method.sanity_check_method(func, "orca")
-            if warning:
-                warnings.append(warning)
-            out_str += "%s" % func
+            func, method_warn = self.method.get_orca()
+            warnings.extend(method_warn)
+            other_kw_dict = combine_dicts(
+                func, other_kw_dict
+            )
 
         # add other route options
         if ORCA_ROUTE in other_kw_dict:

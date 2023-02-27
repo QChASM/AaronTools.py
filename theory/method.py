@@ -148,29 +148,35 @@ class Method:
 
     def get_orca(self):
         """maps proper functional name to one ORCA accepts"""
-        warning = None
+        from AaronTools.theory import ORCA_ROUTE
+        
+        warnings = []
         if (
                 self.name == "ωB97X-D" or
                 any(
                     test == self.name.lower() for test in ["wb97xd", "wb97x-d"]
                 )
         ):
-            return ("wB97X-D3", "ωB97X-D may refer to ωB97X-D2 or ωB97X-D3 - using the latter")
+            warnings.append("ωB97X-D may refer to ωB97X-D2 or ωB97X-D3 - using the latter")
+            return ({ORCA_ROUTE: ["wB97X-D3"]}, warnings)
         elif self.name == "ωB97X-D3":
-            return ("wB97X-D3", None)
+            return ({ORCA_ROUTE: ["wB97X-D3"]}, warnings)
         elif any(self.name.upper() == name for name in ["B97-D", "B97D"]):
-            return ("B97-D", None)
+            return ({ORCA_ROUTE: ["B97-D"]}, warnings)
         elif self.name == "Gaussian's B3LYP":
-            return ("B3LYP/G", None)
+            return ({ORCA_ROUTE: ["B3LYP/G", "NoCosx"]}, warnings)
         elif self.name.upper() == "M06-L":
-            return ("M06L", None)
+            return ({ORCA_ROUTE: ["M06L"]}, warnings)
         elif self.name.upper() == "M06-2X":
-            return ("M062X", None)
+            return ({ORCA_ROUTE: ["M062X"]}, warnings)
         elif self.name.upper() == "PBE1PBE":
-            return ("PBE0", None)
+            return ({ORCA_ROUTE: ["PBE0"]}, warnings)
 
         name = self.name.replace('ω', 'w')
-        return name, warning
+        warning = self.sanity_check_method(name, "orca")
+        if warning:
+            warnings.append(warning)
+        return {ORCA_ROUTE: [name]}, warnings
 
     def get_psi4(self):
         """maps proper functional name to one Psi4 accepts"""
