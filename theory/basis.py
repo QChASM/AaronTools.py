@@ -425,7 +425,11 @@ class BasisSet:
         elif isinstance(ecp, BasisSet):
             ecp = ecp.ecp
 
+        if basis is None:
+            basis = []
         self.basis = basis
+        if ecp is None:
+            ecp = []
         self.ecp = ecp
 
     @property
@@ -620,129 +624,201 @@ class BasisSet:
         info = {}
         warnings = []
 
-        if self.basis is not None:
-            # check if we need to use gen or genecp:
-            #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
-            #    -multiple basis sets
-            #    -an ecp
-            if (
-                all([basis == self.basis[0] for basis in self.basis])
-                and not self.basis[0].user_defined
-                and self.ecp is None
-            ):
-                basis_name = Basis.get_gaussian(self.basis[0].name)
-                warning = self.basis[0].sanity_check_basis(
-                    basis_name, "gaussian"
-                )
-                if warning:
+        # check if we need to use gen or genecp:
+        #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
+        #    -multiple basis sets
+        #    -an ecp
+        if (
+            self.basis and 
+            all([basis == self.basis[0] for basis in self.basis]) and
+            not self.basis[0].user_defined and
+            not self.ecp
+        ):
+            # we expect these to be basis sets that are in gaussian
+            # get the keyword gaussian uses for this basis set
+            basis_name = Basis.get_gaussian(self.basis[0].name)
+            # check to make sure the basis set is in gaussian
+            # (or at least the list of basis sets that we know are in gaussian)
+            warning = self.basis[0].sanity_check_basis(
+                basis_name, "gaussian"
+            )
+            if warning:
+                # if it's not, try to grab it from the BSE
+                try:
+                    import basis_set_exchange as bse
+                    bse_data = bse.get_basis(
+                        self.basis[0].name,
+                        elements=self.basis[0].elements,
+                        fmt="gaussian94",
+                        header=False,
+                    )
+                    info[GAUSSIAN_GEN_BASIS] = bse_data
+                    # make sure to switch to /gen
+                    # TODO: check if we need /genecp
+                    basis_name = "gen"
+                except ModuleNotFoundError:
+                    # no BSE module
                     warnings.append(warning)
-                info[GAUSSIAN_ROUTE] = "/%s" % basis_name
+                except KeyError:
+                    # BSE doesn't have it either
+                    warnings.append(warning)
+            info[GAUSSIAN_ROUTE] = "/%s" % basis_name
+        
+        else:
+            # basis set is split or user-defined (i.e. in a basis set file)
+            # use /gen or /genecp 
+            if not self.ecp or all(
+                not ecp.elements for ecp in self.ecp
+            ):
+                info[GAUSSIAN_ROUTE] = "/gen"
             else:
-                if self.ecp is None or all(
-                    not ecp.elements for ecp in self.ecp
-                ):
-                    info[GAUSSIAN_ROUTE] = "/gen"
-                else:
-                    info[GAUSSIAN_ROUTE] = "/genecp"
+                info[GAUSSIAN_ROUTE] = "/genecp"
 
-                out_str = ""
-                # gaussian flips out if you specify basis info for an element that
-                # isn't on the molecule, so make sure the basis set has an element
-                for basis in self.basis:
-                    if basis.elements and not basis.user_defined:
+            out_str = ""
+            # gaussian can flips out if you specify basis info for an element that
+            # isn't on the molecule, so make sure the basis set has an element
+            for basis in self.basis:
+                if basis.elements and not basis.user_defined:
+                    using_bse = False
+                    basis_name = Basis.get_gaussian(basis.name)
+                    warning = basis.sanity_check_basis(
+                        basis_name, "gaussian"
+                    )
+                    if warning:
+                        # this basis set isn't in our list of basis sets that we
+                        # know are in gaussian
+                        # try to get it from the BSE
+                        try:
+                            import basis_set_exchange as bse
+                            bse_data = bse.get_basis(
+                                basis.name,
+                                elements=basis.elements,
+                                fmt="gaussian94",
+                                header=False,
+                            )
+                            # basis data is stored in user_defined
+                            basis.user_defined = bse_data
+                            using_bse = True
+                        except ModuleNotFoundError:
+                            # BSE module not installed
+                            warnings.append(warning)
+                        except KeyError:
+                            # BSE doesn't have this basis either
+                            warnings.append(warning)
+                    if not using_bse:
                         out_str += " ".join([ele for ele in basis.elements])
                         out_str += " 0\n"
-                        basis_name = Basis.get_gaussian(basis.name)
-                        warning = basis.sanity_check_basis(
-                            basis_name, "gaussian"
-                        )
-                        if warning:
-                            warnings.append(warning)
                         out_str += basis_name
                         out_str += "\n****\n"
 
-                for basis in self.basis:
-                    if basis.elements:
-                        if basis.user_defined:
-                            if os.path.exists(basis.user_defined):
-                                with open(basis.user_defined, "r") as f:
-                                    lines = f.readlines()
-
-                                i = 0
-                                while i < len(lines):
-                                    test = lines[i].strip()
-                                    if not test or test.startswith("!"):
-                                        i += 1
-                                        continue
-
-                                    ele = test.split()[0]
-                                    while i < len(lines):
-                                        if ele in basis.elements:
-                                            out_str += lines[i]
-
-                                        if lines[i].startswith("****"):
-                                            break
-
-                                        i += 1
-
-                                    i += 1
-
-                            # if the file does not exists, just insert the path as an @ file
-                            else:
-                                out_str += "@%s\n" % basis.user_defined
-
-                info[GAUSSIAN_GEN_BASIS] = out_str
-
-        if self.ecp is not None:
-            out_str = ""
-            for basis in self.ecp:
-                if basis.elements and not basis.user_defined:
-                    out_str += " ".join([ele for ele in basis.elements])
-                    out_str += " 0\n"
-                    basis_name = Basis.get_gaussian(basis.name)
-                    warning = basis.sanity_check_basis(basis_name, "gaussian")
-                    if warning:
-                        warnings.append(warning)
-                    out_str += basis_name
-                    out_str += "\n"
-
-            for basis in self.ecp:
+            for basis in self.basis:
                 if basis.elements:
                     if basis.user_defined:
-                        if os.path.exists(basis.user_defined):
+                        # lines are the contents of the basis set file
+                        # either read them from the file (if it exists)
+                        # or grab the BSE data we stored in user_defined (which will be multiline)
+                        lines = []
+                        if len(basis.user_defined.splitlines()) > 1:
+                            lines = [s + "\n" for s in basis.user_defined.splitlines()]
+                        elif os.path.exists(basis.user_defined):
                             with open(basis.user_defined, "r") as f:
                                 lines = f.readlines()
+                        else:
+                            # if the file does not exists, just insert the path as an @ file
+                            out_str += "@%s\n" % basis.user_defined
 
-                                i = 0
+                        if lines:
+                            i = 0
+                            while i < len(lines):
+                                test = lines[i].strip()
+                                if not test or test.startswith("!"):
+                                    i += 1
+                                    continue
+
+                                ele = test.split()[0]
                                 while i < len(lines):
-                                    test = lines[i].strip()
-                                    if not test or test.startswith("!"):
-                                        i += 1
-                                        continue
+                                    if ele in basis.elements:
+                                        out_str += lines[i]
 
-                                    match = re.search("([A-Z][a-z]?)-ECP", lines[i], re.IGNORECASE)
-                                    if match and match.group(1).capitalize() in basis.elements:
-                                        ele = match.group(1)
-                                        out_str += "%s      0\n" % ele.upper()
-                                        while i < len(lines):
-                                            out_str += lines[i]
-
-                                            i += 1
-                                            if i >= len(lines):
-                                                break
-                                            test_data = lines[i].split()
-                                            if len(test_data) == 2 and test_data[1] == "0":
-                                                break
-                                        i += 1
+                                    if lines[i].startswith("****"):
+                                        break
 
                                     i += 1
 
-                        else:
-                            out_str += "@%s\n" % basis.user_defined
+                                i += 1
+
+            info[GAUSSIAN_GEN_BASIS] = out_str
+
+        # process ECPs similar to how we did the regular basis sets
+        out_str = ""
+        for basis in self.ecp:
+            if basis.elements and not basis.user_defined:
+                out_str += " ".join([ele for ele in basis.elements])
+                out_str += " 0\n"
+                basis_name = Basis.get_gaussian(basis.name)
+                warning = basis.sanity_check_basis(basis_name, "gaussian")
+                if warning:
+                    warnings.append(warning)
+                out_str += basis_name
+                out_str += "\n"
+
+        # go through both ECPs and basis sets to add ECP data
+        # if we grabbed a basis set from the BSE, it might have ECP data
+        # thus, we need to go through self.basis again
+        for basis in [*self.ecp, *self.basis]:
+            elements = set(basis.elements)
+            if not isinstance(basis, ECP):
+                if not basis.user_defined:
+                    # Basis does not have BSE data
+                    continue
+                # we want to prioritize ECPs, which are likely specifically requested,
+                # over a regular basis file which might have ECP data for an element
+                # in common with an ECP
+                for ecp in self.ecp:
+                    elements -= set(ecp.elements)
+            if not elements:
+                continue
+            
+            if basis.user_defined:
+                lines = []
+                if len(basis.user_defined.splitlines()) > 1:
+                    lines = [s + "\n" for s in basis.user_defined.splitlines()]
+                elif os.path.exists(basis.user_defined):
+                    with open(basis.user_defined, "r") as f:
+                        lines = f.readlines()
+                else:
+                    out_str += "@%s\n" % basis.user_defined
+
+                if lines:
+                    if isinstance(basis, Basis):
+                        info[GAUSSIAN_ROUTE] = "/genecp"
+                    i = 0
+                    while i < len(lines):
+                        test = lines[i].strip()
+                        if not test or test.startswith("!"):
+                            i += 1
+                            continue
+
+                        match = re.search("([A-Z][a-z]?)-ECP", lines[i], re.IGNORECASE)
+                        if match and match.group(1).capitalize() in elements:
+                            ele = match.group(1)
+                            out_str += "%s      0\n" % ele.upper()
+                            while i < len(lines):
+                                out_str += lines[i]
+
+                                i += 1
+                                if i >= len(lines):
+                                    break
+                                test_data = lines[i].split()
+                                if len(test_data) == 2 and test_data[1] == "0":
+                                    break
+                            i += 1
+
+                        i += 1
 
             info[GAUSSIAN_GEN_ECP] = out_str
 
-            if self.basis is None:
+            if not self.basis:
                 info[GAUSSIAN_ROUTE] = " Pseudo=Read"
 
         return info, warnings
