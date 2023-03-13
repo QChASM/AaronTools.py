@@ -709,10 +709,7 @@ class Theory:
                 warnings.append(warning)
             out_str += "%s" % func
             if not self.method.is_semiempirical and self.basis is not None:
-                (
-                    basis_info,
-                    basis_warnings,
-                ) = self.basis.get_gaussian_basis_info()
+                basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
                 # in two basis sets or left out of any
@@ -724,7 +721,15 @@ class Theory:
                         warnings.append(basis_warning)
 
                 if GAUSSIAN_ROUTE in basis_info:
-                    out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+                    for key in basis_info[GAUSSIAN_ROUTE]:
+                        if "/" in key:
+                            out_str += "%s" % key
+                        del basis_info[GAUSSIAN_ROUTE][key]
+                        break
+                    other_kw_dict = combine_dicts(
+                        other_kw_dict,
+                        basis_info,
+                    )
 
             out_str += " "
 
@@ -1281,6 +1286,8 @@ class Theory:
             # aux basis sets might have a '%s' b/c the keyword to apply them depends on
             # the method - replace %s with the appropriate thing for the method
             for key in basis_info:
+                if not isinstance(basis_info[key], list):
+                    continue
                 for i in range(0, len(basis_info[key])):
                     if "%s" in basis_info[key][i]:
                         if "cc" in self.method.name.lower():
@@ -1644,7 +1651,14 @@ class Theory:
         if self.solvent is not None:
             solvent_info, warning = self.solvent.get_psi4()
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
-
+        
+        # basis set
+        if not self.method.is_semiempirical and self.basis is not None:
+            basis_info, basis_warnings = self.basis.get_psi4_basis_info(
+                isinstance(self.method, SAPTMethod)
+            )
+            other_kw_dict = combine_dicts(other_kw_dict, basis_info)
+        
         # grid
         if self.grid is not None:
             grid_info, warning = self.grid.get_psi4()
