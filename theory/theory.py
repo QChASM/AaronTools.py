@@ -924,7 +924,7 @@ class Theory:
             and not self.method.is_semiempirical
             and self.basis is not None
         ):
-            basis_info, warnings = self.basis.get_gaussian_basis_info()
+            basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
 
         elif (
             self.method is not None

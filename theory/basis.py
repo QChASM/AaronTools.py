@@ -797,8 +797,6 @@ class BasisSet:
                     out_str += "@%s\n" % basis.user_defined
 
                 if lines:
-                    if isinstance(basis, Basis):
-                        info[GAUSSIAN_ROUTE] = ["/genecp"]
                     i = 0
                     while i < len(lines):
                         test = lines[i].strip()
@@ -808,6 +806,12 @@ class BasisSet:
 
                         match = re.search("([A-Z][a-z]?)-ECP", lines[i], re.IGNORECASE)
                         if match and match.group(1).capitalize() in elements:
+                            if isinstance(basis, Basis):
+                                info[GAUSSIAN_ROUTE]["/genecp"] = []
+                                try:
+                                    del info[GAUSSIAN_ROUTE]["/gen"]
+                                except KeyError:
+                                    pass
                             ele = match.group(1)
                             out_str += "%s      0\n" % ele.upper()
                             while i < len(lines):
