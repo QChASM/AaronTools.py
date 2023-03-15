@@ -21,6 +21,7 @@ from AaronTools.theory import (
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
+    PSI4_SETTINGS,
     QCHEM_REM,
     QCHEM_SETTINGS,
 )
@@ -474,11 +475,13 @@ class BasisSet:
     ]
     QCHEM_AUX = ["RI", "J", "K", "corr"]
 
-    def __init__(self, basis=None, ecp=None):
+    def __init__(self, basis=None, ecp=None, angular_momentum_type=None):
         """
         basis: list(Basis), Basis, str, or None
         ecp: list(ECP) or None
+        angular_momentum_type: pure, cartesian, or None
         """
+        self.angular_momentum_type = angular_momentum_type
         if isinstance(basis, str):
             basis = self.parse_basis_str(basis, cls=Basis)
         elif isinstance(basis, Basis):
@@ -498,7 +501,11 @@ class BasisSet:
         elif isinstance(ecp, BasisSet):
             ecp = ecp.ecp
 
+        if basis is None:
+            basis = []
         self.basis = basis
+        if ecp is None:
+            ecp = []
         self.ecp = ecp
 
     @property
@@ -538,7 +545,37 @@ class BasisSet:
         Example:
             "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
         """
-        info = basis_str.split()
+        # split basis_str into words
+        # if there are quotes, whatever is inside the quotes is a word
+        # otherwise, whitespace determines words
+        info = list()
+        i = 0
+        word = ""
+        basis_str = " ".join(basis_str.splitlines())
+        while i < len(basis_str):
+            s = basis_str[i]
+            for char in ["\"", "'"]:
+                if s == char:
+                    while i < len(basis_str):
+                        i += 1
+                        if basis_str[i] == char:
+                            break
+                        word += basis_str[i]
+                    info.append(word)
+                    word = ""
+                    i += 1
+                    break
+            else:
+                if word and s == " ":
+                    info.append(word)
+                    word = ""
+                else:
+                    word += s
+                i += 1
+
+        if word:
+            info.append(word)
+
         i = 0
         basis_sets = []
         elements = []
@@ -693,128 +730,225 @@ class BasisSet:
 
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""
-        info = {}
+        info = {GAUSSIAN_ROUTE: {}}
         warnings = []
 
-        if self.basis is not None:
-            # check if we need to use gen or genecp:
-            #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
-            #    -multiple basis sets
-            #    -an ecp
-            if (
-                all([basis == self.basis[0] for basis in self.basis])
-                and not self.basis[0].user_defined
-                and self.ecp is None
-            ):
-                basis_name = Basis.get_gaussian(self.basis[0].name)
-                warning = self.basis[0].sanity_check_basis(
-                    basis_name, "gaussian"
-                )
-                if warning:
+        # check if we need to use gen or genecp:
+        #    -a basis set is user-defined (stored in an external file e.g. from the BSE)
+        #    -multiple basis sets
+        #    -an ecp
+        if (
+            self.basis and 
+            all([basis == self.basis[0] for basis in self.basis]) and
+            not self.basis[0].user_defined and
+            not self.ecp
+        ):
+            # we expect these to be basis sets that are in gaussian
+            # get the keyword gaussian uses for this basis set
+            basis_name = Basis.get_gaussian(self.basis[0].name)
+            # check to make sure the basis set is in gaussian
+            # (or at least the list of basis sets that we know are in gaussian)
+            warning = self.basis[0].sanity_check_basis(
+                basis_name, "gaussian"
+            )
+            if warning:
+                # if it's not, try to grab it from the BSE
+                try:
+                    import basis_set_exchange as bse
+                    bse_data = bse.get_basis(
+                        self.basis[0].name,
+                        elements=self.basis[0].elements,
+                        fmt="gaussian94",
+                        header=False,
+                    )
+                    info[GAUSSIAN_GEN_BASIS] = bse_data
+                    # make sure to switch to /gen
+                    # TODO: check if we need /genecp
+                    basis_name = "gen"
+                except ModuleNotFoundError:
+                    # no BSE module
                     warnings.append(warning)
-                info[GAUSSIAN_ROUTE] = "/%s" % basis_name
+                except KeyError:
+                    # BSE doesn't have it either
+                    warnings.append(warning)
+            info[GAUSSIAN_ROUTE]["/%s" % basis_name] = []
+        
+        else:
+            # basis set is split or user-defined (i.e. in a basis set file)
+            # use /gen or /genecp 
+            if not self.ecp or all(
+                not ecp.elements for ecp in self.ecp
+            ):
+                info[GAUSSIAN_ROUTE]["/gen"] = []
             else:
-                if self.ecp is None or all(
-                    not ecp.elements for ecp in self.ecp
-                ):
-                    info[GAUSSIAN_ROUTE] = "/gen"
-                else:
-                    info[GAUSSIAN_ROUTE] = "/genecp"
+                info[GAUSSIAN_ROUTE]["/genecp"] = []
+                try:
+                    info[GAUSSIAN_ROUTE].remove("/gen")
+                except KeyError:
+                    pass
 
-                out_str = ""
-                # gaussian flips out if you specify basis info for an element that
-                # isn't on the molecule, so make sure the basis set has an element
-                for basis in self.basis:
-                    if basis.elements and not basis.user_defined:
+            out_str = ""
+            # gaussian can flips out if you specify basis info for an element that
+            # isn't on the molecule, so make sure the basis set has an element
+            for basis in self.basis:
+                if basis.elements and not basis.user_defined:
+                    using_bse = False
+                    basis_name = Basis.get_gaussian(basis.name)
+                    warning = basis.sanity_check_basis(
+                        basis_name, "gaussian"
+                    )
+                    if warning:
+                        # this basis set isn't in our list of basis sets that we
+                        # know are in gaussian
+                        # try to get it from the BSE
+                        try:
+                            import basis_set_exchange as bse
+                            bse_data = bse.get_basis(
+                                basis.name,
+                                elements=basis.elements,
+                                fmt="gaussian94",
+                                header=False,
+                            )
+                            # basis data is stored in user_defined
+                            basis.user_defined = bse_data
+                            using_bse = True
+                        except ModuleNotFoundError:
+                            # BSE module not installed
+                            warnings.append(warning)
+                        except KeyError:
+                            # BSE doesn't have this basis either
+                            warnings.append(warning)
+                    if not using_bse:
                         out_str += " ".join([ele for ele in basis.elements])
                         out_str += " 0\n"
-                        basis_name = Basis.get_gaussian(basis.name)
-                        warning = basis.sanity_check_basis(
-                            basis_name, "gaussian"
-                        )
-                        if warning:
-                            warnings.append(warning)
                         out_str += basis_name
                         out_str += "\n****\n"
 
-                for basis in self.basis:
-                    if basis.elements:
-                        if basis.user_defined:
-                            if os.path.exists(basis.user_defined):
-                                with open(basis.user_defined, "r") as f:
-                                    lines = f.readlines()
-
-                                i = 0
-                                while i < len(lines):
-                                    test = lines[i].strip()
-                                    if not test or test.startswith("!"):
-                                        i += 1
-                                        continue
-
-                                    ele = test.split()[0]
-                                    while i < len(lines):
-                                        if ele in basis.elements:
-                                            out_str += lines[i]
-
-                                        if lines[i].startswith("****"):
-                                            break
-
-                                        i += 1
-
-                                    i += 1
-
-                            # if the file does not exists, just insert the path as an @ file
-                            else:
-                                out_str += "@%s\n" % basis.user_defined
-
-                info[GAUSSIAN_GEN_BASIS] = out_str
-
-        if self.ecp is not None:
-            out_str = ""
-            for basis in self.ecp:
-                if basis.elements and not basis.user_defined:
-                    out_str += " ".join([ele for ele in basis.elements])
-                    out_str += " 0\n"
-                    basis_name = Basis.get_gaussian(basis.name)
-                    warning = basis.sanity_check_basis(basis_name, "gaussian")
-                    if warning:
-                        warnings.append(warning)
-                    out_str += basis_name
-                    out_str += "\n"
-
-            for basis in self.ecp:
+            for basis in self.basis:
                 if basis.elements:
                     if basis.user_defined:
-                        if os.path.exists(basis.user_defined):
+                        # lines are the contents of the basis set file
+                        # either read them from the file (if it exists)
+                        # or grab the BSE data we stored in user_defined (which will be multiline)
+                        lines = []
+                        if len(basis.user_defined.splitlines()) > 1:
+                            lines = [s + "\n" for s in basis.user_defined.splitlines()]
+                        elif os.path.exists(basis.user_defined):
                             with open(basis.user_defined, "r") as f:
                                 lines = f.readlines()
+                        else:
+                            # if the file does not exists, just insert the path as an @ file
+                            out_str += "@%s\n" % basis.user_defined
 
-                                i = 0
+                        if lines:
+                            i = 0
+                            while i < len(lines):
+                                test = lines[i].strip()
+                                if not test or test.startswith("!"):
+                                    i += 1
+                                    continue
+
+                                ele = test.split()[0]
                                 while i < len(lines):
-                                    test = lines[i].strip()
-                                    if not test or test.startswith("!"):
-                                        i += 1
-                                        continue
+                                    if ele in basis.elements:
+                                        out_str += lines[i]
 
-                                    ele = test.split()[0]
-                                    while i < len(lines):
-                                        if ele in basis.elements:
-                                            out_str += lines[i]
-
-                                        if lines[i].startswith("****"):
-                                            break
-
-                                        i += 1
+                                    if lines[i].startswith("****"):
+                                        break
 
                                     i += 1
 
-                        else:
-                            out_str += "@%s\n" % basis.user_defined
+                                i += 1
+
+            info[GAUSSIAN_GEN_BASIS] = out_str
+
+        # process ECPs similar to how we did the regular basis sets
+        out_str = ""
+        for basis in self.ecp:
+            if basis.elements and not basis.user_defined:
+                out_str += " ".join([ele for ele in basis.elements])
+                out_str += " 0\n"
+                basis_name = Basis.get_gaussian(basis.name)
+                warning = basis.sanity_check_basis(basis_name, "gaussian")
+                if warning:
+                    warnings.append(warning)
+                out_str += basis_name
+                out_str += "\n"
+
+        # go through both ECPs and basis sets to add ECP data
+        # if we grabbed a basis set from the BSE, it might have ECP data
+        # thus, we need to go through self.basis again
+        for basis in [*self.ecp, *self.basis]:
+            elements = set(basis.elements)
+            if not isinstance(basis, ECP):
+                if not basis.user_defined:
+                    # Basis does not have BSE data
+                    continue
+                # we want to prioritize ECPs, which are likely specifically requested,
+                # over a regular basis file which might have ECP data for an element
+                # in common with an ECP
+                for ecp in self.ecp:
+                    elements -= set(ecp.elements)
+            if not elements:
+                continue
+            
+            if basis.user_defined:
+                lines = []
+                if len(basis.user_defined.splitlines()) > 1:
+                    lines = [s + "\n" for s in basis.user_defined.splitlines()]
+                elif os.path.exists(basis.user_defined):
+                    with open(basis.user_defined, "r") as f:
+                        lines = f.readlines()
+                else:
+                    out_str += "@%s\n" % basis.user_defined
+
+                if lines:
+                    i = 0
+                    while i < len(lines):
+                        test = lines[i].strip()
+                        if not test or test.startswith("!"):
+                            i += 1
+                            continue
+
+                        match = re.search("([A-Z][a-z]?)-ECP", lines[i], re.IGNORECASE)
+                        if match and match.group(1).capitalize() in elements:
+                            if isinstance(basis, Basis):
+                                info[GAUSSIAN_ROUTE]["/genecp"] = []
+                                try:
+                                    del info[GAUSSIAN_ROUTE]["/gen"]
+                                except KeyError:
+                                    pass
+                            ele = match.group(1)
+                            out_str += "%s      0\n" % ele.upper()
+                            while i < len(lines):
+                                out_str += lines[i]
+
+                                i += 1
+                                if i >= len(lines):
+                                    break
+                                test_data = lines[i].split()
+                                if len(test_data) == 2 and test_data[1] == "0":
+                                    break
+                            i += 1
+
+                        i += 1
 
             info[GAUSSIAN_GEN_ECP] = out_str
 
-            if self.basis is None:
-                info[GAUSSIAN_ROUTE] = " Pseudo=Read"
+            if not self.basis:
+                info[GAUSSIAN_ROUTE]["Pseudo=Read"] = []
+
+        if self.angular_momentum_type:
+            if self.angular_momentum_type.lower() == "pure":
+                info[GAUSSIAN_ROUTE]["5D"] = []
+                info[GAUSSIAN_ROUTE]["7F"] = []
+            elif self.angular_momentum_type.lower() == "cartesian":
+                info[GAUSSIAN_ROUTE]["6D"] = []
+                info[GAUSSIAN_ROUTE]["10F"] = []
+            else:
+                warnings.append(
+                    "unrecognized BasisSet.angular_momentum_type: %s" % self.angular_momentum_type
+                )
 
         return info, warnings
 
@@ -826,11 +960,43 @@ class BasisSet:
 
         first_basis = []
 
-        if self.basis is not None:
-            for basis in self.basis:
-                if basis.elements:
-                    if basis.aux_type is None:
-                        if basis.aux_type not in first_basis:
+        for basis in self.basis:
+            if basis.elements:
+                if basis.aux_type is None:
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = Basis.get_orca(basis.name)
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            use_bse = False
+                            if warning:
+                                try:
+                                    import basis_set_exchange as bse
+                                    bse_data = bse.get_basis(
+                                        basis.name,
+                                        elements=basis.elements,
+                                    )                                    
+                                    info[ORCA_BLOCKS]["basis"].append(_bse_to_orca_fmt(bse_data))
+                                    use_bse = True
+                                except ModuleNotFoundError:
+                                    warnings.append(warning)
+                                except KeyError:
+                                    warnings.append(warning)
+                            if not use_bse:
+                                first_basis.append(basis.aux_type)
+                                info[ORCA_ROUTE].append(basis_name)
+
+
+                        else:
+                            out_str = 'GTOName "%s"' % basis.user_defined
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
+
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newGTO            %-2s " % ele
+
                             if not basis.user_defined:
                                 basis_name = Basis.get_orca(basis.name)
                                 warning = Basis.sanity_check_basis(
@@ -838,154 +1004,158 @@ class BasisSet:
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
-
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = 'GTOName "%s"' % basis.user_defined
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
+
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+
+                elif basis.aux_type.upper() == "C":
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = Basis.get_orca(basis.name) + "/C"
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            if warning:
+                                warnings.append(warning)
+                            out_str = "%s" % basis_name
+                            info[ORCA_ROUTE].append(out_str)
+                            first_basis.append(basis.aux_type)
 
                         else:
-                            for ele in basis.elements:
-                                out_str = "newGTO            %-2s " % ele
+                            out_str = (
+                                'AuxCGTOName "%s"' % basis.user_defined
+                            )
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
 
-                                if not basis.user_defined:
-                                    basis_name = Basis.get_orca(basis.name)
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newAuxCGTO        %-2s " % ele
 
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-
-                    elif basis.aux_type.upper() == "C":
-                        if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                basis_name = Basis.get_orca(basis.name) + "/C"
+                                basis_name = (
+                                    Basis.get_orca(basis.name) + "/C"
+                                )
                                 warning = Basis.sanity_check_basis(
                                     basis_name, "orca"
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = "%s" % basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
 
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = (
-                                    'AuxCGTOName "%s"' % basis.user_defined
-                                )
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
+
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+
+                elif basis.aux_type.upper() == "J":
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = Basis.get_orca(basis.name) + "/J"
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            if warning:
+                                warnings.append(warning)
+                            out_str = "%s" % basis_name
+                            info[ORCA_ROUTE].append(out_str)
+                            first_basis.append(basis.aux_type)
 
                         else:
-                            for ele in basis.elements:
-                                out_str = "newAuxCGTO        %-2s " % ele
+                            out_str = (
+                                'AuxJGTOName "%s"' % basis.user_defined
+                            )
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
 
-                                if not basis.user_defined:
-                                    basis_name = (
-                                        Basis.get_orca(basis.name) + "/C"
-                                    )
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newAuxJGTO        %-2s " % ele
 
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
-
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-
-                    elif basis.aux_type.upper() == "J":
-                        if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                basis_name = Basis.get_orca(basis.name) + "/J"
+                                basis_name = (
+                                    Basis.get_orca(basis.name) + "/J"
+                                )
                                 warning = Basis.sanity_check_basis(
                                     basis_name, "orca"
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = "%s" % basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
 
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = (
-                                    'AuxJGTOName "%s"' % basis.user_defined
-                                )
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
+
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+
+                elif basis.aux_type.upper() == "JK":
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = Basis.get_orca(basis.name) + "/JK"
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            if warning:
+                                warnings.append(warning)
+                            out_str = "%s" % basis_name
+                            info[ORCA_ROUTE].append(out_str)
+                            first_basis.append(basis.aux_type)
 
                         else:
-                            for ele in basis.elements:
-                                out_str = "newAuxJGTO        %-2s " % ele
+                            out_str = (
+                                'AuxJKGTOName "%s"' % basis.user_defined
+                            )
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
 
-                                if not basis.user_defined:
-                                    basis_name = (
-                                        Basis.get_orca(basis.name) + "/J"
-                                    )
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newAuxJKGTO       %-2s " % ele
 
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
-
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-
-                    elif basis.aux_type.upper() == "JK":
-                        if basis.aux_type not in first_basis:
                             if not basis.user_defined:
-                                basis_name = Basis.get_orca(basis.name) + "/JK"
+                                basis_name = (
+                                    Basis.get_orca(basis.name) + "/JK"
+                                )
                                 warning = Basis.sanity_check_basis(
                                     basis_name, "orca"
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = "%s" % basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
 
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = (
-                                    'AuxJKGTOName "%s"' % basis.user_defined
-                                )
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
+
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+
+                elif basis.aux_type.upper() == "CABS":
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = (
+                                Basis.get_orca(basis.name) + "-CABS"
+                            )
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            if warning:
+                                warnings.append(warning)
+                            out_str = "%s" % basis_name
+                            info[ORCA_ROUTE].append(out_str)
+                            first_basis.append(basis.aux_type)
 
                         else:
-                            for ele in basis.elements:
-                                out_str = "newAuxJKGTO       %-2s " % ele
+                            out_str = (
+                                'CABSGTOName "%s"' % basis.user_defined
+                            )
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
 
-                                if not basis.user_defined:
-                                    basis_name = (
-                                        Basis.get_orca(basis.name) + "/JK"
-                                    )
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newCABSGTO        %-2s " % ele
 
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
-
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-
-                    elif basis.aux_type.upper() == "CABS":
-                        if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 basis_name = (
                                     Basis.get_orca(basis.name) + "-CABS"
@@ -995,39 +1165,39 @@ class BasisSet:
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = "%s" % basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
 
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = (
-                                    'CABSGTOName "%s"' % basis.user_defined
-                                )
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
+
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+
+                elif basis.aux_type.upper() == "OPTRI CABS":
+                    if basis.aux_type not in first_basis:
+                        if not basis.user_defined:
+                            basis_name = (
+                                Basis.get_orca(basis.name) + "-OptRI"
+                            )
+                            warning = Basis.sanity_check_basis(
+                                basis_name, "orca"
+                            )
+                            if warning:
+                                warnings.append(warning)
+                            out_str = "%s" % basis_name
+                            info[ORCA_ROUTE].append(out_str)
+                            first_basis.append(basis.aux_type)
 
                         else:
-                            for ele in basis.elements:
-                                out_str = "newCABSGTO        %-2s " % ele
+                            out_str = (
+                                'CABSGTOName "%s"' % basis.user_defined
+                            )
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
+                            first_basis.append(basis.aux_type)
 
-                                if not basis.user_defined:
-                                    basis_name = (
-                                        Basis.get_orca(basis.name) + "-CABS"
-                                    )
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
+                    else:
+                        for ele in basis.elements:
+                            out_str = "newCABSGTO        %-2s " % ele
 
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
-
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-
-                    elif basis.aux_type.upper() == "OPTRI CABS":
-                        if basis.aux_type not in first_basis:
                             if not basis.user_defined:
                                 basis_name = (
                                     Basis.get_orca(basis.name) + "-OptRI"
@@ -1037,36 +1207,12 @@ class BasisSet:
                                 )
                                 if warning:
                                     warnings.append(warning)
-                                out_str = "%s" % basis_name
-                                info[ORCA_ROUTE].append(out_str)
-                                first_basis.append(basis.aux_type)
 
+                                out_str += '"%s" end' % basis_name
                             else:
-                                out_str = (
-                                    'CABSGTOName "%s"' % basis.user_defined
-                                )
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
-                                first_basis.append(basis.aux_type)
+                                out_str += '"%s" end' % basis.user_defined
 
-                        else:
-                            for ele in basis.elements:
-                                out_str = "newCABSGTO        %-2s " % ele
-
-                                if not basis.user_defined:
-                                    basis_name = (
-                                        Basis.get_orca(basis.name) + "-OptRI"
-                                    )
-                                    warning = Basis.sanity_check_basis(
-                                        basis_name, "orca"
-                                    )
-                                    if warning:
-                                        warnings.append(warning)
-
-                                    out_str += '"%s" end' % basis_name
-                                else:
-                                    out_str += '"%s" end' % basis.user_defined
-
-                                info[ORCA_BLOCKS]["basis"].append(out_str)
+                            info[ORCA_BLOCKS]["basis"].append(out_str)
 
         if self.ecp is not None:
             for basis in self.ecp:
@@ -1086,6 +1232,11 @@ class BasisSet:
                     out_str = 'GTOName "%s"' % basis.user_defined
 
                     info[ORCA_BLOCKS]["basis"].append(out_str)
+
+        if self.angular_momentum_type and self.angular_momentum_type.lower() != "pure":
+            warnings.append(
+                "can only use pure angular momentum with ORCA basis sets"
+            )
 
         return info, warnings
 
@@ -1141,7 +1292,19 @@ class BasisSet:
                 if not basis.user_defined:
                     warning = basis.sanity_check_basis(basis_name, "psi4")
                     if warning:
-                        warnings.append(warning)
+                        try:
+                            import basis_set_exchange as bse
+                            bse_data = bse.get_basis(
+                                basis.name,
+                                fmt="psi4",
+                                elements=basis.elements,
+                                header=False,
+                            )
+                            basis.user_defined = bse_data
+                        except ModuleNotFoundError:
+                            warnings.append(warning)
+                        except KeyError:
+                            warnings.append(warning)
 
                 if aux_type not in out_str:
                     out_str[aux_type] = "%s this_%s {\n" % (
@@ -1163,14 +1326,16 @@ class BasisSet:
                         if not aux_type:
                             aux_type = "BASIS"
                         aux_type = aux_type.upper()
-                        if os.path.exists(basis.user_defined):
-                            if aux_type not in out_str:
-                                out_str[aux_type] = "%s this_%s {\n" % (
-                                    aux_type.lower(),
-                                    aux_type.lower().replace(" ", "_")
-                                )
+                        if aux_type not in out_str:
+                            out_str[aux_type] = "%s this_%s {\n" % (
+                                aux_type.lower(),
+                                aux_type.lower().replace(" ", "_")
+                            )
 
-                            out_str[aux_type] += "\n[%s]\n" % basis.name
+                        out_str[aux_type] += "\n[%s]\n" % basis.name
+                        if len(basis.user_defined.splitlines()) > 1:
+                            lines = basis.user_defined.splitlines()
+                        else:
                             with open(basis.user_defined, "r") as f:
                                 lines = [
                                     line.rstrip()
@@ -1178,13 +1343,18 @@ class BasisSet:
                                     if line.strip()
                                     and not line.startswith("!")
                                 ]
-                                out_str[aux_type] += "\n".join(lines)
-                                out_str[aux_type] += "\n\n"
+                        out_str[aux_type] += "\n".join(lines)
+                        out_str[aux_type] += "\n\n"
 
         s = "}\n\n".join(out_str.values())
         s += "}"
 
         info = {PSI4_BEFORE_GEOM: [s]}
+        if self.angular_momentum_type:
+            if self.angular_momentum_type.lower() == "pure":
+                info[PSI4_SETTINGS] = {"puream": "true"}
+            elif self.angular_momentum_type.lower() == "cartesian":
+                info[PSI4_SETTINGS] = {"puream": "false"}
 
         return info, warnings
 
@@ -1459,5 +1629,31 @@ class BasisSet:
                 else:
                     info[QCHEM_SETTINGS]["ecp"] = [out_str.strip()]
 
+        if self.angular_momentum_type:
+            if self.angular_momentum_type.lower() == "pure":
+                info[QCHEM_REM]["PURECART"] = ["1111"]
+            elif self.angular_momentum_type.lower() == "cartesian":
+                info[QCHEM_REM]["PURECART"] = ["2222"]
+            else:
+                warnings.append(
+                    "unrecognized BasisSet.angular_momentum_type: %s" % self.angular_momentum_type
+                )
 
         return info, warnings
+
+
+def _bse_to_orca_fmt(data):
+    out = ""
+    momentum_symbols = {0: "S", 1: "P", 2: "D", 3: "F", 4: "G", 5: "H", 6: "I"}
+    for element in data["elements"]:
+        symbol = ELEMENTS[int(element)]
+        out += "  newGTO %s\n" % symbol
+        for shell in data["elements"][element]["electron_shells"]:
+            # for s=p orbitals presumably
+            for i, angular_momentum in enumerate(shell["angular_momentum"]):
+                out += "  %s  %i\n" % (momentum_symbols[angular_momentum], len(shell["exponents"]))
+                for j, (coef, exp) in enumerate(zip(shell["coefficients"][i], shell["exponents"])):
+                    out += "    %2i    %14s    %14s\n" % (j + 1, exp, coef)
+        out += "  end\n"
+    
+    return out

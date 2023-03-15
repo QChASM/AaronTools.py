@@ -470,12 +470,15 @@ def shortest_path(graph, start, end):
             [graph.atoms.index(j) for j in i.connected if j in graph.atoms]
             for i in graph.atoms
         ]
-    graph = [[i for i in j] for j in graph]
+    # I'm not sure why we were copying the graph
+    # blame me if this messes things up
+    # - Tony
+    # graph = [j[:] for j in graph]
 
     # initialize distance array, parent array, and set of unvisited nodes
-    dist = [np.inf for x in graph]
-    parent = [-1 for x in graph]
-    unvisited = set([i for i in range(len(graph))])
+    dist = (np.inf * np.ones(len(graph)))
+    parent = (-1 * np.ones(len(graph), dtype=int))
+    unvisited = set(np.arange(0, len(graph), dtype=int))
 
     dist[start] = 0
     current = start
@@ -723,9 +726,20 @@ def perp_vector(vec):
         return out
 
     elif vec.ndim == 2:
+        if len(vec) == 3:
+            ovl = np.dot(vec[0] - vec[1], vec[2] - vec[1])
+            n1 = np.linalg.norm(vec[0] - vec[1])
+            n2 = np.linalg.norm(vec[2] - vec[1])
+            if abs(ovl) == n1 * n2:
+                return perp_vector(vec[0] - vec[1])
+            else:
+                return np.cross(vec[0] - vec[1], vec[2] - vec[1])
         xyz = vec - np.mean(vec, axis=0)
         cov_prod = np.dot(xyz.T, xyz)
-        u, s, vh = np.linalg.svd(cov_prod, compute_uv=True)
+        try:
+            u, s, vh = np.linalg.svd(cov_prod, compute_uv=True)
+        except np.linalg.LinAlgError:
+            return perp_vector(vec[0] - vec[1])
         return u[:, -1]
 
     raise NotImplementedError(
@@ -832,6 +846,7 @@ def is_num(test):
     rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
 
+
 def getuser():
     """returns the username of the user"""
     for envar in ["LOGNAME", "USER", "LNAME", "USERNAME"]:
@@ -846,6 +861,7 @@ def getuser():
         from psutil import username
         return username()
 
+
 def available_memory():
     """returns available memory in B"""
     for envar in ["SLURM_MEM_PER_NODE"]:
@@ -854,6 +870,26 @@ def available_memory():
             return 1e6 * int(mem)
     
     from psutil import virtual_memory
-    return virtual_memory().free
+    return virtual_memory().available
+
+
+def unique_combinations(*args):
+    total = 1
+    mod_array = []
+    for arg in args:
+        n_options = len(arg)
+        mod_array = [n_options * x for x in mod_array]
+        mod_array.append(1)
+        total *= n_options
+    
+    output = []
+    for i in range(0, total):
+        output.append([])
+        for j, arg in enumerate(args):
+            ndx = int(i / mod_array[j]) % len(arg)
+            option = arg[ndx]
+            output[-1].append(option)
+    
+    return output
 
 float_num = re.compile("[-+]?\d+\.?\d*")

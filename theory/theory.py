@@ -950,10 +950,7 @@ class Theory:
                 warnings.append(warning)
             out_str += "%s" % func
             if not self.method.is_semiempirical and self.basis is not None:
-                (
-                    basis_info,
-                    basis_warnings,
-                ) = self.basis.get_gaussian_basis_info()
+                basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
                 # in two basis sets or left out of any
@@ -965,7 +962,15 @@ class Theory:
                         warnings.append(basis_warning)
 
                 if GAUSSIAN_ROUTE in basis_info:
-                    out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+                    for key in basis_info[GAUSSIAN_ROUTE]:
+                        if "/" in key:
+                            out_str += "%s" % key
+                        del basis_info[GAUSSIAN_ROUTE][key]
+                        break
+                    other_kw_dict = combine_dicts(
+                        other_kw_dict,
+                        basis_info,
+                    )
 
             out_str += " "
 
@@ -1178,11 +1183,6 @@ class Theory:
         if GAUSSIAN_COORDINATES not in other_kw_dict:
             other_kw_dict[GAUSSIAN_COORDINATES] = {}
 
-        if "coords" not in other_kw_dict[GAUSSIAN_COORDINATES]:
-            other_kw_dict[GAUSSIAN_COORDINATES][
-                "coords"
-            ] = self.geometry.coords
-
         s = ""
 
         # atom specs need flag column before coords if any atoms frozen
@@ -1203,9 +1203,7 @@ class Theory:
         if hasattr(test_atom, "charge"):
             if atom.charge != "" and atom.charge != None:
                 has_charge = True
-        for atom, coord in zip(
-            self.geometry.atoms, other_kw_dict[GAUSSIAN_COORDINATES]["coords"]
-        ):
+        for i, atom in enumerate(self.geometry.atoms):
             spec = ""
             if oniom:
                 s += "%s" % atom.element
@@ -1223,16 +1221,21 @@ class Theory:
                 s += " " * num_spaces
             if has_frozen:
                 s += " % 2d" % (-1 if atom.flag else 0)
-            for val in coord:
-                s += "  "
-                if isinstance(val, float):
-                    s += " %9.5f" % val
-                elif isinstance(val, str):
-                    s += " %5s" % val
-                elif isinstance(val, int):
-                    s += " %3i" % val
-                else:
-                    warnings.append("unknown coordinate type: %s" % type(val))
+            try:
+                coord = other_kw_dict[GAUSSIAN_COORDINATES]["coords"][i]
+                for val in coord:
+                    s += "  "
+                    if isinstance(val, float):
+                        s += " %9.5f" % val
+                    elif isinstance(val, str):
+                        s += " %5s" % val
+                    elif isinstance(val, int):
+                        s += " %3i" % val
+                    else:
+                        warnings.append("unknown coordinate type: %s" % type(val))
+            except KeyError:
+                coord = tuple(atom.coords)
+                s += "   %9.5f   %9.5f   %9.5f" % coord
             if oniom:
                 s += " %s" % atom.layer
                 if atom.link_info =={}:
@@ -1327,7 +1330,7 @@ class Theory:
             and not self.method.is_semiempirical
             and self.basis is not None
         ):
-            basis_info, warnings = self.basis.get_gaussian_basis_info()
+            basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
 
         elif (
             self.method is not None
@@ -1494,16 +1497,14 @@ class Theory:
             for line in comment.split("\n"):
                 out_str += "#%s\n" % line
 
-        out_str += "! "
+        out_str += "!"
         # method
         if self.method is not None:
-            func, warning = self.method.get_orca()
-            if warning is not None:
-                warnings.append(warning)
-            warning = self.method.sanity_check_method(func, "orca")
-            if warning:
-                warnings.append(warning)
-            out_str += "%s" % func
+            func, method_warn = self.method.get_orca()
+            warnings.extend(method_warn)
+            other_kw_dict = combine_dicts(
+                func, other_kw_dict
+            )
 
         # add other route options
         if ORCA_ROUTE in other_kw_dict:
@@ -1723,6 +1724,8 @@ class Theory:
             # aux basis sets might have a '%s' b/c the keyword to apply them depends on
             # the method - replace %s with the appropriate thing for the method
             for key in basis_info:
+                if not isinstance(basis_info[key], list):
+                    continue
                 for i in range(0, len(basis_info[key])):
                     if "%s" in basis_info[key][i]:
                         if "cc" in self.method.name.lower():
@@ -2086,7 +2089,14 @@ class Theory:
         if self.solvent is not None:
             solvent_info, warning = self.solvent.get_psi4()
             other_kw_dict = combine_dicts(other_kw_dict, solvent_info)
-
+        
+        # basis set
+        if not self.method.is_semiempirical and self.basis is not None:
+            basis_info, basis_warnings = self.basis.get_psi4_basis_info(
+                isinstance(self.method, SAPTMethod)
+            )
+            other_kw_dict = combine_dicts(other_kw_dict, basis_info)
+        
         # grid
         if self.grid is not None:
             grid_info, warning = self.grid.get_psi4()

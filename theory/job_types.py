@@ -70,7 +70,6 @@ def job_from_string(name, **kwargs):
 
         return ConformerSearchJob(geometry=geom)
     
-    
     if name.lower().startswith("freq"):
         numerical = kwargs.get("numerical", False)
         numerical = numerical or (ext and ext.startswith("num"))
@@ -283,7 +282,7 @@ class OptimizationJob(JobType):
         else:
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
 
-        coords = self.geometry.coords.tolist()
+        coords = dict()
         vars = []
         consts = []
         use_zmat = False
@@ -319,6 +318,7 @@ class OptimizationJob(JobType):
                     if atom in x_atoms:
                         var_name = "x%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[0]))
+                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
                         coords[i] = [var_name, coords[i][1], coords[i][2]]
 
                 if not use_zmat:
@@ -331,6 +331,7 @@ class OptimizationJob(JobType):
                     if atom in y_atoms:
                         var_name = "y%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[1]))
+                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
                         coords[i] = [coords[i][0], var_name, coords[i][2]]
 
                 if not use_zmat:
@@ -343,6 +344,7 @@ class OptimizationJob(JobType):
                     if atom in z_atoms:
                         var_name = "z%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[2]))
+                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
                         coords[i] = [coords[i][0], coords[i][1], var_name]
 
                 if not use_zmat:
@@ -365,6 +367,7 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in x_atoms:
+                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
                             coords[i] = [var_name, coords[i][1], coords[i][2]]
 
                 if not use_zmat:
@@ -387,6 +390,7 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in y_atoms:
+                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
                             coords[i] = [coords[i][0], var_name, coords[i][2]]
 
                 if not use_zmat:
@@ -409,6 +413,7 @@ class OptimizationJob(JobType):
                         vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in z_atoms:
+                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
                             coords[i] = [coords[i][0], coords[i][1], var_name]
 
                 if not use_zmat:

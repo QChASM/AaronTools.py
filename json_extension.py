@@ -236,6 +236,10 @@ class ATEncoder(json.JSONEncoder):
         return rv
 
     def _encode_finder(self, obj):
+        try:
+            get_class(obj.__class__.__name__)
+        except ValueError:
+            return None
         rv = {"_type": "Finder"}
         rv["_spec_type"] = obj.__class__.__name__
         rv["kwargs"] = obj.__dict__
@@ -423,7 +427,10 @@ class ATDecoder(json.JSONDecoder):
     def _decode_finder(self, obj):
         specific_type = obj["_spec_type"]
         kwargs = obj["kwargs"]
-        cls = get_class(specific_type)
+        try:
+            cls = get_class(specific_type)
+        except ValueError:
+            return None
         args = []
         sig = signature(cls.__init__)
         for param in sig.parameters.values():

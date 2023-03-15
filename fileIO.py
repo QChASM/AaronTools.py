@@ -2096,11 +2096,14 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_orca_out(self, f, get_all=False, just_geom=True):
+    def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False):
         """read orca output file"""
 
         nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
         opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
+
+        is_scan_job = False
+        step_converged = False
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2160,7 +2163,14 @@ class FileReader:
                 )
             
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
-                if get_all and len(self.atoms) > 0:
+                if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
+                    if self.all_geom is None:
+                        self.all_geom = []
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+
+                elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
                     self.all_geom += [
@@ -2168,6 +2178,7 @@ class FileReader:
                     ]
 
                 self.atoms, n = get_atoms(f, n)
+                step_converged = False
 
             if just_geom:
                 line = f.readline()
@@ -2220,10 +2231,20 @@ class FileReader:
                     self.other["energy"] = float(nrg.group(2))
                     self.other[nrg.group(1)] = float(nrg.group(2))
 
+                elif "*    Relaxed Surface Scan    *" in line:
+                    is_scan_job = True
+
+                elif "THE OPTIMIZATION HAS CONVERGED" in line:
+                    step_converged = True
+
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
-                    self.skip_lines(f, 2)
-                    n += 2
+                    if "NUMERICAL" in line:
+                        self.skip_lines(f, 1)
+                        n += 1
+                    else:
+                        self.skip_lines(f, 2)
+                        n += 2
                     for i in range(0, len(self.atoms)):
                         n += 1
                         line = f.readline()
