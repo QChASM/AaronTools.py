@@ -1,4 +1,5 @@
-<a href="https://badge.fury.io/py/AaronTools"><img src="https://badge.fury.io/py/AaronTools.svg" alt="PyPI version" height="18"></a>
+<a href="https://badge.fury.io/py/AaronTools"><img src="https://badge.fury.io/py/AaronTools.svg" alt="PyPI version"></a>
+<a href="https://doi.org/10.1002/wcms.1510"><img src="https://img.shields.io/badge/DOI-10.1002/wcms.1510-blue"></a>
 # AaronTools.py
 AaronTools provides a collection of tools for automating routine tasks encountered when running quantum chemistry computations.
 
