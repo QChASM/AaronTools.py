@@ -1859,7 +1859,8 @@ class FileReader:
                     self.other[item] = float(line.split()[-2])
 
                 elif "CORRELATION ENERGY" in line and "Eh" in line:
-                    item = line.split()[-6] + " correlation energy"
+                    energy_type = re.search("\s*([\S\s]+) CORRELATION ENERGY", line).group(1)
+                    item = energy_type + " correlation energy"
                     self.other[item] = float(line.split()[-2])
                 
                 elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
