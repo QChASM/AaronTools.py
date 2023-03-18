@@ -5616,85 +5616,31 @@ class Geometry:
         self = self - tmp
         return self
 
-#    def fix_links(self, refresh_connected=False):
-#        if refresh_connected==True:
-#            self.refresh_connected()
-#        for a in self.atoms:
-#            if "connected" in a.link_info.keys():
-#                c = self.atoms[a.link_info["connected"]-1]
-#                if c not in a.connected:
-#                    a.link_info = {}
-#            elif "connected" not in a.link_info.keys():
-#                for b in a.connected:
-#                    if b > a:
-#                        a.link_info["connected"]=int(b.name)
-#                    elif a > b:
-#                        b.link_info["connected"]=int(a.name)
  
     def fix_links(self):
-        numlinks = 0
-        for i, a in enumerate(self.atoms):
-            if not isinstance(a, OniomAtom):
-                raise TypeError("geometry must be composed of OniomAtoms")
-            for j in range(i+1, len(self.atoms)):
-                if a.is_connected(self.atoms[j]) and a.layer != self.atoms[j].layer:
-                   # b = self.atoms[j]
-                    numlinks += 1
-                    if a > self.atoms[j]:
-                        if "connected" in self.atoms[j].link_info.keys() and self.atoms[j].link_info["connected"] == i+1:
-                            pass
-                        else:
-                            self.atoms[j].link_info["connected"] = i+1
-                            self.atoms[j].link_info["element"] = "H"
-                    elif self.atoms[j] > a:
-                        if "connected" in a.link_info.keys() and a.link_info["connected"] == j+1:
-                            pass
-                        else:
-                            self.atoms[i].link_info["connected"] = j+1
-                            self.atoms[i].link_info["element"] = "H"
+        #connectivity = self.get_connectivity()
+        #atoms = enumerate(self.atoms)
+        if not hasattr(self.atoms[0], "index"):
+            for i, atom in enumerate(self.atoms):
+                atom.index = i
+        for a in self.atoms:
             if a.link_info != None and "connected" in a.link_info.keys():
-                #if a.link_info["connected"] == 4303:
-                    #print(a.is_connected(self.atoms[4302]))
-                #b = self.atoms[a.link_info["connected"]-1]
                 if a.is_connected(self.atoms[a.link_info["connected"]-1]) == False:
-                    #if a.link_info["connected"] == 4303:
-                    #    print(a)
                     self.atoms[a.link_info["connected"]-1].link_info = {}
-                    self.atoms[i].link_info = {}
+                    self.atoms[a.index].link_info = {}
                 elif a.is_connected(self.atoms[a.link_info["connected"]-1]) and a.layer == self.atoms[a.link_info["connected"]-1].layer:
                     self.atoms[a.link_info["connected"]-1].link_info = {}
-                    self.atoms[i].link_info = {}
-                else:
-                    numlinks +=1
+                    self.atoms[a.index].link_info = {}
+ 
+            for c in a.connected:
+                if a.layer != c.layer:
+                    if a > c:
+                        self.atoms[c.index].link_info["connected"] = a.index+1
+                        self.atoms[c.index].link_info["element"] = "H"
+                    elif c > a:
+                        self.atoms[a.index].link_info["connected"] = c.index+1
+                        self.atoms[a.index].link_info["element"] = "H"
 
-#    def fix_links(self):
-#        numlinks = 0
-#        for i, a in enumerate(self.atoms):
-#            if not isinstance(a, OniomAtom):
-#                raise TypeError("geometry must be composed of OniomAtoms")
-#            if (not a.link_info) or (a.link_info and "connected" not in a.link_info.keys()):
-#                for j in range(i+1, len(self.atoms)):
-#                    b = self.atoms[j]
-#                    if a.is_connected(b) and a.layer != b.layer:
-#                        numlinks += 1
-#                        if a > b:
-#                            if "connected" in b.link_info.keys() and b.link_info["connected"] == i+1:
-#                                pass
-#                            else:
-#                                b.link_info = {}
-#                                b.link_info["connected"] = i+1
-#                        elif not a > b:
-#                            if "connected" in a.link_info.keys() and a.link_info["connected"] == j+1:
-#                                pass
-#                            else:
-#                                a.link_info = {}
-#                                a.link_info["connected"] = j+1
-#            elif a.link_info and "connected" in a.link_info.keys():
-#                b = self.atoms[a.link_info["connected"]-1]
-#                if not a.is_connected(b):
-#                    a.link_info = {}
-#                else:
-#                    numlinks +=1
         return
 
     #def write_comment(self):
@@ -5891,8 +5837,6 @@ class Geometry:
             for i, atom in enumerate(self.atoms):
                 atom.index = i
 
-        #self.refresh_connected
-
         avoid = set([])
         layer_atoms = set([])
         new_atoms = []
@@ -5925,11 +5869,6 @@ class Geometry:
                 if isinstance(reference[0][0], float):
                     for point in reference:
                         new_atoms += WithinRadiusFromPoint(point, distance).get_matching_atoms(self.atoms)
-                        #layer_atoms.update(new_atoms)
-                        #for new_atom in new_atoms:
-                            #if new_atom not in layer_atoms:
-                                #new_atom.layer == layer.upper()
-                            #layer_atoms.add(new_atom)
             elif isinstance(reference[0], Atom):
                 for atom in reference:
                     new_atoms.append(atom)
@@ -5937,19 +5876,12 @@ class Geometry:
                         new_atoms += WithinRadiusFromAtom(atom,distance).get_matching_atoms(self.atoms)
                     elif bond_based == True:
                         new_atoms += WithinBondsOf(atom, distance).get_matching_atoms(self.atoms)
-                    #layer_atoms.update(new_atoms)
-                    #for new_atom in new_atoms:
-                        #if new_atom not in layer_atoms:
-                            #new_atom.layer == layer.upper()
-                        #layer_atoms.add[new_atom]
         elif isinstance(reference, Atom):
             new_atoms.append(reference)
             if bond_based == False:
                 new_atoms += WithinRadiusFromAtom(reference, distance).get_matching_atoms(self.atoms)
             elif bond_based == True:
                 new_atoms += WithinBondsOf(reference,distance).get_matching_atoms(self.atoms)
-            #for atom in layer_atoms:
-            #    atom.layer == layer.upper()
 
         elif isinstance(reference, str):
             if reference.startswith("!") and reference[1].upper() in ("H", "M", "L"):
@@ -5970,16 +5902,10 @@ class Geometry:
                         new_atoms += WithinRadiusFromAtom(atom,distance).get_matching_atoms(self.atoms)
                     elif bond_based == True:
                         new_atoms += WithinBondsOf(atom, distance).get_matching_atoms(self.atoms)
-                    #new_atoms = set(new_atoms)
-                    #for new_atom in new_atoms:
-                        #if new_atom not in layer_atoms:
-                            #new_atom.layer == layer.upper()
-                    #layer_atoms.update(new_atoms)
 
             elif reference.upper() == "OTHER":
                 for atom in self.atoms:
                     if atom.layer == "":
-                        layer_atoms.add(atom)
                         atom.layer = layer.upper()
                 #fix link atom stuff
                 return
@@ -5996,7 +5922,7 @@ class Geometry:
                 else:
                     boundary_atoms.add(atom)
                     break
-        boundary_atoms = list(boundary_atoms)
+        boundary_atoms = [*boundary_atoms, ]
         if res_based == True:
             new_layer_atoms = set([])
             new_boundary_atoms = []
@@ -6013,7 +5939,7 @@ class Geometry:
                         if connected > dummy:
                             boundary_atom.link_info["element"] = "H"
                             boundary_atom.link_info["connected"] = connected.index + 1
-                        elif dummy > connected or all((connected.layer == "", boundary_atom.layer == "")):
+                        elif dummy > connected: 
                             connected.link_info["element"] = "H"
                             connected.link_info["connected"]= boundary_atom.index + 1
                 boundary_atoms += new_boundary_atoms
@@ -6044,7 +5970,6 @@ class Geometry:
                     else:
                         boundary_atoms.remove(boundary_atom)
                         layer_atoms.remove(boundary_atom)
-                        #boundary_atoms = boundary_atoms + boundary_atom.connected
                 else:
                     for connected in boundary_atom.connected:
                         if connected not in layer_atoms:
@@ -6204,13 +6129,13 @@ class Geometry:
  #                       self.LOG.warning("Incomplete residue at atoms " + str(m[0].name))
 
         #layer_atoms = set(layer_atoms)
-        for layer_atom in layer_atoms:
-            for atom in self.atoms:
-                if layer_atom == atom:
-                    atom.layer = layer.upper()
-                if atom not in layer_atoms and atom.layer == layer.upper():
-                    atom.layer = ""
-                    atom.link_info = {}
+        #for layer_atom in layer_atoms:
+        for atom in self.atoms:
+            if atom in layer_atoms:
+                atom.layer = layer.upper()
+            elif atom not in layer_atoms and atom.layer == layer.upper():
+                atom.layer = ""
+                atom.link_info = {}
 
     def change_chirality(self, target):
         """
