@@ -23,7 +23,6 @@ class TestFileIO(TestWithTimer):
     ts = os.path.join(prefix, "test_files", "claisen_ts.xyz")
     oniom_com = os.path.join(prefix, "test_files", "pd_complex_2.com")
     oniom_xyz = os.path.join(prefix, "test_files", "pd_complex_2.xyz")
-    pdb_xyz = os.path.join(prefix, "test_files", "input.xyz")
     pdb = os.path.join(prefix, "test_files", "input.pdb")
 
     def xyz_matrix(self, fname):
@@ -198,11 +197,24 @@ class TestFileIO(TestWithTimer):
         test = FileReader(self.com_file2, just_geom=False)
         self.assertEqual(test.other, ref2)
 
-#    def test_read_pdb(self):
-#        """read rcsb pdb files"""
-#        ref = Geometry(FileReader(self.pdb_xyz))
-#        test = Geometry(FileReader(self.pdb))
-        #self.assertTrue(ref==test)
+    def test_read_pdb(self):
+        """read rcsb pdb files"""
+        ref = open(self.pdb, "r")
+        test = Geometry(FileReader(self.pdb))
+        line = ref.readline()
+        while line.split()[0] != "ATOM":
+            line = ref.readline()
+        n = 0
+        while line.strip() != "ENDMDL":
+            if line.split()[0] in ("ATOM", "HETATM"):
+                self.assertEqual(line[12:16].strip(), test.atoms[n].atomtype)
+                self.assertEqual(line[76:78].strip(), test.atoms[n].element)
+                self.assertTrue(float(line[30:38].strip()) == test.atoms[n].coords[0])
+                self.assertTrue(float(line[38:46].strip()) == test.atoms[n].coords[1])
+                self.assertTrue(float(line[46:54].strip()) == test.atoms[n].coords[2])
+                self.assertEqual(line[17:20].strip(), test.atoms[n].res)
+                n += 1
+            line = ref.readline()
 
     def test_write_com(self):
         """write gaussian input file"""
