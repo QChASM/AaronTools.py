@@ -412,11 +412,11 @@ class Theory:
         if isinstance(val, str):
             if attr == "method":
                 super().__setattr__(attr, Method(val))
-            if attr == "high_method":
+            elif attr == "high_method":
                 super().__setattr__(attr, Method(val))
-            if attr == "medium_method":
+            elif attr == "medium_method":
                 super().__setattr__(attr, Method(val))
-            if attr == "low_method":
+            elif attr == "low_method":
                 super().__setattr__(attr, Method(val))
             elif attr == "basis":
                 super().__setattr__(attr, BasisSet(val))
