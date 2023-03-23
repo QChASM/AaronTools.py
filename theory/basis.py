@@ -783,7 +783,7 @@ class BasisSet:
             else:
                 info[GAUSSIAN_ROUTE]["/genecp"] = []
                 try:
-                    info[GAUSSIAN_ROUTE].remove("/gen")
+                    del info[GAUSSIAN_ROUTE]["/gen"]
                 except KeyError:
                     pass
 

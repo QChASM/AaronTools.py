@@ -887,7 +887,7 @@ class Theory:
             elif self.geometry.name:
                 other_kw_dict[GAUSSIAN_COMMENT] = [self.geometry.name]
             else:
-                other_kw_dict[GAUSSIAN_COMMENT] = "comment"
+                other_kw_dict[GAUSSIAN_COMMENT] = ["comment"]
 
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
