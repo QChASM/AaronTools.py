@@ -37,6 +37,7 @@ def is_close(a, b, tol=10 ** -8, debug=False):
 
 class TestGeometry(TestWithTimer):
     benz_NO2_Cl = os.path.join(prefix, "test_files", "benzene_1-NO2_4-Cl.xyz")
+    benzene_oniom = os.path.join(prefix, "test_files", "benzene_oniom.xyz")
     benz_NO2_Cl_conn = [
         "2,6,12",
         "1,3,7",
@@ -87,6 +88,8 @@ class TestGeometry(TestWithTimer):
 
     lig_1 = os.path.join(prefix, "test_files", "lig_1.xyz")
     lig_2 = os.path.join(prefix, "test_files", "lig_2.xyz")
+    pd_1 = os.path.join(prefix, "test_files", "pd_complex_1.com")
+    pd_2 = os.path.join(prefix, "test_files", "pd_complex_2.com")
 
     def test_init(self):
         ref = FileReader(TestGeometry.benz_NO2_Cl)
@@ -883,6 +886,84 @@ class TestGeometry(TestWithTimer):
         # profile.disable()
         # profile.print_stats()
 
+    def test_get_gaff_geom(self):
+        ref = Geometry(TestGeometry.benzene_oniom)
+        mol = Geometry(TestGeometry.benz_NO2_Cl)
+        mol2 = mol.get_gaff_geom()
+        self.assertEqual(ref,mol2)
+
+    def test_get_aromatic_atoms(self):
+        mol = Geometry(TestGeometry.benzene)
+        out,out2,out3 = mol.get_aromatic_atoms(mol.atoms, return_rings=False,return_h=False)
+        self.assertTrue(all([atom in mol.find('C') for atom in out]))
+
+    def test_define_layer(self):
+        g = Geometry(TestGeometry.pd_1)
+        h = Geometry(TestGeometry.pd_2)
+        for atom in g.atoms:
+            atom.layer = ""
+            atom.link_info = {}
+        g.define_layer("H", g.atoms[0], 4)
+        g.define_layer("L", "!H", 5)
+        counter = 0
+        for index, atom in enumerate(g.atoms):
+            if atom.layer == h.atoms[index].layer:
+                counter += 1
+#            elif atom.layer != h.atoms[index].layer:
+#                print(atom, h.atoms[index])
+        self.assertEqual(counter, len(g.atoms))
+#        self.assertTrue(g == h)
+
+    def test_detect_solvent(self):
+        g = Geometry(TestGeometry.pd_1)
+        mol_1 = Geometry(structure=[Atom(name = "74", element = "C", coords =[6.040704, 0.007857, 0.264571]),
+                Atom(name="75", element="H", coords= [4.952884, 0.082218, 0.304678]),
+                Atom(name="77", element="Cl", coords= [ 6.551478, -1.353073,  1.318184]),
+                Atom(name="78", element="Cl", coords= [ 6.507952, -0.297483, -1.439601]),
+                Atom(name="76", element="Cl", coords= [6.737007, 1.550031, 0.844314])])
+
+        mol_2 = Geometry(structure=[Atom(name="79", element="C" , coords= [ 8.232315, -6.21151 , -0.70706 ]),
+                Atom(name="80", element="H" , coords= [ 9.302822, -6.374525, -0.627481]),
+                Atom(name="82", element="Cl" , coords= [ 7.901812, -4.527103, -0.209528]),
+                Atom(name="83", element="Cl" , coords= [ 7.773422, -6.483229, -2.416086]),
+                Atom(name="81", element="Cl" , coords= [ 7.422991, -7.380789 , 0.374106])])
+
+        mol_3 = Geometry(structure=[Atom(name="84", element= "C" , coords= [-9.068698, -1.81313  , 2.409807]),
+                Atom(name="85", element= "H" , coords= [-10.069529,  -1.900536  , 2.821704]),
+                Atom(name="86", element= "Cl" , coords= [-8.062186, -0.920557 , 3.571119]),
+                Atom(name="88", element= "Cl" , coords= [-9.206153, -0.941428 , 0.850172]),
+                Atom(name="87", element= "Cl" , coords= [-8.454248, -3.48083  , 2.152553])])
+
+        mol_4 = Geometry(structure=[Atom(name="89", element= "C" , coords= [ 1.813612, 10.176062, -1.144781]),
+                Atom(name="90", element= "H" , coords= [ 1.710907 , 9.10081 , -1.029659]),
+                Atom(name="92", element= "Cl" , coords= [ 0.195889, 10.847618, -1.510565]),
+                Atom(name="91", element= "Cl" , coords= [ 2.953246, 10.474472, -2.493735]),
+                Atom(name="93", element= "Cl" , coords= [ 2.451281, 10.83513  , 0.392064])])
+
+        mol_5 = Geometry(structure=[Atom(name="94", element= "C" , coords= [3.553798, 1.61359 , 4.8339 ]),
+                Atom(name="95", element= "H" , coords= [4.326498, 2.37589 , 4.806883]),
+                Atom(name="97", element= "Cl" , coords= [3.270833, 1.047785, 3.172041]),
+                Atom(name="98", element= "Cl" , coords= [4.158172, 0.290949, 5.886787]),
+                Atom(name="96", element= "Cl" , coords= [2.086952, 2.366203, 5.533697])])
+
+        mol_6 = Geometry(structure=[Atom(name="99", element= "C" , coords= [-3.468257,  2.485975, -2.800501]),
+                Atom(name="100", element= "H" , coords= [-3.066961,  1.783651, -2.070988]),
+                Atom(name="101", element= "Cl" , coords= [-2.093225,  3.085446, -3.787699]),
+                Atom(name="102", element= "Cl" , coords= [-4.654776,  1.619324, -3.825669]),
+                Atom(name="103", element= "Cl" , coords= [-4.245191,  3.82967 , -1.913365])])
+
+        mol_7 = Geometry(structure=[Atom(name="104", element= "C" , coords= [-6.669581, -3.00503 , -1.506201]),
+                Atom(name="105", element= "H" , coords= [-7.211251, -2.785918, -0.590727]),
+                Atom(name="107", element= "Cl" , coords= [-5.27109,  -4.037495, -1.074827]),
+                Atom(name="106", element= "Cl" , coords= [-6.132572, -1.456226, -2.211052]),
+                Atom(name="108", element= "Cl" , coords= [-7.791344, -3.866729, -2.602856])])
+        ref = [mol_1, mol_2, mol_3, mol_4, mol_5, mol_6, mol_7]
+        solv_list = g.detect_solvent(solvent="ClC(Cl)Cl")
+        counter = 0
+        for i, mol in enumerate(solv_list):
+            if mol == ref[i]:
+                counter += 1
+        self.assertEqual(counter, len(ref))
 
 def suite():
     suite = unittest.TestSuite()

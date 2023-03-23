@@ -10,6 +10,7 @@ import numpy as np
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
+from AaronTools.oniomatoms import OniomAtom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.orbitals import Orbitals
 from AaronTools.spectra import Frequency, ValenceExcitations
@@ -36,6 +37,10 @@ read_types = [
     "out",
     "dat",
     "fchk",
+    "pdb",
+    "pdbqt",
+    "cif",
+    "mmcif",
     "crest",
     "xtb",
     "sqmout",
@@ -45,6 +50,11 @@ read_types = [
 ]
 write_types = ["xyz", "com", "inp", "inq", "in", "sqmin", "cube", "xtb", "crest", "mol"]
 file_type_err = "File type not yet implemented: {}"
+#LAH_bonded_to = re.compile("(LAH) bonded to ([0-9]+)")
+#LA_atom_type = re.compile("(?<=')[A-Z][A-Z](?=')")
+#LA_charge = re.compile("[-+]?[0-9]*\.[0-9]+")
+#LA_bonded_to = re.compile("(?<=')([0-9][0-9]?)(?![0-9 A-Z\.])(?=')")
+#Svalue = re.compile("(?<=diff= +)-?[0-9]+\.[0-9]+")
 NORM_FINISH = "Normal termination"
 ORCA_NORM_FINISH = "****ORCA TERMINATED NORMALLY****"
 PSI4_NORM_FINISH = "*** Psi4 exiting successfully. Buy a developer a beer!"
@@ -72,6 +82,9 @@ ERROR = {
     "malloc failed.": "MEM",
     "A syntax error was detected in the input line": "SYNTAX",
     "Unknown message": "UNKNOWN",
+    "Atoms in 1 layers were given but there should be 2": "LAYER",
+    "MM function not complete": "MM_PARAM",
+    "PCMIOp: Cannot load options.": "PCM",
 }
 
 ERROR_ORCA = {
@@ -221,6 +234,8 @@ class FileWriter:
                 style = "sqmin"
             elif style.lower() == "qchem":
                 style = "inq"
+            elif style.lower() == "pdb":
+                style = "pdb"
             else:
                 raise NotImplementedError(file_type_err.format(style))
 
@@ -231,18 +246,24 @@ class FileWriter:
         ):
             os.makedirs(os.path.dirname(geom.name))
         if style.lower() == "xyz":
-            out = cls.write_xyz(geom, append, outfile=outfile)
+            if "oniom" in kwargs and "models" not in kwargs:
+                out = cls.write_oniom_xyz(geom, append, outfile, **kwargs)
+            elif "oniom" in kwargs and "models" in kwargs:
+                out = cls.write_multi_xyz(geom, append, outfile, **kwargs)
+            else:
+                out = cls.write_xyz(geom, append, outfile)
+
         elif style.lower() == "mol":
             out = cls.write_mol(geom, outfile=outfile)
         elif style.lower() == "com":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
                 del kwargs["theory"]
-                out = cls.write_com(geom, theory, outfile=outfile, **kwargs)
             else:
                 raise TypeError(
                     "when writing 'com/gjf' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
+            out = cls.write_com(geom, theory, outfile, **kwargs)
         elif style.lower() == "inp":
             if "theory" in kwargs:
                 theory = kwargs["theory"]
@@ -301,6 +322,9 @@ class FileWriter:
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
+        elif style.lower() == "pdb":
+            out = cls.write_pdb(geom, append, outfile=outfile, **kwargs)
+
         return out
 
     @classmethod
@@ -327,6 +351,155 @@ class FileWriter:
         return
 
     @classmethod
+    def write_multi_xyz(cls, geom, append, outfile=None, **kwargs):
+        """write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
+        kwargs["models"] can be string "all", string of model number e.g. "2", string of model range e.g. "1-5",
+        or list of model numbers including ranges e.g. ["1", "3-5", "10"]
+        kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
+        models = None
+        geom_list = [geom]
+        if "models" in kwargs.keys():
+            models = kwargs["models"]
+        if models is not None:
+            if isinstance(models, str):
+                if models != "all":
+                    try:
+                        models = int(models)
+                        models = ["model_%s" % str(models)]
+                    except ValueError:
+                        if "-" in models:
+                            models = models.split("-")
+                            model_list = []
+                            for i in range(int(models[0]), int(models[1])+1):
+                                model_list.append("models_%s" % str(i))
+                            models = model_list
+                        else: raise ValueError("improper specification of included models")
+            elif isinstance(models, list):
+                model_list = []
+                for model in models:
+                    if "-" in model:
+                        model = model.split("-")
+                        for i in range(int(model[0]), int(model[1])+1):
+                            model_list.append("model_%s" % str(i))
+                    else:
+                        model_list.append("model_%s" % str(model))
+                models = model_list
+
+            for key in geom.other.keys():
+                if key.startswith("model"):
+                    if models == "all":
+                        geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
+                    elif isinstance(models, list):
+                        if key in models:
+                            geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
+
+        counter = 0
+        for geom in geom_list:
+            if outfile == False:
+                FileWriter.write_oniom_xyz(geom, append, outfile = False, **kwargs)
+            elif outfile==None:
+                FileWriter.write_oniom_xyz(geom, append, outfile = geom.name, **kwargs)
+            else:
+                counter += 1
+                outfile_name = outfile.split(".")[0] + "_" + str(counter) + "." + outfile.split(".")[1]
+                FileWriter.write_oniom_xyz(geom, append, outfile = outfile_name, **kwargs)
+        return
+
+    @classmethod
+    def write_oniom_xyz(cls, geom, append, outfile=None, **kwargs):
+        """write xyz files with additional columns for atomtype, charge, and link atom info
+        kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
+        frag = kwargs["oniom"]
+        if frag == 'all':
+            geom.sub_links()
+        elif frag == 'layer':
+            geom=geom.oniom_frag(layer=kwargs["layer"], as_object=True)
+
+        mode = "a" if append else "w"
+        fmt1a = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f} {:2s} {:2s} {: 8.6f} {:2d}\n"
+        fmt1b = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {:2s} {:2s} {:2d}\n"
+        fmt1c = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {: 8.6f} {:2s} {: 8.6f} {:2d}\n"
+        fmt1d = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:2s} {:2d}\n"
+        fmt2a = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s} {: 8.6f}\n"
+        fmt2b = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {:3s}\n"
+        fmt2c = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s} {: 8.6f}\n"
+        fmt2d = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {:2s}\n"
+        fmt3 = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} \n"
+
+        s = "%i\n" % len(geom.atoms)
+        s += "%s\n" % geom.comment
+        for atom in geom.atoms:
+            if atom.link_info:
+                if "atomtype" not in atom.link_info.keys():
+                    connected_elements = []
+                    for connected in atom.connected:
+                        connected_elements.append(connected.element)
+                    if "C" in connected_elements:
+                        atom.link_info["atomtype"] = "hc"
+                    elif "C" not in connected_elements and "N" in connected_elements:
+                        atom.link_info["atomtype"] = "hn"
+                    elif "C" not in connected_elements and "O" in connected_elements:
+                        atom.link_info["atomtype"] = "ho"
+                    elif "C" not in connected_elements and "S" in connected_elements:
+                        atom.link_info["atomtype"] = "hs"
+                    elif "C" not in connected_elements and "P" in connected_elements:
+                        atom.link_info["atomtype"] = "hp"
+                if "charge" not in atom.link_info.keys():
+                    atom.link_info["charge"] = atom.charge
+                if "element" not in atom.link_info.keys():
+                    atom.link_info["element"] = "H"
+                if "connected" not in atom.link_info.keys():
+                    print("Determining link atom connection from connectivity")
+                    for connected in atom.connected:
+                        if connected.layer == "":
+                            raise ValueError("cannot determine link atom connection without defined layers")
+                        elif connected.layer != atom.layer:
+                            for i, a in enumerate(geom.atoms):
+                                if a == connected:
+                                    atom.link_info["connected"] = i+1
+                                    break
+                    if "connected" not in atom.link_info.keys():
+                        raise ValueError("Cannot determine link atom connection based on layers")
+            try:
+                if atom.atomtype != "" and atom.charge != "" and atom.link_info:
+                    s += fmt1a.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge, atom.link_info["element"], atom.link_info["atomtype"], float(atom.link_info["charge"]), int(atom.link_info["connected"]))
+                elif atom.atomtype != "" and atom.charge == "" and atom.link_info:
+                    s += fmt1b.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.link_info["element"], atom.link_info["atomtype"], int(atom.link_info["connected"]))
+                elif atom.atomtype == "" and atom.charge != "" and atom.link_info:
+                    s += fmt1c.format(atom.element, *atom.coords, atom.layer, atom.charge, atom.link_info["element"], float(atom.link_info["charge"]), int(atom.link_info["connected"]))
+                elif atom.atomtype == "" and atom.charge == "" and atom.link_info:
+                    s += fmt1d.format(atom.element, *atom.coords, atom.layer, atom.link_info["element"], int(atom.link_info["connected"]))
+                elif atom.atomtype != "" and atom.charge != "" and not atom.link_info:
+                    s += fmt2a.format(atom.element, *atom.coords, atom.layer, atom.atomtype, atom.charge)
+                elif atom.atomtype != "" and atom.charge == "" and not atom.link_info:
+                    s += fmt2b.format(atom.element, *atom.coords, atom.layer, atom.atomtype)
+                elif atom.atomtype == "" and atom.charge != "" and not atom.link_info:
+                    s += fmt2c.format(atom.element, *atom.coords, atom.layer, atom.charge)
+                elif atom.atomtype == "" and atom.charge == "" and not atom.link_info:
+                    s += fmt2d.format(atom.element, *atom.coords, atom.layer)
+            except ValueError:
+                self.LOG.warning("no layers designated for OniomAtom object(s)")
+                s += fmt3.format(atom.element, *atom.coords)
+
+        s = s.rstrip()
+
+        if outfile is None:
+            #if no output file is specified, use the name of the geometry
+            with open(geom.name + ".xyz", mode) as f:
+                f.write(s)
+        elif outfile is False:
+            #if no output file is desired, just return the file contents
+            return s
+        else:
+            #write output to the requested destination
+            with open(outfile, mode) as f:
+                f.write(s)
+
+        return
+
+
     def write_mol(
         cls, geom, outfile=None, **kwargs
     ):
@@ -954,6 +1127,138 @@ class FileWriter:
         return
 
     @classmethod
+    def write_pdb(cls, geom, append, outfile=None, qt=False):
+        if not isinstance(geom.atoms[0], OniomAtom):
+            geom = geom.make_oniom()
+        mode = "a" if append else "w"
+        if "model_2" in geom.other.keys():
+            models = True
+        else:
+            models = False
+        s = ""
+        def spaced(spac, val, align="right"):
+            if not isinstance(val, str):
+                val = str(val).strip()
+            val_predecimal = len(val.split(".")[0])
+            writ_space = spac
+            if len(val) > writ_space:
+                val=str(round(float(val),writ_space-val_predecimal-1))
+            n = writ_space-len(val)
+            sp = " "
+            spaces = n*sp
+            if align=="right":
+                rv = spaces+val
+            elif align=="left":
+                rv = val+spaces
+            elif align=="atomtype":
+                if len(val) == 1:
+                    rv = sp + val + (n-1)*sp
+                elif len(val) in [2,3]:
+                    if val[0].isalpha() and val[1].isalpha():
+                        rv = val+spaces
+                    if val[0].isalpha() and val[1].isdigit():
+                        if len(val)==3:
+                            rv = spaces+val
+                        else:
+                            rv = sp + val + sp
+                else:
+                    rv = val+spaces
+            return rv
+
+        connectivity = []
+        con_spac = 5
+
+        def write_atoms(atoms, s, get_connect=False):
+            for i, atom in enumerate(atoms):
+                atom.index = i
+                serial_spac = 5
+                atom_spac = 4
+                res_spac = 3
+                coord_spac = 8
+                ele_spac = 2
+                if get_connect:
+                    connectivity.append([])
+                    connectivity[-1].append(atom)
+                    for connected in atom.connected:
+                        connectivity[-1].append(connected)
+                if qt == False:
+                    charge_spac = 2
+                else:
+                    charge_spac = 10
+                if atom.res:
+                    s += "ATOM  "
+                else:
+                    s += "HETATM"
+                s += spaced(serial_spac, str(i+1))
+                s += " "
+                if qt==True:
+                    s += spaced(atom_spac, atom.element)
+                else:
+                    s += spaced(atom_spac, atom.atomtype, align="atomtype")
+                s += " "
+                s += spaced(res_spac, atom.res)
+                s += 10 * " "
+                for coord in atom.coords:
+                    s += spaced(coord_spac, coord)
+                if qt == False:
+                    s += 22*" "
+                    s += spaced(ele_spac, atom.element)
+                    if hasattr(atom, "charge") and atom.charge != None and atom.charge != "":
+                        s += "{: 4.2f}".format(atom.charge)
+                else:
+                    s += 12 * " "
+                    s += spaced(charge_spac, atom.charge, align="left")
+                    s += spaced(ele_spac, atom.element)
+                s += "\n"
+            return s
+
+        if hasattr(geom, "name"):
+            s += "HEADER"
+            s += " " * 52
+            s += geom.name
+            s += "\n"
+
+        if hasattr(geom, "other"):
+            if isinstance(geom.other, dict) and "source" in geom.other.keys():
+                s += "EXPDATA"
+                s += " " *3
+                s += geom.other["source"]
+                s += "\n"
+
+        if models == True:
+            num_models = 1
+            s += "MODEL 1\n"
+            s = write_atoms(geom.atoms, s, get_connect=True)
+            s += "ENDMDL\n"
+            for key in geom.other.keys():
+                if key.startswith("model"):
+                    num_models += 1
+                    s += "MODEL %s\n" % str(num_models)
+                    s = write_atoms(geom.other[key], s)
+                    s += "ENDMDL\n"
+
+        elif models == False:
+            s = write_atoms(geom.atoms, s, get_connect=True)
+
+        for connection in connectivity:
+            s += "CONECT"
+            for connect in connection: 
+                s += spaced(con_spac, connect.index+1)
+            s += "\n"
+
+        if outfile is None:
+            #if no output file is specified, use the name of the geometry
+            with open(geom.name + ".xyz", mode) as f:
+                f.write(s)
+        elif outfile is False:
+            #if no output file is desired, just return the file contents
+            return s
+        else:
+            #write output to the requested destination
+            with open(outfile, mode) as f:
+                f.write(s)
+
+        return
     def write_xtb(
         cls,
         geom,
@@ -1080,7 +1385,7 @@ class FileReader:
         name ''
         file_type ''
         comment ''
-        atoms [Atom]
+        atoms [Atom] or [OniomAtom]
         other {}
     """
 
@@ -1092,6 +1397,7 @@ class FileReader:
         fname,
         get_all=False,
         just_geom=True,
+        oniom=False,
         scan_read_all=False,
         freq_name=None,
         conf_name=None,
@@ -1142,6 +1448,7 @@ class FileReader:
                 conf_name=conf_name,
                 nbo_name=nbo_name,
                 max_length=max_length,
+                oniom=oniom
             )
         elif isinstance(self.content, str):
             if os.path.isfile(self.name):
@@ -1179,6 +1486,12 @@ class FileReader:
                 self.read_psi4_out(f, get_all, just_geom)
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom, max_length=max_length)
+            elif self.file_type == "pdb":
+                self.read_pdb(f, qt=False)
+            elif self.file_type == "pdbqt":
+                self.read_pdb(f, qt=True)
+            elif self.file_type in ("mmcif", "cif"):
+                self.read_mmcif(f)
             elif self.file_type == "crest":
                 self.read_crest(f, conf_name=conf_name)
             elif self.file_type == "xtb":
@@ -1228,7 +1541,7 @@ class FileReader:
     
     def read_file(
         self, get_all=False, just_geom=True, scan_read_all=False,
-        freq_name=None, conf_name=None, nbo_name=None,
+        freq_name=None, conf_name=None, nbo_name=None, oniom=False,
         max_length=10000000,
     ):
         """
@@ -1257,7 +1570,7 @@ class FileReader:
                 )
 
         if self.file_type == "xyz":
-            self.read_xyz(f, get_all)
+            self.read_xyz(f, get_all, oniom)
         elif self.file_type == "log":
             self.read_log(f, get_all, just_geom, scan_read_all)
         elif any(self.file_type == ext for ext in ["com", "gjf"]):
@@ -1272,6 +1585,12 @@ class FileReader:
             self.read_psi4_out(f, get_all, just_geom)
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom, max_length=max_length)
+        elif self.file_type == "pdb":
+            self.read_pdb(f, qt=False)
+        elif self.file_type == "pdbqt":
+            self.read_pdb(f, qt=True)
+        elif self.file_type in ("mmcif", "cif"):
+            self.read_mmcif(f)
         elif self.file_type == "crest":
             self.read_crest(f, conf_name=conf_name)
         elif self.file_type == "xtb":
@@ -1293,7 +1612,7 @@ class FileReader:
             f.readline()
         return
 
-    def read_xyz(self, f, get_all=False):
+    def read_xyz(self, f, get_all=False, oniom=False):
         self.all_geom = []
         # number of atoms
         f.readline()
@@ -1316,8 +1635,53 @@ class FileReader:
                 atom_count = 0
             except ValueError:
                 line = line.split()
-                atom_count += 1
-                self.atoms += [Atom(element=line[0], coords=line[1:4], name=str(atom_count))]
+                element = line[0]
+                coords = line[1:4]
+                layer = ""
+                atomtype = ""
+                charge = ""
+                link_info = {}
+                #tags = ""
+                if len(line) > 4:
+                    layer = line[4]
+                    oniom = True
+                    if len(line) == 11:
+                        atomtype = line[5]
+                        charge = line[6]
+                        #tags=line[7:]
+                        link_info["element"] = line[7]
+                        link_info["atomtype"] = line[8]
+                        link_info["charge"] = line[9]
+                        link_info["connected"] = line[10]
+                    if len(line) == 9:
+                        #tags = line[6:]
+                        link_info["element"] = line[6]
+                        link_info["connected"] = line[8]
+                        if is_alpha(line[5][0]):
+                            atomtype = line[5]
+                            link_info["atomtype"] = line[7]
+                        else:
+                            charge = line[5]
+                            link_info["charge"] = line[7]
+                    if len(line) == 7:
+                        if line[6].isdigit():
+                            #tags = line[5:]
+                            link_info["element"] = line[5]
+                            link_info["connected"] = line[6]
+                        else:
+                            atomtype = line[5]
+                            charge = line[6]
+                    if len(line) == 6:
+                        if is_alpha(line[5][0]):
+                            atomtype = line[5]
+                        else:
+                            charge = line[5]
+                if oniom == True:
+                    atom_count += 1
+                    self.atoms += [OniomAtom(element=element, coords=coords, layer=layer, atomtype=atomtype, charge=charge, link_info=link_info, name=str(atom_count))]
+                else:
+                    atom_count += 1
+                    self.atoms += [Atom(element=line[0], coords=line[1:4], name=str(atom_count))]
 
         # if get_all:
         #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
@@ -1859,7 +2223,8 @@ class FileReader:
                     self.other[item] = float(line.split()[-2])
 
                 elif "CORRELATION ENERGY" in line and "Eh" in line:
-                    item = line.split()[-6] + " correlation energy"
+                    energy_type = re.search("\s*([\S\s]+) CORRELATION ENERGY", line).group(1)
+                    item = energy_type + " correlation energy"
                     self.other[item] = float(line.split()[-2])
                 
                 elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
@@ -1875,8 +2240,12 @@ class FileReader:
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     gradient = np.zeros((len(self.atoms), 3))
-                    self.skip_lines(f, 2)
-                    n += 2
+                    if "NUMERICAL" in line:
+                        self.skip_lines(f, 1)
+                        n += 1
+                    else:
+                        self.skip_lines(f, 2)
+                        n += 2
                     for i in range(0, len(self.atoms)):
                         n += 1
                         line = f.readline()
@@ -2860,6 +3229,97 @@ class FileReader:
                 n += 1
             return rv, n
 
+        def get_oniom_atoms(f, n):
+            rv = self.atoms
+            self.skip_lines(f, 4)
+            line = f.readline()
+            n += 5
+            atnum = 0
+            while "--" not in line:
+                line = line.strip()
+                line = line.split()
+                for l in line:
+                    try:
+                        float(l)
+                    except ValueError:
+                        msg = "Error detected with log file on line {}"
+                        raise IOError(msg.format(n))
+                rv[atnum].coords = np.array(line[3:], dtype=float)
+                atnum += 1
+                line = f.readline()
+                n += 1
+            return rv, n
+
+        def get_oniom_info(f, n):
+            rv = []
+            line = f.readline()
+            n += 1
+            charge = []
+            multiplicity = []
+            while "Charge" in line:
+                match = re.search(
+                    "Charge\s*=\s*(-?\d+)\s*Multiplicity\s*=\s*(\d+)", line
+                )
+                if match is not None:
+                    charge.append(int(match.group(1)))
+                    multiplicity.append(int(match.group(2)))
+                line = f.readline()
+                n += 1
+            self.other["charge"] = charge
+            self.other["multiplicity"] = multiplicity
+            while len(line.split()) > 0:
+                nums = float_num.findall(line)
+                line = line.split()
+                is_oniom = False
+                flag = ""
+                atomtype = ""
+                charge = ""
+                #tags = []
+                link_info = {}
+                has_flag = False
+                if len(line[0].split("-")) == 2:
+                    if not is_alpha(line[0].split("-")[1][0]):
+                        charge = nums[0]
+                    elif is_alpha(line[0].split("-")[1][0]):
+                        atomtype = line[0].split("-")[1]
+                if len(line[0].split("-")) == 4:
+                    atomtype = line[0].split("-")[1]
+                    charge = str(-1 * float(line[0].split("-")[3]))
+                if len(line[0].split("-")) == 3:
+                    if not is_alpha(line[0].split("-")[1][0]):
+                        charge = nums[0]
+                    elif is_alpha(line[0].split("-")[1][0]):
+                        atomtype = line[0].split("-")[1]
+                        charge = line[0].split("-")[2]
+                if len(line)%2 == 0:
+                    has_flag = True
+                    flag = line[1]
+                    coords = line[2:5]
+                if not has_flag:
+                    coords = line[1:4]
+                if len(line) > 6:
+                    link_atom = line[len(line)-2:].split()
+                    link_info["connected"] = link_atom[1]
+                    info = link_atom[0].split("-")
+                    link_info["element"] = info[0]
+                    if len(info) == 3:
+                        link_info["atomtype"] = info[1]
+                        link_info["charge"] = info[2]
+                    elif len(info) == 2:
+                        if is_alpha(info[1][0]):
+                            link_info["atomtype"] = info[1]
+                        else:
+                            link_info["charge"] = info[1]
+                    #tags.append(line[len(line)-2:])
+                    layer = line[len(line)-3]
+                if len(line) < 7:
+                    layer = line[len(line)-1]
+                a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
+                rv += [a] 
+                line = f.readline()
+                n += 1
+            return rv, n
+
         def get_params(f, n):
             rv = []
             self.skip_lines(f, 2)
@@ -2964,7 +3424,12 @@ class FileReader:
         found_archive = False
         n = 1
         route = None
+        oniom = False
+        has_params = False
         while line != "":
+            if line.strip().startswith("AtFile"):
+                parameters = line.split()[1]
+                has_params = True
             # route
             # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
             # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
@@ -2985,8 +3450,11 @@ class FileReader:
             elif found_archive:
                 self.other["archive"] += line.strip()
 
+            if route is not None and "oniom" in route.lower():
+                oniom=True
+
             # input atom specs and charge/mult
-            if "Symbolic Z-matrix:" in line:
+            if oniom==False and "Symbolic Z-matrix:" in line:
                 self.atoms, n = get_input(f, n)
 
             #Pseudopotential info
@@ -3007,7 +3475,7 @@ class FileReader:
                     line = f.readline()
 
             # geometry
-            if re.search("(Standard|Input) orientation:", line):
+            if re.search("(Standard|Input) orientation:", line) and not oniom:
                 record_coords = True
                 if "scan" in constraints:
                     if scan_read_all == False:
@@ -3034,6 +3502,18 @@ class FileReader:
                 if record_coords:
                     self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
+
+            if re.search("(Standard|Input) orientation:", line) and oniom == True:
+                 if get_all and len(self.atoms) > 0:
+                    self.all_geom += [
+                        (deepcopy(self.atoms), deepcopy(self.other))
+                    ]
+                 self.atoms, n = get_oniom_atoms(f, n)
+                 self.other["opt_steps"] += 1
+
+            #oniom atom types and input charges
+            if oniom == True and re.search("Symbolic Z-matrix", line):
+                self.atoms, n = get_oniom_info(f, n)
 
             if re.search(
                 "The following ModRedundant input section has been read:", line
@@ -3355,17 +3835,18 @@ class FileReader:
                 self.read_nbo(f)
 
             # atomic charges
-            charge_match = re.search("(\S+) charges:\s*$", line)
-            if charge_match:
-                self.skip_lines(f, 1)
-                n += 1
-                charges = []
-                for i in range(0, len(self.atoms)):
-                    line = f.readline()
+            if any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+                charge_match = re.search("(\S+) charges.*:", line)
+                if charge_match:
+                    self.skip_lines(f, 1)
                     n += 1
-                    charges.append(float(line.split()[2]))
-                    self.atoms[i].charge = float(line.split()[2])
-                self.other[charge_match.group(1) + " Charges"] = charges
+                    charges = []
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges.append(float(line.split()[2]))
+                        self.atoms[i].charge = float(line.split()[2])
+                    self.other[charge_match.group(1) + " Charges"] = charges
 
             if "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
                 self.skip_lines(f, 1)
@@ -3411,20 +3892,94 @@ class FileReader:
             if route is not None:
                 other_kwargs = {GAUSSIAN_ROUTE: {}}
                 route_spec = re.compile("(\w+)=?\((.*)\)")
-                method_and_basis = re.search(
-                    "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
-                )
+                if oniom == False:
+                    method_and_basis = re.search(
+                        "#(?:[NnPpTt]\s+?)(\S+)|#\s*?(\S+)", route
+                    )
+                if oniom == True:
+                    method_and_basis = re.search(
+                        "#(?:[NnPpTt]*\s+?)(?:[OoNnIiMm]*\()(\S+?)(?::)([A-z0-9\/\(\)-]*)(?:=\()?([A-z,]*)?(?:\))?(?::)?([A-z-\(\)0-9]*)?(?:=\()?([A-z,]*)(?:\)*=)?([A-z,]*)?"
+                    , route)
                 if method_and_basis is not None:
-                    if method_and_basis.group(2):
-                        method_info = method_and_basis.group(2).split("/")
-                    else:
-                        method_info = method_and_basis.group(1).split("/")
+                    if oniom == False:
+                        if method_and_basis.group(2):
+                            method_info = method_and_basis.group(2).split("/")
+                        else:
+                            method_info = method_and_basis.group(1).split("/")
 
-                    method = method_info[0]
-                    if len(method_info) > 1:
-                        basis = method_info[1]
-                    else:
+                        method = method_info[0]
+                        if len(method_info) > 1:
+                            basis = method_info[1]
+                        else:
+                            basis = None
+                    if oniom == True:
+                        method = None
                         basis = None
+                        medium_info = None
+                        mm_options = {}
+                        oniom_options = []
+                        high_info = method_and_basis.group(1).split("/")
+                        if method_and_basis.group(4) and len(method_and_basis.group(4)) > 1:
+                            medium_info = method_and_basis.group(2).split("/")
+                            low_info = method_and_basis.group(4).split("/")
+                        if (method_and_basis.group(4) and len(method_and_basis.group(4)) <= 1) or not method_and_basis.group(4):
+                            low_info = method_and_basis.group(2).split("/")
+                        if method_and_basis.group(6):
+                            oniom_options = method_and_basis.group(6).split(",")
+                        high_method = high_info[0]
+                        try:
+                            high_basis = high_info[1]
+                        except IndexError:
+                            high_basis = None
+                        if medium_info is not None:
+                            medium_method = medium_info[0]
+                            try:
+                                medium_basis = medium_info[1]
+                            except IndexError:
+                                medium_basis = None
+                        low_method = low_info[0]
+                        try:
+                            low_basis = low_info[1]
+                        except IndexError:
+                            low_basis = None
+                        if medium_info is None:
+                            medium_method = None
+                            medium_basis = None
+                        def fix_paren(string):
+                            if ")" in string:
+                                if "(" not in string:
+                                    string = string.split(")")[0]
+                                if "(" in string:
+                                    left = 0
+                                    right = 0
+                                    for x in string:
+                                        if x == "(":
+                                            left += 1
+                                        if x == ")":
+                                            right += 1
+                                    if left < right:
+                                        string = string[:-1]
+                            else:
+                                pass
+                            return string
+                        if low_basis is None:
+                            low_method = fix_paren(low_method)
+                        elif low_basis is not None:
+                            low_basis = fix_paren(low_basis)
+                        if method_and_basis.group(3) and not method_and_basis.group(5):
+                            mm_options[low_method] = method_and_basis.group(3).split(",")
+                        if method_and_basis.group(5) and not method_and_basis.group(3):
+                            mm_options[low_method] = method_and_basis.group(5).split(",")
+                        if method_and_basis.group(5) and method_and_basis.group(3):
+                            mm_options[low_method] = method_and_basis.group(5).split(",")
+                            mm_options[medium_method] = method_and_basis.group(3).split(",")
+                        if mm_options != {}:
+                            other_kwargs["mm"] = mm_options
+                        if oniom_options != []:
+                            other_kwargs["oniom"] = oniom_options
+
+                    if has_params:
+                        other_kwargs["parameters"] = parameters
 
                     route_options = route.split()
                     job_type = []
@@ -3433,8 +3988,10 @@ class FileReader:
                     for option in route_options:
                         if option.startswith("#"):
                             continue
-                        elif option.startswith(method):
-                            continue
+                        if method is not None and option.startswith(method):
+                                continue
+                        if option.lower().startswith("oniom"):
+                                continue
 
                         option_lower = option.lower()
                         if option_lower.startswith("opt"):
@@ -3544,22 +4101,51 @@ class FileReader:
                                 continue
 
                     self.other["other_kwargs"] = other_kwargs
-                    try:
-                        theory = Theory(
-                            charge=self.other["charge"],
-                            multiplicity=self.other["multiplicity"],
-                            job_type=job_type,
-                            basis=basis,
-                            method=method,
-                            grid=grid,
-                            solvent=solvent,
-                        )
-                        theory.kwargs = self.other["other_kwargs"]
-                        self.other["theory"] = theory
-                    except KeyError:
-                        # if there is a serious error, too little info may be available
-                        # to properly create the theory object
-                        pass
+                    if oniom == True:
+                        try:
+                            theory = Theory(
+                                charge=self.other["charge"],
+                                multiplicity=self.other["multiplicity"],
+                                job_type=job_type,
+                                high_method=high_method,
+                                medium_method=medium_method,
+                                low_method=low_method,
+                                high_basis=high_basis,
+                                medium_basis=medium_basis,
+                                low_basis=low_basis,
+                                grid=grid,
+                                solvent=solvent,
+                            )
+                            theory.kwargs = self.other["other_kwargs"]
+                            self.other["theory"] = theory
+                        except KeyError:
+                            print(high_method)
+                            print(high_basis)
+                            if medium_method is not None: print(medium_method)
+                            if medium_basis is not None: print(medium_basis)
+                            print(low_method)
+                            if low_basis is not None: print(low_basis)
+                            print(solvent)
+                    elif oniom == False:
+                        try:
+                            theory = Theory(
+                                charge=self.other["charge"],
+                                multiplicity=self.other["multiplicity"],
+                                job_type=job_type,
+                                basis=basis,
+                                method=method,
+                                grid=grid,
+                                solvent=solvent,
+                            )
+                            theory.kwargs = self.other["other_kwargs"]
+                            self.other["theory"] = theory
+                        except KeyError:
+                            # if there is a serious error, too little info may be available
+                            # to properly create the theory object
+                            #pass
+                            print(method)
+                            print(basis)
+                            print(solvent)
 
         for i, a in enumerate(self.atoms):
             a.name = str(i + 1)
@@ -3649,16 +4235,65 @@ class FileReader:
             # atom coords
             nums = float_num.findall(line)
             line = line.split()
-            if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4:
-                if not is_int(line[1]):
-                    continue
-                a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
-                atoms += [a]
-            elif len(line) == 4 and is_alpha(line[0]) and len(nums) == 3:
-                a = Atom(element=line[0], coords=nums)
-                atoms += [a]
-            else:
-                continue
+            is_oniom = False
+            flag = ""
+            atomtype = ""
+            charge = ""
+            tags = []
+            has_flag = False
+            if "oniom" in other["method"].lower():
+                is_oniom = True
+            if not is_oniom:
+                if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4: 
+                    if not is_int(line[1]):
+                        continue
+                    a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
+                    atoms += [a]
+                elif len(line) == 4 and is_alpha(line[0]) and len(nums) == 3:
+                    a = Atom(element=line[0], coords=nums)
+                    atoms += [a]
+            elif is_oniom:
+                link_info = {}
+                if len(line) > 0 and len(line[0].split("-")) > 0 and len(nums) > 2:
+                    if len(line[0].split("-")) == 2:
+                        if not is_alpha(line[0].split("-")[1][0]):
+                            charge = nums[0]
+                        elif is_alpha(line[0].split("-")[1][0]):
+                            atomtype = line[0].split("-")[1]
+                    if len(line[0].split("-")) == 4:
+                        atomtype = line[0].split("-")[1]
+                        charge = str(-1 * float(line[0].split("-")[3]))
+                    if len(line[0].split("-")) == 3:
+                        if not is_alpha(line[0].split("-")[1][0]):
+                            charge = nums[0]
+                        elif is_alpha(line[0].split("-")[1][0]):
+                            atomtype = line[0].split("-")[1]
+                            charge = line[0].split("-")[2]
+                    if len(line)%2 == 0:
+                        has_flag = True
+                        flag = line[1]
+                        coords = line[2:5]
+                    if not has_flag:
+                        coords = line[1:4]
+                    if len(line) > 6:
+                        #tags.append(line[len(line)-2:])
+                        link_atom = line[len(line)-2:]
+                        link_info["connected"] = link_atom[1]
+                        info = link_atom[0].split("-")
+                        link_info["element"] = info[0]
+                        if len(info) == 3:
+                            link_info["atomtype"] = info[1]
+                            link_info["charge"] = info[2]
+                        elif len(info) == 2:
+                            if is_alpha(info[1][0]):
+                                link_info["atomtype"] = info[1]
+                            else:
+                                link_info["charge"] = info[1]
+                        layer = line[len(line)-3]
+                    if len(line) < 7:
+                        layer = line[len(line)-1]
+                    a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
+                    atoms += [a] 
         for i, a in enumerate(atoms):
             a.name = str(i + 1)
         self.atoms = atoms
@@ -3832,6 +4467,175 @@ class FileReader:
                     self.LOG.warning(
                         "size of %s is > %i: %i" % (key, max_length, self.other[key])
                     )
+
+    def read_pdb(self, f, qt=False):
+        """
+        read pdb or pdbqt file
+        """
+        line = f.readline()
+        n = 1
+        def get_atoms(f, n, line):
+            rv = []
+            while line.split()[0] in {"ATOM", "TER", "ANISOU", "HETATM", "ROOT", "BRANCH", "ENDROOT", "ENDBRANCH", "ENDMDL"}:
+                endmdl = False
+                if line.split()[0].upper() in ("ATOM", "HETATM"):
+                    if qt==False:
+                        if line[76:78].strip() != "":
+                            element = line[76:78].strip()
+                        else:
+                            element = ''.join(i for i in line[12:16].strip() if not i.isdigit())
+                        atomtype = line[12:16].strip()
+                        charge = line[78:].strip()
+                    if qt==True:
+                        element = ''.join(i for i in line[12:16].strip() if not i.isdigit())
+                        atomtype = line[78:].strip()
+                        charge = line[66:76].strip()
+                    a = OniomAtom(element=element, coords=[line[30:38], line[38:46], line[46:54]], name=line[6:11].strip(), res=line[17:20].strip(), atomtype=atomtype, charge=charge)
+                    rv += [a]
+                elif line.startswith("ENDMDL"):
+                    endmdl = True
+                    break
+                line = f.readline()
+                n += 1
+            return rv, n, endmdl
+        num_models = 0
+        while line != "":
+            if line.startswith("HEADER"):
+                self.name = line[62:66]
+            if line.startswith("EXPDTA"):
+                self.other["source"] = line[10:].strip()
+            elif line.startswith("MODEL"):
+                model_num = int(line.split()[1])
+                line = f.readline()
+                n += 1
+                if model_num == 1:
+                    self.atoms, n, endmdl = get_atoms(f, n, line)
+                elif model_num > 1:
+                    self.other["model_%s" % str(model_num)], n, endmdl = get_atoms(f, n, line)
+            elif line.startswith("ATOM") or line.startswith("HETATM"):
+                atoms, n, endmdl = get_atoms(f, n, line)
+                if endmdl == True:
+                    num_models+=1
+                    if num_models == 1:
+                        self.atoms = atoms
+                    elif num_models > 1:
+                        self.other["model_%s" % str(num_models)] = atoms
+                elif endmdl == False:
+                    self.atoms = atoms
+            elif line.startswith("CONECT"):
+                while line.startswith("CONECT"):
+                    for atom_num in line.split()[3:]:
+                        self.atoms[int(line.split()[1])-1].connected.add(self.atoms[int(atom_num)-1])
+                    line = f.readline()
+                    n += 1
+            line = f.readline()
+            n += 1
+        return
+
+    def read_mmcif(self, f):
+        line = f.readline()
+        n = 1
+        nloops=0
+        current_model="data_UNK"
+        self.other[current_model] = {}
+        def read_loop(line, n, nloops):
+            entries = "(?:[\'\"].*?[\'\"]|\S)+"
+            self.other[current_model]["loop_" + str(nloops)]={}
+            self.other[current_model]["loop_" + str(nloops)]["titles"]=[]
+            self.other[current_model]["loop_" + str(nloops)]["items"]=[]
+            n_titles = 0
+            name_ndx=None
+            ele_ndx=None
+            type_ndx=None
+            charge_ndx=None
+            res_ndx=None
+            x_ndx=None
+            y_ndx=None
+            z_ndx=None
+            read_atoms=False
+            while line.startswith("_"):
+                self.other[current_model]["loop_" + str(nloops)]["titles"].append(line.strip())
+                if line.startswith("_atom_site.id"):
+                    read_atoms=True
+                    atoms=[]
+                    name_ndx = n_titles
+                if line.startswith("_atom_site.type_symbol"):
+                    ele_ndx = n_titles
+                if line.startswith("_atom_site.label_atom_id"):
+                    type_ndx = n_titles
+                if line.startswith("_atom_site.auth_comp_id"):
+                    res_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_x":
+                    x_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_y":
+                    y_ndx = n_titles
+                if line.strip()=="_atom_site.Cartn_z":
+                    z_ndx = n_titles
+                if line.startswith("_atom_site.pdbx_formal_charge"):
+                    charge_ndx = n_titles
+                line = f.readline()
+                n += 1
+                n_titles+=1
+            while not line.startswith("_") and line != "" and "#" not in line:
+                item_list=[]
+                items=[]
+                while len(item_list) < n_titles:
+                    item = ""
+                    items=[]
+                    if line.startswith(";"):
+                        item = line.strip()
+                        line = f.readline()
+                        while not line.startswith(";"):
+                            item = item + line.strip()
+                            line = f.readline()
+                    else:
+                        items=re.findall(entries, line.strip())
+                        if read_atoms:
+                            atom = OniomAtom()
+                            if name_ndx:
+                                atom.name=items[name_ndx]
+                            if ele_ndx:
+                                atom.element=items[ele_ndx]
+                            if res_ndx:
+                                atom.res=items[res_ndx]
+                            if type_ndx:
+                                atom.atomtype=items[type_ndx]
+                            if charge_ndx:
+                                atom.charge=items[charge_ndx]
+                            if x_ndx:
+                                atom.coords=[float(items[x_ndx]), float(items[y_ndx]), float(items[z_ndx])]
+                            atoms.append(atom)
+                    item_list = item_list + items
+                    if item != "":
+                        item_list.append(item.strip(";"))
+                    line = f.readline()
+                    n+=1
+
+                self.other[current_model]["loop_" + str(nloops)]["items"].append(item_list)
+                #print(self.other[current_model]["loop_" + str(nloops)]["items"])
+            if read_atoms:
+                if self.atoms==[]:
+                    self.atoms=atoms
+                else:
+                    self.other[current_model]["atoms"]=atoms
+            nloops +=1
+            return
+
+
+        while line:
+            if line.startswith("data"):
+                current_model = line.strip()
+                self.other[current_model] = {}
+            elif line.startswith("loop"):
+                line=f.readline()
+                n+=1
+                read_loop(line, n, nloops)
+            elif line.startswith("_") and len(line.split())==2:
+                if line.split()[1] != "?":
+                    self.other[current_model][line.split()[0]]=line.split()[1]
+            line = f.readline()
+            n += 1
+        return
 
     def read_nbo(self, f):
         """
@@ -4314,3 +5118,4 @@ class FileReader:
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
 
+            

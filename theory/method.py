@@ -26,6 +26,8 @@ KNOWN_SEMI_EMPIRICAL = [
     "PM6-DH+",
 ]
 
+KNOWN_MM = ["AMBER","UFF","DREIDING","GAFF"]
+
 class Method:
     """functional object
     used to ensure the proper keyword is used
@@ -34,21 +36,38 @@ class Method:
 
     LOG = None
 
-    def __init__(self, name, is_semiempirical=False):
+    def __init__(self, name, is_semiempirical=False, is_oniom=False, oniom_layer=None, is_mm=False):
         """
         name: str, functional name
         is_semiempirical: bool, basis set is not required
+        is_oniom: bool, oniom_layer must be in kwargs, is_mm must be in kwargs
+        oniom_layer: str, oniom layer method describes, must be "H", "M", or "L"
+        is_mm: bool, basis set is not required
         """
         self.name = name
         self.is_semiempirical = is_semiempirical
+        self.is_oniom = is_oniom
+        self.oniom_layer = oniom_layer
+        self.is_mm = is_mm
+        if self.is_oniom == True and self.oniom_layer is None:
+            raise ValueError("ONIOM method must include oniom_layer in kwargs")
 
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        return (
-            self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
-            self.is_semiempirical == other.is_semiempirical
-        )
+        if self.is_oniom == False:
+            return (
+                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+                self.is_semiempirical == other.is_semiempirical
+            )
+        else:
+            return (
+                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+                self.is_semiempirical == other.is_semiempirical and
+                self.is_oniom == other.is_oniom and
+                self.oniom_layer == other.oniom_layer and
+                self.is_mm == other.is_mm
+            )
 
     @staticmethod
     def sanity_check_method(name, program):
@@ -148,29 +167,35 @@ class Method:
 
     def get_orca(self):
         """maps proper functional name to one ORCA accepts"""
-        warning = None
+        from AaronTools.theory import ORCA_ROUTE
+        
+        warnings = []
         if (
                 self.name == "ωB97X-D" or
                 any(
                     test == self.name.lower() for test in ["wb97xd", "wb97x-d"]
                 )
         ):
-            return ("wB97X-D3", "ωB97X-D may refer to ωB97X-D2 or ωB97X-D3 - using the latter")
+            warnings.append("ωB97X-D may refer to ωB97X-D2 or ωB97X-D3 - using the latter")
+            return ({ORCA_ROUTE: ["wB97X-D3"]}, warnings)
         elif self.name == "ωB97X-D3":
-            return ("wB97X-D3", None)
+            return ({ORCA_ROUTE: ["wB97X-D3"]}, warnings)
         elif any(self.name.upper() == name for name in ["B97-D", "B97D"]):
-            return ("B97-D", None)
-        elif self.name == "Gaussian's B3LYP":
-            return ("B3LYP/G", None)
+            return ({ORCA_ROUTE: ["B97-D"]}, warnings)
+        elif self.name == "Gaussian's B3LYP" or self.name.lower() == "b3lyp/g":
+            return ({ORCA_ROUTE: ["B3LYP/G", "NoCosx"]}, warnings)
         elif self.name.upper() == "M06-L":
-            return ("M06L", None)
+            return ({ORCA_ROUTE: ["M06L"]}, warnings)
         elif self.name.upper() == "M06-2X":
-            return ("M062X", None)
+            return ({ORCA_ROUTE: ["M062X"]}, warnings)
         elif self.name.upper() == "PBE1PBE":
-            return ("PBE0", None)
+            return ({ORCA_ROUTE: ["PBE0"]}, warnings)
 
         name = self.name.replace('ω', 'w')
-        return name, warning
+        warning = self.sanity_check_method(name, "orca")
+        if warning:
+            warnings.append(warning)
+        return {ORCA_ROUTE: [name]}, warnings
 
     def get_psi4(self):
         """maps proper functional name to one Psi4 accepts"""

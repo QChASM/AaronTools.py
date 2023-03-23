@@ -16,6 +16,9 @@ from AaronTools.theory import (
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_ONIOM,
+    GAUSSIAN_MM,
+    GAUSSIAN_MM_PARAMS,
     ORCA_BLOCKS,
     ORCA_COMMENT,
     ORCA_COORDINATES,
@@ -38,10 +41,12 @@ from AaronTools.theory import (
     XTB_CONTROL_BLOCKS,
     XTB_COMMAND_LINE,
     Theory,
+    OptimizationJob,
+    FrequencyJob,
 )
 from AaronTools.theory.implicit_solvent import ImplicitSolvent
 from AaronTools.theory.job_types import job_from_string
-from AaronTools.utils.utils import getuser
+from AaronTools.utils.utils import getuser, to_closing
 
 
 THEORY_OPTIONS = [
@@ -465,9 +470,12 @@ class Config(configparser.ConfigParser):
                 print(filename)
             content = self._process_content(filename)
             self.read(content, quiet=quiet)
-            job_include = self.get("Job", "include", fallback=job_include)
             if filename != infile:
-                self.remove_option("Job", "include")
+                try:
+                    self.remove_option("Job", "include")
+                except configparser.NoSectionError:
+                    pass
+            job_include = self.get("Job", "include", fallback=job_include)
             # local_only can only be overridden at the user level if "False" in the system config file
             if i == 0:
                 local_only = self["DEFAULT"].getboolean("local_only")
@@ -479,7 +487,7 @@ class Config(configparser.ConfigParser):
             ]
         else:
             type_spec = []
-        if not any(type_spec):
+        if job_include and not any(type_spec):
             self.set("Job", "include", job_include)
 
     def get_other_kwargs(self, section="Theory"):
@@ -504,6 +512,7 @@ class Config(configparser.ConfigParser):
         two_layer = [
             GAUSSIAN_ROUTE,
             GAUSSIAN_PRE_ROUTE,
+            GAUSSIAN_MM,
             ORCA_BLOCKS,
             PSI4_JOB,
             QCHEM_REM,
@@ -525,6 +534,8 @@ class Config(configparser.ConfigParser):
             GAUSSIAN_COMMENT,
             GAUSSIAN_CONSTRAINTS,
             GAUSSIAN_POST,
+            GAUSSIAN_ONIOM,
+            GAUSSIAN_MM_PARAMS,
             ORCA_COMMENT,
             ORCA_ROUTE,
             PSI4_AFTER_JOB,
@@ -537,10 +548,19 @@ class Config(configparser.ConfigParser):
 
         theory_kwargs = [
             "method",
+            "high_method",
+            "medium_method",
+            "low_method",
             "charge",
             "multiplicity",
             "type",
             "basis",
+            "high_basis",
+            "medium_basis",
+            "low_basis",
+            "high_ecp",
+            "medium_ecp",
+            "low_ecp",
             "ecp",
             "grid",
             "empirical_dispersion",
@@ -616,7 +636,32 @@ class Config(configparser.ConfigParser):
     def get_constraints(self, geometry):
         constraints = {}
         try:
-            con_list = re.findall("\(.*?\)", self["Geometry"]["constraints"])
+            con_list = []
+            word = ""
+            constraint_str = self["Geometry"]["constraints"]
+            # print(constraint_str)
+            i = 0
+            while i < len(constraint_str):
+                x = constraint_str[i]
+                # print(i, x, word)
+                if x.strip() and x != "(":
+                    word += x
+                    i += 1
+
+                elif word:
+                    con_list.append(word)
+                    word = ""
+                    i += 1
+                
+                if x == "(":
+                    word = to_closing(constraint_str[i:], "(")
+                    con_list.append(word)
+                    i += len(word) - 1
+                    word = ""
+
+            if word:
+                con_list.append(word)
+
         except KeyError:
             try:
                 geometry.parse_comment()
@@ -625,27 +670,25 @@ class Config(configparser.ConfigParser):
                 raise RuntimeError(
                     "Constraints for forming/breaking bonds must be specified for TS search"
                 )
+        # print(con_list)
         for con in con_list:
-            tmp = []
-            try:
-                for c in eval(con, {}):
-                    tmp += geometry.find(str(c))
-            except TypeError:
-                for c in con:
-                    tmp += geometry.find(str(c))
-            con = [a.name for a in tmp]
-            if len(con) == 1:
+            # print(con)
+            if "(" in con:
+                c = eval(con)
+                tmp = geometry.find(list(c))
+                if len(con) == 2:
+                    constraints.setdefault("bonds", [])
+                    constraints["bonds"] += [tmp]
+                elif len(con) == 3:
+                    constraints.setdefault("angles", [])
+                    constraints["angles"] += [tmp]
+                elif len(con) == 4:
+                    constraints.setdefault("torsions", [])
+                    constraints["torsions"] += [tmp]
+            else:
                 constraints.setdefault("atoms", [])
-                constraints["atoms"] += [con]
-            elif len(con) == 2:
-                constraints.setdefault("bonds", [])
-                constraints["bonds"] += [con]
-            elif len(con) == 3:
-                constraints.setdefault("angles", [])
-                constraints["angles"] += [con]
-            elif len(con) == 4:
-                constraints.setdefault("torsions", [])
-                constraints["torsions"] += [con]
+                constraints["atoms"].extend(geometry.find(con))
+        # print("constraints", constraints, flush=True)
         return constraints
 
     def get_theory(self, geometry, section="Theory"):
@@ -711,6 +754,7 @@ class Config(configparser.ConfigParser):
         return theory
 
     def get_template(self):
+        from AaronTools.geometry import Geometry
         # captures name placeholder and iterator from for-loop initilaizer
         for_patt = re.compile("&for\s+(.+)\s+in\s+(.+)")
         # captures structure_dict-style structure/suffix -> (structure['suffix'], suffix)
@@ -828,10 +872,10 @@ class Config(configparser.ConfigParser):
             elif structure is not None:
                 try:
                     # if structure is a filename
-                    structure = AaronTools.geometry.Geometry(structure)
+                    structure = Geometry(structure)
                 except FileNotFoundError:
                     # if structure is a filename
-                    structure = AaronTools.geometry.Geometry(
+                    structure = Geometry(
                         os.path.join(self["DEFAULT"]["top_dir"], structure)
                     )
                 except (IndexError, NotImplementedError):
@@ -851,7 +895,7 @@ class Config(configparser.ConfigParser):
                                 )
                         for (
                             geom
-                        ) in AaronTools.geometry.Geometry.get_coordination_complexes(
+                        ) in Geometry.get_coordination_complexes(
                             center=center, ligands=ligands, shape=shape
                         )[
                             0
@@ -863,13 +907,15 @@ class Config(configparser.ConfigParser):
                         pop_sd.add(suffix)
                     else:
                         # if structure is a smiles string
-                        structure = AaronTools.geometry.Geometry.from_string(
+                        structure = Geometry.from_string(
                             structure
                         )
                 # adjust structure attributes
                 if structure is not None:
-                    if "name" in self["Job"]:
+                    if self.has_option("Job", "name"):
                         structure.name = self["Job"]["name"]
+                    elif self.has_option("","name"):
+                        structure.name = self["DEFAULT"]["name"]
                     if "Geometry" in self and "comment" in self["Geometry"]:
                         structure.comment = self["Geometry"]["comment"]
                         structure.parse_comment()
@@ -896,7 +942,7 @@ class Config(configparser.ConfigParser):
                 lines = self["Geometry"][key].split("\n")
                 for it_val in eval(for_match.group(2), {}):
                     eval_dict = {
-                        "Geometry": AaronTools.geometry.Geometry,
+                        "Geometry": Geometry,
                         "structure": structure_dict,
                         for_match.group(1): it_val,
                     }
@@ -926,7 +972,7 @@ class Config(configparser.ConfigParser):
             padding = 0
         for suffix in structure_dict:
             geom = structure_dict[suffix]
-            if suffix:
+            if suffix and self.has_option("Job", "name"):
                 geom.name = "{}.{}".format(
                     self["Job"]["name"], suffix.zfill(padding)
                 )

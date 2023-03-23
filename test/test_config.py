@@ -148,7 +148,6 @@ class TestConfig(TestWithTimer):
             geometry=geom,
             simple=["zora"],
         )
-        # print("\n", geom.write(outfile=False, theory=ref, style="orca"))
         test = config.get_theory(geom)
         self.assertEqual(ref, test)
 

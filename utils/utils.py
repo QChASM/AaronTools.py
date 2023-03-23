@@ -476,8 +476,8 @@ def shortest_path(graph, start, end):
     # graph = [j[:] for j in graph]
 
     # initialize distance array, parent array, and set of unvisited nodes
-    dist = (np.inf * np.ones(len(graph))).tolist()
-    parent = (-1 * np.ones(len(graph))).tolist()
+    dist = (np.inf * np.ones(len(graph)))
+    parent = (-1 * np.ones(len(graph), dtype=int))
     unvisited = set(np.arange(0, len(graph), dtype=int))
 
     dist[start] = 0
@@ -726,9 +726,20 @@ def perp_vector(vec):
         return out
 
     elif vec.ndim == 2:
+        if len(vec) == 3:
+            ovl = np.dot(vec[0] - vec[1], vec[2] - vec[1])
+            n1 = np.linalg.norm(vec[0] - vec[1])
+            n2 = np.linalg.norm(vec[2] - vec[1])
+            if abs(ovl) == n1 * n2:
+                return perp_vector(vec[0] - vec[1])
+            else:
+                return np.cross(vec[0] - vec[1], vec[2] - vec[1])
         xyz = vec - np.mean(vec, axis=0)
         cov_prod = np.dot(xyz.T, xyz)
-        u, s, vh = np.linalg.svd(cov_prod, compute_uv=True)
+        try:
+            u, s, vh = np.linalg.svd(cov_prod, compute_uv=True)
+        except np.linalg.LinAlgError:
+            return perp_vector(vec[0] - vec[1])
         return u[:, -1]
 
     raise NotImplementedError(
@@ -835,6 +846,7 @@ def is_num(test):
     rv = re.search("^[+-]?\d+\.?\d*", test)
     return bool(rv)
 
+
 def getuser():
     """returns the username of the user"""
     for envar in ["LOGNAME", "USER", "LNAME", "USERNAME"]:
@@ -849,6 +861,7 @@ def getuser():
         from psutil import username
         return username()
 
+
 def available_memory():
     """returns available memory in B"""
     for envar in ["SLURM_MEM_PER_NODE"]:
@@ -858,6 +871,7 @@ def available_memory():
     
     from psutil import virtual_memory
     return virtual_memory().available
+
 
 def unique_combinations(*args):
     total = 1

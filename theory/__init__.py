@@ -67,6 +67,9 @@ GAUSSIAN_GEN_BASIS = "gen_basis" #gen or genecp basis section
 GAUSSIAN_GEN_ECP = "gen_ecp" #genecp ECP section
 GAUSSIAN_POST = "end_of_file" #after everything else (e.g. NBO options)
 GAUSSIAN_COMMENT = "comments" #comment line after the route
+GAUSSIAN_MM = "mm" #options for mm methods
+GAUSSIAN_ONIOM = "oniom" #oniom options like embedcharge
+GAUSSIAN_MM_PARAMS = "parameters" #path to file with additional or total mm parameters
 
 SQM_COMMENT = "comments"
 SQM_QMMM = "qmmm"

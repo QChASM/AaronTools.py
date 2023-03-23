@@ -4,9 +4,7 @@ import inspect
 from collections import deque
 
 import numpy as np
-
 from AaronTools import addlogger
-
 
 def get_class(name):
     """returns the finder class with the given name"""
@@ -95,7 +93,10 @@ class BondedTo(Finder):
 
     def get_matching_atoms(self, atoms, geometry=None):
         """returns list(Atom) that are within a radius of a point"""
-        return [atom for atom in atoms if atom in self.atom.connected]
+        try:
+            return [atom for atom in atoms if atom in self.atom.connected]
+        except AttributeError:
+            pass
 
 
 class WithinRadiusFromPoint(Finder):
@@ -256,7 +257,7 @@ class VSEPR(Finder):
                 "triangular cupola and heptagonal bipyramidal cannot be distinguished"
             )
         self.cutoff = cutoff
-    
+
     def __repr__(self):
         return "atoms with %s shape" % self.vsepr
 
@@ -600,6 +601,217 @@ class CloserTo(Finder):
         return matching_atoms
 
 
+class IsElement(Finder):
+    """all atoms of the specified element"""
+    def __init__(self, element):
+        super().__init__()
+
+        self.element = element
+
+    def __repr__(self):
+        return "atoms of the element '%s'" % self.element
+
+    def get_matching_atoms(self, atoms, geometry=None):
+        """returns List(Atom) of atoms of that element"""
+        return [atom for atom in atoms if atom.element == self.element]
+
+class OfType(Finder):
+    """all atoms of the specified GAFF atom type
+    if ignore_metals = True (default), bonding with metals will not count towards VSEPR shapes"""
+    def __init__(self, atomtype, ignore_metals=True):
+        super().__init__()
+
+        self.atomtype = atomtype.capitalize()
+        if self.atomtype in {'Br', 'Cl'}:
+            self.element = self.atomtype
+        else:
+            self.split_type = list(self.atomtype)
+            self.element = self.split_type[0]
+        self.ignore_metals = ignore_metals
+
+    def __repr__(self):
+        return "atoms of the gaff atomtype '%s'" % self.atomtype
+
+    def get_matching_atoms(self, atoms, geometry):
+        """returns List(Atom) that are of the given atom type"""
+#        geom = geometry.copy()
+        if self.ignore_metals == True:
+            metals = []
+            from AaronTools.const import TMETAL
+            for i, atom in enumerate(geometry.atoms):
+                atom.index = i
+                if atom.element in TMETAL:
+                    metals.append(atom)
+
+        geometry - metals
+        atoms = geometry.atoms
+
+        atoms = [atom for atom in atoms if atom.element == self.element]
+
+        class CustomError(Exception):
+            pass
+
+        shapes = {'C1': ['linear 1', 'linear 2'],
+                  'C2': ['trigonal planar', 'bent 2 planar'],
+                  'C3': ['trigonal pyramidal', 'tetrahedral'],
+                   'C': ['trigonal planar'],
+                  'Ha': ['linear 1'],
+                  'Hc': ['linear 1'],
+                  'N1': ['linear 1', 'linear 2'],
+                  'N2': ['bent 2 planar', 'bent 2 tetrahedral'],
+                  'N3': ['trigonal pyramidal', 'bent 3 tetrahedral'],
+                  'N4': ['tetrahedral'],
+                  'Na': ['trigonal planar'],
+                  'S4': ['trigonal planar'],
+                  'S6': ['tetrahedral'],
+                  'P3': ['trigonal pyramidal'],
+                  'P4': ['trigonal planar'],
+                  'P5': ['tetrahedral'],
+                  'Ca': ['trigonal planar', 'bent 2 planar'],
+                   'N': ['trigonal planar'],
+                  'Nh': ['trigonal planar'],
+                  'Os': ['bent 2 tetrahedral', 'bent 2 planar']}
+
+        """helper functions"""
+        def is_carbonyl(atom):
+            """returns True if atom is carbonyl carbon"""
+            for connected in atom.connected:
+                if connected.element == 'O' and connected in BondedElements(atom.element).get_matching_atoms(atoms):
+                    carbonyl = True
+                    break
+                else:
+                    carbonyl = False
+            return carbonyl
+
+        def is_carboxyl(atom):
+            """returns True if atom is carboxyl carbon"""
+            o_counter = 0
+            if is_carbonyl(atom):
+                for connected in atom.connected:
+                    if connected.element == 'O':
+                        o_counter += 1
+                if o_counter == 2:
+                    return True
+            else:
+                return False
+
+        def is_water(atom):
+            if atom.element == 'O':
+                h_counter = 0
+                for connected in atom.connected:
+                    if connected.element == 'H': h_counter +=1
+                if h_counter == 2: return True
+                else: return False
+            else: return False
+
+        def is_amide(atom):
+            if atom.element == 'N':
+                for connected in atom.connected:
+                    if is_carbonyl(connected):
+                        return True
+                        break
+                    else: return False
+            else: return False
+
+        matching_atoms = []
+        if self.atomtype in {'F', 'Cl', 'Br', 'I'}: 
+            for atom in IsElement(self.atomtype).get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.split_type[0] == 'H' and self.atomtype not in {'Ha', 'Hc'}:
+            if self.split_type[1] in {'o','w'}:
+                for atom in BondedElements('O').get_matching_atoms(atoms):
+                    for connected in atom.connected:
+                        if self.atomtype == 'Hw' and is_water(connected): matching_atoms.append(atom)
+                        elif self.atomtype == 'Ho' and not is_water(connected): matching_atoms.append(atom)
+            else:
+                for atom in BondedElements(self.split_type[1].capitalize()).get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.atomtype in {'O', 'S2', 'P2'}:
+            for atom in BondedElements('C').get_matching_atoms(atoms): matching_atoms.append(atom)
+        elif self.atomtype in {'C', 'C2', 'Ca', 'Na', 'Nh', 'Ha', 'Hc','N'}:
+            aromatics, charge, fused = geometry.get_aromatic_atoms(atoms, return_rings=False)
+            for shape in shapes.get(self.atomtype):
+                for atom in VSEPR(shape).get_matching_atoms(atoms):
+                    if self.atomtype == 'Ca' and atom in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'C2' and atom not in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'C' and is_carbonyl(atom): matching_atoms.append(atom)
+                    elif self.atomtype == 'N' and is_amide(atom) and atom not in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype == 'Na' and charge == 1 and atom.element == 'N' and not is_carboxyl(atom) and len(matching_atoms) == 0 and atom in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype == 'Na' and atom not in aromatics and not is_carboxyl(atom) and not is_amide(atom): matching_atoms.append(atom)
+                    elif self.atomtype in {'Na','Nh'} and charge == 1 and atom.element == 'N' and len(matching_atoms) > 0 and atom in aromatics:
+                        raise CustomError("Indistinguishable nitrogens in aromatic ring")
+                    elif self.atomtype == 'Nh' and charge == 0 and atom.element == 'N' and atom in aromatics: matching_atoms.append(atom)
+                    elif self.atomtype in {'Hc', 'Ha'}:
+                        for connected in atom.connected:
+                            if self.atomtype == 'Ha' and connected.element == 'C' and connected in aromatics: matching_atoms.append(atom)
+                            elif self.atomtype == 'Hc' and connected.element == 'C' and connected not in aromatics: matching_atoms.append(atom)
+        elif self.atomtype in {'Oh', 'Os', 'Sh', 'Ss','Ow'}:
+            for shape in shapes.get('Os'):
+                for atom in VSEPR(shape,cutoff=0.7).get_matching_atoms(atoms):
+                    counter = 0
+                    for connected in atom.connected:
+                        if self.split_type[1] == 'h' and connected.element == 'H' and not is_water(atom): matching_atoms.append(atom)
+                        elif self.split_type[1] == 'w' and is_water(atom) and atom not in matching_atoms: matching_atoms.append(atom)
+                        elif self.split_type[1] == 's' and connected.element != 'H': counter +=1
+                    if counter == 2: matching_atoms.append(atom)
+        elif self.atomtype == 'No':
+            for atom in IsElement('N').get_matching_atoms(atoms):
+                if is_carboxyl(atom): matching_atoms.append(atom)
+        else:
+            for shape in shapes.get(self.atomtype):
+                for atom in VSEPR(shape).get_matching_atoms(atoms): matching_atoms.append(atom)
+        matching_atoms = [match for match in matching_atoms if match.element == self.element]
+
+        #add metals back into geometry and reorder
+        geometry = geometry + metals
+        new_atoms = [0]* len(geometry.atoms)
+        for atom in geometry.atoms:
+            new_atoms[atom.index] = atom
+        geometry.atoms = new_atoms
+
+        return matching_atoms
+
+class Aromatics(Finder):
+    """all atoms in aromatic rings"""
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        return "atoms that are in aromatic rings"
+
+    def get_matching_atoms(self, atoms, geometry):
+        aromatics, charge, fused = geometry.get_aromatic_atoms(atoms,return_rings=False)
+        return aromatics
+
+class ONIOMLayer(Finder):
+    """all atoms in a given ONIOM layer or list of ONIOM layers"""
+    def __init__(self, layers=""):
+        super().__init__()
+
+        self.layers = layers
+        if isinstance(layers, list):
+            for layer in self.layers: 
+                if layer.capitalize() not in ['H', 'M', 'L']:
+                    raise ValueError("layer must be H, M, or L")
+
+    def __repr__(self):
+        return "atoms in the ONIOM layer '%s'" % self.layers
+
+    def get_matching_atoms(self, atoms, geometry=None):
+        matching_atoms = []
+        for atom in atoms:
+            if isinstance(self.layers, list):
+                try:
+                    for layer in self.layers:
+                        if atom.layer.capitalize() == layer.capitalize(): matching_atoms.append(atom)
+                except AttributeError:
+                    pass
+                    #print("ONIOMlayer only accepts OniomAtom type atoms")
+            else:
+                try:
+                    if atom.layer.capitalize() == self.layer.capitalize(): matching_atoms.append(atom)
+                except AttributeError:
+                    pass #print("ONIOMlayer only accepts OniomAtom type atoms")
+        return matching_atoms
+
 class AmideCarbon(Finder):
     """
     amide carbons
@@ -750,4 +962,25 @@ class SpiroCenters(Finder):
             elif n_rings > 1 and not self.ring_sizes:
                 matching_atoms.append(atom1)
 
+        return matching_atoms
+
+class Resiude(Finder):
+    """all atoms in a given residue"""
+    def __init__(self, residue):
+        super().__init__()
+        
+        if not isinstance(residue, str):
+            residue = str(residue)
+        self.residue=residue
+
+    def get_matching_atoms(self, geometry):
+        matching_atoms = []
+        for atom in geometry.atoms:
+            if isinstance(atom, OniomAtom):
+                break
+            else:
+                raise AttributeError("atoms in % geometry have no attribute 'residue'" % geometry.name)
+        for atom in geometry.atoms:
+            if atom.residue == self.residue:
+                matching_atoms.append(atom)
         return matching_atoms
