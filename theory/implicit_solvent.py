@@ -526,8 +526,8 @@ class ImplicitSolvent:
 
     def __init__(self, solvent_model, solvent):
         """
-        :param solvent_model str: implicit solvent model (e.g. PCM)
-        :param solvent str: solvent name (e.g. water)
+        :param str solvent_model: implicit solvent model (e.g. PCM)
+        :param str solvent: solvent name (e.g. water)
         """
         self.solvent_model = solvent_model
         self.solvent = solvent

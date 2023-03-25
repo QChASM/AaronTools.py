@@ -36,15 +36,16 @@ class Basis:
     * elements      - same as initialization keyword
     * aux_type      - same as initialization keyword
     * elements      - list of element symbols for elements this basis applies to
-        updated with Basis.refresh_elements
-        Basis.refresh_elements is called when writing an input file
+      updated with Basis.refresh_elements
+      
+      Basis.refresh_elements is called when writing an input file
     * ele_selection - list of finders used to determine which elements this basis applies to
     * not_anys      - list of finders used to determine which elements this basis does not apply to
     * ONIOM-only attributes:
     * oniom_layer   - same as initialization keyword
     * atom_selection - list of finders used to determine which atoms this basis applies to
     * atoms         - list of atoms this basis applies to
-        updated with Bases.refresh_atoms
+      updated with Bases.refresh_atoms
     * default_notany_atoms - finder for atoms that are not in the given layer
     """
 
@@ -54,23 +55,23 @@ class Basis:
 
     def __init__(self, name, elements=None, aux_type=None, user_defined=False, oniom_layer=None, atoms=None):
         """
-        :param name str: basis set base name (e.g. 6-31G)
-        :param elements list(str): list of element symbols or finders to determine the basis set applies to
+        :param str name: basis set base name (e.g. 6-31G)
+        :param list(str) elements: list of element symbols or finders to determine the basis set applies to
             elements may also be 'tm' or 'all' to indicate any transition metal and
             all elements, respectively
             elements may start with '!' to exclude that element from the basis
             for example, elements='!H' will apply to default elements, minus H
-        :param aux_type str|None:
+        :param str|None aux_type:
             
             * ORCA: one of BasisSet.ORCA_AUX
             * Psi4: one of BasisSet.PSI4_AUX
-        :param user_defined str|bool: path to file containing basis info from basissetexchange.org
+        :param str|bool user_defined: path to file containing basis info from basissetexchange.org
             or similar
             False for builtin basis sets
 
         ONIOM-only:
         
-        :param oniom_layer str|None: must be 'H', 'M', or 'L' if not None
+        :param str|None oniom_layer: must be 'H', 'M', or 'L' if not None
         :param atoms: list of finders or 'tm' to determine what atoms the basis set applies to
         """
         self.name = name
@@ -266,8 +267,8 @@ class Basis:
         checks the basis set name against a list of basis sets
         that are built-in to the specified program
         
-        :param name str: keyword of basis set (e.g. def2SVP)
-        :param program str: program name (gaussian, psi4, etc.)
+        :param str name: keyword of basis set (e.g. def2SVP)
+        :param str program: program name (gaussian, psi4, etc.)
         """
         import os.path
         from difflib import SequenceMatcher as seqmatch
@@ -1262,7 +1263,7 @@ class BasisSet:
 
     def get_psi4_basis_info(self, sapt=False):
         """
-        :param sapt bool: use df_basis_sapt instead of df_basis_scf for jk basis
+        :param bool sapt: use df_basis_sapt instead of df_basis_scf for jk basis
         
         :returns: dict for get_psi4_header
         """

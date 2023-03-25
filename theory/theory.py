@@ -545,9 +545,9 @@ class Theory:
         **kwargs,
     ):
         """
-        :param geom Geometry: structure:
-        :param style str: file format (e.g. gaussian, orca, psi4, oniom, or sqm)
-        :param conditional_kwargs dict: keys are ORCA_*, PSI4_*, or GAUSSIAN_*
+        :param Geometry geom: structure
+        :param str style: file format (e.g. gaussian, orca, psi4, oniom, or sqm)
+        :param dict conditional_kwargs: keys are ORCA_*, PSI4_*, or GAUSSIAN_*
             
             items in conditional_kwargs will only be added
             to the input if they would otherwise be preset.
@@ -556,10 +556,10 @@ class Theory:
             conditional_kwargs = {GAUSSIAN_ROUTE:{'opt':['noeigentest']}}
             will not add opt=noeigentest to the route
             but if it's an OptimizationJob, it will add opt=noeigentest
-        :param sanity_check_method bool: check if method is available in recent version
+        :param bool sanity_check_method: check if method is available in recent version
                              of the target software package (Psi4 checks when its
                              footer is created)
-        :param kwargs dict: see AaronTools.theory parameters for more details 
+        :param dict kwargs: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry
@@ -664,11 +664,11 @@ class Theory:
         **kwargs,
     ):
         """
-        :param geom Geometry: structure
-        :param style str: gaussian, psi4, or sqm
-        :param conditional_kwargs dict: theory parameters, which will
+        :param Geometry geom: structure
+        :param str style: gaussian, psi4, or sqm
+        :param dict conditional_kwargs: theory parameters, which will
             only be added if the corresponding section is used elsewhere
-        :param kwargs dict: see AaronTools.theory parameters for more details 
+        :param dict kwargs: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry
@@ -767,12 +767,12 @@ class Theory:
         **kwargs,
     ):
         """
-        :param geom Geometry: structure
-        :param style str: program name
-        :param conditional_kwargs dict: see Theory.make_header
-        :param sanity_check_method bool: check if method is available in recent version
+        :param Geometry geom: structure
+        :param str style: program name
+        :param dict conditional_kwargs: see Theory.make_header
+        :param bool sanity_check_method: check if method is available in recent version
             of the target software package (Psi4 only)
-        :param kwargs dict: see AaronTools.theory parameters for more details 
+        :param dict kwargs: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry

@@ -31,6 +31,7 @@ KNOWN_MM = ["AMBER","UFF","DREIDING","GAFF"]
 class Method:
     """functional object
     used to ensure the proper keyword is used
+    
     e.g.
     using Functional('PBE0') will use PBE1PBE in a gaussian input file"""
 
@@ -38,11 +39,11 @@ class Method:
 
     def __init__(self, name, is_semiempirical=False, is_oniom=False, oniom_layer=None, is_mm=False):
         """
-        name: str, functional name
-        is_semiempirical: bool, basis set is not required
-        is_oniom: bool, oniom_layer must be in kwargs, is_mm must be in kwargs
-        oniom_layer: str, oniom layer method describes, must be "H", "M", or "L"
-        is_mm: bool, basis set is not required
+        :param str name: functional name
+        :param bool is_semiempirical: basis set is not required
+        :param bool is_oniom: oniom_layer must be in kwargs, is_mm must be in kwargs
+        :param str oniom_layer: oniom layer method describes, must be "H", "M", or "L"
+        :param bool is_mm: basis set is not required
         """
         self.name = name
         self.is_semiempirical = is_semiempirical
@@ -73,8 +74,9 @@ class Method:
     def sanity_check_method(name, program):
         """
         check to see if method is available in the specified program
-        name - str, name of method
-        program, str, gaussian, orca, psi4, or qchem
+        
+        :param str name: name of method
+        :param str program: program name (gaussian, orca, psi4, or qchem)
         """
         import os.path
         from difflib import SequenceMatcher as seqmatch
@@ -267,8 +269,10 @@ class SAPTMethod(Method):
     """
     method used to differentiate between regular methods and sapt
     methods because the molecule will need to be split into monomers
+    
     if using a sapt method, the geometry given to Theory or Geometry.write
-    should have a 'components' attribute with each monomer being a coordinate
+    should have a 'components' attribute with each monomer being a component
+    
     the charge and multiplicity given to Theory should be a list, with the first
     item in each list being the overall charge/multiplicity and the subsequent items
     being the charge/multiplicity of the monomers (components)

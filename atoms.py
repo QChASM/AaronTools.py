@@ -75,20 +75,20 @@ class BondOrder:
 class Atom:
     """
     Attributes:
-        
-        * element         str
-        * coords          np.array(float)
-        * flag            bool            true if frozen, false if relaxed
-        * name            str             form of \d+(\.\d+)*
-        * tags            set
-        * charge          float
-        * connected       set(Atom)
-        * constraint      set(Atom)       for determining constrained bonds
-        * _rank
-        * _radii          float           for calculating if bonded
-        * _connectivity   int             max connections without hypervalence
-        * _saturation     int             max connections without hypervalence or charges
-        
+
+    * element         str
+    * coords          np.array(float)
+    * flag            bool            true if frozen, false if relaxed
+    * name            str             form of \d+(\.\d+)*
+    * tags            set
+    * charge          float
+    * connected       set(Atom)
+    * constraint      set(Atom)       for determining constrained bonds
+    * _rank
+    * _radii          float           for calculating if bonded
+    * _connectivity   int             max connections without hypervalence
+    * _saturation     int             max connections without hypervalence or charges
+
     """
 
     LOG = None
@@ -99,13 +99,13 @@ class Atom:
         self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
     ):
         """
-        :param element str: element symbol
-        :param coords np.ndarray: position
-        :param flag: whether atom is frozen
-        :param name str: name of atom
-        :param tags list: misc. data
-        :param charge float: partial charge of atom
-        :param mass float: mass of atom
+        :param str element: element symbol
+        :param np.ndarray coords: position
+        :param bool flag: whether atom is frozen
+        :param str name: atom name
+        :param list tags: misc. data
+        :param float charge: partial charge of atom
+        :param float mass: mass of atom
         """
         
         super().__setattr__("_hashed", False)
@@ -316,12 +316,12 @@ class Atom:
         """
         gets initial invariant, which is formulated using:
         
-        # number of non-hydrogen connections (\d{1}): nconn
-        # sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
-        # atomic number (\d{3}): z
-        # sign of charge (\d{1}) (not used)
-        # absolute charge (\d{1}) (not used)
-        # number of attached hydrogens (\d{1}): nH
+        #. number of non-hydrogen connections (\d{1}): nconn
+        #. sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
+        #. atomic number (\d{3}): z
+        #. sign of charge (\d{1}) (not used)
+        #. absolute charge (\d{1}) (not used)
+        #. number of attached hydrogens (\d{1}): nH
         """
         heavy = set([x for x in self.connected if x.element != "H"])
         # number of non-hydrogen connections:
@@ -1009,9 +1009,9 @@ class Atom:
         returns the name of the expected vsepr geometry when the number of bonds
         changes by +/- 1
 
-        :param old_shape str: vsepr geometry name
-        :param new_connectivity int: connectivity (see Atom._connectivity)
-        :param bond_change int: +1 or -1, indicating that the number of bonds is changing by 1
+        :param str old_shape: vsepr geometry name
+        :param int new_connectivity: connectivity (see Atom._connectivity)
+        :param int bond_change: +1 or -1, indicating that the number of bonds is changing by 1
         
         """
         if old_shape == "point":

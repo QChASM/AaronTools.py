@@ -29,18 +29,23 @@ def job_from_string(name, **kwargs):
     """
     get a job name given a simple name
     
-    :param name str:
+    :param str name:
     
         * "opt" or "conf" with ".ts", ".transition_state", ".change", and ".con" extensions
+
             * .ts and .transition_state indicate a transition state optimization
             * .con indicates a constrained optimization - "constraints" should
-                be in kwargs and the value should be a dictionary conformable with 
-                the keyword of OptimizationJob
+              be in kwargs and the value should be a dictionary conformable with 
+              the keyword of OptimizationJob
+        
         * "freq" with ".num" extensions
+        
             * .num indicates a numerical frequnecy, as does kwargs["numerical"] = True
-                kwargs can also have a "temperature" key
+              kwargs can also have a "temperature" key
+        
         * "sp" or "energy" or "single-point"
         * "force" or "gradient" with a ".num" extension
+        
             * .num indicates a numerical frequnecy, as does kwargs["numerical"] = True
 
     :returns: job types for the given string
@@ -149,11 +154,11 @@ class JobType:
         raises NotImplementedError if this job type has no fix for
         the error code
         
-        :param error str: error code (e.g. SCF_CONV; see fileIO ERROR)
-        :param theory Theory: Theory instance used when the error happened
-        :param exec_type str: software program (i.e. gaussian, orca, etc.)
+        :param str error: error code (e.g. SCF_CONV; see fileIO ERROR)
+        :param Theory theory: Theory instance used when the error happened
+        :param str exec_type: software program (i.e. gaussian, orca, etc.)
         
-        :param geometry Geometry: (optional) structure might be adjusted slightly if
+        :param Geometry geometry: (optional) structure might be adjusted slightly if
             there are close contacts
         """
 
@@ -247,37 +252,34 @@ class OptimizationJob(JobType):
         geometry=None,
     ):
         """
-        :param transition_state bool: request a transition state optimization
-        :param constraints dict: keys are
+        :param bool transition_state: request a transition state optimization
+        :param dict constraints: keys are
         
             **available for ORCA, Gaussian, and Psi4**
             
             * 'atoms' - atom identifiers/finders - atoms to constrain
-            * 'bonds' - list(atom idenifiers/finders) - distances to constrain
-                each atom identifier in the list should result in exactly 2 atoms
-            * 'angles' - list(atom idenifiers/finders) - 1-3 angles to constrain
-                each atom identifier should result in exactly 3 atoms
-            * 'torsions' - list(atom identifiers/finders) - constrained dihedral angles
-                each atom identifier should result in exactly 4 atoms
+            * 'bonds' - list(atom idenifiers/finders) - distances to constrain each atom identifier
+              in the list should result in exactly 2 atoms
+            * 'angles' - list(atom idenifiers/finders) - 1-3 angles to constrain each atom identifier
+              should result in exactly 3 atoms
+            * 'torsions' - list(atom identifiers/finders) - constrained dihedral angles each atom
+              identifier should result in exactly 4 atoms
             
             
             **available for Gaussian and Psi4**
             
-            * 'x' - list(atom identifiers/finders) - constrain the x coordinate of
-                these atoms.
-                Similarly, 'y' and 'z' are also accepted.
+            * 'x' - list(atom identifiers/finders) - constrain the x coordinate of these atoms. Similarly, 'y' and 'z' are also accepted.
             * 'xgroup' - list(tuple(list(atom idenifiers), x_val, hold)) -
-                constrain the x coordinate of these atoms to be the same
+              constrain the x coordinate of these atoms to be the same
                 
                 * x_val - set x-coordinate to this value
-                * hold - hold this value constant during the optimization
-                    if 'hold' is omitted, the value will not be held
-                    constant during the optimization
+                * hold - hold this value constant during the optimization if 'hold' is omitted,
+                  the value will not be held constant during the optimization
                 
-                e.g. 'xgroup':[("1-6", 0, False), ("13-24", 3.25, False)]
+                  e.g. 'xgroup':[("1-6", 0, False), ("13-24", 3.25, False)]
                 
-                this will keep atoms 1-6 and 13-24 in parallel planes, while also
-                allowing those planes to move
+                  this will keep atoms 1-6 and 13-24 in parallel planes, while also
+                  allowing those planes to move
             
             * 'ygroup' and 'zgroup' are also available, with analagous options
     
@@ -286,7 +288,7 @@ class OptimizationJob(JobType):
             for Gaussian, 'bonds', 'angles', and 'torsions' constraints cannot be mixed
             with 'x', 'y', 'z', 'xgroup', 'ygroup', or 'zgroup' constraints
         
-        :param geometry Geometry: will be set when using an AaronTools FileWriter"""
+        :param Geometry geometry: will be set when using an AaronTools FileWriter"""
         super().__init__()
 
         self.transition_state = transition_state
@@ -1265,18 +1267,17 @@ class ConformerSearchJob(JobType):
         geometry=None,
     ):
         """
-        :param constraints dict:
+        :param dict constraints:
+            
             valid keys are:
             
             * 'atoms' - atom identifiers/finders - atoms to constrain
-            * 'bonds' - list(atom idenifiers/finders) - distances to constrain
-                each atom identifier in the list should result in exactly 2 atoms
-            * 'angles' - list(atom idenifiers/finders) - 1-3 angles to constrain
-                each atom identifier should result in exactly 3 atoms
+            * 'bonds' - list(atom idenifiers/finders) - distances to constrain each atom identifier in the list should result in exactly 2 atoms
+            * 'angles' - list(atom idenifiers/finders) - 1-3 angles to constrain each atom identifier should result in exactly 3 atoms
             * 'torsions' - list(atom identifiers/finders) - constrained dihedral angles
                 each atom identifier should result in exactly 4 atoms            
         
-        :param geometry Geometry: will be set when using an AaronTools FileWriter
+        :param Geometry geometry: will be set when using an AaronTools FileWriter
         """
         self.constraints = constraints
         self.geometry = geometry

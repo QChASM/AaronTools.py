@@ -19,7 +19,7 @@ class IntegrationGrid:
     
     def __init__(self, name):
         """
-        :param name str: Gaussian keyword (e.g. SuperFineGrid),
+        :param str name: Gaussian keyword (e.g. SuperFineGrid),
             ORCA keyword (e.g. Grid7),
             or "(radial, angular)"
         

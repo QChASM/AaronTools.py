@@ -19,10 +19,10 @@ The value should be as specified.
 * PSI4_COMMENT: list(str)
 * PSI4_MOLECULE: dict(str:list(str)) e.g. {'symmetry': ['c1']}
 * PSI4_COORDINATES: dict() with keys:
-    'coords' - array of coordinates with one item for each atom
-    'variables' - list of name (str), value (float), is_angstrom (bool) tuples
-    this is ignored if using a SAPTMethod with a low-spin combination
-    of monomers
+  'coords' - array of coordinates with one item for each atom
+  'variables' - list of name (str), value (float), is_angstrom (bool) tuples
+  this is ignored if using a SAPTMethod with a low-spin combination
+  of monomers
 * PSI4_JOB: dict(optimize/frequencies/etc: list(str $METHOD replaced w/ method))
 * PSI4_OPTKING: dict(setting_name: [value])
 
@@ -53,7 +53,7 @@ The value should be as specified.
 
 * XTB_CONTROL_BLOCKS: dict - stuff in xcontrol file
 * XTB_COMMAND_LINE: dict(str:list) - command line stuff, values should be 
-    emtpy lists if the command line flag (key) has no arguments
+  emtpy lists if the command line flag (key) has no arguments
 
 :CREST:
 

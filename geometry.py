@@ -66,14 +66,14 @@ class Geometry:
         """
         :param structure: can be a Geometry(), a FileReader(), a file name, or a
             list of atoms
-        :param name str: name 
-        :param comment str: comment
-        :param components list(AaronTools.component.Component())|None: components list or None
-        :param refresh_connected bool: usually True - determine connectivity
+        :param str name: name 
+        :param str comment: comment
+        :param list(AaronTools.component.Component())|None components: components list or None
+        :param bool refresh_connected: usually True - determine connectivity
         
             can save time for methods that only need coordinates by using
             `refresh_connected=False`
-        :param refresh_ranks bool: usually True - rank atoms, False when loading from database
+        :param bool refresh_ranks: usually True - rank atoms, False when loading from database
             can save time for methods that only don't rely on ranks by using
             `refresh_ranks=False`
         """
@@ -167,10 +167,10 @@ class Geometry:
         """
         get Geometry from string
         
-        :param name str: either an IUPAC name or a SMILES for a molecule
-        :param form str: * "smiles" -  structure from cactvs API/RDKit
+        :param str name: either an IUPAC name or a SMILES for a molecule
+        :param str form: * "smiles" -  structure from cactvs API/RDKit
             * "iupac" - iupac to smiles from opsin API, then the same as form=smiles
-        :param strict_use_rdkit bool: force use of RDKit and never use cactvs 
+        :param bool strict_use_rdkit: force use of RDKit and never use cactvs 
         """
 
         # CC and HOH are special-cased because they are used in
@@ -296,14 +296,14 @@ class Geometry:
         get all unique coordination complexes
         uses templates from Inorg. Chem. 2018, 57, 17, 10557–10567
 
-        :param center str: - element of center atom
-        :param ligands list(str): - list of ligand names in the ligand library
-        :param shape str: coordination geometry (e.g. octahedral) - see Atom.get_shape
-        :param c2_symmetric list(bool): specify which of the bidentate ligands are C2-symmetric
+        :param str center: - element of center atom
+        :param list(str) ligands: - list of ligand names in the ligand library
+        :param str shape: coordination geometry (e.g. octahedral) - see Atom.get_shape
+        :param list(bool) c2_symmetric: specify which of the bidentate ligands are C2-symmetric
                        if this list is as long as the ligands list, the nth item corresponds
                        to the nth ligand
                        otherwise, the nth item indicate the symmetry of the nth bidentate ligand
-        :param minimize bool: passed to cls.map_ligand when adding ligands
+        :param bool minimize: passed to cls.map_ligand when adding ligands
 
         :return: a list of cls containing all unique coordination complexes and the
             general formula of the complexes
@@ -554,7 +554,7 @@ class Geometry:
     @classmethod
     def get_diastereomers(cls, geometry, minimize=True):
         """
-        :param geometry Geometry: chiral structure
+        :param Geometry geometry: chiral structure
         :return: list of all diastereomers for detected chiral centers
         :rtype: list(Geometry)
         """
@@ -615,10 +615,10 @@ class Geometry:
         """
         Boltzmann-averaged percent buried volume
         
-        :param geometries list(Geometry): structures to calculate buried volume for
-        :param energies np.ndarray: energy in kcal/mol; ith energy corresponds to ith substituent
-        :param temperature float: temperature in K
-        :param args: passed to Geometry.percent_buried_volume()
+        :param list(Geometry) geometries: structures to calculate buried volume for
+        :param np.ndarray energies: energy in kcal/mol; ith energy corresponds to ith substituent
+        :param temperature: temperature in K
+        :param float args: passed to Geometry.percent_buried_volume()
         :param kwargs: passed to Geometry.percent_buried_volume()
         :return: Boltzmann-weighted percent buried volume
         """
@@ -681,7 +681,7 @@ class Geometry:
 
     def coordinates(self, atoms=None):
         """
-        :param atoms list(Atom):
+        :param list(Atom) atoms:
         :return: N x 3 coordinate matrix for requested atoms
             (defaults to all atoms)
         :rtype: np.ndarray
@@ -822,7 +822,7 @@ class Geometry:
         """
         Write geometry to a file
 
-        :param name str: name for geometry defaults to self.name
+        :param str name: name for geometry defaults to self.name
         :param args: passed to FileWriter.write
         :param kwargs: passed to FileWriter.write
         """
@@ -1049,7 +1049,7 @@ class Geometry:
         """
         freezes atoms in the geometry
         
-        :param targets list(Atom|str|Finder): atoms to freeze
+        :param list(Atom|str|Finder) targets: atoms to freeze
         """
         self._flag(True, targets)
 
@@ -1057,7 +1057,7 @@ class Geometry:
         """
         relaxes atoms in the geometry
         
-        :param targets list(Atom|str|Finder): atoms to unfreeze
+        :param list(Atom|str|Finder) targets: atoms to unfreeze
         """
         self._flag(False, targets)
 
@@ -1065,7 +1065,7 @@ class Geometry:
         """
         get frozen atoms
         
-        :param as_index bool: return indices instead of atoms
+        :param bool as_index: return indices instead of atoms
         
         :return: frozen atoms
         :rtype: list(int|Atom)
@@ -1100,7 +1100,7 @@ class Geometry:
         
         :param targets: atoms to look for fragments on,
             defaults to all atoms
-        :param max_order int: max bond order to cut when
+        :param int max_order: max bond order to cut when
             defining fragments
         """
         if targets:
@@ -1198,7 +1198,7 @@ class Geometry:
         """
         finds atom in geometry
 
-        :param args list|tuple|str|Finder: tags, names, elements, or a Finder subclass
+        :param list|tuple|str|Finder args: tags, names, elements, or a Finder subclass
             args=(['this', 'that'], 'other') will find atoms for which
             ('this' || 'that') && 'other' == True
         
@@ -1374,7 +1374,7 @@ class Geometry:
 
         :param atoms: the atoms to fix connectivity for; connections to atoms
             outside of this list are severed in the resulting list
-        :param copy bool: perform a deepcopy of the atom list, defaults to True
+        :param bool copy: perform a deepcopy of the atom list, defaults to True
         """
         if atoms is None:
             atoms = self.atoms
@@ -1405,7 +1405,7 @@ class Geometry:
         the sum of their covalent radii plus a threshold
         
         :param targets: atoms to update connectivity
-        :param threshold float: upper limit on difference to ideal
+        :param float threshold: upper limit on difference to ideal
             covalent bond length
         """
         # clear current connectivity
@@ -1449,7 +1449,7 @@ class Geometry:
         """
         updates ranks of all atoms
         
-        :param invariant bool: passed to Geometry.canonical_rank
+        :param bool invariant: passed to Geometry.canonical_rank
         """
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
@@ -1580,7 +1580,7 @@ class Geometry:
         """
         determine canonical ranking for atoms
         
-        :param invariant bool: if True, use invariant described in
+        :param bool invariant: if True, use invariant described in
             J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
             (DOI: 10.1021/ci00062a008)
             if False, use neighbor IDs
@@ -2088,7 +2088,7 @@ class Geometry:
         returns a vector from the origin to the center of mass
         
         :param targets: the atoms to use in calculation, defaults to all
-        :param heavy_only bool: exclude hydrogens, defaults to False
+        :param bool heavy_only: exclude hydrogens, defaults to False
         """
         # get targets
         if targets:
@@ -2129,16 +2129,16 @@ class Geometry:
         calculates the RMSD between two geometries
         Returns: rmsd (float)
 
-        :param ref Geometry: the geometry to compare to
-        :param align: if True (default), align self to other;
+        :param Geometry ref: the geometry to compare to
+        :param bool align: if True (default), align self to other;
             if False, just calculate the RMSD
-        :param heavy_only bool: only use heavy atoms (default False)
+        :param bool heavy_only: only use heavy atoms (default False)
         :param targets: the atoms in `self` to use in calculation
         :param ref_targets:  the atoms in the reference geometry to use
-        :param sort bool: canonical sorting of atoms before comparing
-        :param debug bool: returns RMSD and Geometry([ref_targets]), Geometry([targets])
-        :param weights list(float): weights to apply to targets
-        :param ref_weights list(float): weights to apply to ref_targets
+        :param bool sort: canonical sorting of atoms before comparing
+        :param bool debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
+        :param list(float) weights: weights to apply to targets
+        :param list(float) ref_weights: weights to apply to ref_targets
         """
 
         def _RMSD(ref, other):
@@ -2310,14 +2310,14 @@ class Geometry:
         :returns: list of atoms within a distance or number of bonds of a
             reference point, line, plane, atom, or list of atoms
 
-        :param ref list: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
+        :param list ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
             (eg: ['*', '*', 0]), atom, or list of atoms
-        :param dist float: the distance threshold or number of bonds away threshold, is an
+        :param float dist: the distance threshold or number of bonds away threshold, is an
             inclusive upper bound (uses `this <= dist`)
-        :param by_bond bool: if true, `dist` is interpreted as the number of bonds away
+        :param bool by_bond: if true, `dist` is interpreted as the number of bonds away
             instead of distance in angstroms
             NOTE: by_bond=True means that ref must be an atom or list of atoms
-        :param include_ref: if Atom or list(Atom) given as ref, include these in the
+        :param bool include_ref: if Atom or list(Atom) given as ref, include these in the
             returned list, (default=False, do not include ref in returned list)
         """
         if dist < 0:
@@ -2396,8 +2396,8 @@ class Geometry:
 
     def get_principle_axes(self, mass_weight=True, center=None):
         """
-        :param mass_weight bool: mass-weight axes (i.e. moments of inertia)
-        :param center np.ndarray: center of rotation, defaults to Geometry.COM
+        :param bool mass_weight: mass-weight axes (i.e. moments of inertia)
+        :param np.ndarray center: center of rotation, defaults to Geometry.COM
         
         :returns: [principal moments], [principle axes]
         """
@@ -2428,9 +2428,9 @@ class Geometry:
         """
         computes LJ energy using autodock parameters
         
-        :param other Geometry: calculate LJ energy between self and other
+        :param Geometry other: calculate LJ energy between self and other
             instead of just self
-        :param use_prev_params bool: use same sigma/epsilon as the last time
+        :param bool use_prev_params: use same sigma/epsilon as the last time
             LJ_energy was called; useful for methods that make repetitive
             LJ_energy calls, like minimize_torsion
         """
@@ -2519,9 +2519,9 @@ class Geometry:
         
         :param ref: the structure to compare to (str(path), FileReader, or Geometry)
             ref.atoms should be in the same order as self.atoms
-        :param thresh float: allow for connectivity changes as long as the difference
+        :param float thresh: allow for connectivity changes as long as the difference
             between bond distances is below a threshold, default None
-        :param return_idx bool: output will be indices of atoms instead of names
+        :param bool return_idx: output will be indices of atoms instead of names
 
         
         :returns: broken, formed
@@ -2589,20 +2589,20 @@ class Geometry:
             the centroid between the atoms
         :param targets: atoms to use in calculation, defaults to all non-center if there
             is only one center, otherwise all atoms
-        :param radius float: sphere radius around center atom
-        :param radii str|dict: "umn" or "bondi", VDW radii to use
+        :param float radius: sphere radius around center atom
+        :param str|dict radii: "umn" or "bondi", VDW radii to use
             can also be a dict() with atom symbols as the keys and
             their respective radii as the values
-        :param scale float: scale VDW radii by this
-        :param method str: integration method (MC or lebedev)
-        :param rpoints int: number of radial shells for Lebedev integration
-        :param apoints int: number of angular points for Lebedev integration
-        :param min_iter int: minimum number of iterations for MC integration
+        :param float scale: scale VDW radii by this
+        :param str method: integration method (MC or lebedev)
+        :param int rpoints: number of radial shells for Lebedev integration
+        :param int apoints: number of angular points for Lebedev integration
+        :param int min_iter: minimum number of iterations for MC integration
             each iteration is a batch of 3000 points
             iterations will continue beyond min_iter if the volume has not converged
-        :param basis np.ndarray: change of basis matrix
+        :param np.ndarray basis: change of basis matrix
             will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
-        :param n_threads int: number of threads to use for MC integration
+        :param int n_threads: number of threads to use for MC integration
             using multiple threads doesn't benefit performance very much
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
@@ -2912,16 +2912,16 @@ class Geometry:
         """
         :param center: atom, list of atoms, or array specifiying the origin
         :param key_atoms: list of ligand key atoms. Atoms on these ligands will be in the steric map.
-        :param radii str|dict: "umn", "bondi", or dict() specifying the VDW radii to use
-        :param oop_vector np.ndarray: None or array specifying the direction out of the plane of the steric map
+        :param str|dict radii: "umn", "bondi", or dict() specifying the VDW radii to use
+        :param np.ndarray oop_vector: None or array specifying the direction out of the plane of the steric map
             if None, oop_vector is determined using the average vector from the key
             atoms to the center atom
-        :param ip_vector np.ndarray: None or array specifying a vector in the plane of the steric map
+        :param np.ndarray ip_vector: None or array specifying a vector in the plane of the steric map
             if None, ip_vector is determined as the plane of best fit through the
             key_atoms and the center
-        :param return_basis bool: whether or not to return a change of basis matrix
-        :param num_pts int: number of points along x and y axis to use
-        :param shape str: "circle" or "square"
+        :param bool return_basis: whether or not to return a change of basis matrix
+        :param int num_pts: number of points along x and y axis to use
+        :param str shape: "circle" or "square"
 
         :returns: x, y, z, min_alt, max_alt
         
@@ -3095,17 +3095,17 @@ class Geometry:
         selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
 
-        :param return_vector bool: returns dict of tuple(vector start, vector end) instead
-        :param radii str|dict|list:
+        :param bool return_vector: returns dict of tuple(vector start, vector end) instead
+        :param str|dict|list radii:
             
             * "bondi" - Bondi vdW radii
             * "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
             * dict()  - radii are values and elements are keys
             * list()  - list of radii corresponding to targets
 
-        :param L_axis np.ndarray: vector defining L-axis
+        :param np.ndarray L_axis: vector defining L-axis
         :param targets: atoms to include in the parameter calculation
-        :param L_func function: function to evaluate for getting the L value and vector
+        :param function L_func: function to evaluate for getting the L value and vector
             for each atom
             takes positional arguments:
             
@@ -3117,12 +3117,12 @@ class Geometry:
             if L_func is not given, the default is the distance from
             start_atom to the furthest vdw radius projected onto the
             L-axis
-        :param return_vector bool: returned dictionary will have tuples of start, end
+        :param bool return_vector: returned dictionary will have tuples of start, end
             for vectors to represent the parameters in 3D space
-        :param at_L float: - L value to calculate sterimol parameters at
+        :param float at_L: - L value to calculate sterimol parameters at
                
                Used for Sterimol2Vec
-        :param max_error float: max. error in angstroms for B1
+        :param float max_error: max. error in angstroms for B1
             higher error can sometimes make the calculation
             go slightly faster
             
@@ -3591,10 +3591,10 @@ class Geometry:
         :param start: the atoms to start on
         :param stop: the atom(s) to avoid
             stop=None will try all possibilities and return smallest fragment
-        :param as_object bool: return as list (default) or Geometry object
-        :param copy bool: whether or not to copy the atoms before returning the list;
+        :param bool as_object: return as list (default) or Geometry object
+        :param bool copy: whether or not to copy the atoms before returning the list;
             copy will automatically fix connectivity information
-        :param biggest bool: if stop=None, will return biggest possible fragment
+        :param bool biggest: if stop=None, will return biggest possible fragment
             instead of smallest
 
         :returns:
@@ -3638,7 +3638,7 @@ class Geometry:
         :param start: the atom of the fragment to be removed that attaches to the
             rest of the geometry
         :param avoid: the atoms :start: is attached to that should be avoided
-        :param add_H bool: default is to change :start: to H and update bond lengths, but
+        :param bool add_H: default is to change :start: to H and update bond lengths, but
             add_H=False overrides this behaviour
 
         :returns: :start: + the removed fragment
@@ -3663,7 +3663,7 @@ class Geometry:
         """
         shifts the coordinates of the target atoms by a vector
         parameters:
-        :param vector np.ndarray: the shift vector
+        :param np.ndarray vector: the shift vector
         :param targets: the target atoms to shift (default to all)
         """
         if targets is None:
@@ -3685,13 +3685,13 @@ class Geometry:
 
         :param a1: the first atom
         :param a2: the second atom
-        :param dist float: the distance to change by/to.
+        :param float dist: the distance to change by/to.
             Default is to set the bond length to that determined by RADII
-        :param adjust bool: default is to set the bond length to `dist`,
+        :param bool adjust: default is to set the bond length to `dist`,
             adjust=True indicates the current bond length should be adjusted by `dist`
-        :param fix int: default is to move both a1 and a2 by half of `dist`, fix=1
+        :param int fix: default is to move both a1 and a2 by half of `dist`, fix=1
             will move only a2 and fix=2 will move only a1
-        :param as_group bool: default is to move the fragments connected to a1 and a2
+        :param bool as_group: default is to move the fragments connected to a1 and a2
             as well, as_group=False will only move the requested atom(s)
         """
         a1, a2 = self.find_exact(a1, a2)
@@ -3769,9 +3769,9 @@ class Geometry:
         """
         rotates target atoms by an angle about an axis
 
-        :param w np.ndarray: the axis of rotation (doesnt need to be unit vector)
+        :param np.ndarray w: the axis of rotation (doesnt need to be unit vector)
             or a quaternion (angle not required then)
-        :param angle float: the angle by which to rotate (in radians)
+        :param float angle: the angle by which to rotate (in radians)
         :param targets: atoms to rotate (defaults to all)
         :param center: if provided, the atom (or COM of a list)
             will be centered at the origin before rotation, then shifted
@@ -3870,13 +3870,13 @@ class Geometry:
         :param a1: first atom
         :param a2: second atom (vertex)
         :param a3: third atom
-        :param angle: the angle to change by/to
-        :param radians bool: default units are radians, radians=False uses degrees
-        :param adjust bool: default is to set the angle to `angle`, adjust=True
+        :param float angle: the angle to change by/to
+        :param bool radians: default units are radians, radians=False uses degrees
+        :param bool adjust: default is to set the angle to `angle`, adjust=True
             indicates the current angle should be adjusted by `angle`
-        :param fix int: default is to move both a1 and a3 by half of `angle`, fix=1
+        :param int fix: default is to move both a1 and a3 by half of `angle`, fix=1
             will move only a3 and fix=3 will move only a1
-        :param as_group bool: default is to move the fragments connected to a1 and a3
+        :param bool as_group: default is to move the fragments connected to a1 and a3
             as well, as_group=False will only move the requested atom(s)
         """
         try:
@@ -4033,9 +4033,9 @@ class Geometry:
         
         :param geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
-        :param all_frags bool: minimize rotatable bonds on substituents
-        :param increment float: angle stride in degrees
-        :param allow_planar: allow substituents that start and end with atoms
+        :param  bool all_frags: minimize rotatable bonds on substituents
+        :param  float increment: angle stride in degrees
+        :param bool allow_planar: allow substituents that start and end with atoms
             with planar VSEPR geometries that are nearly
             planar to be rotated
         """
@@ -4088,11 +4088,11 @@ class Geometry:
         Rotate :targets: to minimize the LJ potential
 
         :param targets: the target atoms to rotate
-        :param axis np.ndarray: the axis by which to rotate
-        :param center np.ndarray|Atom: where to center before rotation
-        :param geom: calculate LJ potential between self and another geometry-like
+        :param np.ndarray axis: the axis by which to rotate
+        :param np.ndarray|Atom center: where to center before rotation
+        :param Geometry geom: calculate LJ potential between self and another geometry-like
             object, instead of just within self
-        :param increment float: angle stride in degrees
+        :param float increment: angle stride in degrees
         """
         targets = Geometry(
             self.find(targets),
@@ -4170,13 +4170,13 @@ class Geometry:
         """
         substitutes fragment containing `target` with substituent `sub`
         
-        :param sub str|Substituent: substituent (or name from the library) to use
+        :param str|Substituent sub: substituent (or name from the library) to use
         :param target: atom to place the substituent on
         :param attached_to: if attached_to is provided, this is the atom where the substituent is attached;         
         
             if attached_to=None, replace the smallest fragment containing `target`
         
-        :param minimize bool: rotate sub to lower LJ potential
+        :param bool minimize: rotate sub to lower LJ potential
         """
         from AaronTools.component import Component
 
@@ -4350,10 +4350,10 @@ class Geometry:
         on the ring fragment
         
         :param targets: pair of atoms to be in the ring
-        :param ring_fragment str|Ring: Ring or name of ring in the library
-        :param minimize bool: try other rings with the same name (appended with a number)
+        :param str|Ring ring_fragment: Ring or name of ring in the library
+        :param bool minimize: try other rings with the same name (appended with a number)
             in the library to see if they fit better
-        :param flip_walk bool: also flip the rings when minimizing to see if that fits better
+        :param bool flip_walk: also flip the rings when minimizing to see if that fits better
         """
 
         def attach_short(geom, walk, ring_fragment):
@@ -4619,9 +4619,9 @@ class Geometry:
         change the element of an atom on self
         
         :param target: target atom
-        :param new_element str:  element of new atom
-        :param adjust_bonds bool: bool adjust distance to bonded atoms
-        :param adjust_hydrogens bool|tuple(int, str):
+        :param str new_element:  element of new atom
+        :param bool adjust_bonds: bool adjust distance to bonded atoms
+        :param bool|tuple(int, str) adjust_hydrogens:
         
             * :bool: try to add or remove hydrogens and guess how many hydrogens to add or remove
             * :tuple(int, str): remove specified number of hydrogens and set the geometry to
@@ -5115,7 +5115,7 @@ class Geometry:
 
         :param ligand:    the name of a ligand in the ligand library
         :param old_keys:  the key atoms of the old ligand to map to
-        :param minimize bool: rotate groups slightly to reduce steric clashing
+        :param bool minimize: rotate groups slightly to reduce steric clashing
         """
 
         def get_rotation(old_axis, new_axis):
@@ -5607,8 +5607,8 @@ class Geometry:
         """
         Generates the next possible conformer
 
-        :param conf_spec dict: {sub_start_number: conf_number}
-        :param skip_spec dict: {sub_start_number: [skip_numbers]}
+        :param dict conf_spec: {sub_start_number: conf_number}
+        :param dict skip_spec: {sub_start_number: [skip_numbers]}
 
 
         :returns:
@@ -5648,9 +5648,9 @@ class Geometry:
         """
         returns atoms for the specified layer and adds link atoms
         
-        :param layer str: ONIOM layer (H, M, L)
-        :param low_layer str: label for low layer, defaults to L
-        :param as_object bool:
+        :param str layer: ONIOM layer (H, M, L)
+        :param str low_layer: label for low layer, defaults to L
+        :param bool as_object:
         
             * True - return Geometry
             * False - return list(Atom)
@@ -5799,7 +5799,7 @@ class Geometry:
         """
         rotates substituents according to the specified conformer specification
         
-        :param conf_spec dict: 
+        :param dict conf_spec: 
             {sub_start_number: (conf_number, [skip_numbers])}
 
         :returns:
