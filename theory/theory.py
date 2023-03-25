@@ -59,20 +59,21 @@ class Theory:
     attribute names are the same as initialization keywords (with the exception of ecp, which
     is added to the basis attribute)
     valid initialization keywords are:
-    geometry                -   AaronTools Geometry
-    charge                  -   total charge
-    multiplicity            -   electronic multiplicity
-    job_type                -   JobType or list(JobType)
+    
+    * geometry                -   AaronTools Geometry
+    * charge                  -   total charge
+    * multiplicity            -   electronic multiplicity
+    * job_type                -   JobType or list(JobType)
 
-    method                  -   Method object (or str - Method instance will be created) or list(Method) for ONIOM
-    basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(keyword)))
-    ecp                     -   str parsable by BasisSet.parse_basis_str
-    empirical_dispersion    -   EmpiricalDispersion object (or str)
-    grid                    -   IntegrationGrid object (or str)
-    solvent                 -   ImplicitSolvent object
+    * method                  -   Method object (or str - Method instance will be created) or list(Method) for ONIOM
+    * basis                   -   BasisSet object (or str - will be set to BasisSet(Basis(keyword)))
+    * ecp                     -   str parsable by BasisSet.parse_basis_str
+    * empirical_dispersion    -   EmpiricalDispersion object (or str)
+    * grid                    -   IntegrationGrid object (or str)
+    * solvent                 -   ImplicitSolvent object
 
-    memory                  -   int - allocated memory (GB)
-    processors              -   int - allocated cores
+    * memory                  -   int - allocated memory (GB)
+    * processors              -   int - allocated cores
     """
 
     ACCEPTED_INIT_KW = [
@@ -521,7 +522,7 @@ class Theory:
 
     def remove_kwargs(self, **kwargs):
         """
-        add kwargs to the theory
+        remove kwargs from the theory
         """
         new_kwargs = dict()
         for keyword in kwargs.keys():
@@ -544,20 +545,21 @@ class Theory:
         **kwargs,
     ):
         """
-        geom: Geometry
-        style: str, gaussian, orca, psi4, oniom, or sqm
-        conditional_kwargs: dict - keys are ORCA_*, PSI4_*, or GAUSSIAN_*
+        :param geom Geometry: structure:
+        :param style str: file format (e.g. gaussian, orca, psi4, oniom, or sqm)
+        :param conditional_kwargs dict: keys are ORCA_*, PSI4_*, or GAUSSIAN_*
+            
             items in conditional_kwargs will only be added
-            to the input if they would otherwise be preset
-            e.g. if self.job_type is FrequencyJob and a Gaussian
+            to the input if they would otherwise be preset.
+            For example, if self.job_type is FrequencyJob and a Gaussian
             input file is being written,
             conditional_kwargs = {GAUSSIAN_ROUTE:{'opt':['noeigentest']}}
             will not add opt=noeigentest to the route
             but if it's an OptimizationJob, it will add opt=noeigentest
-        sanity_check_method: bool, check if method is available in recent version
+        :param sanity_check_method bool: check if method is available in recent version
                              of the target software package (Psi4 checks when its
                              footer is created)
-        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
+        :param kwargs dict: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry
@@ -662,10 +664,11 @@ class Theory:
         **kwargs,
     ):
         """
-        geom: Geometry()
-        style: gaussian, psi4, or sqm
-        conditional_kwargs: dict() of keyword: value pairs
-        kwargs: keywords are GAUSSIAN_*, ORCA_*, PSI4_*, or QCHEM_*
+        :param geom Geometry: structure
+        :param style str: gaussian, psi4, or sqm
+        :param conditional_kwargs dict: theory parameters, which will
+            only be added if the corresponding section is used elsewhere
+        :param kwargs dict: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry
@@ -764,12 +767,12 @@ class Theory:
         **kwargs,
     ):
         """
-        geom: Geometry
-        style: str, gaussian or psi4
-        conditional_kwargs: dict, see make_header
-        sanity_check_method: bool, check if method is available in recent version
-                             of the target software package (Psi4 only)
-        kwargs: keywords are GAUSSIAN_*, ORCA_*, or PSI4_*
+        :param geom Geometry: structure
+        :param style str: program name
+        :param conditional_kwargs dict: see Theory.make_header
+        :param sanity_check_method bool: check if method is available in recent version
+            of the target software package (Psi4 only)
+        :param kwargs dict: see AaronTools.theory parameters for more details 
         """
         if geom is None:
             geom = self.geometry
@@ -860,8 +863,10 @@ class Theory:
     ):
         """
         write Gaussian09/16 input file header (up to charge mult)
+        
         other_kw_dict is a dictionary with file positions (using GAUSSIAN_*)
         corresponding to options/keywords
+        
         returns warnings if a certain feature is not available in Gaussian
         """
 
@@ -1419,11 +1424,14 @@ class Theory:
     ):
         """
         get ORCA input file header
+        
         other_kw_dict is a dictionary with file positions (using ORCA_*)
         corresponding to options/keywords
-        returns file content and warnings e.g. if a certain feature is not available in ORCA
-        returns str of header content
-        if return_warnings, returns str, list(warning)
+        
+        if ``return_warnings==True``, returns file content and warnings
+            e.g. if a certain feature is not available in ORCA
+        
+        else, returns str of header content
         """
 
         if conditional_kwargs is None:
@@ -1579,11 +1587,9 @@ class Theory:
     ):
         """
         get ORCA input file header
+        
         other_kw_dict is a dictionary with file positions (using ORCA_*)
         corresponding to options/keywords
-        returns file content and warnings e.g. if a certain feature is not available in ORCA
-        returns str of header content
-        if return_warnings, returns str, list(warning)
         """
 
         if conditional_kwargs is None:
@@ -1686,9 +1692,9 @@ class Theory:
     ):
         """
         write Psi4 input file
+        
         other_kw_dict is a dictionary with file positions (using PSI4_*)
         corresponding to options/keywords
-        returns file content and warnings e.g. if a certain feature is not available in Psi4
         """
 
         if conditional_kwargs is None:
@@ -2546,8 +2552,10 @@ class Theory:
     ):
         """
         write QChem input file header (up to charge mult)
+        
         other_kw_dict is a dictionary with file positions (using QCHEM_*)
         corresponding to options/keywords
+        
         returns warnings if a certain feature is not available in QChem
         """
 

@@ -19,12 +19,15 @@ class IntegrationGrid:
     
     def __init__(self, name):
         """
-        name: str, Gaussian keyword (e.g. SuperFineGrid),
-                   ORCA keyword (e.g. Grid7),
-                   or "(radial, angular)"
+        :param name str: Gaussian keyword (e.g. SuperFineGrid),
+            ORCA keyword (e.g. Grid7),
+            or "(radial, angular)"
+        
         ORCA can only use ORCA grid keywords
+        
         Gaussian can use its keywords and will try to use ORCA keywords, and
         can use "(radial, angular)" or radialangular
+        
         Psi4 will use "(radial, angular)" and will try to use ORCA or Gaussian keywords
         """
         self.name = name

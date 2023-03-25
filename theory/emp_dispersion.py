@@ -10,22 +10,25 @@ class EmpiricalDispersion:
     LOG = None
     
     def __init__(self, name):
-        """name can be (availability may vary):
-            Grimme D2 (or D2, -D2, GD2)
-            Zero-damped Grimme D3 (or D3, -D3, GD3)
-            Becke-Johnson damped Grimme D3 (or D3BJ, -D3BJ, GD3BJ)
-            Becke-Johnson damped modified Grimme D3 (or B3MBJ, -D3MBJ)
-            Petersson-Frisch (or PFD)
-            Grimme D4 (or D4, -D4, GD4)
-            Chai & Head-Gordon (or CHG, -CHG)
-            Nonlocal Approximation (or NL, NLA, -NL)
-            Pernal, Podeszwa, Patkowski, & Szalewicz (or DAS2009, -DAS2009)
-            Podeszwa, Katarzyna, Patkowski, & Szalewicz (or DAS2010, -DAS2010)
-            Coupled-Cluster Doubles (or CCD)
-            Řezác, Greenwell, & Beran (or DMP2)
-            Coupled-Cluster Doubles + Řezác, Greenwell, & Beran (or (CCD)DMP2)
+        """
+        name can be (availability may vary):
+        
+        * Grimme D2 (or D2, -D2, GD2)
+        * Zero-damped Grimme D3 (or D3, -D3, GD3)
+        * Becke-Johnson damped Grimme D3 (or D3BJ, -D3BJ, GD3BJ)
+        * Becke-Johnson damped modified Grimme D3 (or B3MBJ, -D3MBJ)
+        * Petersson-Frisch (or PFD)
+        * Grimme D4 (or D4, -D4, GD4)
+        * Chai & Head-Gordon (or CHG, -CHG)
+        * Nonlocal Approximation (or NL, NLA, -NL)
+        * Pernal, Podeszwa, Patkowski, & Szalewicz (or DAS2009, -DAS2009)
+        * Podeszwa, Katarzyna, Patkowski, & Szalewicz (or DAS2010, -DAS2010)
+        * Coupled-Cluster Doubles (or CCD)
+        * Řezác, Greenwell, & Beran (or DMP2)
+        * Coupled-Cluster Doubles + Řezác, Greenwell, & Beran (or (CCD)DMP2)
 
-        or simply the keyword for the input file type you are using"""
+        or simply the keyword for the input file type you are using
+        """
 
         self.name = name
 
@@ -70,15 +73,19 @@ class EmpiricalDispersion:
         return self.__class__(**new_dict)
 
     def get_gaussian(self):
-        """Acceptable dispersion methods for Gaussian are:
-        Grimme D2
-        Grimme D3
-        Becke-Johnson damped Grimme D3
-        Petersson-Frisch
+        """
+        Acceptable dispersion methods for Gaussian are:
+        
+        * Grimme D2
+        * Grimme D3
+        * Becke-Johnson damped Grimme D3
+        * Petersson-Frisch
 
         Dispersion methods available in other software that will be modified are:
-        Grimme D4
-        undampened Grimme D3"""
+        
+        * Grimme D4
+        * undampened Grimme D3
+        """
 
         if any(
                 self.name.upper() == name for name in [
@@ -118,11 +125,14 @@ class EmpiricalDispersion:
         return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_orca(self):
-        """Acceptable keywords for ORCA are:
-        Grimme D2
-        Zero-damped Grimme D3
-        Becke-Johnson damped Grimme D3
-        Grimme D4"""
+        """
+        Acceptable keywords for ORCA are:
+        
+        * Grimme D2
+        * Zero-damped Grimme D3
+        * Becke-Johnson damped Grimme D3
+        * Grimme D4
+        """
         if any(
                 self.name.upper() == name for name in [
                     "GRIMME D2", "GD2", "D2", "-D2"
@@ -154,16 +164,19 @@ class EmpiricalDispersion:
         return(out_dict, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_psi4(self):
-        """Acceptable keywords for Psi4 are:
-        Grimme D1
-        Grimme D2
-        Zero-damped Grimme D3
-        Becke-Johnson damped Grimme D3
-        Chai & Head-Gordon
-        Nonlocal Approximation
-        Pernal, Podeszwa, Patkowski, & Szalewicz
-        Podeszwa, Katarzyna, Patkowski, & Szalewicz
-        Řezác, Greenwell, & Beran"""
+        """
+        Acceptable keywords for Psi4 are:
+        
+        * Grimme D1
+        * Grimme D2
+        * Zero-damped Grimme D3
+        * Becke-Johnson damped Grimme D3
+        * Chai & Head-Gordon
+        * Nonlocal Approximation
+        * Pernal, Podeszwa, Patkowski, & Szalewicz
+        * Podeszwa, Katarzyna, Patkowski, & Szalewicz
+        * Řezác, Greenwell, & Beran
+        """
         if any(
                 self.name.upper() == name for name in [
                     "GRIMME D1", "GD1", "D1", "-D1"
@@ -240,13 +253,15 @@ class EmpiricalDispersion:
             return (self.name, "unrecognized emperical dispersion: %s" % self.name)
 
     def get_qchem(self):
-        """Acceptable keywords for QChem are:
-        Grimme D2
-        Modified Zero-damped Grimme D3
-        Zero-damped Grimme D3
-        Becke-Johnson damped Grimme D3
-        Becke-Johnson damped modified Grimme D3
-        Chai & Head-Gordon
+        """
+        Acceptable keywords for QChem are:
+        
+        * Grimme D2
+        * Modified Zero-damped Grimme D3
+        * Zero-damped Grimme D3
+        * Becke-Johnson damped Grimme D3
+        * Becke-Johnson damped modified Grimme D3
+        * Chai & Head-Gordon
         """
         if any(
                 self.name.upper() == name for name in [

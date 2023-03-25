@@ -1,51 +1,68 @@
 """
-methods that construct headers and footers can specify some keyword arguments
-keywords are ORCA_*, PSI4_*, or GAUSSIAN_* (from AaronTools.theory)
-ORCA_ROUTE: list(str)
-ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
-ORCA_COORDINATES: ignored
-ORCA_COMMENT: list(str)
+Theory methods that construct headers, footers, or molecule specifications
+can take some keyword arguments (i.e. `\*\*kwargs`).
+For these methods, you can use the parameters below. 
+The value should be as specified. 
 
-PSI4_SETTINGS: dict(setting_name: [value])
-PSI4_BEFORE_GEOM: list(str)
-PSI4_AFTER_JOB: list(str) -FUNCTIONAL will be replaced with method name
-PSI4_COMMENT: list(str)
-PSI4_MOLECULE: dict(str:list(str)) e.g. {'symmetry': ['c1']}
-PSI4_COORDINATES: dict() with keys:
-                  'coords' - array of coordinates with one item for each atom
-                  'variables' - list of name (str), value (float), is_angstrom (bool) tuples
-                  this is ignored if using a SAPTMethod with a low-spin combination
-                  of monomers
-PSI4_JOB: dict(optimize/frequencies/etc: list(str -FUNCTIONAL replaced w/ method))
-PSI4_OPTKING: dict(setting_name: [value])
+:ORCA:
 
-GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
-GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
-GAUSSIAN_COORDINATES: list of coordinates and variables/constants
-GAUSSIAN_CONSTRAINTS: list(str)
-GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
-GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
-GAUSSIAN_POST: list(str)
-GAUSSIAN_COMMENT: list(str)
+* ORCA_ROUTE: list(str)
+* ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
+* ORCA_COORDINATES: ignored
+* ORCA_COMMENT: list(str)
 
-SQM_COMMENT: list(str)
-SQM_QMMM: dict()
+:Psi4:
 
-QCHEM_MOLECULE: list(str) - $molecule section
-QCHEM_REM: dict(str:str) - $rem section
-QCHEM_COMMENT: list(str) - comments
-QCHEM_SETTINGS: dict(str:str) - all other sections
+* PSI4_SETTINGS: dict(setting_name: [value])
+* PSI4_BEFORE_GEOM: list(str)
+* PSI4_AFTER_JOB: list(str) $METHOD will be replaced with method name
+* PSI4_COMMENT: list(str)
+* PSI4_MOLECULE: dict(str:list(str)) e.g. {'symmetry': ['c1']}
+* PSI4_COORDINATES: dict() with keys:
+    'coords' - array of coordinates with one item for each atom
+    'variables' - list of name (str), value (float), is_angstrom (bool) tuples
+    this is ignored if using a SAPTMethod with a low-spin combination
+    of monomers
+* PSI4_JOB: dict(optimize/frequencies/etc: list(str $METHOD replaced w/ method))
+* PSI4_OPTKING: dict(setting_name: [value])
 
-XTB_CONTROL_BLOCKS: dict - stuff in xcontrol file
-XTB_COMMAND_LINE: dict(str:list) - command line stuff, values should be 
+:Gaussian:
+
+* GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
+* GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
+* GAUSSIAN_COORDINATES: list of coordinates and variables/constants
+* GAUSSIAN_CONSTRAINTS: list(str)
+* GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
+* GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
+* GAUSSIAN_POST: list(str)
+* GAUSSIAN_COMMENT: list(str)
+
+:SQM:
+
+* SQM_COMMENT: list(str)
+* SQM_QMMM: dict()
+
+:Q-Chem:
+
+* QCHEM_MOLECULE: list(str) - $molecule section
+* QCHEM_REM: dict(str:str) - $rem section
+* QCHEM_COMMENT: list(str) - comments
+* QCHEM_SETTINGS: dict(str:str) - all other sections
+
+:xTB:
+
+* XTB_CONTROL_BLOCKS: dict - stuff in xcontrol file
+* XTB_COMMAND_LINE: dict(str:list) - command line stuff, values should be 
     emtpy lists if the command line flag (key) has no arguments
 
-CREST_COMMAND_LINE: crest command line - see XTB_COMMAND_LINE
+:CREST:
+
+* CREST_COMMAND_LINE: crest command line - see XTB_COMMAND_LINE
 """
 
 ORCA_ROUTE = "simple" # simple input
 ORCA_BLOCKS = "blocks" #blocks
-ORCA_COORDINATES = 3 #molecule (not used)
+ORCA_COORDINATES = 3 # molecule (not used)
 ORCA_COMMENT = "comments" #comments
 
 PSI4_SETTINGS = "settings" # set { stuff }

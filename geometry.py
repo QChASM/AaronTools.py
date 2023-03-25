@@ -64,13 +64,18 @@ class Geometry:
         refresh_ranks=True,
     ):
         """
-        :structure: can be a Geometry(), a FileReader(), a file name, or a
+        :param structure: can be a Geometry(), a FileReader(), a file name, or a
             list of atoms
-        :name: str
-        :comment: str
-        :components: list of AaronTools.component.Component() or None
-        :refresh_connected: usually True - determine connectivity
-        :refresh_ranks: usually True - rank atoms, only False when loading from database
+        :param name str: name 
+        :param comment str: comment
+        :param components list(AaronTools.component.Component())|None: components list or None
+        :param refresh_connected bool: usually True - determine connectivity
+        
+            can save time for methods that only need coordinates by using
+            `refresh_connected=False`
+        :param refresh_ranks bool: usually True - rank atoms, False when loading from database
+            can save time for methods that only don't rely on ranks by using
+            `refresh_ranks=False`
         """
         super().__setattr__("_hashed", False)
         self.name = name
@@ -130,6 +135,11 @@ class Geometry:
     # class methods
     @staticmethod
     def iupac2smiles(name):
+        """
+        convert IUPAC name to smiles using the OPSIN web API
+        
+        :param str name: IUPAC name of a molecule
+        """
         if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
             raise PermissionError(
                 "Converting IUPAC to SMILES failed. External network lookup disallowed."
@@ -154,10 +164,13 @@ class Geometry:
 
     @classmethod
     def from_string(cls, name, form="smiles", strict_use_rdkit=False):
-        """get Geometry from string
-        form=iupac -> iupac to smiles from opsin API
-                       --> form=smiles
-        form=smiles -> structure from cactvs API/RDKit
+        """
+        get Geometry from string
+        
+        :param name str: either an IUPAC name or a SMILES for a molecule
+        :param form str: * "smiles" -  structure from cactvs API/RDKit
+            * "iupac" - iupac to smiles from opsin API, then the same as form=smiles
+        :param strict_use_rdkit bool: force use of RDKit and never use cactvs 
         """
 
         # CC and HOH are special-cased because they are used in
@@ -283,17 +296,18 @@ class Geometry:
         get all unique coordination complexes
         uses templates from Inorg. Chem. 2018, 57, 17, 10557–10567
 
-        center - str, element of center atom
-        ligands - list of ligand names in the ligand library
-        shape - str, e.g. octahedral - see Atom.get_shape
-        c2_symmetric - list of bools, specifies which of the bidentate ligands are C2-symmetric
+        :param center str: - element of center atom
+        :param ligands list(str): - list of ligand names in the ligand library
+        :param shape str: coordination geometry (e.g. octahedral) - see Atom.get_shape
+        :param c2_symmetric list(bool): specify which of the bidentate ligands are C2-symmetric
                        if this list is as long as the ligands list, the nth item corresponds
                        to the nth ligand
                        otherwise, the nth item indicate the symmetry of the nth bidentate ligand
-        minimize - bool, use minimize=True when mapping ligands (see Geometry.map_ligand)
+        :param minimize bool: passed to cls.map_ligand when adding ligands
 
-        returns a list of cls containing all unique coordination complexes and the
-        general formula of the complexes
+        :return: a list of cls containing all unique coordination complexes and the
+            general formula of the complexes
+        :rtype: list(Geometry)
         """
         import os.path
 
@@ -539,7 +553,11 @@ class Geometry:
 
     @classmethod
     def get_diastereomers(cls, geometry, minimize=True):
-        """returns a list of all diastereomers for detected chiral centers"""
+        """
+        :param geometry Geometry: chiral structure
+        :return: list of all diastereomers for detected chiral centers
+        :rtype: list(Geometry)
+        """
         from AaronTools.finders import ChiralCenters, Bridgehead, NotAny, SpiroCenters
         from AaronTools.ring import Ring
         from AaronTools.substituent import Substituent
@@ -596,10 +614,13 @@ class Geometry:
     ):
         """
         Boltzmann-averaged percent buried volume
-        geometries - list of Geometry instances
-        energies - numpy array, energy in kcal/mol; ith energy corresponds to ith substituent
-        temperature - temperature in K
-        *args, **kwargs - passed to Geometry.percent_buried_volume()
+        
+        :param geometries list(Geometry): structures to calculate buried volume for
+        :param energies np.ndarray: energy in kcal/mol; ith energy corresponds to ith substituent
+        :param temperature float: temperature in K
+        :param args: passed to Geometry.percent_buried_volume()
+        :param kwargs: passed to Geometry.percent_buried_volume()
+        :return: Boltzmann-weighted percent buried volume
         """
         values = []
 
@@ -633,11 +654,14 @@ class Geometry:
 
     @property
     def elements(self):
-        """returns list of elements composing the atoms in the geometry"""
+        """
+        returns list of elements composing the atoms in the geometry
+        """
         return np.array([a.element for a in self.atoms])
 
     @property
     def num_atoms(self):
+        """number of atoms"""
         return len(self.atoms)
 
     @property
@@ -657,8 +681,10 @@ class Geometry:
 
     def coordinates(self, atoms=None):
         """
-        returns N x 3 coordinate matrix for requested atoms
+        :param atoms list(Atom):
+        :return: N x 3 coordinate matrix for requested atoms
             (defaults to all atoms)
+        :rtype: np.ndarray
         """
         if atoms is None:
             return self._stack_coords()
@@ -796,16 +822,9 @@ class Geometry:
         """
         Write geometry to a file
 
-        :name: defaults to self.name
-        :style: defaults to xyz
-
-        *args and **kwargs for styles:
-            xyz
-                :append: True/False
-            com
-                :step:
-                :theory: the Theory specification object
-                :**kwargs: Additional route arguments in key=val format
+        :param name str: name for geometry defaults to self.name
+        :param args: passed to FileWriter.write
+        :param kwargs: passed to FileWriter.write
         """
         tmp = self.name
         if name is not None:
@@ -818,9 +837,10 @@ class Geometry:
     def copy(self, atoms=None, name=None, comment=None, copy_atoms=True):
         """
         creates a new copy of the geometry
+        
         parameters:
-            atoms (list): defaults to all atoms
-            name (str): defaults to NAME_copy
+        :param atoms list(Atom): atoms to copy defaults to all atoms
+        :param name str: defaults to NAME_copy
         """
         if name is None:
             name = self.name
@@ -933,6 +953,9 @@ class Geometry:
         return rv
 
     def fix_comment(self):
+        """
+        sets self.comment to define key atoms for ligands, etc.
+        """
         if not hasattr(self, "components"):
             return
         elif self.components is None:
@@ -1025,16 +1048,28 @@ class Geometry:
     def freeze(self, targets=None):
         """
         freezes atoms in the geometry
+        
+        :param targets list(Atom|str|Finder): atoms to freeze
         """
         self._flag(True, targets)
 
     def relax(self, targets=None):
         """
         relaxes atoms in the geometry
+        
+        :param targets list(Atom|str|Finder): atoms to unfreeze
         """
         self._flag(False, targets)
 
     def get_constraints(self, as_index=True):
+        """
+        get frozen atoms
+        
+        :param as_index bool: return indices instead of atoms
+        
+        :return: frozen atoms
+        :rtype: list(int|Atom)
+        """
         rv = {}
         for i, a in enumerate(self.atoms[:-1]):
             if not a.constraint:
@@ -1050,6 +1085,9 @@ class Geometry:
         return rv
 
     def get_connectivity(self):
+        """
+        list of connectivity for each atom
+        """
         rv = []
         for atom in self.atoms:
             rv += [atom.connected]
@@ -1059,6 +1097,11 @@ class Geometry:
         """
         find fragments connected by only one bond
         (both fragments contain no overlapping atoms)
+        
+        :param targets: atoms to look for fragments on,
+            defaults to all atoms
+        :param max_order int: max bond order to cut when
+            defining fragments
         """
         if targets:
             atoms = self.find(targets)
@@ -1154,16 +1197,19 @@ class Geometry:
     def find(self, *args, debug=False):
         """
         finds atom in geometry
-        Parameters:
-            *args are tags, names, elements, or a Finder subclass
+
+        :param args list|tuple|str|Finder: tags, names, elements, or a Finder subclass
             args=(['this', 'that'], 'other') will find atoms for which
-                ('this' || 'that') && 'other' == True
+            ('this' || 'that') && 'other' == True
+        
         Returns:
-            [Atom()] or []
-        Raises:
-            LookupError when the tags/names provided do not exist
+        
+        :return: list of matching atoms 
+        :rtype: list(Atom)|list()
+        
+        :raises LookupError: when the tags/names provided do not exist.
             However, it will return empty list if valid tag/names were provided
-                but were screened out using the && argument form
+            but were screened out using the && argument form
         """
 
         found_atoms = set()
@@ -1299,7 +1345,7 @@ class Geometry:
     def find_exact(self, *args):
         """
         finds exactly the same number of atoms as arguments used.
-        Raises LookupError if wrong number of atoms found
+        :raises LookupError: if wrong number of atoms found
         """
         rv = []
         err = "Wrong number of atoms found: "
@@ -1326,9 +1372,9 @@ class Geometry:
         for fixing the connectivity for a set of atoms when grabbing
         a fragment or copying atoms, ensures atom references are sane
 
-        :atoms: the atoms to fix connectivity for; connections to atoms
+        :param atoms: the atoms to fix connectivity for; connections to atoms
             outside of this list are severed in the resulting list
-        :copy: perform a deepcopy of the atom list
+        :param copy bool: perform a deepcopy of the atom list, defaults to True
         """
         if atoms is None:
             atoms = self.atoms
@@ -1354,8 +1400,13 @@ class Geometry:
     def refresh_connected(self, targets=None, threshold=0.3):
         """
         reset connected atoms
+        
         atoms are connected if their distance from each other is less than
-            the sum of their covalent radii plus a threshold
+        the sum of their covalent radii plus a threshold
+        
+        :param targets: atoms to update connectivity
+        :param threshold float: upper limit on difference to ideal
+            covalent bond length
         """
         # clear current connectivity
         if targets is None:
@@ -1395,6 +1446,11 @@ class Geometry:
             targets[ndx1].add_bond_to(targets[ndx2])
 
     def refresh_ranks(self, invariant=True):
+        """
+        updates ranks of all atoms
+        
+        :param invariant bool: passed to Geometry.canonical_rank
+        """
         rank = self.canonical_rank(invariant=invariant)
         for a, r in zip(self.atoms, rank):
             a._rank = r
@@ -1523,9 +1579,11 @@ class Geometry:
     ):
         """
         determine canonical ranking for atoms
-        invariant: bool - if True, use invariant described in J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
-                          (DOI: 10.1021/ci00062a008)
-                          if False, use neighbor IDs
+        
+        :param invariant bool: if True, use invariant described in
+            J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
+            (DOI: 10.1021/ci00062a008)
+            if False, use neighbor IDs
 
         algorithm described in J. Chem. Inf. Model. 2015, 55, 10, 2111–2120
         (DOI: 10.1021/acs.jcim.5b00543)
@@ -1765,6 +1823,11 @@ class Geometry:
         return ranks
 
     def element_counts(self):
+        """
+        number of each element in this Geometry
+        
+        :rtype: dict(str:int)
+        """
         eles = dict()
         for ele in self.elements:
             if ele not in eles:
@@ -1780,10 +1843,9 @@ class Geometry:
         heavy_only=False,
     ):
         """
-        Returns:
-            list(ordered_targets), list(non_targets)
-
         Depth-first reorder of atoms based on canonical ranking
+        
+        :rtype: tuple(list(ordered_targets), list(non_targets))
         """
 
         if not targets:
@@ -1886,9 +1948,14 @@ class Geometry:
         """
         Returns a list of Geometries in which the connection to other
         atoms in the larger geometry must go through the center atoms
-        eg: L1--C--L2 will give two fragments, L1 and L2
+        
+        for example, ::
+        
+            L1--C--L2 
             (  /
             L1/
+        
+        will give two fragments, L1 and L2
         """
 
         def add_tags(frag):
@@ -1940,7 +2007,13 @@ class Geometry:
     def shortest_path(self, atom1, atom2, avoid=None):
         """
         Uses Dijkstra's algorithm to find shortest path between atom1 and atom2
-        avoid: atoms to avoid on the path
+        
+        :param atom1: starting atom
+        :param atom2: ending atom
+        :param avoid: atoms to avoid on the path
+        
+        :return: atoms on the path from atom1 to atom2, including atom1 and atom2
+        :rtype: list(Atom)
         """
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
@@ -2013,9 +2086,9 @@ class Geometry:
         """
         calculates center of mass of the target atoms
         returns a vector from the origin to the center of mass
-        parameters:
-            targets (list) - the atoms to use in calculation (defaults to all)
-            heavy_only (bool) - exclude hydrogens (defaults to False)
+        
+        :param targets: the atoms to use in calculation, defaults to all
+        :param heavy_only bool: exclude hydrogens, defaults to False
         """
         # get targets
         if targets:
@@ -2056,16 +2129,16 @@ class Geometry:
         calculates the RMSD between two geometries
         Returns: rmsd (float)
 
-        :ref: (Geometry) the geometry to compare to
-        :align: (bool) if True (default), align self to other;
+        :param ref Geometry: the geometry to compare to
+        :param align: if True (default), align self to other;
             if False, just calculate the RMSD
-        :heavy_only: (bool) only use heavy atoms (default False)
-        :targets: (list) the atoms in `self` to use in calculation
-        :ref_targets: (list) the atoms in the reference geometry to use
-        :sort: (bool) canonical sorting of atoms before comparing
-        :debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
-        :weights: (list(float)) weights to apply to targets
-        :ref_weights: (list(float)) weights to apply to ref_targets
+        :param heavy_only bool: only use heavy atoms (default False)
+        :param targets: the atoms in `self` to use in calculation
+        :param ref_targets:  the atoms in the reference geometry to use
+        :param sort bool: canonical sorting of atoms before comparing
+        :param debug bool: returns RMSD and Geometry([ref_targets]), Geometry([targets])
+        :param weights list(float): weights to apply to targets
+        :param ref_weights list(float): weights to apply to ref_targets
         """
 
         def _RMSD(ref, other):
@@ -2234,17 +2307,17 @@ class Geometry:
 
     def get_near(self, ref, dist, by_bond=False, include_ref=False):
         """
-        Returns: list of atoms within a distance or number of bonds of a
+        :returns: list of atoms within a distance or number of bonds of a
             reference point, line, plane, atom, or list of atoms
 
-        :ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
+        :param ref list: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
             (eg: ['*', '*', 0]), atom, or list of atoms
-        :dist: the distance threshold or number of bonds away threshold, is an
+        :param dist float: the distance threshold or number of bonds away threshold, is an
             inclusive upper bound (uses `this <= dist`)
-        :by_bond: if true, `dist` is interpreted as the number of bonds away
+        :param by_bond bool: if true, `dist` is interpreted as the number of bonds away
             instead of distance in angstroms
             NOTE: by_bond=True means that ref must be an atom or list of atoms
-        :include_ref: if Atom or list(Atom) given as ref, include these in the
+        :param include_ref: if Atom or list(Atom) given as ref, include these in the
             returned list, (default=False, do not include ref in returned list)
         """
         if dist < 0:
@@ -2323,7 +2396,10 @@ class Geometry:
 
     def get_principle_axes(self, mass_weight=True, center=None):
         """
-        Return: [principal moments], [principle axes]
+        :param mass_weight bool: mass-weight axes (i.e. moments of inertia)
+        :param center np.ndarray: center of rotation, defaults to Geometry.COM
+        
+        :returns: [principal moments], [principle axes]
         """
         if center is None:
             COM = self.COM(mass_weight=mass_weight)
@@ -2351,9 +2427,12 @@ class Geometry:
     def LJ_energy(self, other=None, use_prev_params=False):
         """
         computes LJ energy using autodock parameters
-        use_prev_params - use same sigma/epsilon as the last time LJ_energy was called
-                          useful for methods that make repetitive LJ_energy calls, like
-                          minimize_torsion
+        
+        :param other Geometry: calculate LJ energy between self and other
+            instead of just self
+        :param use_prev_params bool: use same sigma/epsilon as the last time
+            LJ_energy was called; useful for methods that make repetitive
+            LJ_energy calls, like minimize_torsion
         """
 
         if (
@@ -2410,7 +2489,8 @@ class Geometry:
     def examine_constraints(self, thresh=None):
         """
         Determines if constrained atoms are too close/ too far apart
-        Returns: (atom1, atom2, flag) where flag is 1 if atoms too close,
+        
+        :returns: (atom1, atom2, flag) where flag is 1 if atoms too close,
             -1 if atoms to far apart (so one can multiply a distance to change
             by the flag and it will adjust in the correct direction)
         """
@@ -2436,16 +2516,20 @@ class Geometry:
     def compare_connectivity(self, ref, thresh=None, return_idx=False):
         """
         Compares connectivity of self relative to ref
-        Returns: broken, formed
-            :broken: set of atom name pairs for which a bond broke
-            :formed: set of atom name pairs for which a bond formed
-
-        :ref: the structure to compare to (str(path), FileReader, or Geometry)
+        
+        :param ref: the structure to compare to (str(path), FileReader, or Geometry)
             ref.atoms should be in the same order as self.atoms
-        :thresh: allow for connectivity changes as long as the difference
-            between bond distances is below a threshold
-        :by_name: if True (default) lookup atoms by name, otherwise compare
-            based on index in atom list
+        :param thresh float: allow for connectivity changes as long as the difference
+            between bond distances is below a threshold, default None
+        :param return_idx bool: output will be indices of atoms instead of names
+
+        
+        :returns: broken, formed
+        
+            * broken - set of atom name pairs for which a bond broke
+            * formed - set of atom name pairs for which a bond formed
+
+        :rtype: set(), set()
         """
         broken = set([])
         formed = set([])
@@ -2497,28 +2581,29 @@ class Geometry:
     ):
         """
         calculates % buried volume (%V_bur) using Monte-Carlo or Gauss-Legendre/Lebedev integration
+        
         see Organometallics 2008, 27, 12, 2679–2681 (DOI: 10.1021/om8001119) for details
 
-        center  - center atom(s) or np.array of coordinates
-                  if more than one atom is specified, the sphere will be centered on
-                  the centroid between the atoms
-        targets - atoms to use in calculation, defaults to all non-center if there
-                  is only one center, otherwise all atoms
-        radius  - sphere radius around center atom
-        radii   - "umn" or "bondi", VDW radii to use
-                  can also be a dict() with atom symbols as the keys and
-                  their respective radii as the values
-        scale   - scale VDW radii by this
-        method  - integration method (MC or lebedev)
-        rpoints - number of radial shells for Lebedev integration
-        apoints - number of angular points for Lebedev integration
-        min_iter - minimum number of iterations for MC integration
-                   each iteration is a batch of 3000 points
-                   iterations will continue beyond min_iter if the volume has not converged
-        basis - change of basis matrix
-                will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
-        n_threads - number of threads to use for MC integration
-                    using multiple threads doesn't benefit performance very much
+        :param center: center atom(s) or np.array of coordinates
+            if more than one atom is specified, the sphere will be centered on
+            the centroid between the atoms
+        :param targets: atoms to use in calculation, defaults to all non-center if there
+            is only one center, otherwise all atoms
+        :param radius float: sphere radius around center atom
+        :param radii str|dict: "umn" or "bondi", VDW radii to use
+            can also be a dict() with atom symbols as the keys and
+            their respective radii as the values
+        :param scale float: scale VDW radii by this
+        :param method str: integration method (MC or lebedev)
+        :param rpoints int: number of radial shells for Lebedev integration
+        :param apoints int: number of angular points for Lebedev integration
+        :param min_iter int: minimum number of iterations for MC integration
+            each iteration is a batch of 3000 points
+            iterations will continue beyond min_iter if the volume has not converged
+        :param basis np.ndarray: change of basis matrix
+            will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
+        :param n_threads int: number of threads to use for MC integration
+            using multiple threads doesn't benefit performance very much
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
         #        split up the shells for the Lebedev integration, but...
@@ -2825,29 +2910,38 @@ class Geometry:
         shape="circle",
     ):
         """
-        returns x, y, z, min_alt, max_alt or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
-        x - x coordinates for grid
-        y - y coordinates for grid
-        z - altitude levels; points where no atoms are will be -1000
-        min_alt - minimum altitude (above -1000)
-        max_alt - maximum altitute
-        basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
-        atoms - list of atoms that are in the steric map
-        a contour plot can be created with this data - see stericMap.py command line script
+        :param center: atom, list of atoms, or array specifiying the origin
+        :param key_atoms: list of ligand key atoms. Atoms on these ligands will be in the steric map.
+        :param radii str|dict: "umn", "bondi", or dict() specifying the VDW radii to use
+        :param oop_vector np.ndarray: None or array specifying the direction out of the plane of the steric map
+            if None, oop_vector is determined using the average vector from the key
+            atoms to the center atom
+        :param ip_vector np.ndarray: None or array specifying a vector in the plane of the steric map
+            if None, ip_vector is determined as the plane of best fit through the
+            key_atoms and the center
+        :param return_basis bool: whether or not to return a change of basis matrix
+        :param num_pts int: number of points along x and y axis to use
+        :param shape str: "circle" or "square"
 
-        parameters:
-        center - atom, list of atoms, or array specifiying the origin
-        key_atoms - list of ligand key atoms. Atoms on these ligands will be in the steric map.
-        radii - "umn", "bondi", or dict() specifying the VDW radii to use
-        oop_vector - None or array specifying the direction out of the plane of the steric map
-                     if None, oop_vector is determined using the average vector from the key
-                     atoms to the center atom
-        ip_vector - None or array specifying a vector in the plane of the steric map
-                    if None, ip_vector is determined as the plane of best fit through the
-                    key_atoms and the center
-        return_basis - whether or not to return a change of basis matrix
-        num_pts - number of points along x and y axis to use
-        shape - "circle" or "square"
+        :returns: x, y, z, min_alt, max_alt
+        
+        or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
+
+        a contour plot can be created with this data - see stericMap.py command line script
+        
+        x - x coordinates for grid
+        
+        y - y coordinates for grid
+        
+        z - altitude levels; points where no atoms are will be -1000
+        
+        min_alt - minimum altitude (above -1000)
+        
+        max_alt - maximum altitute
+        
+        basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
+        
+        atoms - list of atoms that are in the steric map
         """
 
         # determine center if none was specified
@@ -2992,43 +3086,52 @@ class Geometry:
         max_error=None,
     ):
         """
-        returns sterimol parameter values in a dictionary
-        keys are B1, B2, B3, B4, B5, and L
         B1 is determined numerically; B2-B4 depend on B1
+        
         B5 and L are analytical (unless L_func is not analytical)
+        
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
         selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
 
-        return_vector: bool/returns dict of tuple(vector start, vector end) instead
-        radii: "bondi" - Bondi vdW radii
-               "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
-               dict()  - radii are values and elements are keys
-               list()  - list of radii corresponding to targets
+        :param return_vector bool: returns dict of tuple(vector start, vector end) instead
+        :param radii str|dict|list:
+            
+            * "bondi" - Bondi vdW radii
+            * "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            * dict()  - radii are values and elements are keys
+            * list()  - list of radii corresponding to targets
 
-        L_axis: vector defining L-axis
-        targets: atoms to include in the parameter calculation
-        L_func: function to evaluate for getting the L value and vector
-                for each atom
-                takes positional arguments:
-                atom: Atom() - atom being checked
-                start: Atom() - start_atom
-                radius: vdw radius of atom
-                L_axis: unit vector for L-axis
+        :param L_axis np.ndarray: vector defining L-axis
+        :param targets: atoms to include in the parameter calculation
+        :param L_func function: function to evaluate for getting the L value and vector
+            for each atom
+            takes positional arguments:
+            
+            * :atom: Atom - atom being checked
+            * :start: Atom - start_atom
+            * :radius: vdw radius of atom
+            * :L_axis: unit vector for L-axis
 
-                if L_func is not given, the default is the distance from
-                start_atom to the furthest vdw radius projected onto the
-                L-axis
-        return_vector - returned dictionary will have tuples of start, end
-                        for vectors to represent the parameters in 3D space
-        at_L - L value to calculate sterimol parameters at
+            if L_func is not given, the default is the distance from
+            start_atom to the furthest vdw radius projected onto the
+            L-axis
+        :param return_vector bool: returned dictionary will have tuples of start, end
+            for vectors to represent the parameters in 3D space
+        :param at_L float: - L value to calculate sterimol parameters at
+               
                Used for Sterimol2Vec
-        max_error - max. error in angstroms for B1
-                    higher error can sometimes make the calculation
-                    go slightly faster
-                    max_error=None will have an error for B1 of at most
-                    (sum of radii tangent to B1 face) * (1 - cos(0.5 degrees))
+        :param max_error float: max. error in angstroms for B1
+            higher error can sometimes make the calculation
+            go slightly faster
+            
+            max_error=None will have an error for B1 of at most
+            (sum of radii tangent to B1 face) * (1 - cos(0.5 degrees))
+
+        :returns: sterimol parameter values in a dictionary
+        
+        keys are B1, B2, B3, B4, B5, and L
         """
         from scipy.spatial import ConvexHull
 
@@ -3434,7 +3537,7 @@ class Geometry:
         """
         Replace current coords with those from :structure:
 
-        :structure: a file name, atom list, Geometry or np.array() of shape Nx3
+        :param structure: a file name, atom list, Geometry or np.array() of shape Nx3
         """
         if isinstance(structure, np.ndarray):
             coords = structure
@@ -3458,7 +3561,7 @@ class Geometry:
         return
 
     def get_all_connected(self, target):
-        """returns a list of all elements on the target atom's monomer"""
+        """:returns: list of all elements on the target atom's monomer"""
 
         def _get_all_connected(geom, target, avoid):
             atoms = [target]
@@ -3484,17 +3587,21 @@ class Geometry:
         self, start, stop=None, as_object=False, copy=False, biggest=False
     ):
         """
-        Returns:
-            [Atoms()] if as_object == False
-            Geometry() if as_object == True
 
-        :start: the atoms to start on
-        :stop: the atom(s) to avoid
+        :param start: the atoms to start on
+        :param stop: the atom(s) to avoid
             stop=None will try all possibilities and return smallest fragment
-        :as_object: return as list (default) or Geometry object
-        :copy: whether or not to copy the atoms before returning the list;
+        :param as_object bool: return as list (default) or Geometry object
+        :param copy bool: whether or not to copy the atoms before returning the list;
             copy will automatically fix connectivity information
-        :biggest: if stop=None, will return biggest possible fragment instead of smallest
+        :param biggest bool: if stop=None, will return biggest possible fragment
+            instead of smallest
+
+        :returns:
+        
+            * [Atoms()] if as_object == False
+            
+            * Geometry() if as_object == True
         """
         start = self.find(start)
         if stop is None:
@@ -3527,15 +3634,15 @@ class Geometry:
     def remove_fragment(self, start, avoid=None, add_H=True):
         """
         Removes a fragment of the geometry
-        Returns:
-            (list) :start: + the removed fragment
 
-        :start: the atom of the fragment to be removed that attaches to the
+        :param start: the atom of the fragment to be removed that attaches to the
             rest of the geometry
-        :avoid: the atoms :start: is attached to that should be avoided
-        :add_H: default is to change :start: to H and update bond lengths, but
+        :param avoid: the atoms :start: is attached to that should be avoided
+        :param add_H bool: default is to change :start: to H and update bond lengths, but
             add_H=False overrides this behaviour
 
+        :returns: :start: + the removed fragment
+        :rtype: list(Atom)
         """
         start = self.find(start)
         if avoid is not None:
@@ -3556,8 +3663,8 @@ class Geometry:
         """
         shifts the coordinates of the target atoms by a vector
         parameters:
-            vector (np.array) - the shift vector
-            targets (list) - the target atoms to shift (default to all)
+        :param vector np.ndarray: the shift vector
+        :param targets: the target atoms to shift (default to all)
         """
         if targets is None:
             targets = self.atoms
@@ -3573,20 +3680,19 @@ class Geometry:
     def change_distance(
         self, a1, a2, dist=None, adjust=False, fix=0, as_group=True
     ):
-        """For setting/adjusting bond length between atoms
-        Parameters:
-            a1_arg - the first atom
-            a2_arg - the second atom
-            dist - the distance to change by/to. Default is to set the bond
-                   length to that determined by RADII
-            adjust - default is to set the bond length to `dist`, adjust=True
-                     indicates the current bond length should be adjusted by
-                     `dist`
-            fix - default is to move both a1 and a2 by half of `dist`, fix=1
-                  will move only a2 and fix=2 will move only a1
-            as_group - default is to move the fragments connected to a1 and a2
-                       as well, as_group=False will only move the requested
-                       atom(s)
+        """
+        For setting/adjusting bond length between atoms
+
+        :param a1: the first atom
+        :param a2: the second atom
+        :param dist float: the distance to change by/to.
+            Default is to set the bond length to that determined by RADII
+        :param adjust bool: default is to set the bond length to `dist`,
+            adjust=True indicates the current bond length should be adjusted by `dist`
+        :param fix int: default is to move both a1 and a2 by half of `dist`, fix=1
+            will move only a2 and fix=2 will move only a1
+        :param as_group bool: default is to move the fragments connected to a1 and a2
+            as well, as_group=False will only move the requested atom(s)
         """
         a1, a2 = self.find_exact(a1, a2)
 
@@ -3644,8 +3750,10 @@ class Geometry:
         return
 
     def rotate_fragment(self, start, avoid, angle):
-        """rotates the all atoms on the 'start' side of the
-        start-avoid bond about the bond vector by angle"""
+        """
+        rotates the all atoms on the 'start' side of the
+        start-avoid bond about the bond vector by angle
+        """
         start = self.find(start)[0]
         avoid = self.find(avoid)[0]
         shift = start.coords
@@ -3661,11 +3769,11 @@ class Geometry:
         """
         rotates target atoms by an angle about an axis
 
-        :w: (np.array) - the axis of rotation (doesnt need to be unit vector)
+        :param w np.ndarray: the axis of rotation (doesnt need to be unit vector)
             or a quaternion (angle not required then)
-        :angle: (float) - the angle by which to rotate (in radians)
-        :targets: (list) - the atoms to rotate (defaults to all)
-        :center: (Atom or list) - if provided, the atom (or COM of a list)
+        :param angle float: the angle by which to rotate (in radians)
+        :param targets: atoms to rotate (defaults to all)
+        :param center: if provided, the atom (or COM of a list)
             will be centered at the origin before rotation, then shifted
             back after rotation
         """
@@ -3758,18 +3866,18 @@ class Geometry:
         as_group=True,
     ):
         """For setting/adjusting angle between atoms
-        Parameters:
-            a1 - the first atom
-            a2 - the second atom (vertex)
-            a3 - the third atom
-            angle - the angle to change by/to
-            radians - default units are radians, radians=False uses degrees
-            adjust - default is to set the angle to `angle`, adjust=True
-                indicates the current angle should be adjusted by `angle`
-            fix - default is to move both a1 and a3 by half of `angle`, fix=1
-                will move only a3 and fix=3 will move only a1
-            as_group - default is to move the fragments connected to a1 and a3
-                as well, as_group=False will only move the requested atom(s)
+
+        :param a1: first atom
+        :param a2: second atom (vertex)
+        :param a3: third atom
+        :param angle: the angle to change by/to
+        :param radians bool: default units are radians, radians=False uses degrees
+        :param adjust bool: default is to set the angle to `angle`, adjust=True
+            indicates the current angle should be adjusted by `angle`
+        :param fix int: default is to move both a1 and a3 by half of `angle`, fix=1
+            will move only a3 and fix=3 will move only a1
+        :param as_group bool: default is to move the fragments connected to a1 and a3
+            as well, as_group=False will only move the requested atom(s)
         """
         try:
             a1, a2, a3 = self.find([a1, a2, a3])
@@ -3822,21 +3930,25 @@ class Geometry:
         """
         For setting/adjusting dihedrals
 
-        *args
-        :a1: the first atom
-        :a2: the second atom
-        :a3: the third atom (optional for adjust=True if as_group=True)
-        :a4: the fourth atom (optional for adjust=True if as_group=True)
-        :dihedral: the dihedral to change by/to
+        :param args:
+        
+            * :a1: the first atom
+            * :a2: the second atom
+            * :a3: the third atom (optional for adjust=True if as_group=True)
+            * :a4: the fourth atom (optional for adjust=True if as_group=True)
+            * :dihedral: the dihedral to change by/to
 
-        **kwargs
-        :fix: default is to move both a1 and a4 by half of `dihedral`,
-            fix=1 will move only a4 and fix=4 will move only a1
-        :adjust: default is to set the dihedral to `dihedral`, adjust=True
-            indicates the current dihedral should be adjusted by `dihedral`
-        :as_group: default is to move the fragments connected to a1 and a3
-            as well, as_group=False will only move the requested atom(s)
-        :radians: default units are degrees, radians=True to use radians
+
+        :param kwargs:
+        
+            * :fix: default is to move both a1 and a4 by half of `dihedral`,
+                fix=1 will move only a4 and fix=4 will move only a1
+            * :adjust: default is to set the dihedral to `dihedral`, adjust=True
+                indicates the current dihedral should be adjusted by `dihedral`
+            * :as_group: default is to move the fragments connected to a1 and a3 as well,
+                as_group=False will only move the requested atom(s)
+            * :radians: default units are degrees, radians=True to use radians
+
         """
         fix = kwargs.get("fix", 0)
         adjust = kwargs.get("adjust", False)
@@ -3918,12 +4030,14 @@ class Geometry:
         self, geom=None, all_frags=False, increment=30, allow_planar=False
     ):
         """rotate substituents to try to minimize LJ potential
-        geom: calculate LJ potential between self and another geometry-like
+        
+        :param geom: calculate LJ potential between self and another geometry-like
               object, instead of just within self
-        all_frags: minimize rotatable bonds on substituents
-        allow_planar: allow substituents that start and end with atoms
-                      with planar VSEPR geometries that are nearly
-                      planar to be rotated
+        :param all_frags bool: minimize rotatable bonds on substituents
+        :param increment float: angle stride in degrees
+        :param allow_planar: allow substituents that start and end with atoms
+            with planar VSEPR geometries that are nearly
+            planar to be rotated
         """
         # minimize torsion for each substituent
 
@@ -3973,11 +4087,12 @@ class Geometry:
         """
         Rotate :targets: to minimize the LJ potential
 
-        :targets: the target atoms to rotate
-        :axis: the axis by which to rotate
-        :center: where to center before rotation
-        :geom: calculate LJ potential between self and another geometry-like
+        :param targets: the target atoms to rotate
+        :param axis np.ndarray: the axis by which to rotate
+        :param center np.ndarray|Atom: where to center before rotation
+        :param geom: calculate LJ potential between self and another geometry-like
             object, instead of just within self
+        :param increment float: angle stride in degrees
         """
         targets = Geometry(
             self.find(targets),
@@ -4054,9 +4169,14 @@ class Geometry:
     def substitute(self, sub, target, attached_to=None, minimize=False):
         """
         substitutes fragment containing `target` with substituent `sub`
-        if attached_to is provided, this is the atom where the substituent is attached
-        if attached_to==None, replace the smallest fragment containing `target`
-        minimize - bool, rotate sub to lower LJ potential
+        
+        :param sub str|Substituent: substituent (or name from the library) to use
+        :param target: atom to place the substituent on
+        :param attached_to: if attached_to is provided, this is the atom where the substituent is attached;         
+        
+            if attached_to=None, replace the smallest fragment containing `target`
+        
+        :param minimize bool: rotate sub to lower LJ potential
         """
         from AaronTools.component import Component
 
@@ -4182,8 +4302,8 @@ class Geometry:
         """
         Finds a substituent based on a given atom (matches start==sub.atoms[0])
 
-        :start: the first atom of the subsituent, where it connects to sub.end
-        :for_confs: if true(default), only consider substituents that need to
+        :param start: the first atom of the subsituent, where it connects to sub.end
+        :param for_confs: if true(default), only consider substituents that need to
             be rotated to generate conformers
         """
         start = self.find(start)[0]
@@ -4207,7 +4327,7 @@ class Geometry:
         """
         Returns list of all substituents found on all components
 
-        :for_confs: if true (default), returns only substituents that need to
+        :param for_confs: if true (default), returns only substituents that need to
             be rotated to generate conformers
         """
         rv = []
@@ -4228,10 +4348,12 @@ class Geometry:
         """
         take ring, reorient it, put it on self and replace targets with atoms
         on the ring fragment
-        ring_fragment - Ring instance or name of ring in the library
-        minimize - try other rings with the same name (appended with a number)
-                   in the library to see if they fit better
-        flip_walk - also flip the rings when minimizing to see if that fits better
+        
+        :param targets: pair of atoms to be in the ring
+        :param ring_fragment str|Ring: Ring or name of ring in the library
+        :param minimize bool: try other rings with the same name (appended with a number)
+            in the library to see if they fit better
+        :param flip_walk bool: also flip the rings when minimizing to see if that fits better
         """
 
         def attach_short(geom, walk, ring_fragment):
@@ -4493,17 +4615,20 @@ class Geometry:
         adjust_hydrogens=False,
         hold_steady=None,
     ):
-        """change the element of an atom on self
-        target              - target atom
-        new_element         - str:  element of new atom
-        adjust_bonds        - bool: adjust distance to bonded atoms
-        adjust_hydrogens    - bool: try to add or remove hydrogens and guess how many
-                                    hydrogens to add or remove
-                              tuple(int, str): remove specified number of hydrogens and
-                                               set the geometry to the specified shape
-                                               (see Atom.get_shape for a list of shapes)
-        hold_steady         - atom: atom bonded to target that will be held steady when
-                                    adjusting bonds; Default - longest fragment
+        """
+        change the element of an atom on self
+        
+        :param target: target atom
+        :param new_element str:  element of new atom
+        :param adjust_bonds bool: bool adjust distance to bonded atoms
+        :param adjust_hydrogens bool|tuple(int, str):
+        
+            * :bool: try to add or remove hydrogens and guess how many hydrogens to add or remove
+            * :tuple(int, str): remove specified number of hydrogens and set the geometry to
+                the specified shape (see Atom.get_shape for a list of shapes)
+        
+        :param hold_steady: atom bonded to target that will be held steady when
+            adjusting bonds; Default - longest fragment
         """
 
         def get_corresponding_shape(target, shape_object, frags):
@@ -4987,9 +5112,10 @@ class Geometry:
     def map_ligand(self, ligands, old_keys, minimize=True):
         """
         Maps new ligand according to key_map
-        Parameters:
-        :ligand:    the name of a ligand in the ligand library
-        :old_keys:  the key atoms of the old ligand to map to
+
+        :param ligand:    the name of a ligand in the ligand library
+        :param old_keys:  the key atoms of the old ligand to map to
+        :param minimize bool: rotate groups slightly to reduce steric clashing
         """
 
         def get_rotation(old_axis, new_axis):
@@ -5350,6 +5476,9 @@ class Geometry:
         return rv
 
     def remove_clash(self, sub_list=None):
+        """
+        rotates substituents slightly to reduce steric clashing
+        """
         def get_clash(sub, scale):
             """
             Returns: np.array(bend_axis) if clash found, False otherwise
@@ -5478,11 +5607,11 @@ class Geometry:
         """
         Generates the next possible conformer
 
-        :conf_spec: {sub_start_number: conf_number}
-        :skip_spec: {sub_start_number: [skip_numbers]}
+        :param conf_spec dict: {sub_start_number: conf_number}
+        :param skip_spec dict: {sub_start_number: [skip_numbers]}
 
 
-        Returns:
+        :returns:
             conf_spec if there are still more conformers
             {} if there are no more conformers to generate
         """
@@ -5516,6 +5645,17 @@ class Geometry:
             return {}
 
     def oniom_layer(self, layer = "", low_layer="", as_object=False):
+        """
+        returns atoms for the specified layer and adds link atoms
+        
+        :param layer str: ONIOM layer (H, M, L)
+        :param low_layer str: label for low layer, defaults to L
+        :param as_object bool:
+        
+            * True - return Geometry
+            * False - return list(Atom)
+
+        """
         frag=[]
         #self.sub_links()
         if layer not in ['H', 'L', 'M']:
@@ -5537,6 +5677,9 @@ class Geometry:
         return frag
 
     def add_links(self, high_layer="", low_layer=""):
+        """
+        defines links between ONIOM layers
+        """
         adjust=[]
         tmp=[]
         for a in self.atoms:
@@ -5596,6 +5739,7 @@ class Geometry:
         return self
 
     def sub_links(self):
+        # ?
         tmp = []
         for a in self.atoms:
             if a.link_info and "host" in a.link_info.keys():
@@ -5606,6 +5750,7 @@ class Geometry:
         return self
 
     def sub_hosts(self):
+        # ?
         tmp = []
         for a in self.atoms:
             if a.link_info and "link" in a.link_info.keys():
@@ -5652,12 +5797,15 @@ class Geometry:
 
     def make_conformer(self, conf_spec):
         """
-        Returns:
+        rotates substituents according to the specified conformer specification
+        
+        :param conf_spec dict: 
+            {sub_start_number: (conf_number, [skip_numbers])}
+
+        :returns:
             conf_spec, True if conformer generated (allowed by conf_spec),
             conf_spec, False if not allowed or invalid
 
-        :conf_spec: dictionary of the form
-            {sub_start_number: (conf_number, [skip_numbers])}
         """
         original = self.copy()
         for start, conf_num in conf_spec.items():
@@ -5691,11 +5839,13 @@ class Geometry:
 
     def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
         """
-        Returns:
-            List(Atom) of atoms in aromatic rings, including hydrogens if return_h is True
-            Charge (int) (also could be number of atoms in aromatic rings not participating in aromaticity) of rings
-            number of rings (int) that are fused (napthalene would be 2)
-            List of aromatic rings if return_rings is True
+        :returns:
+        
+            * List(Atom) of atoms in aromatic rings, including hydrogens if return_h is True
+            * Charge (int) (also could be number of atoms in aromatic rings not participating in aromaticity) of rings
+                number of rings (int) that are fused (napthalene would be 2)
+            * List of aromatic rings if return_rings is True
+
         """
 
         def is_aromatic(num):
@@ -5778,7 +5928,7 @@ class Geometry:
 
 
     def get_gaff_geom(self):
-        """Returns a geometry comprised of OniomAtoms with GAFF atomtypes from OfType finder"""
+        """:returns: geometry comprised of OniomAtoms with GAFF atomtypes from OfType finder"""
         if not isinstance(self.atoms[0], OniomAtom):
             geom = self.make_oniom()
         else:
@@ -6200,8 +6350,10 @@ class Geometry:
             )
         return targets
 
-    def detect_solvent(self, solvent=""):
-        """detects solvent based on either an input xyz, solvent in solvent library, or input SMILES"""
+    def detect_solvent(self, solvent):
+        """
+        detects solvent based on either an input xyz, solvent in solvent library, or input SMILES
+        """
 
         AARON_LIBS = os.path.join(AARONLIB, "Solvents")
         BUILTIN = os.path.join(AARONTOOLS, "Solvents")
@@ -6312,8 +6464,10 @@ class Geometry:
         return geom_list
 
     def update_charges(self, charges=""):
-        """update the atomic partial charges.
-        accepts Tuple or List(charges), Dict{atom name: charge}"""
+        """
+        update the atomic partial charges.
+        accepts Tuple or List(charges), Dict{atom name: charge}
+        """
         if not any((isinstance(charges, tuple), isinstance(charges, list), isinstance(charges, dict))):
             raise ValueError("charges must be in tuple, list, or dict")
         elif isinstance(charges, dict):
@@ -6328,9 +6482,11 @@ class Geometry:
                 atom.charge = charge
         return
 
-    def update_atom_types(self, atom_types=""):
-        """update the atom types.
-        accepts Tuple or List(atom types), Dict{atom name: atom type}"""
+    def update_atom_types(self, atom_types):
+        """
+        update the molecular mechanics atom types.
+        accepts Tuple or List(atom types), Dict{atom name: atom type}
+        """
         if not any((isinstance(atom_types, tuple), isinstance(atom_types, list), isinstance(atom_types, dict))):
             raise ValueError("atom types must be in tuple, list, or dict")
         elif isinstance(atom_types, dict):

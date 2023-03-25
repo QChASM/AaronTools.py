@@ -30,21 +30,22 @@ from AaronTools.theory import (
 @addlogger
 class Basis:
     """
-    has attributes:
-    name          - same as initialization keyword
-    elements      - same as initialization keyword
-    aux_type      - same as initialization keyword
-    elements      - list of element symbols for elements this basis applies to
-                    updated with Basis.refresh_elements
-                    Basis.refresh_elements is called when writing an input file
-    ele_selection - list of finders used to determine which elements this basis applies to
-    not_anys      - list of finders used to determine which elements this basis does not apply to
-    ONIOM-only attributes:
-    oniom_layer   - same as initialization keyword
-    atom_selection - list of finders used to determine which atoms this basis applies to
-    atoms         - list of atoms this basis applies to
-                    updated with Bases.refresh_atoms
-    default_notany_atoms - finder for atoms that are not in the given layer
+    :has attributes:
+    
+    * name          - same as initialization keyword
+    * elements      - same as initialization keyword
+    * aux_type      - same as initialization keyword
+    * elements      - list of element symbols for elements this basis applies to
+        updated with Basis.refresh_elements
+        Basis.refresh_elements is called when writing an input file
+    * ele_selection - list of finders used to determine which elements this basis applies to
+    * not_anys      - list of finders used to determine which elements this basis does not apply to
+    * ONIOM-only attributes:
+    * oniom_layer   - same as initialization keyword
+    * atom_selection - list of finders used to determine which atoms this basis applies to
+    * atoms         - list of atoms this basis applies to
+        updated with Bases.refresh_atoms
+    * default_notany_atoms - finder for atoms that are not in the given layer
     """
 
     LOG = None
@@ -53,18 +54,24 @@ class Basis:
 
     def __init__(self, name, elements=None, aux_type=None, user_defined=False, oniom_layer=None, atoms=None):
         """
-        name         -   basis set base name (e.g. 6-31G)
-        elements     -   list of element symbols or finders to determine the basis set applies to
-                         elements may also be 'tm' or 'all' to indicate any transition metal and
-                         all elements, respectively
-                         elements may start with '!' to exclude that element from the basis
-                         for example, elements='!H' will apply to default elements, minus H
-        aux_type     -   str - ORCA: one of BasisSet.ORCA_AUX; Psi4: one of BasisSet.PSI4_AUX
-        user_defined -   path to file containing basis info from basissetexchange.org or similar
-                         False for builtin basis sets
+        :param name str: basis set base name (e.g. 6-31G)
+        :param elements list(str): list of element symbols or finders to determine the basis set applies to
+            elements may also be 'tm' or 'all' to indicate any transition metal and
+            all elements, respectively
+            elements may start with '!' to exclude that element from the basis
+            for example, elements='!H' will apply to default elements, minus H
+        :param aux_type str|None:
+            
+            * ORCA: one of BasisSet.ORCA_AUX
+            * Psi4: one of BasisSet.PSI4_AUX
+        :param user_defined str|bool: path to file containing basis info from basissetexchange.org
+            or similar
+            False for builtin basis sets
+
         ONIOM-only:
-        oniom_layer  -   str - must be 'H', 'M', or 'L' if not None
-        atoms        -   list of finders or 'tm' to determine what atoms the basis set applies to
+        
+        :param oniom_layer str|None: must be 'H', 'M', or 'L' if not None
+        :param atoms: list of finders or 'tm' to determine what atoms the basis set applies to
         """
         self.name = name
         if oniom_layer is not None:
@@ -255,6 +262,13 @@ class Basis:
 
     @staticmethod
     def sanity_check_basis(name, program):
+        """
+        checks the basis set name against a list of basis sets
+        that are built-in to the specified program
+        
+        :param name str: keyword of basis set (e.g. def2SVP)
+        :param program str: program name (gaussian, psi4, etc.)
+        """
         import os.path
         from difflib import SequenceMatcher as seqmatch
         from re import IGNORECASE, match
@@ -333,10 +347,7 @@ class Basis:
         returns the Gaussian09/16 name of the basis set
         currently just removes the hyphen from the Karlsruhe def2 ones
         """
-        if name.startswith("def2-"):
-            return name.replace("def2-", "def2", 1)
-
-        return name
+        return name.replace("def2-", "def2", 1)
 
     @staticmethod
     def get_orca(name):
@@ -530,20 +541,29 @@ class BasisSet:
     def parse_basis_str(basis_str, cls=Basis):
         """
         parse basis set specification string and returns list(cls)
+        
         cls should be Basis or ECP (or subclasses of these)
+        
         basis info should have:
-            - a list of elements before basis set name (e.g. C H N O)
-                - other element keywords are 'tm' (transition metals) and 'all' (all elements)
-                - can also put "!" before an element to exclude it from the basis set
-            - auxilliary type before basis name (e.g. auxilliary C)
-            - basis set name
-            - path to basis set file right after basis set name if the basis is not builtin
-                - path cannot contain spaces
-        ONIOM only:
-            - high, medium, or low to describe the ONIOM layer before the list of atoms
-            - a list of atoms that can be all, tm, or ! to exclude those. automatically excludes atoms outside of layer
+            
+        * a list of elements before basis set name (e.g. C H N O)
+            
+            * other element keywords are 'tm' (transition metals) and 'all' (all elements)
+            * can also put "!" before an element to exclude it from the basis set
+        
+        * auxilliary type before basis name (e.g. auxilliary C)
+        * basis set name
+        * path to basis set file right after basis set name if the basis is not builtin
+            * path cannot contain spaces
+        
+        :ONIOM only:
+        
+            * high, medium, or low to describe the ONIOM layer before the list of atoms
+            * a list of atoms that can be all, tm, or ! to exclude those. automatically excludes atoms outside of layer
+        
         Example:
-            "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
+
+        "!H !tm def2-SVPD /home/CoolUser/basis_sets/def2svpd.gbs H def2-SVP Ir SDD
         """
         # split basis_str into words
         # if there are quotes, whatever is inside the quotes is a word
@@ -1242,8 +1262,9 @@ class BasisSet:
 
     def get_psi4_basis_info(self, sapt=False):
         """
-        sapt: bool, use df_basis_sapt instead of df_basis_scf for jk basis
-        return dict for get_psi4_header
+        :param sapt bool: use df_basis_sapt instead of df_basis_scf for jk basis
+        
+        :returns: dict for get_psi4_header
         """
         out_str = dict()
         warnings = []

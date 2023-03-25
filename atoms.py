@@ -75,18 +75,20 @@ class BondOrder:
 class Atom:
     """
     Attributes:
-        element         str
-        coords          np.array(float)
-        flag            bool            true if frozen, false if relaxed
-        name            str             form of \d+(\.\d+)*
-        tags            set
-        charge          float
-        connected       set(Atom)
-        constraint      set(Atom)       for determining constrained bonds
-        _rank
-        _radii          float           for calculating if bonded
-        _connectivity   int             max connections without hypervalence
-        _saturation     int             max connections without hypervalence or charges
+        
+        * element         str
+        * coords          np.array(float)
+        * flag            bool            true if frozen, false if relaxed
+        * name            str             form of \d+(\.\d+)*
+        * tags            set
+        * charge          float
+        * connected       set(Atom)
+        * constraint      set(Atom)       for determining constrained bonds
+        * _rank
+        * _radii          float           for calculating if bonded
+        * _connectivity   int             max connections without hypervalence
+        * _saturation     int             max connections without hypervalence or charges
+        
     """
 
     LOG = None
@@ -96,6 +98,16 @@ class Atom:
     def __init__(
         self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
     ):
+        """
+        :param element str: element symbol
+        :param coords np.ndarray: position
+        :param flag: whether atom is frozen
+        :param name str: name of atom
+        :param tags list: misc. data
+        :param charge float: partial charge of atom
+        :param mass float: mass of atom
+        """
+        
         super().__setattr__("_hashed", False)
         if coords is None:
             coords = []
@@ -242,7 +254,9 @@ class Atom:
         return
 
     def _set_connectivity(self):
-        """Sets theoretical maximum connectivity.
+        """
+        Sets theoretical maximum connectivity.
+        
         If # connections > self._connectivity, then atom is hyper-valent
         """
         try:
@@ -255,7 +269,9 @@ class Atom:
         return
 
     def _set_saturation(self):
-        """Sets theoretical maximum connectivity without the atom having a formal charge.
+        """
+        Sets theoretical maximum connectivity without the atom having a formal charge.
+        
         If # connections > self._saturation, then atom is hyper-valent or has a non-zero formal charge
         """
         try:
@@ -298,13 +314,14 @@ class Atom:
 
     def get_invariant(self):
         """
-        gets initial invariant
-        (1) number of non-hydrogen connections (\d{1}): nconn
-        (2) sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
-        (3) atomic number (\d{3}): z
-        #(4) sign of charge (\d{1})
-        #(5) absolute charge (\d{1})
-        (6) number of attached hydrogens (\d{1}): nH
+        gets initial invariant, which is formulated using:
+        
+        # number of non-hydrogen connections (\d{1}): nconn
+        # sum of bond order of non-hydrogen bonds * 10 (\d{2}): nB
+        # atomic number (\d{3}): z
+        # sign of charge (\d{1}) (not used)
+        # absolute charge (\d{1}) (not used)
+        # number of attached hydrogens (\d{1}): nH
         """
         heavy = set([x for x in self.connected if x.element != "H"])
         # number of non-hydrogen connections:
@@ -381,7 +398,8 @@ class Atom:
     def dist_is_connected(self, other, dist_to_other, tolerance):
         """
         determines if distance between atoms is small enough to be bonded
-        used to optimize connected checks when distances can be quickly precalculated
+        
+        used to optimize connected checks when distances can be quickly precalculated,
         like with scipy.spatial.distance_matrix
         """
         if tolerance is None:
@@ -464,51 +482,55 @@ class Atom:
 
     @classmethod
     def get_shape(cls, shape_name):
-        """returns dummy atoms in an idealized vsepr geometry
+        """
+        returns dummy atoms in an idealized vsepr geometry
+        
         shape_name can be:
-        point
-        linear 1
-        linear 2
-        bent 2 tetrahedral
-        bent 2 planar
-        trigonal planar
-        bent 3 tetrahedral
-        t shaped
-        tetrahedral
-        sawhorse
-        seesaw
-        square planar
-        trigonal pyramidal
-        trigonal bipyramidal
-        square pyramidal
-        pentagonal
-        hexagonal
-        trigonal prismatic
-        pentagonal pyramidal
-        octahedral
-        capped octahedral
-        hexagonal pyramidal
-        pentagonal bipyramidal
-        capped trigonal prismatic
-        heptagonal
-        hexagonal bipyramidal
-        heptagonal pyramidal
-        octagonal
-        square antiprismatic
-        trigonal dodecahedral
-        capped cube
-        biaugmented trigonal prismatic
-        cubic
-        elongated trigonal bipyramidal
-        capped square antiprismatic
-        enneagonal
-        heptagonal bipyramidal
-        hula-hoop
-        triangular cupola
-        tridiminished icosahedral
-        muffin
-        octagonal pyramidal
-        tricapped trigonal prismatic
+        
+        * point
+        * linear 1
+        * linear 2
+        * bent 2 tetrahedral
+        * bent 2 planar
+        * trigonal planar
+        * bent 3 tetrahedral
+        * t shaped
+        * tetrahedral
+        * sawhorse
+        * seesaw
+        * square planar
+        * trigonal pyramidal
+        * trigonal bipyramidal
+        * square pyramidal
+        * pentagonal
+        * hexagonal
+        * trigonal prismatic
+        * pentagonal pyramidal
+        * octahedral
+        * capped octahedral
+        * hexagonal pyramidal
+        * pentagonal bipyramidal
+        * capped trigonal prismatic
+        * heptagonal
+        * hexagonal bipyramidal
+        * heptagonal pyramidal
+        * octagonal
+        * square antiprismatic
+        * trigonal dodecahedral
+        * capped cube
+        * biaugmented trigonal prismatic
+        * cubic
+        * elongated trigonal bipyramidal
+        * capped square antiprismatic
+        * enneagonal
+        * heptagonal bipyramidal
+        * hula-hoop
+        * triangular cupola
+        * tridiminished icosahedral
+        * muffin
+        * octagonal pyramidal
+        * tricapped trigonal prismatic
+        
         """
         if shape_name == "point":
             return cls.linear_shape()[0:1]
@@ -983,12 +1005,15 @@ class Atom:
 
     @staticmethod
     def new_shape(old_shape, new_connectivity, bond_change):
-        """returns the name of the expected vsepr geometry when the number of bonds
+        """
+        returns the name of the expected vsepr geometry when the number of bonds
         changes by +/- 1
 
-        old_shape - :str: vsepr geometry name
-        new_connectivity - :int: connectivity (see Atom._connectivity)
-        bond_change - :int: +1 or -1, indicating that the number of bonds is changing by 1"""
+        :param old_shape str: vsepr geometry name
+        :param new_connectivity int: connectivity (see Atom._connectivity)
+        :param bond_change int: +1 or -1, indicating that the number of bonds is changing by 1
+        
+        """
         if old_shape == "point":
             if bond_change == 1:
                 return "linear 1"
@@ -1072,10 +1097,15 @@ class Atom:
             raise RuntimeError("no shape method is defined for %s" % old_shape)
 
     def get_vsepr(self):
-        """determine vsepr geometry around an atom
-        returns shape as a string and the score assigned to that shape
-        returns None if self has > 6 bonds
+        """
+        determine vsepr geometry around an atom
+        
+        :returns: 
+            * :shape, score: as a string and the score assigned to that shape
+            * :None: if self has > 6 bonds
+        
         scores > 0.5 are generally questionable
+        
         see atom.get_shape for a list of shapes
         """
 

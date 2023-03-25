@@ -8,7 +8,7 @@ test/ligand.xyz
 /AaronTools.egg-info
 /build
 /dist
-/doc
+/docs
 /test/*.xyz
 test/.coverage
 /test/htmlcov/
