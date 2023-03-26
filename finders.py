@@ -16,16 +16,20 @@ def get_class(name):
 
 class Finder:
     def get_matching_atoms(self, atoms, geometry=None):
-        """overwrite with function that returns list(Atom) of the atoms that
+        """
+        overwrite with function that returns list(Atom) of the atoms that
         match your Finder's criteria
         geometry is an optional argument that could be used to e.g. find
-        atoms a certain number of bonds"""
+        atoms a certain number of bonds
+        """
         pass
 
 
 class BondsFrom(Finder):
-    """exact number of bonds from specified atom
-    avoid: bonding path cannot pass through these atoms"""
+    """
+    exact number of bonds from specified atom
+    avoid: bonding path cannot pass through these atoms
+    """
     def __init__(self, central_atom, number_of_bonds, avoid=None):
         super().__init__()
 
@@ -245,8 +249,11 @@ class HasAttribute(Finder):
 
 @addlogger
 class VSEPR(Finder):
-    """atoms with the specified VSEPR geometry
-    see Atom.get_shape for a list of valid vsepr strings"""
+    """
+    atoms with the specified VSEPR geometry
+    
+    see Atom.get_shape for a list of valid vsepr strings
+    """
     LOG = None
     def __init__(self, vsepr, cutoff=0.5):
         super().__init__()
@@ -274,10 +281,14 @@ class VSEPR(Finder):
 
 
 class BondedElements(Finder):
-    """atoms bonded to the specified neighboring elements
+    """
+    atoms bonded to the specified neighboring elements
+    
     if match_exact=True (default), elements must match exactly 
+    
     e.g. BondedElements('C') will find
-    atoms bonded to only one carbon and nothing else"""
+    atoms bonded to only one carbon and nothing else
+    """
     def __init__(self, *args, match_exact=True, **kwargs):
         super().__init__()
         
@@ -331,11 +342,15 @@ class NumberOfBonds(Finder):
 
 
 class ChiralCentres(Finder):
-    """chiral centers
+    """
+    chiral centers
+    
     atoms with a non-planar VSEPR geometry with all bonded groups
     being distinct
+    
     for rings, looks for a set of unique canonical ranks for atoms that 
-    are all the same number of bonds away from one atom"""
+    are all the same number of bonds away from one atom
+    """
     #IUPAC spelling 
     def __init__(self, RS_only=False):
         """RS_only: bool  - if True, do not identify chiral centers that are chiral because they
@@ -616,8 +631,11 @@ class IsElement(Finder):
         return [atom for atom in atoms if atom.element == self.element]
 
 class OfType(Finder):
-    """all atoms of the specified GAFF atom type
-    if ignore_metals = True (default), bonding with metals will not count towards VSEPR shapes"""
+    """
+    all atoms of the specified GAFF atom type
+    
+    if ignore_metals = True (default), bonding with metals will not count towards VSEPR shapes
+    """
     def __init__(self, atomtype, ignore_metals=True):
         super().__init__()
 
@@ -815,6 +833,7 @@ class ONIOMLayer(Finder):
 class AmideCarbon(Finder):
     """
     amide carbons
+    
     trigonal planar carbons bonded to a linear oxygen and a
     nitrogen with 3 bonds
     """
@@ -840,18 +859,20 @@ class AmideCarbon(Finder):
 class Bridgehead(Finder):
     """
     bridgehead atoms
+    
     can specify ring sizes that the atoms bridge
     """
     def __init__(self, ring_sizes=None, match_exact=False):
         """
-        ring_sizes  - list of int, size of rings (e.g. [6, 6] for atoms that bridge
-                      two 6-membered rings)
-                      not specifying yields bridgehead atoms for any ring size
-        match_exact - bool, if True, return atoms only bridging the specified rings
-                      if False, the ring_sizes is taken as a minimum (e.g.
-                      ring_size=[6, 6], match_exact=False would also yield atoms
-                      bridging three 6-membered rings or two six-membered rings and
-                      a five-membered ring)
+        :param None|list(int) ring_sizes" list of int, size of rings (e.g. [6, 6] for atoms that bridge
+            two 6-membered rings)
+            
+            not specifying yields bridgehead atoms for any ring size
+        :param bool match_exact: bool, if True, return atoms only bridging the specified rings
+            if False, the ring_sizes is taken as a minimum (e.g.
+            ring_size=[6, 6], match_exact=False would also yield atoms
+            bridging three 6-membered rings or two six-membered rings and
+            a five-membered ring)
         """
         self.ring_sizes = ring_sizes
         self.match_exact = match_exact
@@ -900,14 +921,15 @@ class SpiroCenters(Finder):
     """
     def __init__(self, ring_sizes=None, match_exact=False):
         """
-        ring_sizes  - list of int, size of rings (e.g. [6, 6] for atoms that bridge
-                      two 6-membered rings)
-                      not specifying yields bridgehead atoms for any ring size
-        match_exact - bool, if True, return atoms only bridging the specified rings
-                      if False, the ring_sizes is taken as a minimum (e.g.
-                      ring_size=[6, 6], match_exact=False would also yield atoms
-                      bridging three 6-membered rings or two six-membered rings and
-                      a five-membered ring)
+        :param None|list(int) ring_sizes: list of int, size of rings (e.g. [6, 6] for atoms that bridge
+            two 6-membered rings)
+            
+            not specifying yields bridgehead atoms for any ring size
+        :param bool match_exact: if True, return atoms only bridging the specified rings
+            if False, the ring_sizes is taken as a minimum (e.g.
+            ring_size=[6, 6], match_exact=False would also yield atoms
+            bridging three 6-membered rings or two six-membered rings and
+            a five-membered ring)
         """
         self.ring_sizes = ring_sizes
         self.match_exact = match_exact

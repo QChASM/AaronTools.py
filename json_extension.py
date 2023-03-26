@@ -34,6 +34,7 @@ class ATEncoder(json.JSONEncoder):
     def default(self, obj):
         """
         Calls appropriate encoding method for supported AaronTools types.
+        
         If type not supported, calls the default `default` method
         """
         if isinstance(obj, Atom):

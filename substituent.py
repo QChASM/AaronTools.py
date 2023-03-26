@@ -20,11 +20,13 @@ from AaronTools.utils.utils import boltzmann_average
 class Substituent(Geometry):
     """
     Attributes:
-        name
-        atoms
-        end         the atom substituent is connected to
-        conf_num    number of conformers
-        conf_angle  angle to rotate by to make next conformer
+    
+    * name
+    * atoms
+    * end         the atom substituent is connected to
+    * conf_num    number of conformers
+    * conf_angle  angle to rotate by to make next conformer
+    
     """
 
     LOG = None
@@ -182,10 +184,12 @@ class Substituent(Geometry):
     def weighted_sterimol(substituents, energies, temperature, *args, **kwargs):
         """
         returns Boltzmann-averaged sterimol parameters for the substituents
-        substituents - list of Substituent instances
-        energies - numpy array, energy in kcal/mol; ith energy corresponds to ith substituent
-        temperature - temperature in K
-        *args, **kwargs - passed to Substituent.sterimol()
+        
+        :param list(Substituent) substituents: list of Substituent instances
+        :param np.ndarray energies: energies in kcal/mol; ith energy corresponds to ith substituent
+        :param float temperature: temperature in K
+        :param args:
+        :param kwargs: passed to Substituent.sterimol()
         """
         CITATION = "doi:10.1021/acscatal.8b04043"
         Substituent.LOG.citation(CITATION)
@@ -223,10 +227,11 @@ class Substituent(Geometry):
     ):
         """
         creates a substituent from a string
-        name        str     identifier for substituent
-        conf_num    int     number of conformers expected for hierarchical conformer generation
-        conf_angle  int     angle between conformers
-        form        str     type of identifier (smiles, iupac)
+        
+        :param str name: identifier for substituent
+        :param int conf_num: number of conformers expected for hierarchical conformer generation
+        :param int conf_angle: angle between conformers
+        :param str form: type of identifier (smiles, iupac)
         """
         # convert whatever format we"re given to smiles
         # then grab the structure from cactus site
@@ -351,8 +356,9 @@ class Substituent(Geometry):
         """
         creates a new copy of the geometry
         parameters:
-            end - atom substituent is connected to
-            kwargs - passed to super().copy
+        
+        :param Atom end: atom substituent is connected to
+        :param kwargs: passed to super().copy
         """
         rv = super().copy(**kwargs)
         rv = Substituent(
@@ -503,19 +509,24 @@ class Substituent(Geometry):
 
     def sterimol(self, return_vector=False, radii="bondi", old_L=False, **kwargs):
         """
-        returns sterimol parameter values in a dictionary
-        keys are B1, B2, B3, B4, B5, and L
+        :returns: sterimol parameter values in a dictionary
+            keys are B1, B2, B3, B4, B5, and L
+        
         see Verloop, A. and Tipker, J. (1976), Use of linear free energy
         related and other parameters in the study of fungicidal
         selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
 
-        return_vector: bool/returns dict of tuple(vector start, vector end) instead
-        radii: "bondi" - Bondi vdW radii
-               "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
-        old_L: bool - True: use original L (ideal bond length between first substituent
-                            atom and hydrogen + 0.40 angstrom
-                      False: use AaronTools definition
+        :param bool return_vector: returns dict of tuple(vector start, vector end) instead
+        :param str|dict radii: radii to use
+        
+            * "bondi" - Bondi vdW radii
+            * "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+        
+        :param bool old_L: True: use original L (ideal bond length between first substituent
+            atom and hydrogen + 0.40 angstrom
+            
+            False: use AaronTools definition
 
         AaronTools' definition of the L parameter is different than the original
         STERIMOL program. In STERIMOL, the van der Waals radii of the substituent is
@@ -621,7 +632,8 @@ class Substituent(Geometry):
     def sub_rotate(self, angle=None, reverse=False):
         """
         rotates substituent about bond w/ rest of geometry
-        :angle: in radians
+        
+        :param float angle: in radians
         """
         if angle is None:
             angle = self.conf_angle

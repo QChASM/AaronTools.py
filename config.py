@@ -85,11 +85,14 @@ THEORY_OPTIONS = [
 class Config(configparser.ConfigParser):
     """
     Reads configuration information from INI files found at:
+        
         $QCHASM/AaronTools/config.ini
         $AARONLIB/config.ini
         ./config.ini or /path/to/file supplied during initialization
+    
     Access to configuration information available using dictionary notation.
         eg: self[`section_name`][`option_name`] returns `option_value`
+    
     See help(configparser.ConfigParser) for more information
     """
 
@@ -216,8 +219,10 @@ class Config(configparser.ConfigParser):
     def get(self, section, option, *, junk="_ ", max_junk=1, **kwargs):
         """
         see ConfigParser.get for details
+        
         junk are characters that are not important in the option name
         max_junk - number of allowed junk characters
+        
         e.g. junk="_" with max_junk=1 when looking for
         'empirical dispersion' will match 'empirical_dispersion'
         """
@@ -397,8 +402,11 @@ class Config(configparser.ConfigParser):
     def parse_functions(self):
         """
         Evaluates functions supplied in configuration file
+        
         Functions indicated by "%{...}"
+        
         Pulls in values of options indicated by $option_name
+        
         Eg:
             ppn = 4
             memory = %{ $ppn * 2 }GB --> memory = 8GB
@@ -493,20 +501,25 @@ class Config(configparser.ConfigParser):
     def get_other_kwargs(self, section="Theory"):
         """
         Returns dict() that can be unpacked and passed to Geometry.write along with a theory
+        
         Example:
-        [Theory]
-        route = pop NBORead
-                opt MaxCycle=1000, NoEigenTest
-        end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
+            
+            [Theory]
+            route = pop NBORead
+                    opt MaxCycle=1000, NoEigenTest
+            end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
 
         this adds opt(MaxCycle=1000,NoEigenTest) pop=NBORead to the route with any other
         pop or opt options being added by the job type
 
         'two-layer' options can also be specified as a python dictionary
+        
         the following is equivalent to the above example:
-        [Theory]
-        route = {"pop":["NBORead"], "opt":["MaxCycle=1000", NoEigenTest"]}
-        end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
+            
+            [Theory]
+            route = {"pop":["NBORead"], "opt":["MaxCycle=1000", NoEigenTest"]}
+            end_of_file = $nbo RESONANCE NBOSUM E2PERT=0.0 NLMO BNDIDX $end
+        
         """
         # these need to be dicts
         two_layer = [
@@ -1060,6 +1073,7 @@ class Config(configparser.ConfigParser):
         """
         Moves option values from subsections into parent section
         Eg:
+        
             [HPC]
             include = Wheeler
             ppn = 12
@@ -1107,11 +1121,13 @@ class Config(configparser.ConfigParser):
     def as_dict(self, spec=None, skip=None):
         """
         Forms a metadata spec dictionary from configuration info
-        :spec: (dict) if given, append key/vals to that dict
-        :skip: (list) skip storing stuff according to (section, option) or attrs
-               section, option, and attrs are strings that can be regex (full match only)
-               eg: skip=[("Job", ".*"), "conformer"] will skip everything in the Job
-               section and the Config.conformer attribute
+        
+        :param dict spec: if given, append key/vals to that dict
+        :param list skip: skip storing stuff according to (section, option) or attrs
+            section, option, and attrs are strings that can be regex (full match only)
+            
+            eg: skip=[("Job", ".*"), "conformer"] will skip everything in the Job
+            section and the Config.conformer attribute
         """
         if spec is None:
             spec = {}

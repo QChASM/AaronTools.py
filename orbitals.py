@@ -15,42 +15,44 @@ class Orbitals:
     """
     stores functions for the shells in a basis set
     for evaluation at arbitrary points
+    
     attributes:
-    basis_functions - list(len=n_shell) of lists(len=n_prim_per_shell)
-                      of functions
-                      function takes the arguments:
-                      r2 - float array like, squared distance from the
-                           shell's center to each point being evaluated
-                      x - float or array like, distance from the shell's
-                          center to the point(s) being evaluated along
-                          the x axis
-                      y and z - same as x for the corresponding axis
-                      mo_coeffs - list(len=funcs_per_shell), MO coefficients
-                                  for the functions in this shell (e.g. 3
-                                  coefficients for the p shell); order
-                                  might depend on input file format
-                                  for example, FCHK files will be px, py, pz
-                                  ORCA files will be pz, px, py
-    funcs_per_shell - list(len=n_shell), number of basis functions for
-                      each shell
-    alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
-                         molecular orbitals for alpha electrons
-    beta_coefficients - same as alpha_coefficients for beta electrons
-    shell_coords - array(shape=(n_shells, 3)), coordinates of each shell
-                   in Angstroms
-    shell_types - list(str, len=n_shell), type of each shell (e.g. s,
-                  p, sp, 5d, 6d...)
-    n_shell - number of shells
-    n_prim_per_shell - list(len=n_shell), number of primitives per shell
-    n_mos - number of molecular orbitals
-    exponents - array, exponents for primitives in Eh
-                each shell
-    alpha_nrgs - array(len=n_mos), energy of alpha MO's
-    beta_nrgs - array(len=n_mos), energy of beta MO's
-    contraction_coeff - array, contraction coefficients for each primitive
-                        in each shell
-    n_alpha - int, number of alpha electrons
-    n_beta - int, number of beta electrons
+    
+    * basis_functions - list(len=n_shell) of lists(len=n_prim_per_shell)
+      of functions
+      function takes the arguments:
+      * r2 - float array like, squared distance from the
+        shell's center to each point being evaluated
+      * x - float or array like, distance from the shell's
+        center to the point(s) being evaluated along
+        the x axis
+      * y and z - same as x for the corresponding axis
+      * mo_coeffs - list(len=funcs_per_shell), MO coefficients
+        for the functions in this shell (e.g. 3
+        coefficients for the p shell); order
+        might depend on input file format
+        for example, FCHK files will be px, py, pz
+        ORCA files will be pz, px, py
+    * funcs_per_shell - list(len=n_shell), number of basis functions for
+      each shell
+    * alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
+      molecular orbitals for alpha electrons
+    * beta_coefficients - same as alpha_coefficients for beta electrons
+    * shell_coords - array(shape=(n_shells, 3)), coordinates of each shell
+      in Angstroms
+    * shell_types - list(str, len=n_shell), type of each shell (e.g. s,
+      p, sp, 5d, 6d...)
+    * n_shell - number of shells
+    * n_prim_per_shell - list(len=n_shell), number of primitives per shell
+    * n_mos - number of molecular orbitals
+    * exponents - array, exponents for primitives in Eh
+      each shell
+    * alpha_nrgs - array(len=n_mos), energy of alpha MO's
+    * beta_nrgs - array(len=n_mos), energy of beta MO's
+    * contraction_coeff - array, contraction coefficients for each primitive
+      in each shell
+    * n_alpha - int, number of alpha electrons
+    * n_beta - int, number of beta electrons
     """
 
     LOG = None
@@ -1616,13 +1618,14 @@ class Orbitals:
     def mo_value(self, mo, coords, alpha=True, n_jobs=1):
         """
         get the MO evaluated at the specified coords
-        m - index of molecular orbital or an array of MO coefficients
-        coords - numpy array of points (N,3) or (3,)
-        alpha - use alpha coefficients (default)
-        n_jobs - number of parallel threads to use
-                 this is on top of NumPy's multithreading, so
-                 if NumPy uses 8 threads and n_jobs=2, you can
-                 expect to see 16 threads in use
+        
+        :param int|np.ndarray mo: index of molecular orbital or an array of MO coefficients
+        :param np.ndarray coords: array of points (N,3) or (3,)
+        :param bool alpha: use alpha coefficients (default)
+        :param int n_jobs: number of parallel threads to use
+            this is on top of NumPy's multithreading, so
+            if NumPy uses 8 threads and n_jobs=2, you can
+            expect to see 16 threads in use
         """
         # val is the running sum of MO values
         if alpha:
@@ -1681,13 +1684,15 @@ class Orbitals:
     ):
         """
         returns the eletron density
-        coords - coordinates to calculate e density at
-        n_jobs - number of concurrent threads to use in calculation
-        alpha_occ - array of alpha occupancies
-                    if not specified, defaults to lowest self.n_alpha
-                    orbitals
-        beta_occ - same at alpha_occ, but for beta electrons
-        spin - plot spin density
+        
+        :param np.ndarray coords: coordinates to calculate e density at
+        :param int n_jobs: number of concurrent threads to use in calculation
+        :param np.ndarray|None alpha_occ: array of alpha occupancies
+            
+            if not specified, defaults to lowest self.n_alpha
+            orbitals
+        :param np.ndarray|None beta_occ: same at alpha_occ, but for beta electrons
+        :param bool spin: plot spin density
         """
 
         # set default occupancy
@@ -1835,12 +1840,15 @@ class Orbitals:
     def fukui_donor_value(self, coords, delta=0.1, **kwargs):
         """
         orbital-weighted fukui donor function
+        
         electron density change for removing an electron
+        
         orbital weighting from DOI 10.1002/jcc.24699 accounts
         for nearly degenerate orbitals
-        coords - coordinate to evaluate function at
-        delta - parameter for weighting
-        kwargs - passed to density_value
+        
+        :param np.ndarray coords: coordinates to evaluate function at
+        :param float delta: parameter for weighting
+        :param kwargs: passed to density_value
         """
         CITATION = "doi:10.1002/jcc.24699"
         self.LOG.citation(CITATION)
@@ -1892,12 +1900,15 @@ class Orbitals:
     def fukui_acceptor_value(self, coords, delta=0.1, **kwargs):
         """
         orbital-weighted fukui acceptor function
+        
         electron density change for removing an electron
+        
         orbital weighting from DOI 10.1021/acs.jpca.9b07516 accounts
         for nearly degenerate orbitals
-        coords - coordinate to evaluate function at
-        delta - parameter for weighting
-        kwargs - passed to density_value
+        
+        :param np.ndarray coords: coordinates to evaluate function at
+        :param float delta: parameter for weighting
+        :param kwargs: passed to density_value
         """
         CITATION = "doi:10.1021/acs.jpca.9b07516"
         self.LOG.citation(CITATION)
@@ -2036,19 +2047,21 @@ class Orbitals:
         spacing=0.2,
         standard_axes=False,
     ):
-        """returns n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
-        n_pts1 is the number of points along the first axis
-        n_pts2 ... second axis
-        n_pts3 ... third axis
-        v1 is the vector for the first axis, norm should be close to spacing
-        v2 ... second axis
-        v3 ... third axis
-        com is the center of the cube
-        u is a rotation matrix for the v1, v2, v3 axes relative to xyz
-        geom - Geometry() used to define the cube
-        padding - extra space around atoms in angstrom
-        spacing - distance between adjacent points in angstrom
-        standard_axes - True to use x, y, and z axes
+        """
+        :returns: n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
+        * n_pts1 is the number of points along the first axis
+        * n_pts2 ... second axis
+        * n_pts3 ... third axis
+        * v1 is the vector for the first axis, norm should be close to spacing
+        * v2 ... second axis
+        * v3 ... third axis
+        * com is the center of the cube
+        * u is a rotation matrix for the v1, v2, v3 axes relative to xyz
+        
+        :param Geometry geom: used to define the cube
+        :param float padding: extra space around atoms in angstrom
+        :param float spacing: distance between adjacent points in angstrom
+        :param bool standard_axes: True to use x, y, and z axes
             by default, the cube will be oriented to fit
             the geom and have the smallest volume possible
         """
@@ -2129,9 +2142,11 @@ class Orbitals:
         n_pts1, n_pts2, n_pts3, v1, v2, v3, com, sort=True
     ):
         """
-        returns coords, n_list
-        coords is an array of points in the cube
-        n_list specifies where each point is along the axes
+        :returns: coords, n_list
+        
+        * coords is an array of points in the cube
+        
+        * n_list specifies where each point is along the axes
         e.g. 5th point along v1, 4th point along v2, 0th point along v3
         """
         v_list = [v1, v2, v3]
@@ -2175,10 +2190,12 @@ class Orbitals:
         n_atoms=None,
     ):
         """
-        returns the estimated memory use (in GB) for calling the
+        :returns: estimated memory use (in GB) for calling the
         specified function on the specified number of points
-        if func_name is a condensed fukui function, apoints,
+        
+        if func_name is a condensed fukui function, apoints
         and rpoints must be given
+        
         otherwise, n_points must be given
         """
         test_array = np.ones(1)
@@ -2233,12 +2250,13 @@ class Orbitals:
     ):
         """
         integrates func in the Voronoi cell of the specified target
-        geom - Geometry() target belongs to
-        args - passed to func
-        rpoints - radial points used for Gauss-Legendre integral
-        apoints - angular points for Lebedev integral
-        func - function to evaluate
-        kwargs - passed to func
+        
+        :param Geometry geom: structure target belongs to
+        :param args: passed to func
+        :param int rpoints: radial points used for Gauss-Legendre integral
+        :param int apoints: angular points for Lebedev integral
+        :param function func: function to evaluate
+        :param kwargs: passed to func
         """
         
         atom = geom.find(target)[0]
@@ -2295,19 +2313,23 @@ class Orbitals:
     ):
         """
         integrates func in the power cell of the specified target
+        
         power diagrams are a form of weighted Voronoi diagrams
         that form cells based on the smallest d^2 - r^2
+        
         see wikipedia article: https://en.wikipedia.org/wiki/Power_diagram
-        radii - "bondi" - Bondi vdW radii
-                "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
-                dict()  - radii are values and elements are keys
-                list()  - list of radii corresponding to targets
-        geom - Geometry() target belongs to
-        args - passed to func
-        rpoints - radial points used for Gauss-Legendre integral
-        apoints - angular points for Lebedev integral
-        func - function to evaluate
-        kwargs - passed to func
+        
+        :param str|dict|list radii: radii to use
+            * "bondi" - Bondi vdW radii
+            * "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            * dict()  - radii are values and elements are keys
+            * list()  - list of radii corresponding to targets
+        :param Geometry geom: target belongs to
+        :param args: passed to func
+        :param int rpoints: radial points used for Gauss-Legendre integral
+        :param int apoints: angular points for Lebedev integral
+        :param function func: function to evaluate
+        :param kwargs: passed to func
         """
         
         if func is None:
@@ -2394,10 +2416,14 @@ class Orbitals:
         """
         uses power_integral to integrate the fukui_donor_value
         for all atoms in geom
+        
         values are normalized so they sum to 1
-        geom - Geometry()
-        args and kwargs are passed to power_integral
-        returns array for each atom's condensed Fukui donor values
+        
+        :param Geometry geom: structure
+        :param args:passed to power_integral
+        :param kwargs: passed to power_integral
+        
+        :returns: array for each atom's condensed Fukui donor values
         """
         out = np.zeros(len(geom.atoms))
         for i, atom in enumerate(geom.atoms):
@@ -2417,10 +2443,14 @@ class Orbitals:
         """
         uses power_integral to integrate the fukui_acceptor_value
         for all atoms in geom
+        
         values are normalized so they sum to 1
-        geom - Geometry()
-        args and kwargs are passed to power_integral
-        returns array for each atom's condensed Fukui acceptor values
+        
+        :param Geometry geom: structure
+        :param args:passed to power_integral
+        :param kwargs: passed to power_integral
+        
+        :returns: array for each atom's condensed Fukui acceptor values
         """
         out = np.zeros(len(geom.atoms))
         for i, atom in enumerate(geom.atoms):

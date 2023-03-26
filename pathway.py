@@ -125,6 +125,7 @@ class Pathway:
         """
         returns array for the interpolated pathway
         at point t
+        
         t should be between 0 and 1
         """
         s = self.s_at_t(t)

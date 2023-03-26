@@ -18,27 +18,32 @@ class JobControl:
 
 @addlogger
 class SubmitProcess:
-    """class for submitting jobs to the queue
+    """
+    class for submitting jobs to the queue
     attributes:
 
-    name:       name of job and input file minus the extension
-    exe:        type of input file (com, in, inp)
-    directory:  directory the input file is in
-    walltime:   allocated walltime in hours
-    processors: allocated processors
-    memory:     allocated memory in GB
-    template:   template job file"""
+    * name:      name of job and input file minus the extension
+    * exe        type of input file (com, in, inp)
+    * directory  directory the input file is in
+    * walltime   allocated walltime in hours
+    * processors allocated processors
+    * memory     allocated memory in GB
+    * template   template job file
+    
+    """
 
     LOG = None
 
     def __init__(self, fname, walltime, processors, memory, template=None):
-        """fname:   str     - path to input file (e.g. /home/CoolUser/CoolStuff/neat.com
-        walltime:   int/str - walltime in hours
-        processors: int/str - allocated processors
-        memory:     int/str - allocated memory in GB
-        template:   str     - path to template file; if template is None, will look for
-                              psi4.job, orca.job, or gaussian.job (depending on
-                              extension on fname)"""
+        """
+        :param str fname: path to input file (e.g. /home/CoolUser/CoolStuff/neat.com
+        :param int|str walltime: walltime in hours
+        :param int|str  processors: allocated processors
+        :param int|str memory: allocated memory in GB
+        :param str template: path to template file; if template is None, will look for
+            Psi4_template.job, ORCA_template.job, Gaussian_template.job, etc. (depending on
+            extension on fname)
+        """
         directory, filename = os.path.split(fname)
         self.name, exe = os.path.splitext(filename)
         self.exe = exe[1:]
@@ -52,8 +57,13 @@ class SubmitProcess:
 
     @staticmethod
     def unfinished_jobs_in_dir(directory, retry=True):
-        """returns list(jobids (str)) of jobids in directory
-        retry: bool - if there's an error while checking the queue, sleep 300s and try again"""
+        """
+        :param str directory: directory path
+        :param bool retry: if there's an error while checking the queue, sleep 300s and try again
+        
+        :returns: jobids for jobs in directory
+        :rtype: list(str) of jobids in directory
+        """
         if QUEUE_TYPE == "LSF":
             args = ["bjobs", "-l", "2"]
             proc = subprocess.Popen(
@@ -203,11 +213,14 @@ class SubmitProcess:
                     return job_ids
 
     def submit(self, wait=False, quiet=True, **opts):
-        """submit job to the queue
-        wait: bool/int - do not leave the function until any job in the directory
-                         finishes (polled every 5 minutes or 'wait' seconds)
-        opts: dict() used to render template; keys are template variables (e.g. exec_memory)
-              and values are the corresponding values
+        """
+        submit job to the queue
+        
+        :param bool|int wait: do not leave the function until any job in the directory
+            finishes (polled every 5 minutes or 'wait' seconds)
+        
+        :param dict opts: used to render template; keys are template variables (e.g. exec_memory)
+            and values are the corresponding values
         """
 
         job_file = os.path.join(self.directory, self.name + ".job")
@@ -276,6 +289,7 @@ class SubmitProcess:
     def set_template(self, filename):
         """
         sets job template to filename
+        
         AARONLIB directories are searched
         """
         if filename and len(filename.splitlines()) > 1:

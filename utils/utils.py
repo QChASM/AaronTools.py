@@ -59,8 +59,10 @@ def clean_progress_bar(width=50):
 def proj(v_vec, u_vec):
     """
     projection of u_vec into v_vec
+    
     v_vec should be a np.array, and u_vec should have the
-    same shape as v_vec"""
+    same shape as v_vec
+    """
     numerator = np.dot(u_vec, v_vec)
     denominator = np.dot(v_vec, v_vec)
     return numerator * v_vec / denominator
@@ -112,16 +114,16 @@ def uptri2sym(vec, n=None, col_based=False):
     """
     Converts upper triangular matrix to a symmetric matrix
 
-    :vec: the upper triangle array/matrix
-    :n: the number of rows/columns
-    :col_based: if true, triangular matirx is of the form
-                    0 1 3
-                    - 2 4
-                    - - 5
-                if false, triangular matrix is of the form
-                    0 1 2
-                    - 3 4
-                    - - 5
+    :param np.ndarray vec: the upper triangle array/matrix
+    :param int n: the number of rows/columns
+    :param bool col_based: if true, triangular matirx is of the form
+            0 1 3
+            - 2 4
+            - - 5
+        if false, triangular matrix is of the form
+            0 1 2
+            - 3 4
+            - - 5
     """
     if hasattr(vec[0], "__iter__") and not isinstance(vec[0], str):
         tmp = []
@@ -159,7 +161,7 @@ def uptri2sym(vec, n=None, col_based=False):
 def float_vec(word):
     """
     Turns strings into floating point vectors
-    :word: a comma-delimited string of numbers
+    :param str word: a comma-delimited string of numbers
 
     if no comma or only one element:
         returns just the floating point number
@@ -224,14 +226,18 @@ def resolve_concatenation(*args):
 
 
 def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
-    """combine dictionaries d1 and d2 to return a dictionary
+    """
+    combine dictionaries d1 and d2 to return a dictionary
     with keys d1.keys() + d2.keys()
+    
     if a key is in d1 and d2, the items will be combined:
         if they are both dictionaries, combine_dicts is called recursively
         otherwise, d2[key] is appended to d1[key]
+        
         if case_sensitive=False, the key in the output will be the lowercase
         of the d1 key and d2 key (only for combined items)
-    dict2_conditional: bool - if True, don't add d2 keys unless they are also in d1
+    
+    :param bool dict2_conditional: if True, don't add d2 keys unless they are also in d1
     """
     from copy import deepcopy
 
@@ -372,11 +378,14 @@ def subtract_dicts(*args, case_sensitive=False):
 
 
 def integrate(fun, start, stop, num=101):
-    """numerical integration using Simpson's method
-    fun - function to integrate
-    start - starting point for integration
-    stop - stopping point for integration
-    num - number of points used for integration"""
+    """
+    numerical integration using Simpson's method
+    
+    :param function fun: function to integrate
+    :param float start: starting point for integration
+    :param float stop: stopping point for integration
+    :param int num: number of points used for integration
+    """
 
     delta_x = float(stop - start) / (num - 1)
     x_set = np.linspace(start, stop, num=num)
@@ -420,8 +429,9 @@ def same_cycle(graph, a, b):
 
     Returns: True if cycle found containing a and b, False otherwise
 
-    :graph: connectivity matrix or Geometry
-    :a:, :b: indices in connectivity matrix/Geometry or Atoms in Geometry
+    :param list|Geometry graph: connectivity matrix or Geometry
+    :param int|Atom a: index in connectivity matrix/Geometry or Atoms in Geometry
+    :param int|Atom b: index in connectivity matrix/Geometry or Atoms in Geometry
     """
     from AaronTools.geometry import Geometry
 
@@ -453,11 +463,12 @@ def same_cycle(graph, a, b):
 def shortest_path(graph, start, end):
     """
     Find shortest path from :start: to :end: in :graph: using Dijkstra's algorithm
-    Returns: list(node_index) if path found, None if path not found
 
-    :graph: the connection matrix or Geometry
-    :start: the first atom or node index
-    :end: the last atom or node index
+    :param list|Geometry graph: the connection matrix or Geometry
+    :param int|Atom start: the first atom or node index
+    :param int|Atom end: the last atom or node index
+
+    :returns: list(node_index) if path found, None if path not found
     """
     from AaronTools.geometry import Geometry
 
@@ -548,10 +559,14 @@ def trim_leaves(graph, _removed=None):
 
 
 def to_closing(string, brace):
-    """returns the portion of string from the beginning to the closing
+    """
+    returns the portion of string from the beginning to the closing
     paratheses or bracket denoted by brace
+    
     brace can be '(', '{', or '['
-    if the closing paratheses is not found, returns None instead"""
+    
+    if the closing paratheses is not found, returns None instead
+    """
     if brace == "(":
         pair = ("(", ")")
     elif brace == "{":
@@ -645,8 +660,12 @@ def lebedev_sphere(radius=1, center=np.zeros(3), num=302):
     returns one of the Lebedev grid points (xi, yi, zi)
     and weights (wi) with the specified radius and center.
     Weights do not include r**2, so integral of F(x,y,z)
-    over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}.  The number
+    over sphere is 4*pi*r**2\sum_i{F(xi,yi,zi)wi}. The number
     of points (num) must be one of 110, 194, 302, 590, 974, 1454, 2030, 2702, 5810
+    
+    :param float radius: radius of sphere
+    :param np.ndarray center: center of sphere
+    :param int num: number of points in the grid 
     """
     try:
         grid, weights = _loaded_leb_grids[num]
@@ -681,6 +700,10 @@ def gauss_legendre_grid(start=-1, stop=1, num=32):
     (wi)for the range start to stop. Integral over F(x) is
     \sum_i{F(xi)wi}. The number of points (num) must be one
     of 20, 32, 64, 75, 99, 127
+    
+    :param float start: starting coordinate
+    :param float stop: final coordinate coordinate
+    :param int num: number of points in the grid
     """
     # read grid points on the range [-1,1] and weights
     grid_file = os.path.join(
@@ -706,6 +729,7 @@ def gauss_legendre_grid(start=-1, stop=1, num=32):
 def perp_vector(vec):
     """
     returns a vector orthonormal to vec (np.ndarray)
+    
     if vec is 2D, returns a vector orthonormal to the
     plane of best for the rows of vec
     """
@@ -761,9 +785,10 @@ def get_filename(path, include_parent_dir=True):
 def boltzmann_coefficients(energies, temperature, absolute=True):
     """
     returns boltzmann weights for the energies and T
-    energies - numpy array of energies in kcal/mol
-    temperature - T in K
-    absolute - True if the energies given are absolute, false if they are relative energies
+    
+    :param np.ndarray energies: energies in kcal/mol
+    :param float temperature: T in K
+    :param bool absolute: True if the energies given are absolute, false if they are relative energies
     """
     if absolute:
         min_nrg = min(energies)
@@ -775,10 +800,11 @@ def boltzmann_coefficients(energies, temperature, absolute=True):
 def boltzmann_average(energies, values, temperature, absolute=True):
     """
     returns the AVT result for the values corresponding to the energies
-    energies - np.array, energy for each state in kcal/mol
-    values - np.array, values for which the weighting is applied; the ith value corresponds to the ith energy
-    temperature - float, temperature in K
-    absolute - True if the energies given are absolute, false if they are relative energies
+    
+    :param np.ndarray energies: energies in kcal/mol
+    :param np.ndarray values: values for which the weighting is applied; the ith value corresponds to the ith energy
+    :param float temperature: T in K
+    :param bool absolute: True if the energies given are absolute, false if they are relative energies
     """
     weights = boltzmann_coefficients(energies, temperature, absolute=absolute)
     avg = np.dot(weights, values) / sum(weights)

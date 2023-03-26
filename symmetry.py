@@ -271,6 +271,7 @@ class ImproperRotation(SymmetryElement):
 
 @addlogger
 class PointGroup:
+    """determines point group and valid symmetry operations for a structure"""
 
     LOG = None
 
@@ -308,13 +309,14 @@ class PointGroup:
     ):
         """
         determine what symmetry elements are valid for geom
-        geom - Geometry()
-        tolerance - maximum error for an element to be valid
-        max_rotation - maximum n for Cn (Sn can be 2x this)
-        rotation_tolerance - tolerance in radians for angle between
-        axes to be for them to be considered parallel/antiparallel/orthogonal
+        
+        :param Geometry geom: structre
+        :param float tolerance: maximum error for an element to be valid
+        :param int max_rotation: maximum n for Cn (Sn can be 2x this)
+        :param float rotation_tolerance: tolerance in radians for angle between
+            axes to be for them to be considered parallel/antiparallel/orthogonal
 
-        returns list(SymmetryElement)
+        :rtype: list(SymmetryElement)
         """
         CITATION = "doi:10.1002/jcc.22995"
         self.LOG.citation(CITATION)
@@ -1104,10 +1106,11 @@ class PointGroup:
     def determine_point_group(self, rotation_tolerance=0.01):
         """
         determines point group of self by looing at self.elements
-        rotation_tolerance - tolerance in radians for axes to be
-        considered parallel/antiparallel/orthogonal
+        
+        :param float rotation_tolerance: tolerance in radians for axes to be
+            considered parallel/antiparallel/orthogonal
 
-        returns str for point group name
+        :returns: point group name
         """
         moments, axes = self.geom.get_principle_axes()
         linear = False

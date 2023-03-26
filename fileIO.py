@@ -158,11 +158,13 @@ def str2step(step_str):
 def expected_inp_ext(exec_type):
     """
     extension expected for an input file for exec_type
-    Gaussian - .com (.gjf on windows)
-    ORCA - .inp
-    Psi4 - .in
-    SQM - .mdin
-    qchem - .inp
+    
+    * Gaussian - .com (.gjf on windows)
+    * ORCA - .inp
+    * Psi4 - .in
+    * SQM - .mdin
+    * qchem - .inp
+    
     """
     if exec_type.lower() == "gaussian":
         if sys.platform.startswith("win"):
@@ -180,11 +182,13 @@ def expected_inp_ext(exec_type):
 def expected_out_ext(exec_type):
     """
     extension expected for an input file for exec_type
-    Gaussian - .log
-    ORCA - .out
-    Psi4 - .out
-    SQM - .mdout
-    qchem - .out
+    
+    * Gaussian - .log
+    * ORCA - .out
+    * Psi4 - .out
+    * SQM - .mdout
+    * qchem - .out
+    
     """
     if exec_type.lower() == "gaussian":
         return ".log"
@@ -199,6 +203,10 @@ def expected_out_ext(exec_type):
 
 
 class FileWriter:
+    """
+    class for handling file writing
+    """
+    
     @classmethod
     def write_file(
         cls, geom, style=None, append=False, outfile=None, *args, **kwargs
@@ -206,15 +214,17 @@ class FileWriter:
         """
         Writes file from geometry in the specified style
 
-        :geom: the Geometry to use
-        :style: the file type style to generate
+        :param Geometry geom: the Geometry to use
+        :param str style: the file type style to generate
             Currently supported options: xyz (default), com, inp, in
+            
             if outfile has one of these extensions, default is that style
-        :append: for *.xyz, append geometry to the same file
-        :outfile: output destination - default is
-                  [geometry name] + [extension] or [geometry name] + [step] + [extension]
-                  if outfile is False, no output file will be written, but the contents will be returned
-        :theory: for com, inp, and in files, an object with a get_header and get_footer method
+        :param bool append: for *.xyz, append geometry to the same file
+        :param str|None|False outfile: output destination - default is
+            [geometry name] + [extension] or [geometry name] + [step] + [extension]
+            
+            if outfile is False, no output file will be written, but the contents will be returned
+        :param Theory theory: for com, inp, and in files, an object with a get_header and get_footer method
         """
         if isinstance(outfile, str) and style is None:
             name, ext = os.path.splitext(outfile)
@@ -329,6 +339,9 @@ class FileWriter:
 
     @classmethod
     def write_xyz(cls, geom, append, outfile=None):
+        """
+        write xyz file
+        """
         mode = "a" if append else "w"
         fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
         s = "%i\n" % len(geom.atoms)
@@ -352,11 +365,14 @@ class FileWriter:
 
     @classmethod
     def write_multi_xyz(cls, geom, append, outfile=None, **kwargs):
-        """write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
+        """
+        write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
+        
         kwargs["models"] can be string "all", string of model number e.g. "2", string of model range e.g. "1-5",
-        or list of model numbers including ranges e.g. ["1", "3-5", "10"]
+            or list of model numbers including ranges e.g. ["1", "3-5", "10"]
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
-        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L"
+        """
         models = None
         geom_list = [geom]
         if "models" in kwargs.keys():
@@ -408,9 +424,12 @@ class FileWriter:
 
     @classmethod
     def write_oniom_xyz(cls, geom, append, outfile=None, **kwargs):
-        """write xyz files with additional columns for atomtype, charge, and link atom info
+        """
+        write xyz files with additional columns for atomtype, charge, and link atom info
+        
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
-        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L" """
+        kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L"
+        """
         frag = kwargs["oniom"]
         if frag == 'all':
             geom.sub_links()
@@ -499,10 +518,10 @@ class FileWriter:
 
         return
 
-
     def write_mol(
         cls, geom, outfile=None, **kwargs
     ):
+        """write V2000 mol file"""
         from AaronTools.finders import ChiralCenters
         from AaronTools.const import ELECTRONEGATIVITY
         
@@ -729,16 +748,21 @@ class FileWriter:
         cls, geom, theory, outfile=None, return_warnings=False, **kwargs
     ):
         """
-        write Gaussian input file for given Theory() and Geometry()
-        geom - Geometry()
-        theory - Theory()
-        outfile - None, False, or str
-                  None - geom.name + ".com" is used as output destination
-                  False - return contents of the input file as a str
-                  str - output destination
-        return_warnings - True to return a list of warnings (e.g. basis
-                          set might be misspelled
-        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        write Gaussian input file for given Theory and Geometry
+
+        :param Geometry geom: structure
+        :param Theory theory: input file parameters
+        :param None|False|str outfile:
+            output file option
+            
+            * None - geom.name + ".com" is used as output destination
+            * False - return contents of the input file as a str
+            * str - output destination
+        
+        :param bool return_warnings: True to return a list of warnings (e.g. basis
+            set might be misspelled
+        
+        :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         # get file content string
         header, header_warnings = theory.make_header(
@@ -782,15 +806,18 @@ class FileWriter:
     ):
         """
         write ORCA input file for the given Theory() and Geometry()
-        geom - Geometry()
-        theory - Theory()
-        outfile - None, False, or str
-                  None - geom.name + ".inp" is used as output destination
-                  False - return contents of the input file as a str
-                  str - output destination
-        return_warnings - True to return a list of warnings (e.g. basis
-                          set might be misspelled
-        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        
+        :param Geometry geom: structure
+        :param Theory theory: input file parameters
+        :param None|False|str outfile:
+        
+            * None - geom.name + ".inp" is used as output destination
+            * False - return contents of the input file as a str
+            * str - output destination
+        
+        :param bool return_warnings: True to return a list of warnings (e.g. basis
+            set might be misspelled
+        :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         header, warnings = theory.make_header(
@@ -837,15 +864,18 @@ class FileWriter:
     ):
         """
         write QChem input file for the given Theory() and Geometry()
-        geom - Geometry()
-        theory - Theory()
-        outfile - None, False, or str
-                  None - geom.name + ".inq" is used as output destination
-                  False - return contents of the input file as a str
-                  str - output destination
-        return_warnings - True to return a list of warnings (e.g. basis
-                          set might be misspelled
-        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        
+        :param Geometry geom: structure
+        :param Theory theory: input file parameters
+        :param None|False|str outfile:
+        
+            * None - geom.name + ".inq" is used as output destination
+            * False - return contents of the input file as a str
+            * str - output destination
+        
+        :param bool return_warnings: True to return a list of warnings (e.g. basis
+            set might be misspelled
+        :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         header, header_warnings = theory.make_header(
@@ -885,15 +915,18 @@ class FileWriter:
     ):
         """
         write Psi4 input file for the given Theory() and Geometry()
-        geom - Geometry()
-        theory - Theory()
-        outfile - None, False, or str
-                  None - geom.name + ".com" is used as output destination
-                  False - return contents of the input file as a str
-                  str - output destination
-        return_warnings - True to return a list of warnings (e.g. basis
-                          set might be misspelled
-        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        
+        :param Geometry geom: structure
+        :param Theory theory: input file parameters
+        :param None|False|str outfile:
+        
+            * None - geom.name + ".in" is used as output destination
+            * False - return contents of the input file as a str
+            * str - output destination
+        
+        :param bool return_warnings: True to return a list of warnings (e.g. basis
+            set might be misspelled
+        :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         header, header_warnings = theory.make_header(
             geom, style="psi4", return_warnings=True, **kwargs
@@ -935,15 +968,18 @@ class FileWriter:
     ):
         """
         write SQM input file for the given Theory() and Geometry()
-        geom - Geometry()
-        theory - Theory()
-        outfile - None, False, or str
-                  None - geom.name + ".com" is used as output destination
-                  False - return contents of the input file as a str
-                  str - output destination
-        return_warnings - True to return a list of warnings (e.g. basis
-                          set might be misspelled
-        kwargs - passed to Theory methods (make_header, make_molecule, etc.)
+        
+        :param Geometry geom: structure
+        :param Theory theory: input file parameters
+        :param None|False|str outfile:
+        
+            * None - geom.name + ".sqmin" is used as output destination
+            * False - return contents of the input file as a str
+            * str - output destination
+        
+        :param bool return_warnings: True to return a list of warnings (e.g. basis
+            set might be misspelled
+        :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         header, header_warnings = theory.make_header(
             geom, style="sqm", return_warnings=True, **kwargs
@@ -958,11 +994,11 @@ class FileWriter:
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
-                outfile = "{}.{}.com".format(
+                outfile = "{}.{}.sqmin".format(
                     geom.name, step2str(kwargs["step"])
                 )
             else:
-                outfile = "{}.com".format(geom.name)
+                outfile = "{}.sqmin".format(geom.name)
         if outfile is False:
             if return_warnings:
                 return s, warnings
@@ -995,21 +1031,26 @@ class FileWriter:
     ):
         """
         write a cube file for a molecular orbital
-        geom - geometry
-        orbitals - Orbitals()
-        outfile - output destination
-        mo - index of molecular orbital or "homo" for ground state
-             highest occupied molecular orbital or "lumo" for first
-             ground state unoccupied MO
-             can also be an array of MO coefficients
-        ao - index of atomic orbital to print
-        padding - padding around geom's coordinates
-        spacing - targeted spacing between points
-        n_jobs - number of parallel threads to use
-                 this is on top of NumPy's multithreading, so
-                 if NumPy uses 8 threads and n_jobs=2, you can
-                 expect to see 16 threads in use
-        delta - see Orbitals.fukui_donor_value or fukui_acceptor_value
+        
+        :param Geometry geom: structure
+        :param Orbitals orbitals: orbital data
+        :param str outfile:output destination
+        :param str|int mo: index of molecular orbital or "homo" for ground state
+            
+            highest occupied molecular orbital or "lumo" for first
+            ground state unoccupied MO
+            can also be an array of MO coefficients
+        
+        :param str|int ao: index of atomic orbital to print
+        :param float padding: padding around geom's coordinates
+        :param float spacing: targeted spacing between points
+        :param int n_jobs: number of parallel threads to use
+            
+            this is on top of NumPy's multithreading, so
+            if NumPy uses 8 threads and n_jobs=2, you can
+            expect to see 16 threads in use
+        
+        :param float delta: see Orbitals.fukui_donor_value or fukui_acceptor_value
         """
         if orbitals is None:
             raise RuntimeError(
@@ -1259,6 +1300,7 @@ class FileWriter:
                 f.write(s)
 
         return
+    
     def write_xtb(
         cls,
         geom,
@@ -1267,6 +1309,7 @@ class FileWriter:
         return_warnings=False,
         **kwargs,
     ):
+        """write input files for xtb"""
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
@@ -1317,6 +1360,7 @@ class FileWriter:
         return_warnings=False,
         **kwargs,
     ):
+        """write crest input files"""
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
@@ -1360,13 +1404,16 @@ class FileWriter:
     def write_dict_files(contents, dirname, name):
         """
         write data to different files
-        contents - dict(), keys are either a file name (includes a ".") or
+        
+        :param dict contents: keys are either a file name (includes a ".") or
             a file extension (no ".")
-        dirname - where to write files
-        e.g. calling with contents as
-        {"run.sh": "cat {{ name }}.txt", "txt": "hi"}
-        and name as "test"
-        will write run.sh and test.txt to dirname
+        :param str dirname: where to write files
+            e.g. calling with contents as
+            
+                {"run.sh": "cat {{ name }}.txt", "txt": "hi"}
+        
+            and name as "test"
+            will write run.sh and test.txt to dirname
         """
         for key, data in contents.items():
             if "." in key:
@@ -1381,12 +1428,16 @@ class FileWriter:
 @addlogger
 class FileReader:
     """
-    Attributes:
-        name ''
-        file_type ''
-        comment ''
-        atoms [Atom] or [OniomAtom]
-        other {}
+    class for reading files
+        
+    Attributes
+    
+    * name
+    * file_type
+    * comment
+    * atoms list(Atom) or list(OniomAtom)
+    * other dict
+    
     """
 
     LOG = None
@@ -1405,18 +1456,18 @@ class FileReader:
         max_length=10000000,
     ):
         """
-        :fname: either a string specifying the file name of the file to read
+        :param str|tuple fname: either a string specifying the file name of the file to read
             or a tuple of (str(name), str(file_type), str(content))
-        :get_all: if true, optimization steps are  also saved in
+        :param bool get_all: if true, optimization steps are  also saved in
             self.all_geom; otherwise only saves last geometry
-        :just_geom: if true, does not store other information, such as
+        :param bool just_geom: if true, does not store other information, such as
             frequencies, only what is needed to construct a Geometry() obj
-        :freq_name: Name of the file containing the frequency output. Only use
+        :param str freq_name: Name of the file containing the frequency output. Only use
             if this information is in a different file than `fname` (eg: xtb runs
             using the --hess runtype option)
-        :nbo_name: Name of the file containing the NBO orbital coefficients
-            in the AO basis. Only used when reading *.47 files.
-        :max_length: maximum array size to store from FCHK files
+        :param str nbo_name: Name of the file containing the NBO orbital coefficients
+            in the AO basis. Only used when reading .47 files.
+        :param int max_length: maximum array size to store from FCHK files
             any array that would be larger than this will be the
             size the array would be
         """
@@ -1546,15 +1597,15 @@ class FileReader:
     ):
         """
         Reads geometry information from fname.
-        Parameters:
-            get_all     If false (default), only keep the last geom
-                        If true, self is last geom, but return list
-                            of all others encountered
-            nbo_name    nbo output file containing coefficients to
-                        map AO's to orbitals
-            max_length  max. array size for arrays to store in FCHK
-                        files - anything larger will be the size
-                        the array would be
+
+        :param bool get_all: If false (default), only keep the last geom
+            If true, self is last geom, but return list
+            of all others encountered
+        :param str nbo_name: nbo output file containing coefficients to
+            map AO's to orbitals
+        :param int max_length: max. array size for arrays to store in FCHK
+            files - anything larger will be the size
+            the array would not be stored
         """
         if os.path.isfile(self.name):
             f = open(self.name, "r", encoding="utf8")
@@ -1613,6 +1664,7 @@ class FileReader:
         return
 
     def read_xyz(self, f, get_all=False, oniom=False):
+        """read xyz files"""
         self.all_geom = []
         # number of atoms
         f.readline()
@@ -1687,6 +1739,7 @@ class FileReader:
         #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
 
     def read_sd(self, f, get_all=False):
+        """read sdf file"""
         self.all_geom = []
         lines = f.readlines()
         progress = 0
@@ -1771,6 +1824,7 @@ class FileReader:
             i += 1
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
+        """read psi4 output file"""
         uv_vis = ""
         coord_unit_bohr = False
         def get_atoms(f, n, bohr):
@@ -2951,6 +3005,7 @@ class FileReader:
             self.other["error"] = None
 
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
+        """read gaussian output file"""
         isotope = re.compile(" Atom\s+(\d+) has atomic number")
         def get_atoms(f, n):
             rv = self.atoms
@@ -4157,6 +4212,7 @@ class FileReader:
         return
 
     def read_com(self, f):
+        """read gaussian input file"""
         found_atoms = False
         found_constraint = False
         atoms = []
@@ -4301,6 +4357,7 @@ class FileReader:
         return
 
     def read_fchk(self, f, just_geom=True, max_length=10000000):
+        """read formatted checkpoint file"""
         def parse_to_list(
             i, lines, length, data_type, debug=False, max_length=max_length,
         ):
@@ -4533,6 +4590,7 @@ class FileReader:
         return
 
     def read_mmcif(self, f):
+        """read mmcif"""
         line = f.readline()
         n = 1
         nloops=0
@@ -4770,6 +4828,7 @@ class FileReader:
             self.other["conformers"] = self.other["conformers"][1:]
 
     def read_xtb(self, f, freq_name=None):
+        """read xtb output"""
         line = True
         self.other["finished"] = False
         self.other["error"] = None
@@ -4819,6 +4878,7 @@ class FileReader:
                 self.other["frequency"] = Frequency(f_freq.read())
 
     def read_sqm(self, f):
+        """read sqm output"""
         lines = f.readlines()
 
         self.other["finished"] = False
@@ -4870,6 +4930,7 @@ class FileReader:
             self.other["error_msg"] = line
 
     def read_nbo_47(self, f, nbo_name=None):
+        """read nbo .47 file"""
         lines = f.readlines()
         bohr = False
         i = 0
@@ -5020,6 +5081,7 @@ class FileReader:
         self.other["orbitals"] = Orbitals(self)
 
     def read_nbo_31(self, f, nbo_name=None):
+        """read nbo .31 file"""
         lines = f.readlines()
         comment = lines[0].strip()
         info = lines[3].split()

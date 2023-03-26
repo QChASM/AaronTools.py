@@ -13,9 +13,10 @@ from AaronTools.geometry import Geometry
 class Ring(Geometry):
     """
     Attributes:
-        name
-        atoms
-        end
+        
+    * name
+    * atoms
+    * end
     """
 
     AARON_LIBS = os.path.join(AARONLIB, "Rings")
@@ -24,7 +25,9 @@ class Ring(Geometry):
     def __init__(self, frag, name=None, end=None):
         """
         frag is either a file sub, a geometry, or an atom list
+        
         name is a name
+        
         end is a list of atoms that defines which part of the ring is not part of the fragment
         """
 
@@ -89,11 +92,12 @@ class Ring(Geometry):
 
     @classmethod
     def from_string(cls, name, end_length, end_atom=None, form="smiles"):
-        """create ring fragment from string
-        name        str         identifier for ring
-        end_length  int         number of atoms in ring end
-        end_atom    identifiers identifier for ring end
-        form        str         type of identifier (smiles, iupac)
+        """
+        create ring fragment from string
+        :param str name: identifier for ring
+        :param int end_length: number of atoms in ring end
+        :param end_atom: identifiers identifier for ring end
+        :param str form: type of identifier (smiles, iupac)
         """
 
         ring = Geometry.from_string(name, form)
@@ -113,6 +117,7 @@ class Ring(Geometry):
 
     @classmethod
     def list(cls, include_ext=False):
+        """list rings in the ring library"""
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
             if not os.path.exists(lib):

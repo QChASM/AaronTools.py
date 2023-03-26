@@ -108,16 +108,18 @@ class Signals:
         """
         returns a list of functions that can be evaluated to
         produce a spectrum
-        fwhm - full width at half max of each peak
-        peak_type - gaussian, lorentzian, pseudo-voigt, or delta
-        voigt_mixing - ratio of pseudo-voigt that is gaussian
-        scalar_scale - shift x data
-        linear_scale - scale x data
-        quadratic_scale - scale x data
+        
+        :param float fwhm: full width at half max of each peak
+        :param str peak_type: gaussian, lorentzian, pseudo-voigt, or delta
+        :param float voigt_mixing: ratio of pseudo-voigt that is gaussian
+        :param float scalar_scale: shift x data
+        :param float linear_scale: scale x data
+        :param float quadratic_scale: scale x data
+            
             x' = (1 - linear_scale * x - quadratic_scale * x^2 - scalar_scale)
-        intensity_attr - attribute of Signal used for the intensity
+        :param str intensity_attr: attribute of Signal used for the intensity
             of that signal
-        data_attr - attribute of self for the list of Signal()
+        :param str data_attr: attribute of self for the list of Signal()
         """
         data = getattr(self, data_attr)
         x_attr = data[0].x_attr
@@ -226,17 +228,18 @@ class Signals:
         show_functions=None,
     ):
         """
-        returns arrays of x_values, y_values for a spectrum
-        point_spacing - spacing between points, default is higher resolution around
-                        each peak (i.e. not uniform)
-                        this is pointless if peak_type == delta
-        fwhm - full width at half max
-        transmittance - if true, take 10^(2 - y_values) before returning
+        :returns: arrays of x_values, y_values for a spectrum
+        
+        :param float point_spacing: spacing between points, default is higher resolution around
+            each peak (i.e. not uniform)
+            this is pointless if peak_type == delta
+        :param float fwhm: full width at half max
+        :param bool transmittance: if true, take 10^(2 - y_values) before returning
             to get transmittance as a %
-        peak_type - pseudo-voigt, gaussian, lorentzian, or delta
-        voigt_mixing - fraction of pseudo-voigt that is gaussian
-        linear_scale - subtract linear_scale * frequency off each mode
-        quadratic_scale - subtract quadratic_scale * frequency^2 off each mode
+        :param str peak_type: pseudo-voigt, gaussian, lorentzian, or delta
+        :param float voigt_mixing: fraction of pseudo-voigt that is gaussian
+        :param float linear_scale: subtract linear_scale * frequency off each mode
+        :param float quadratic_scale: subtract quadratic_scale * frequency^2 off each mode
         """
         other_y_list = []
         if peak_type.lower() != "delta":
@@ -341,13 +344,14 @@ class Signals:
         plot the x_data and y_data on figure (matplotlib figure)
         this is intended for IR spectra
 
-        centers - array-like of float, plot is split into sections centered
-                  on the frequency specified by centers
-                  default is to not split into sections
-        widths - array-like of float, defines the width of each section
-        exp_data - other data to plot
-                   should be a list of (x_data, y_data, color)
-        reverse_x - if True, 0 cm^-1 will be on the right
+        :param np.ndarray centers: array-like of float, plot is split into sections centered
+            on the frequency specified by centers
+            
+            default is to not split into sections
+        :param np.ndarray widths: array-like of float, defines the width of each section
+        :param list exp_data: other data to plot
+            should be a list of (x_data, y_data, color)
+        :param bool reverse_x: if True, 0 cm^-1 will be on the right
         """
 
         if not centers:
@@ -581,14 +585,18 @@ class Signals:
     ):
         """
         get signals for a mixture of components or conformers
-        signal_groups - list of Signals() instances or list of lists of Signals()
+        
+        :param list(Signal)|list(list(Signal)) signal_groups: list of Signals() instances or list of lists of Signals()
+            
             a list of Signals() is a group of conformers
+            
             a list of lists of Signals() are the different components
-        weights - weights for each conformer, organized according to signal_groups
-        fractions - fraction of each component in the mixture
+        
+        :param iterable weights: weights for each conformer, organized according to signal_groups
+        :param iterable fractions: fraction of each component in the mixture
             default: all components have equal fractions
-        data_attr - attribute of Signals() for data
-        **kwargs - passed to cls.__init__, along with a new list of data
+        :param str data_attr: attribute of Signals() for data
+        :param kwargs: passed to cls.__init__, along with a new list of data
         """
         if not hasattr(signal_groups[0], "__iter__"):
             signal_groups = [signal_groups]
@@ -1192,17 +1200,20 @@ class Frequency(Signals):
     ):
         """
         plot IR data on figure
-        figure - matplotlib figure
-        centers - array-like of float, plot is split into sections centered
-                  on the frequency specified by centers
-                  default is to not split into sections
-        widths - array-like of float, defines the width of each section
-        exp_data - other data to plot
-                   should be a list of (x_data, y_data, color)
-        reverse_x - if True, 0 cm^-1 will be on the right
-        plot_type - see Frequency.get_plot_data
-        peak_type - any value allowed by Frequency.get_plot_data
-        kwargs - keywords for Frequency.get_spectrum_functions
+        
+        :param matplotlib.pyplot.Figure figure: matplotlib figure
+        :param np.ndarray centers: array-like of float, plot is split into sections centered
+            on the frequency specified by centers
+            
+            default is to not split into sections
+        :param np.ndarray widths: array-like of float, defines the width of each section
+        :param list exp_data: other data to plot
+            
+            should be a list of (x_data, y_data, color)
+        :param bool reverse_x: if True, 0 cm^-1 will be on the right
+        :param str plot_type: see Frequency.get_plot_data
+        :param str peak_type: any value allowed by Frequency.get_plot_data
+        :param kwargs: keywords for Frequency.get_spectrum_functions
         """
 
         if "intensity_attr" not in kwargs:
@@ -1325,6 +1336,7 @@ class TransientExcitation(ValenceExcitation):
 
 
 class ValenceExcitations(Signals):
+    """for UV/vis data, primarily from TD-DFT"""
     def __init__(self, *args, **kwargs):
         self.transient_data = None
         self.spin_orbit_data = None
@@ -1824,17 +1836,20 @@ class ValenceExcitations(Signals):
     ):
         """
         plot IR data on figure
-        figure - matplotlib figure
-        centers - array-like of float, plot is split into sections centered
-                  on the frequency specified by centers
-                  default is to not split into sections
-        widths - array-like of float, defines the width of each section
-        exp_data - other data to plot
-                   should be a list of (x_data, y_data, color)
-        reverse_x - if True, 0 cm^-1 will be on the right
-        plot_type - see Frequency.get_plot_data
-        peak_type - any value allowed by Frequency.get_plot_data
-        kwargs - keywords for Frequency.get_spectrum_functions
+        
+        :param matplotlib.pyplot.Figure figure: matplotlib figure
+        :param np.ndarray centers: array-like of float, plot is split into sections centered
+            on the frequency specified by centers
+            
+            default is to not split into sections
+        :param np.ndarray widths: array-like of float, defines the width of each section
+        :param list exp_data: other data to plot
+            
+            should be a list of (x_data, y_data, color)
+        :param bool reverse_x: if True, 0 cm^-1 will be on the right
+        :param str plot_type: see Frequency.get_plot_data
+        :param str peak_type: any value allowed by Frequency.get_plot_data
+        :param kwargs: keywords for Frequency.get_spectrum_functions
         """
 
         data_attr = "data"

@@ -36,15 +36,16 @@ def obj_to_dict(obj, skip_attrs=None):
 class CompOutput:
     """
     Attributes:
-        geometry    the last Geometry
-        opts        list of Geometry for each optimization steps
-        frequency   Frequency object
-        archive     a string containing the archive entry
-        energy, enthalpy, free_energy, grimme_g,
-        mass, temperature, rotational_temperature,
-        multiplicity, charge, rotational_symmetry_number
-        error, error_msg, finished,
-        gradient, E_ZPVE, ZPVE
+        
+    * geometry    the last Geometry
+    * opts        list of Geometry for each optimization steps
+    * frequency   Frequency object
+    * archive     a string containing the archive entry
+    * energy, enthalpy, free_energy, grimme_g,
+    * mass, temperature, rotational_temperature,
+    * multiplicity, charge, rotational_symmetry_number
+    * error, error_msg, finished,
+    * gradient, E_ZPVE, ZPVE
     """
 
     ELECTRONIC_ENERGY = "NRG"
@@ -159,21 +160,27 @@ class CompOutput:
         v0=100,
     ):
         """
-        returns boltzmann weights
-        thermo_cos - list of CompOutput instances for thermochem corrections
-        nrg_cos - list of CompOutput to take the electronic energy from
-            order should correspond to thermo_cos
-            if not given, the energies from thermo_cos are used
-        weighting - type of energy to use for weighting
+        :param list(CompOutput) thermo_cos: list of CompOutput
+            instances for thermochem corrections
+        :param list(CompOutput) nrg_cos: list of CompOutput to
+            take the electronic energy from order should correspond
+            to thermo_cos if not given, the energies from thermo_cos
+            are used
+        :param str weighting:type of energy to use for weighting
             can be:
-                "NRG"
-                "ZPE"
-                "ENTHALPY"
-                "QHARM"
-                "QRRHO"
-                "RRHO"
-        temperature - temperature in K
-        v0 - parameter for quasi free energy corrections
+            
+                * "NRG"
+                * "ZPE"
+                * "ENTHALPY"
+                * "QHARM"
+                * "QRRHO"
+                * "RRHO"
+        
+        :param float temperature: temperature in K
+        :param float v0: parameter for quasi free energy corrections
+
+        :returns: boltzmann weights
+        :rtype: np.ndarray
         """
         if not nrg_cos:
             nrg_cos = thermo_cos
@@ -254,18 +261,18 @@ class CompOutput:
         for the specified cutoff frequency and temperature
         in that order (Hartrees for corrections, Eh/K for entropy)
 
-        temperature: float, temperature in K- None will use self.temperature
-        pressure: float, pressure in atm
-        v0: float, cutoff/damping parameter for quasi G corrections
-        method: str - type of quasi treatment:
-                RRHO  - no quasi treatment
-                QRRHO - Grimme's quasi-RRHO
-                see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
-                Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
-                18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
-                QHARM - Truhlar's quasi-harmonic
-                see J. Phys. Chem. B 2011, 115, 49, 14556–14562
-                (DOI: 10.1021/jp205508z) for details
+        :param float temperature: temperature in K- None will use self.temperature
+        :param float pressure: pressure in atm
+        :param float v0: float, cutoff/damping parameter for quasi G corrections
+        :param str method: type of free energy\:
+            * RRHO  - no quasi treatment
+            * QRRHO - Grimme's quasi-RRHO
+              see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
+              Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
+              18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
+            * QHARM - Truhlar's quasi-harmonic
+              see J. Phys. Chem. B 2011, 115, 49, 14556–14562
+              (DOI: 10.1021/jp205508z) for details
         """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
@@ -398,10 +405,11 @@ class CompOutput:
     def calc_G_corr(self, temperature=None, v0=0, method="RRHO", **kwargs):
         """
         returns quasi rrho free energy correction (Eh)
-        temperature: float, temperature; default is self.temperature
-        v0: float, parameter for quasi-rrho or quasi-harmonic entropy
-        method: str (RRHO, QRRHO, QHARM) method for treating entropy
-                see CompOutput.therm_corr for references
+        
+        :param float temperature: temperature; default is self.temperature
+        :param float v0: parameter for quasi-rrho or quasi-harmonic entropy
+        :param str method: (RRHO, QRRHO, QHARM) method for treating entropy
+            see CompOutput.therm_corr for references
         """
         Ecorr, Hcorr, Stot = self.therm_corr(temperature, v0, method, **kwargs)
         T = temperature if temperature is not None else self.temperature
@@ -412,6 +420,7 @@ class CompOutput:
     def calc_Grimme_G(self, temperature=None, v0=100, **kwargs):
         """
         returns quasi rrho free energy (Eh)
+        
         see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
         Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
         18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
@@ -538,8 +547,10 @@ class CompOutput:
     def compute_rot_temps(self):
         """
         sets self's 'rotational_temperature' attribute by using self.geometry
+        
         not recommended b/c atoms should be specific isotopes, but this uses
         average atomic weights
+        
         exists because older versions of ORCA don't print rotational temperatures
         """
         COM = self.geometry.COM(mass_weight=True)

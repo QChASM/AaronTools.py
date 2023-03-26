@@ -26,14 +26,17 @@ from AaronTools.utils.utils import (
 
 class Component(Geometry):
     """
+    class for parts of a Geometry (e.g. ligands)
     Attributes:
-    :name:          str
-    :comment:       str
-    :atoms:         list(Atom)
-    :other:         dict()
-    :substituents:  list(Substituent) substituents detected
-    :backbone:      list(Atom) the backbone atoms
-    :key_atoms:     list(Atom) the atoms used for mapping
+    
+    * name           str
+    * comment        str
+    * atoms          list(Atom)
+    * other          dict()
+    * substituents   list(Substituent) substituents detected
+    * backbone       list(Atom) the backbone atoms
+    * key_atoms      list(Atom) the atoms used for mapping
+    
     """
 
     AARON_LIBS = os.path.join(AARONLIB, "Ligands")
@@ -132,6 +135,7 @@ class Component(Geometry):
         denticity=None,
         include_ext=False,
     ):
+        """returns a list of ligand names in the library"""
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
             if not os.path.exists(lib):
@@ -219,11 +223,13 @@ class Component(Geometry):
     def sterimol(self, to_center=None, bisect_L=False, **kwargs):
         """
         calculate ligand sterimol parameters for the ligand
-        to_center - atom the ligand is coordinated to
-        bisect_L - L axis will bisect (or analogous for higher denticity
-                   ligands) the L-M-L angle
-                   Default - center to centroid of key atoms
-        **kwargs - arguments passed to Geometry.sterimol
+        
+        :param Atom to_center: atom the ligand is coordinated to
+        :param bool bisect_L: L axis will bisect (or analogous for higher denticity
+            ligands) the L-M-L angle
+            
+            Default - center to centroid of key atoms
+        :param kwargs: - arguments passed to Geometry.sterimol
         """
         if to_center is not None:
             center = self.find(to_center)
@@ -318,7 +324,7 @@ class Component(Geometry):
         Detects backbone and substituents attached to backbone
         Will tag atoms as 'backbone' or by substituent name
 
-        :to_center:   the atoms connected to the metal/active center
+        :param list(Atom) to_center:   the atoms connected to the metal/active center
         """
         # we must remove any tags already made
         for a in self.atoms:
@@ -428,8 +434,9 @@ class Component(Geometry):
     def minimize_sub_torsion(self, geom=None, **kwargs):
         """
         rotates substituents to minimize LJ potential
-        geom: calculate LJ potential between self and another geometry-like
-              object, instead of just within self
+        
+        :param None|Geometry geom: calculate LJ potential between self and another geometry-like
+            object, instead of just within self
         """
         if geom is None:
             geom = self
@@ -458,24 +465,31 @@ class Component(Geometry):
     ):
         """
         returns cone angle in degrees
-        center - Atom() that this component is coordinating
-                 used as the apex of the cone
-        method (str) can be:
-            'Tolman' - Tolman cone angle for unsymmetric ligands
-                       See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
-                       NOTE: this does not make assumptions about the geometry
-                       NOTE: only works with monodentate and bidentate ligands
-            'exact' - cone angle from Allen et. al.
-                      See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.
-                      (2013), Exact ligand cone angles. J. Comput. Chem., 34:
-                      1189-1197. (DOI: 10.1002/jcc.23217)
-        return_cones - return cone apex, center of base, and base radius list
-                       the sides of the cones will be 5 angstroms long
-                       for Tolman cone angles, multiple cones will be returned, one for
-                       each substituent coming off the coordinating atom
-        radii: 'bondi' - Bondi vdW radii
-               'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
-               dict() with elements as keys and radii as values
+        
+        :param Atom center: that this component is coordinating
+            used as the apex of the cone
+        :param str method: can be:
+            * 'Tolman' - Tolman cone angle for unsymmetric ligands
+              
+              See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
+               
+              :NOTE: this does not make assumptions about the geometry
+               
+              :NOTE: only works with monodentate and bidentate ligands
+            * 'exact' - cone angle from Allen et. al.
+              
+              See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.
+              (2013), Exact ligand cone angles. J. Comput. Chem., 34:
+              1189-1197. (DOI: 10.1002/jcc.23217)
+        :param bool return_cones: return cone apex, center of base, and base radius list
+            the sides of the cones will be 5 angstroms long
+            
+            for Tolman cone angles, multiple cones will be returned, one for
+            each substituent coming off the coordinating atom
+        :param str|dict radii:
+            * 'bondi' - Bondi vdW radii
+            * 'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            * dict() with elements as keys and radii as values
         """
         if method.lower() == "tolman":
             CITATION = "doi:10.1021/ja00808a009"
@@ -907,11 +921,12 @@ class Component(Geometry):
     ):
         """
         calculate the solid angle of a ligand
-        center - atoms or point to denote the center of the sphere
-        radii - "umn", "bondi", or a dictionary with elements as
+        
+        :param Atom center: atoms or point to denote the center of the sphere
+        :param str|dict radii: "umn", "bondi", or a dictionary with elements as
             the keys and radii as the values
-        grid - number of points in lebedev grid
-        return_solid_cone - return solid ligand cone angle (degrees)
+        :param int grid: number of points in lebedev grid
+        :param bool return_solid_cone: return solid ligand cone angle (degrees)
             instead of solid angle (steradians)
         """
         # we calculate the solid angle by projecting each atom's
