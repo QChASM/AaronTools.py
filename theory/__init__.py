@@ -6,58 +6,58 @@ The value should be as specified.
 
 :ORCA:
 
-* ORCA_ROUTE: list(str)
-* ORCA_BLOCKS: dict(list(str)) - keys are block names minus %
+* ORCA_ROUTE (simple): list(str)
+* ORCA_BLOCKS (blocks): dict(list(str)) - keys are block names minus %
 * ORCA_COORDINATES: ignored
-* ORCA_COMMENT: list(str)
+* ORCA_COMMENT (comment): list(str)
 
 :Psi4:
 
-* PSI4_SETTINGS: dict(setting_name: [value])
-* PSI4_BEFORE_GEOM: list(str)
-* PSI4_AFTER_JOB: list(str) $METHOD will be replaced with method name
-* PSI4_COMMENT: list(str)
-* PSI4_MOLECULE: dict(str:list(str)) e.g. {'symmetry': ['c1']}
-* PSI4_COORDINATES: dict() with keys:
+* PSI4_SETTINGS (settings): dict(setting_name: [value])
+* PSI4_BEFORE_GEOM (before_molecule): list(str)
+* PSI4_AFTER_JOB (after_job): list(str) $METHOD will be replaced with method name
+* PSI4_COMMENT (comment): list(str)
+* PSI4_MOLECULE (molecule): dict(str:list(str)) e.g. {'symmetry': ['c1']}
+* PSI4_COORDINATES (coordinates): dict() with keys:
   'coords' - array of coordinates with one item for each atom
   'variables' - list of name (str), value (float), is_angstrom (bool) tuples
   this is ignored if using a SAPTMethod with a low-spin combination
   of monomers
-* PSI4_JOB: dict(optimize/frequencies/etc: list(str $METHOD replaced w/ method))
-* PSI4_OPTKING: dict(setting_name: [value])
+* PSI4_JOB (job): dict(optimize/frequencies/etc: list(str $METHOD replaced w/ method))
+* PSI4_OPTKING (optking): dict(setting_name: [value])
 
 :Gaussian:
 
-* GAUSSIAN_PRE_ROUTE: dict(list(str)) - keys are link0 minus %
-* GAUSSIAN_ROUTE: dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
-* GAUSSIAN_COORDINATES: list of coordinates and variables/constants
-* GAUSSIAN_CONSTRAINTS: list(str)
-* GAUSSIAN_GEN_BASIS: list(str) - only filled by BasisSet automatically when writing footer
-* GAUSSIAN_GEN_ECP: list(str) - only filled by BasisSet automatically when writing footer
-* GAUSSIAN_POST: list(str)
-* GAUSSIAN_COMMENT: list(str)
+* GAUSSIAN_PRE_ROUTE (link0): dict(list(str)) - keys are link0 minus %
+* GAUSSIAN_ROUTE (route): dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
+* GAUSSIAN_COORDINATES (coordinates): list of coordinates and variables/constants
+* GAUSSIAN_CONSTRAINTS (constraints): list(str)
+* GAUSSIAN_GEN_BASIS (gen_basis): list(str) - only filled by BasisSet automatically when writing footer
+* GAUSSIAN_GEN_ECP (gen_ecp): list(str) - only filled by BasisSet automatically when writing footer
+* GAUSSIAN_POST (end_of_file): list(str)
+* GAUSSIAN_COMMENT (comment): list(str)
 
 :SQM:
 
-* SQM_COMMENT: list(str)
-* SQM_QMMM: dict()
+* SQM_COMMENT (comment): list(str)
+* SQM_QMMM (qmmm): dict()
 
 :Q-Chem:
 
-* QCHEM_MOLECULE: list(str) - $molecule section
-* QCHEM_REM: dict(str:str) - $rem section
-* QCHEM_COMMENT: list(str) - comments
-* QCHEM_SETTINGS: dict(str:str) - all other sections
+* QCHEM_MOLECULE (molecule): list(str) - $molecule section
+* QCHEM_REM (rem): dict(str:str) - $rem section
+* QCHEM_COMMENT (comment): list(str) - comments
+* QCHEM_SETTINGS (section): dict(str:str) - all other sections
 
 :xTB:
 
-* XTB_CONTROL_BLOCKS: dict - stuff in xcontrol file
-* XTB_COMMAND_LINE: dict(str:list) - command line stuff, values should be 
+* XTB_CONTROL_BLOCKS (xcontrol): dict - stuff in xcontrol file
+* XTB_COMMAND_LINE (command_line): dict(str:list) - command line stuff, values should be 
   emtpy lists if the command line flag (key) has no arguments
 
 :CREST:
 
-* CREST_COMMAND_LINE: crest command line - see XTB_COMMAND_LINE
+* CREST_COMMAND_LINE (command_line): crest command line - see XTB_COMMAND_LINE
 """
 
 ORCA_ROUTE = "simple" # simple input

@@ -380,7 +380,7 @@ class Basis:
     @staticmethod
     def get_qchem(name):
         """
-        returns the Psi4 name of the basis set
+        returns the Q-Chem name of the basis set
         currently just adds hyphen to Karlsruhe basis if it isn't there
         """
         if name.startswith("def2") and not name.startswith("def2-"):
@@ -871,7 +871,7 @@ class BasisSet:
 
                                 ele = test.split()[0]
                                 while i < len(lines):
-                                    if ele in basis.elements:
+                                    if len(test.split()) == 2 and ele in basis.elements:
                                         out_str += lines[i]
 
                                     if lines[i].startswith("****"):
@@ -1472,12 +1472,48 @@ class BasisSet:
                     all([basis == basis_list[0] for basis in basis_list])
                     and not basis_list[0].user_defined
                 ):
-                    basis_name = Basis.get_qchem(basis_list[0].name)
-                    warning = basis_list[0].sanity_check_basis(
+                    basis = basis_list[0]
+                    basis_name = Basis.get_qchem(basis.name)
+                    warning = basis.sanity_check_basis(
                         basis_name, "qchem"
                     )
-                    if warning:
+                    if warning and label == "BASIS":
+                        try:
+                            import basis_set_exchange as bse
+                            bse_data = bse.get_basis(
+                                self.basis[0].name,
+                                elements=self.basis[0].elements,
+                                fmt="qchem",
+                                header=False,
+                            )
+                            current_section = None
+                            basis.user_defined = ""
+                            for line in bse_data.splitlines():
+                                if "$rem" in line.lower():
+                                    current_section = "rem"
+                                if "$basis" in line.lower():
+                                    current_section = "basis"
+                                if current_section == "rem" and "purecart" in line.lower():
+                                    info[QCHEM_SETTINGS]["purecart"] = line.split()[-1]
+                                if current_section != "basis":
+                                    continue
+                                if current_section == "basis" and "basis" in line.lower():
+                                    continue
+                                if current_section == "basis" and "end" in line.lower():
+                                    break
+                                basis.user_defined += line + "\n"
+                            # make sure to switch to /gen
+                            # TODO: check if we need /genecp
+                            basis_name = "General"
+                        except ModuleNotFoundError:
+                            # no BSE module
+                            warnings.append(warning)
+                        except KeyError:
+                            # BSE doesn't have it either
+                            warnings.append(warning)
+                    elif warning:
                         warnings.append(warning)
+                    
                     info[QCHEM_REM][label] = "%s" % basis_name
                 elif not any(basis.user_defined for basis in basis_list):
                     info[QCHEM_REM][label] = "General"
@@ -1516,39 +1552,42 @@ class BasisSet:
     
                     for basis in basis_list:
                         if basis.elements and basis.user_defined:
-                            if os.path.exists(basis.user_defined):
+                            lines = None
+                            if len(basis.user_defined.splitlines()) > 1:
+                                lines = basis.user_defined.splitlines()
+                            elif os.path.exists(basis.user_defined):
                                 with open(basis.user_defined, "r") as f:
                                     lines = f.readlines()
-                            
-                                for element in basis.elements:
-                                    atoms = geom.find(element)
-                                    for atom in atoms:
-                                        i = 0
-                                        while i < len(lines):
-                                            test = lines[i].strip()
-                                            if not test or test.startswith("!") or test.startswith("$"):
-                                                i += 1
-                                                continue
-            
-                                            ele = test.split()[0]
-                                            if ele == atom.element:
-                                                out_str += "%s %i\n" % (ele, geom.atoms.index(atom))
-                                                i += 1
-                                                while i < len(lines):
-                                                    if ele == atom.element:
-                                                        out_str += lines[i]
-                
-                                                    if lines[i].startswith("****"):
-                                                        break
-                
-                                                    i += 1
-            
-                                            i += 1
-            
-                                    # if the file does not exists, just insert the path as an @ file
-                                    else:
-                                        warnings.append("file not found: %s" % basis.user_defined)
+                            else:
+                                warnings.append("file not found: %s" % basis.user_defined)
+                                continue
     
+                            for element in basis.elements:
+                                atoms = geom.find(element)
+                                for atom in atoms:
+                                    i = 0
+                                    while i < len(lines):
+                                        test = lines[i].strip()
+                                        if not test or test.startswith("!") or test.startswith("$"):
+                                            i += 1
+                                            continue
+            
+                                        ele = test.split()[0]
+                                        if ele == atom.element and len(test.split()) == 2:
+                                            out_str += "%s %i\n" % (ele, geom.atoms.index(atom))
+                                            i += 1
+                                            while i < len(lines):
+                                                if ele == atom.element:
+                                                    out_str += lines[i] + "\n"
+                
+                                                if lines[i].startswith("****"):
+                                                    break
+                
+                                                i += 1
+            
+                                        i += 1
+            
+
                     info[QCHEM_SETTINGS][label.lower()] = [out_str.strip()]
 
         if self.ecp is not None and any(ecp.elements for ecp in self.ecp):
