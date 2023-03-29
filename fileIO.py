@@ -3125,7 +3125,11 @@ class FileReader:
                     a += 1
                     coords = np.zeros(3)
                     info = line.split()
-                    element = info[0].split("(")[0].split("-")[0].rstrip("1234567890")
+                    element = info[0].split("(")[0].split("-")[0]
+                    if not element.isdigit():
+                        element = element.rstrip("1234567890")
+                    else:
+                        element = ELEMENTS[int(element)]
                     rv += [
                         Atom(
                             element=element,
@@ -3272,7 +3276,11 @@ class FileReader:
 
             while len(line.split()) > 1:
                 line  = line.split()
-                element = line[0].split("(")[0].split("-")[0].rstrip("1234567890")
+                element = line[0].split("(")[0].split("-")[0]
+                if not element.isdigit():
+                    element = element.rstrip("1234567890")
+                else:
+                    element = ELEMENTS[int(element)]
                 if len(line) == 5:
                     flag = not bool(line[1])
                     a += 1
