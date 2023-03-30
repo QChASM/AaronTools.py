@@ -126,7 +126,7 @@ class CompOutput:
         if from_file.all_geom:
             self.opts = []
             for g in from_file.all_geom:
-                self.opts += [Geometry(g[0])]
+                self.opts += [Geometry(g["atoms"])]
         if "conformers" in from_file.other:
             self.conformers = []
             for comment, atoms in from_file.other["conformers"]:
@@ -282,7 +282,7 @@ class CompOutput:
         rot = [temp for temp in self.rotational_temperature if temp != 0]
         T = temperature if temperature is not None else self.temperature
         if T == 0:
-            return 0, 0, 0
+            return self.ZPVE, self.ZPVE, 0
 
         if pressure is None:
             pressure = PHYSICAL.STANDARD_PRESSURE
@@ -353,6 +353,7 @@ class CompOutput:
             Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
 
         # Vibrational
+        Sv = 0
         if method == self.QUASI_HARMONIC:
             Sv = np.sum(
                 harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
@@ -388,7 +389,7 @@ class CompOutput:
                 )
                 + (1 - weights) * Sr_eff
             )
-
+        
         Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
 
         Ev *= PHYSICAL.GAS_CONSTANT

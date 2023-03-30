@@ -158,13 +158,13 @@ def str2step(step_str):
 def expected_inp_ext(exec_type):
     """
     extension expected for an input file for exec_type
-    
+
     * Gaussian - .com (.gjf on windows)
     * ORCA - .inp
     * Psi4 - .in
     * SQM - .mdin
     * qchem - .inp
-    
+
     """
     if exec_type.lower() == "gaussian":
         if sys.platform.startswith("win"):
@@ -182,13 +182,13 @@ def expected_inp_ext(exec_type):
 def expected_out_ext(exec_type):
     """
     extension expected for an input file for exec_type
-    
+
     * Gaussian - .log
     * ORCA - .out
     * Psi4 - .out
     * SQM - .mdout
     * qchem - .out
-    
+
     """
     if exec_type.lower() == "gaussian":
         return ".log"
@@ -206,7 +206,7 @@ class FileWriter:
     """
     class for handling file writing
     """
-    
+
     @classmethod
     def write_file(
         cls, geom, style=None, append=False, outfile=None, *args, **kwargs
@@ -217,12 +217,12 @@ class FileWriter:
         :param Geometry geom: the Geometry to use
         :param str style: the file type style to generate
             Currently supported options: xyz (default), com, inp, in
-            
+
             if outfile has one of these extensions, default is that style
         :param bool append: for *.xyz, append geometry to the same file
         :param str|None|False outfile: output destination - default is
             [geometry name] + [extension] or [geometry name] + [step] + [extension]
-            
+
             if outfile is False, no output file will be written, but the contents will be returned
         :param Theory theory: for com, inp, and in files, an object with a get_header and get_footer method
         """
@@ -328,7 +328,7 @@ class FileWriter:
                 raise TypeError(
                     "when writing 'crest' files, **kwargs must include: theory=Aaron.Theory() (or AaronTools.Theory())"
                 )
-        
+
         elif style.lower() == "cube":
             out = cls.write_cube(geom, outfile=outfile, **kwargs)
 
@@ -367,7 +367,7 @@ class FileWriter:
     def write_multi_xyz(cls, geom, append, outfile=None, **kwargs):
         """
         write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
-        
+
         kwargs["models"] can be string "all", string of model number e.g. "2", string of model range e.g. "1-5",
             or list of model numbers including ranges e.g. ["1", "3-5", "10"]
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
@@ -426,7 +426,7 @@ class FileWriter:
     def write_oniom_xyz(cls, geom, append, outfile=None, **kwargs):
         """
         write xyz files with additional columns for atomtype, charge, and link atom info
-        
+
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
         kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L"
         """
@@ -518,24 +518,25 @@ class FileWriter:
 
         return
 
+    @classmethod
     def write_mol(
         cls, geom, outfile=None, **kwargs
     ):
         """write V2000 mol file"""
         from AaronTools.finders import ChiralCenters
         from AaronTools.const import ELECTRONEGATIVITY
-        
+
         elements = geom.element_counts()
         s = ""
         for ele, n in sorted(elements.items(), key=lambda ele: -1 if ele[0] == "C" else ELEMENTS.index(ele[0])):
             s += "%s%i" % (ele, n)
         s += "\nAaronTools\n%s\n" % geom.comment
-        
+
         def bond_order_to_code(x):
             if x == 1.5:
                 return 4
             return int(x)
-        
+
         atom_block = ""
         bond_block = ""
         n_bonds = 0
@@ -546,7 +547,7 @@ class FileWriter:
                 0 # if not hasattr(atom, "_saturation") else len(atom.connected) - atom._saturation,
             )
             n_bonds += len(atom.connected)
- 
+
         try:
             geom.find(ChiralCenters())
             chiral = True
@@ -611,7 +612,7 @@ class FileWriter:
             # for atom in group:
             #     print(atom)
             # print("\n\n")
-        
+
         # combine groups of delocalized bonds if they overlap
         overlapping_groups = False
         for i, group1 in enumerate(contiguous_aro_bonds):
@@ -630,13 +631,13 @@ class FileWriter:
                         break
                 if found_overlap:
                     break
-            
+
             for i, group1 in enumerate(contiguous_aro_bonds):
                 for group2 in contiguous_aro_bonds[:i]:
                     if group1.intersection(group2):
                         overlapping_groups = True
-                
-        
+
+
         # finding the longest path from one atom to another in a group
         # will give us the chain in order
         for group in contiguous_aro_bonds:
@@ -650,7 +651,7 @@ class FileWriter:
                     )
                     if len(path) > len(longest_path):
                         longest_path = path
-            
+
             # there might be branches coming off of the main chain
             branches = [longest_path]
             excluded = group - set(longest_path)
@@ -677,7 +678,7 @@ class FileWriter:
                         if branch_added:
                             excluded = excluded - set(branches[-1])
                             included = included.union(set(branches[-1]))
-            
+
             for branch in branches:
                 # if a branch one has two atoms (one bond), look
                 # at the neighbors of this to determine a better
@@ -702,7 +703,7 @@ class FileWriter:
                     if total_diff <= 1:
                         bonds[branch_bond] = 1
                     continue
-            
+
                 # for longer chains, just alternate double and single bonds
                 # favor double bonds at the more electronegative side of the chain?
                 # maybe there's a better way
@@ -715,22 +716,22 @@ class FileWriter:
                     bond = (atom, atom2)
                     if ndx[atom] > ndx[atom2]:
                         bond = (atom2, atom)
-                    
+
                     if i % 2 == 0:
                         bonds[bond] = 2
                     else:
                         bonds[bond] = 1
-                
+
         for bond in bonds:
             # print(bond, bonds[bond])
             bond_block += "%3i%3i%3i  0  0  0  0\n" % (
                 ndx[bond[0]] + 1, ndx[bond[1]] + 1, bond_order_to_code(bonds[bond])
             )
-        
-            
+
+
         s += bond_block
         s += "M  END\n"
-        
+
         if outfile is None:
             # if no output file is specified, use the name of the geometry
             with open(geom.name + ".mol", "w") as f:
@@ -754,14 +755,14 @@ class FileWriter:
         :param Theory theory: input file parameters
         :param None|False|str outfile:
             output file option
-            
+
             * None - geom.name + ".com" is used as output destination
             * False - return contents of the input file as a str
             * str - output destination
-        
+
         :param bool return_warnings: True to return a list of warnings (e.g. basis
             set might be misspelled
-        
+
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         # get file content string
@@ -806,15 +807,15 @@ class FileWriter:
     ):
         """
         write ORCA input file for the given Theory() and Geometry()
-        
+
         :param Geometry geom: structure
         :param Theory theory: input file parameters
         :param None|False|str outfile:
-        
+
             * None - geom.name + ".inp" is used as output destination
             * False - return contents of the input file as a str
             * str - output destination
-        
+
         :param bool return_warnings: True to return a list of warnings (e.g. basis
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
@@ -836,7 +837,7 @@ class FileWriter:
         s += "*\n"
 
         s += footer
-        
+
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
@@ -854,7 +855,7 @@ class FileWriter:
             s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
-        
+
         if return_warnings:
             return warnings
 
@@ -864,15 +865,15 @@ class FileWriter:
     ):
         """
         write QChem input file for the given Theory() and Geometry()
-        
+
         :param Geometry geom: structure
         :param Theory theory: input file parameters
         :param None|False|str outfile:
-        
+
             * None - geom.name + ".inq" is used as output destination
             * False - return contents of the input file as a str
             * str - output destination
-        
+
         :param bool return_warnings: True to return a list of warnings (e.g. basis
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
@@ -887,7 +888,7 @@ class FileWriter:
 
         out = header + mol
         warnings = header_warnings + mol_warnings
-        
+
         if outfile is None:
             # if outfile is not specified, name file in Aaron format
             if "step" in kwargs:
@@ -905,7 +906,7 @@ class FileWriter:
             out = out.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(out)
-        
+
         if return_warnings:
             return warnings
 
@@ -915,15 +916,15 @@ class FileWriter:
     ):
         """
         write Psi4 input file for the given Theory() and Geometry()
-        
+
         :param Geometry geom: structure
         :param Theory theory: input file parameters
         :param None|False|str outfile:
-        
+
             * None - geom.name + ".in" is used as output destination
             * False - return contents of the input file as a str
             * str - output destination
-        
+
         :param bool return_warnings: True to return a list of warnings (e.g. basis
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
@@ -958,7 +959,7 @@ class FileWriter:
             s = s.replace("{{ name }}", name)
             with open(outfile, "w") as f:
                 f.write(s)
-        
+
         if return_warnings:
             return warnings
 
@@ -968,15 +969,15 @@ class FileWriter:
     ):
         """
         write SQM input file for the given Theory() and Geometry()
-        
+
         :param Geometry geom: structure
         :param Theory theory: input file parameters
         :param None|False|str outfile:
-        
+
             * None - geom.name + ".sqmin" is used as output destination
             * False - return contents of the input file as a str
             * str - output destination
-        
+
         :param bool return_warnings: True to return a list of warnings (e.g. basis
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
@@ -1031,25 +1032,25 @@ class FileWriter:
     ):
         """
         write a cube file for a molecular orbital
-        
+
         :param Geometry geom: structure
         :param Orbitals orbitals: orbital data
         :param str outfile:output destination
         :param str|int mo: index of molecular orbital or "homo" for ground state
-            
+
             highest occupied molecular orbital or "lumo" for first
             ground state unoccupied MO
             can also be an array of MO coefficients
-        
+
         :param str|int ao: index of atomic orbital to print
         :param float padding: padding around geom's coordinates
         :param float spacing: targeted spacing between points
         :param int n_jobs: number of parallel threads to use
-            
+
             this is on top of NumPy's multithreading, so
             if NumPy uses 8 threads and n_jobs=2, you can
             expect to see 16 threads in use
-        
+
         :param float delta: see Orbitals.fukui_donor_value or fukui_acceptor_value
         """
         if orbitals is None:
@@ -1074,7 +1075,7 @@ class FileWriter:
         elif kind.lower().startswith("ao"):
             mo = np.zeros(orbitals.n_mos)
             mo[int(kind.split()[-1])] = 1
-        
+
         s = ""
         s += " %s\n" % geom.comment
         s += " %s\n" % kind
@@ -1283,7 +1284,7 @@ class FileWriter:
 
         for connection in connectivity:
             s += "CONECT"
-            for connect in connection: 
+            for connect in connection:
                 s += spaced(con_spac, connect.index+1)
             s += "\n"
 
@@ -1300,7 +1301,8 @@ class FileWriter:
                 f.write(s)
 
         return
-    
+
+    @classmethod
     def write_xtb(
         cls,
         geom,
@@ -1314,7 +1316,7 @@ class FileWriter:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
                     job.geometry = geom
-                    
+
         contents = dict()
         cli, cli_warnings = theory.get_xtb_cmd(
             return_warnings=True, **kwargs
@@ -1328,7 +1330,7 @@ class FileWriter:
         contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
 
         warnings = cli_warnings + xc_warnings
-        
+
         if write_ref:
             contents[write_ref] = contents["xyz"]
 
@@ -1336,18 +1338,18 @@ class FileWriter:
             if return_warnings:
                 return contents, warnings
             return contents
-        
+
         if outfile is None:
             if "step" in kwargs:
                 outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
             else:
                 outfile = geom.name
-        
+
         dirname, basename = os.path.split(outfile)
         name, ext = os.path.splitext(basename)
 
         cls.write_dict_files(contents, dirname, name)
-        
+
         if return_warnings:
             return warnings
 
@@ -1365,7 +1367,7 @@ class FileWriter:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
                     job.geometry = geom
-                 
+
         contents = dict()
         cli, cli_warnings = theory.get_crest_cmd(
             return_warnings=True, **kwargs
@@ -1378,14 +1380,14 @@ class FileWriter:
         contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
         if write_ref:
             contents[write_ref] = contents["xyz"]
- 
+
         warnings = cli_warnings + xc_warnings
- 
+
         if outfile is False:
             if return_warnings:
                 return contents, warnings
             return contents
-        
+
         if outfile is None:
             if "step" in kwargs:
                 outfile = "{}.{}".format(geom.name, step2str(kwargs["step"]))
@@ -1396,7 +1398,7 @@ class FileWriter:
         name, ext = os.path.splitext(basename)
 
         cls.write_dict_files(contents, dirname, name)
-        
+
         if return_warnings:
             return warnings
 
@@ -1404,14 +1406,14 @@ class FileWriter:
     def write_dict_files(contents, dirname, name):
         """
         write data to different files
-        
+
         :param dict contents: keys are either a file name (includes a ".") or
             a file extension (no ".")
         :param str dirname: where to write files
             e.g. calling with contents as
-            
+
                 {"run.sh": "cat {{ name }}.txt", "txt": "hi"}
-        
+
             and name as "test"
             will write run.sh and test.txt to dirname
         """
@@ -1420,7 +1422,7 @@ class FileWriter:
                 output_path = os.path.join(dirname, key)
             else:
                 output_path = os.path.join(dirname, "%s.%s" % (name, key))
-                
+
             with open(output_path, "w") as f:
                 f.write(data.replace("{{ name }}", name))
 
@@ -1429,15 +1431,15 @@ class FileWriter:
 class FileReader:
     """
     class for reading files
-        
+
     Attributes
-    
+
     * name
     * file_type
     * comment
     * atoms list(Atom) or list(OniomAtom)
     * other dict
-    
+
     """
 
     LOG = None
@@ -1458,7 +1460,7 @@ class FileReader:
         """
         :param str|tuple fname: either a string specifying the file name of the file to read
             or a tuple of (str(name), str(file_type), str(content))
-        :param bool get_all: if true, optimization steps are  also saved in
+        :param bool get_all: if true, optimization steps are also saved in
             self.all_geom; otherwise only saves last geometry
         :param bool just_geom: if true, does not store other information, such as
             frequencies, only what is needed to construct a Geometry() obj
@@ -1560,7 +1562,7 @@ class FileReader:
         if hasattr(self, key):
             return getattr(self, key)
         return self.other[key]
-    
+
     def __setitem__(self, key, value):
         if hasattr(self, key):
             setattr(self, key, value)
@@ -1576,20 +1578,20 @@ class FileReader:
             delattr(self, key)
         if key in self.other:
             del self.other["key"]
-    
+
     def keys(self):
         attr_keys = set(self.__dict__.keys())
         other_keys = set(self.other.keys())
         return tuple(attr_keys.union(other_keys))
-    
+
     def values(self):
         keys = self.keys()
         return tuple(self[key] for key in keys)
-    
+
     def items(self):
         keys = self.keys()
         return tuple((key, self[key]) for key in keys)
-    
+
     def read_file(
         self, get_all=False, just_geom=True, scan_read_all=False,
         freq_name=None, conf_name=None, nbo_name=None, oniom=False,
@@ -1680,7 +1682,10 @@ class FileReader:
                 int(line)
                 if get_all:
                     self.all_geom += [
-                        (deepcopy(self.comment), deepcopy(self.atoms))
+                        {
+                            "comment": deepcopy(self.comment),
+                            "atoms": deepcopy(self.atoms),
+                        }
                     ]
                 self.comment = f.readline().strip()
                 self.atoms = []
@@ -1735,8 +1740,13 @@ class FileReader:
                     atom_count += 1
                     self.atoms += [Atom(element=line[0], coords=line[1:4], name=str(atom_count))]
 
-        # if get_all:
-        #     self.all_geom += [(deepcopy(self.comment), deepcopy(self.atoms))]
+        if get_all:
+            self.all_geom += [
+                {
+                    "comment": self.comment,
+                    "atoms": self.atoms,
+                }
+            ]
 
     def read_sd(self, f, get_all=False):
         """read sdf file"""
@@ -1748,9 +1758,10 @@ class FileReader:
             if "$$$$" in line:
                 progress = 0
                 if get_all:
-                    self.all_geom.append(
-                        [deepcopy(self.comment), deepcopy(self.atoms)]
-                    )
+                    self.all_geom.append({
+                        "comment": deepcopy(self.comment),
+                        "atoms": deepcopy(self.atoms),
+                    })
 
                 continue
 
@@ -1776,13 +1787,19 @@ class FileReader:
 
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
-                
+
                 self.other["charge"] = 0
                 for line in lines[i + natoms + nbonds:]:
                     if "CHG" in line:
                         self.other["charge"] += int(line.split()[-1])
                     if "$$$$" in line:
                         break
+
+        if get_all:
+            self.all_geom.append({
+                "comment": self.comment,
+                "atoms": self.atoms,
+            })
 
     def read_mol2(self, f, get_all=False):
         """
@@ -1822,6 +1839,12 @@ class FileReader:
                     self.atoms[a2].connected.add(self.atoms[a1])
 
             i += 1
+
+        if get_all:
+            self.all_geom.append({
+                "comment": self.comment,
+                "atoms": self.atoms,
+            })
 
     def read_psi4_out(self, f, get_all=False, just_geom=True):
         """read psi4 output file"""
@@ -1890,9 +1913,10 @@ class FileReader:
                     if self.all_geom is None:
                         self.all_geom = []
 
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
 
                 self.atoms, mass, n = get_atoms(f, n, coord_unit_bohr)
                 if not just_geom:
@@ -2109,7 +2133,7 @@ class FileReader:
                         s += line
                         n += 1
                         line = f.readline()
-                    
+
                     self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
 
                 elif "Excitation Energy" in line and "Rotatory" in line:
@@ -2121,7 +2145,7 @@ class FileReader:
                         s += line
                         n += 1
                         line = f.readline()
-                    
+
                     self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
 
                 elif re.search("\| State\s*\d+", line):
@@ -2134,7 +2158,7 @@ class FileReader:
                         uv_vis += line
                         n += 1
                         line = f.readline()
-                    
+
                     if "Oscillator" in uv_vis or "Rotation" in uv_vis:
                         self.other["uv_vis"] = ValenceExcitations(uv_vis, style="psi4")
 
@@ -2146,6 +2170,12 @@ class FileReader:
 
                 line = f.readline()
                 n += 1
+
+        if get_all:
+            self.all_geom += [{
+                "atoms": self.atoms,
+                "data": self.other,
+            }]
 
         if "error" not in self.other:
             self.other["error"] = None
@@ -2197,7 +2227,7 @@ class FileReader:
                 return self.read_psi4_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
-            
+
             if (
                 "A Quantum Leap Into The Future Of Chemistry"
                 in line
@@ -2215,21 +2245,23 @@ class FileReader:
                 return self.read_log(
                     f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                 )
-            
+
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
 
                 elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
 
                 self.atoms, n = get_atoms(f, n)
                 step_converged = False
@@ -2280,7 +2312,7 @@ class FileReader:
                     energy_type = re.search("\s*([\S\s]+) CORRELATION ENERGY", line).group(1)
                     item = energy_type + " correlation energy"
                     self.other[item] = float(line.split()[-2])
-                
+
                 elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
                     nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                     self.other["energy"] = float(nrg.group(2))
@@ -2494,7 +2526,7 @@ class FileReader:
                             names = map(int, members.group(1).split()[1::2])
                             line = f.readline()
                             n += 1
-                        
+
                         if new_gto or members:
                             line = f.readline()
                             n += 1
@@ -2671,7 +2703,7 @@ class FileReader:
                             n += 1
                         self.other[coeff_name].extend(mo_coefficients)
                         line = f.readline()
-                        line = f.readline()
+                        # line = f.readline()
 
                 elif line.startswith("N(Alpha)  "):
                     self.other["n_alpha"] = int(
@@ -2689,7 +2721,7 @@ class FileReader:
                     n += 1
                     n_blocks = int(np.ceil(self.other["n_basis"] / 6))
                     ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
-                    
+
                     for i in range(0, n_blocks):
                         line = f.readline()
                         n += 1
@@ -2700,7 +2732,7 @@ class FileReader:
                             n += 1
                             data = [float(x) for x in line.split()[1:]]
                             ao_overlap[j, start:stop] = data
-                    
+
                     self.other["ao_overlap"] = ao_overlap
 
                 elif ORCA_NORM_FINISH in line:
@@ -2746,7 +2778,13 @@ class FileReader:
                 and "basis_set_by_ele" in self.other
             ):
                 self.other["orbitals"] = Orbitals(self)
-        
+
+        if get_all:
+            self.all_geom += [{
+                "atoms": self.atoms,
+                "data": self.other,
+            }]
+
         if "error" not in self.other:
             self.other["error"] = None
 
@@ -2788,14 +2826,14 @@ class FileReader:
                 return self.read_psi4_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
-            
+
             if "* O   R   C   A *" in line:
                 self.file_type = "out"
                 return self.read_orca_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
-            
-            
+
+
             if (
                 "A Quantum Leap Into The Future Of Chemistry"
                 in line
@@ -2804,14 +2842,15 @@ class FileReader:
                 return self.read_qchem_out(
                     f, get_all=get_all, just_geom=just_geom
                 )
-            
+
             if "Standard Nuclear Orientation (Angstroms)" in line:
                 if get_all and len(self.atoms) > 0:
                     if self.all_geom is None:
                         self.all_geom = []
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
 
                 self.atoms, n = get_atoms(f, n)
 
@@ -2846,10 +2885,10 @@ class FileReader:
 
                 if "Molecular Point Group" in line:
                     self.other["full_point_group"] = line.split()[3]
-                
+
                 if "Largest Abelian Subgroup" in line:
                     self.other["abelian_subgroup"] = line.split()[3]
-                
+
                 if "Ground-State Mulliken Net Atomic Charges" in line:
                     charges = []
                     self.skip_lines(f, 3)
@@ -2860,7 +2899,7 @@ class FileReader:
                         charges.append(charge)
                         line = f.readline()
                         n += 1
-                    
+
                     self.other["Mulliken Charges"] = charges
 
                 if "Cnvgd?" in line:
@@ -2878,7 +2917,7 @@ class FileReader:
                         n += 1
 
                     self.other["gradient"] = grad
-            
+
                 if "VIBRATIONAL ANALYSIS" in line:
                     freq_str = ""
                     self.skip_lines(f, 10)
@@ -2892,13 +2931,13 @@ class FileReader:
                         freq_str, style="qchem", atoms=self.atoms,
                     )
                     self.other["temperature"] = float(line.split()[4])
-    
+
                 if "Rotational Symmetry Number is" in line:
                     self.other["rotational_symmetry_number"] = int(line.split()[-1])
-    
+
                 if "Molecular Mass:" in line:
                     self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
-    
+
                 if "$molecule" in line.lower():
                     line = f.readline()
                     while "$end" not in line.lower() and line:
@@ -2908,7 +2947,7 @@ class FileReader:
                             self.other["multiplicity"] = int(match.group(2))
                             break
                         line = f.readline()
-    
+
                 if "Principal axes and moments of inertia" in line:
                     self.skip_lines(f, 1)
                     line = f.readline()
@@ -2919,12 +2958,12 @@ class FileReader:
                     rot_consts *= UNIT.A0_TO_BOHR ** 2
                     rot_consts *= 1e-20
                     rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
-            
+
                     self.other["rotational_temperature"] = rot_consts
-                
+
                 if line.startswith("Mult"):
                     self.other["multiplicity"] = int(line.split()[1])
-                
+
                 # TD-DFT excitations
                 if re.search("TDDFT.* Excitation Energies", line):
                     excite_s = ""
@@ -2935,7 +2974,7 @@ class FileReader:
                         excite_s += line
                         line = f.readline()
                         n += 1
-                    
+
                     self.other["uv_vis"] = ValenceExcitations(
                         excite_s, style="qchem",
                     )
@@ -2950,11 +2989,11 @@ class FileReader:
                         excite_s += line
                         line = f.readline()
                         n += 1
-                    
+
                     self.other["uv_vis"] = ValenceExcitations(
                         excite_s, style="qchem",
                     )
-                
+
                 # EOM excitations
                 if re.search("Start computing the transition properties", line):
                     excite_s = ""
@@ -2964,11 +3003,11 @@ class FileReader:
                         excite_s += line
                         line = f.readline()
                         n += 1
-                    
+
                     self.other["uv_vis"] = ValenceExcitations(
                         excite_s, style="qchem",
                     )
-                
+
                 if line.startswith(" Gradient of SCF Energy"):
                     # why on earth do they print the gradient like this
                     gradient = np.zeros((len(self.atoms), 3))
@@ -2991,15 +3030,21 @@ class FileReader:
                                 gradient[l, j] = dx[k]
 
                     self.other["forces"] = -gradient
-                
+
                 if "Thank you very much for using Q-Chem" in line:
                     self.other["finished"] = True
 
                 line = f.readline()
                 n += 1
-        
+
         if not just_geom and "finished" not in self.other:
             self.other["finished"] = False
+
+        if get_all:
+            self.all_geom += [{
+                "atoms": deepcopy(self.atoms),
+                "data": deepcopy(self.other),
+            }]
 
         if "error" not in self.other:
             self.other["error"] = None
@@ -3108,7 +3153,7 @@ class FileReader:
                         # switch from reading molecule to reading variables
                         # variable list comes after atoms
                         reading_molecule = False
-                    
+
                     if reading_molecule:
                         molecule_data += line
                     else:
@@ -3117,9 +3162,9 @@ class FileReader:
                             variables[var] = value
                         except ValueError:
                             pass
-                    
+
                     line = f.readline()
-                
+
                 for i, line in enumerate(molecule_data.splitlines()):
                     # get coordinates for molecule
                     a += 1
@@ -3183,7 +3228,7 @@ class FileReader:
                     # go on to next atom
                     if len(info) < 4:
                         continue
-                    
+
                     # similar process for angles
                     angle_ndx = int(info[3]) - 1
                     target_angle = info[4]
@@ -3237,7 +3282,7 @@ class FileReader:
                             angle_set = set_angle(rv[angle_ndx], rv[bond_ndx], rv[-1], target_angle)
                             j += 1
                         continue
-                    
+
                     # 1-2-3-4 angle
                     torsion_ndx = int(info[5]) - 1
 
@@ -3378,7 +3423,7 @@ class FileReader:
                 if len(line) < 7:
                     layer = line[len(line)-1]
                 a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
-                rv += [a] 
+                rv += [a]
                 line = f.readline()
                 n += 1
             return rv, n
@@ -3554,9 +3599,10 @@ class FileReader:
                     elif scan_read_all == True:
                         record_coords = True
                 if get_all and self.atoms and record_coords:
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
                     # delete gradient so we don't double up on standard and input orientation
                     try:
                         del self.other["gradient"]
@@ -3568,9 +3614,10 @@ class FileReader:
 
             if re.search("(Standard|Input) orientation:", line) and oniom == True:
                  if get_all and len(self.atoms) > 0:
-                    self.all_geom += [
-                        (deepcopy(self.atoms), deepcopy(self.other))
-                    ]
+                    self.all_geom += [{
+                        "atoms": deepcopy(self.atoms),
+                        "data": deepcopy(self.other),
+                    }]
                  self.atoms, n = get_oniom_atoms(f, n)
                  self.other["opt_steps"] += 1
 
@@ -3594,7 +3641,7 @@ class FileReader:
             # status
             if NORM_FINISH in line:
                 self.other["finished"] = True
-            
+
             # read energies from different methods
             if "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
@@ -3612,7 +3659,7 @@ class FileReader:
                 # and later on, there will be a line...
                 #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
                 # this will give:
-                # * E(RB2PLYPD3) = -76.2887108570 
+                # * E(RB2PLYPD3) = -76.2887108570
                 # * E(B2PLYPD3) = -76.353361915801
                 # very similar names for very different energies...
                 if nrg_match:
@@ -3628,7 +3675,7 @@ class FileReader:
             if line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))
                 self.other["E(CCSD(T))"] = self.other["energy"]
-            
+
             # MP energies
             mp_match = re.search("([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)", line)
             if mp_match:
@@ -3649,7 +3696,7 @@ class FileReader:
                 self.other["n_basis"] = n_basis
                 n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
                 self.other["n_frozen"] = n_frozen
-            
+
             if line.startswith(" NROrb"):
                 n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
                 self.other["n_occupied_alpha"] = n_occupied_alpha
@@ -3753,7 +3800,7 @@ class FileReader:
             if line.startswith(" S**2 before annihilation"):
                 self.other["S^2 before"] = float(line.split()[3].strip(","))
                 self.other["S^2 annihilated"] = float(line.split()[-1])
-            
+
             # Thermo
             if re.search("Temperature\s*\d+\.\d+", line):
                 self.other["temperature"] = float(
@@ -3940,16 +3987,18 @@ class FileReader:
             n += 1
 
         if (
-            get_all and 
+            get_all and
             scan_read_all == False and
             not just_geom and not
             all(grad[i]["converged"] for i in grad)
         ):
-            if get_all:
-                self.other["gradient"] = grad
-            self.all_geom += [
-                (deepcopy(self.atoms), deepcopy(self.other))
-            ]
+            self.other["gradient"] = grad
+
+        if get_all:
+            self.all_geom += [{
+                "atoms": self.atoms,
+                "data": self.other,
+            }]
 
         if not just_geom:
             if route is not None:
@@ -4308,7 +4357,7 @@ class FileReader:
             if "oniom" in other["method"].lower():
                 is_oniom = True
             if not is_oniom:
-                if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4: 
+                if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4:
                     if not is_int(line[1]):
                         continue
                     a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
@@ -4357,7 +4406,7 @@ class FileReader:
                     if len(line) < 7:
                         layer = line[len(line)-1]
                     a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
-                    atoms += [a] 
+                    atoms += [a]
         for i, a in enumerate(atoms):
             a.name = str(i + 1)
         self.atoms = atoms
@@ -4389,7 +4438,7 @@ class FileReader:
                 if max_length < length:
                     continue
                 block.append(line)
-            
+
             if max_length < length:
                 return length, i + num_lines
             block = " ".join(block)
@@ -5037,7 +5086,7 @@ class FileReader:
                         else:
                             i += 1
                             line = lines[i]
-                            
+
                 elif section.startswith("$GENNBO"):
                     if "BOHR" in section.upper():
                         bohr = True
@@ -5046,10 +5095,10 @@ class FileReader:
                     if "CUBICF" in section.upper():
                         self.LOG.warning("cubic F shell will not be handled correctly")
             i += 1
-        
+
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
-    
+
     def _read_nbo_coeffs(self, nbo_name):
         """
         read coefficients in AO basis for NBO's/NLHO's/NAO's/etc.
@@ -5077,7 +5126,7 @@ class FileReader:
             self.LOG.warning(
                 "no .46 file found - orbital descriptions will be unavialable"
             )
-                
+
         j = 3
         self.other["alpha_coefficients"] = []
         while len(self.other["alpha_coefficients"]) < sum(self.other["funcs_per_shell"]):
@@ -5106,7 +5155,7 @@ class FileReader:
                     name=str(i-4),
                 )
             )
-        
+
         i = n_atoms + 6
         line = lines[i]
         self.other["shell_to_atom"] = []
@@ -5130,7 +5179,7 @@ class FileReader:
             self.other["momentum_label"].extend(momentum_labels)
             i += 1
             line = lines[i]
-        
+
         i += 1
         self.other["exponents"] = []
         line = lines[i]
@@ -5148,7 +5197,7 @@ class FileReader:
             self.other["s_coeff"].extend(coeff)
             i += 1
             line = lines[i]
-        
+
         i += 1
         self.other["p_coeff"] = []
         line = lines[i]
@@ -5187,5 +5236,3 @@ class FileReader:
 
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
-
-            

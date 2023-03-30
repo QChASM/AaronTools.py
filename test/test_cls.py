@@ -741,15 +741,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         fr = FileReader(("out", "xyz", out.decode("utf-8")), get_all=True)
 
         for step, ref in zip(fr.all_geom, self.make_conf_ref_1):
-            geom = None
-            for item in step:
-                if isinstance(item, list) and all(
-                    isinstance(a, Atom) for a in item
-                ):
-                    geom = Geometry(item)
-
-            if geom is None:
-                raise RuntimeError("an output is missing atoms")
+            geom = Geometry(step["atoms"])
 
             ref_geom = Geometry(ref)
             rmsd = ref_geom.RMSD(geom)
@@ -774,15 +766,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         fr = FileReader(("out", "xyz", out.decode("utf-8")), get_all=True)
 
         for step, ref in zip(fr.all_geom, self.change_chir_ref_1):
-            geom = None
-            for item in step:
-                if isinstance(item, list) and all(
-                    isinstance(a, Atom) for a in item
-                ):
-                    geom = Geometry(item)
-
-            if geom is None:
-                raise RuntimeError("an output is missing atoms")
+            geom = geom = Geometry(step["atoms"])
 
             ref_geom = Geometry(ref)
             rmsd = ref_geom.RMSD(geom)

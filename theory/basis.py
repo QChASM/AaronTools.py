@@ -499,6 +499,8 @@ class BasisSet:
         elif isinstance(basis, Basis):
             basis = [basis]
         elif isinstance(basis, BasisSet):
+            if angular_momentum_type is None:
+                self.angular_momentum_type = basis.angular_momentum_type
             if ecp is None:
                 ecp = basis.ecp
             basis = basis.basis

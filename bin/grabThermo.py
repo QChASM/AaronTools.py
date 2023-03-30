@@ -156,7 +156,7 @@ else:
 
 if args.sp_file != [None]:
     if args.pattern is None:
-        sp_filenames = glob_files([f for  f in args.sp_file])
+        sp_filenames = glob_files([f for f in args.sp_file])
 
     else:
         sp_filenames = []
