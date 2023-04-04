@@ -162,8 +162,8 @@ class IntegrationGrid:
             out_dict = {
                 ORCA_BLOCKS: {
                     "method": [
-                        "AngularGrid     Lebedev590",
-                        "IntAcc          4.0",
+                        "AngularGrid     6",
+                        "IntAcc          9.0",
                     ]
                 }
             }
@@ -173,8 +173,8 @@ class IntegrationGrid:
             out_dict = {
                 ORCA_BLOCKS: {
                     "method": [
-                        "AngularGrid     Lebedev302",
-                        "IntAcc          4.0",
+                        "AngularGrid     4",
+                        "IntAcc          7.0",
                     ]
                 }
             }
@@ -184,15 +184,17 @@ class IntegrationGrid:
         elif self.name.lower() == "superfinegrid":
             #radial is 175 for 1st row, 250 for later rows
             out_dict = {
-                ORCA_ROUTE: [
-                    "Grid7",
-                    "FinalGrid7",
-                ],
+                ORCA_BLOCKS: {
+                    "method": [
+                        "AngularGrid     7",
+                        "IntAcc          17.0",
+                    ]
+                }
             }
 
             return (
                 out_dict,
-                "could not set SuperFineGrid equivalent - using largest ORCA grid keyword",
+                "could not set SuperFineGrid equivalent - using a fairly dense grid instead",
             )
 
         elif re.match("defgrid\d", self.name.lower()):
@@ -220,11 +222,23 @@ class IntegrationGrid:
         if match:
             r_pts = int(match.group(1))
             a_pts = int(match.group(2))
-            int_acc = -((r_pts / -5) + 2 - 8) / 3
+            try:
+                grid = {
+                    50: 1,
+                    110: 2,
+                    194: 3,
+                    302: 4,
+                    434: 5,
+                    590: 6,
+                    770: 7,
+                }[a_pts]
+            except KeyError:
+                raise RuntimeError("grid cannot be specified in ORCA: %s" % self.name)
+            int_acc = (r_pts + 30.) / 15.
             out_dict = {
                 ORCA_BLOCKS: {
                     "method": [
-                        "AngularGrid     Lebedev%i" % a_pts,
+                        "AngularGrid     %i" % grid,
                         "IntAcc          %.1f" % int_acc,
                     ]
                 }

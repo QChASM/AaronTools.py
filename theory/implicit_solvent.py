@@ -650,6 +650,8 @@ class ImplicitSolvent:
                         "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SOLVENTS"
                     )
 
+            out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
+        
         else:
             # TODO: look for gaussian/orca pcm solvent names that need to change
             if not any(
@@ -660,8 +662,10 @@ class ImplicitSolvent:
                     "solvent is unknown to ORCA: %s\n" % solvent +
                     "see AaronTools.theory.implicit_solvent.KNOWN_ORCA_SOLVENTS"
                 )
-
-        out[ORCA_ROUTE] = ["CPCM(%s)" % solvent]
+            out[ORCA_ROUTE] = ["CPCM"]
+            out[ORCA_BLOCKS]["cpcm"].append(
+                "SMDsolvent    \"%s\"" % solvent
+            )
 
         return (out, warnings)
 

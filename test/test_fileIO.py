@@ -404,7 +404,6 @@ Cl    -7.79134   -3.86673   -2.60286 L  Cl   0.043021"""
         for line1, line2 in zip(test.splitlines(), ref.splitlines()):
             self.assertEqual(line1.strip(), line2.strip())
 
-
     def test_write_inp(self):
         """write orca input file"""
         # like gaussian input files, this compares exact output
@@ -413,7 +412,7 @@ Cl    -7.79134   -3.86673   -2.60286 L  Cl   0.043021"""
 
         ref = """#comment line 1
 #comment line 2
-! PBE0 Opt Freq def2-SVP CPCM(dichloromethane) D3BJ
+! PBE0 Opt Freq def2-SVP CPCM D3BJ
 %freq
     Temp    298.15
 end
@@ -422,6 +421,7 @@ end
 end
 %cpcm
     smd    true
+    SMDsolvent    "dichloromethane"
 end
 
 *xyz 0 1

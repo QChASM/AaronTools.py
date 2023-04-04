@@ -2183,6 +2183,7 @@ class FileReader:
     def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False):
         """read orca output file"""
 
+        self.all_geom = []
         nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
         opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
 
@@ -2350,12 +2351,17 @@ class FileReader:
                     self.skip_lines(f, 2)
                     n += 3
                     line = f.readline()
+                    hit = {
+                        "modes": False,
+                        "spectrum": False,
+                    }
                     while not (stage == "THERMO" and line == "\n") and line:
                         if "--" not in line and line != "\n":
                             freq_str += line
 
                         if "NORMAL MODES" in line:
                             stage = "modes"
+                            hit["modes"] = True
                             self.skip_lines(f, 6)
                             n += 6
 
@@ -2365,6 +2371,9 @@ class FileReader:
                             n += 2
 
                         if "IR SPECTRUM" in line:
+                            if not hit["modes"]:
+                                break
+                            hit["spectrum"] = True
                             stage = "IR"
                             self.skip_lines(f, 2)
                             n += 2
@@ -2374,10 +2383,11 @@ class FileReader:
 
                         n += 1
                         line = f.readline()
-
-                    self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="orca", atoms=self.atoms,
-                    )
+                    
+                    if all(hit.values()):
+                        self.other["frequency"] = Frequency(
+                            freq_str, hpmodes=False, style="orca", atoms=self.atoms,
+                        )
 
                 elif line.startswith("Temperature"):
                     self.other["temperature"] = float(line.split()[2])

@@ -3292,6 +3292,8 @@ class Geometry:
                     vector["B3"] = (vector["L"][1], vector["L"][1])
                     vector["B4"] = (vector["L"][1], vector["L"][1])
                     vector["B5"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_small"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_big"] = (vector["L"][1], vector["L"][1])
                     return vector
                 params = {
                     "L": L,
@@ -3300,6 +3302,8 @@ class Geometry:
                     "B3": 0,
                     "B4": 0,
                     "B5": 0,
+                    "Bperp_small": 0,
+                    "Bperp_big": 0,
                 }
                 return params
             raise RuntimeError("there are no atoms with a non-zero radius")
@@ -3502,12 +3506,21 @@ class Geometry:
                 vector["B2"] = max_v
             i += 1
 
+        if Bperp1 > Bperp2:
+            vector["Bperp_small"] = perp_vec2
+            vector["Bperp_big"] = perp_vec1
+        else:
+            vector["Bperp_small"] = perp_vec1
+            vector["Bperp_big"] = perp_vec2
+
         params = {
             "B1": B1,
             "B2": B2,
             "B3": B3,
             "B4": B4,
             "B5": B5,
+            "Bperp_small": min([Bperp1, Bperp2]),
+            "Bperp_big": max([Bperp1, Bperp2]),
             "L": L,
         }
 
