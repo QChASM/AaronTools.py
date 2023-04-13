@@ -154,9 +154,14 @@ class Method:
             return ("B97D", None)
         elif self.name.lower().startswith("m06-"):
             return (self.name.upper().replace("M06-", "M06", 1), None)
-
         elif self.name.upper() == "PBE0":
             return ("PBE1PBE", None)
+        elif self.name.upper() == "DSD-PBEP86":
+            return ("DSDPBEP86", None)
+        elif self.name.upper() == "PBE0-DH":
+            return ("PBE0DH", None)
+        elif self.name.upper() == "PBE-QIDH":
+            return ("PBEQIDH", None)
 
         #methods available in ORCA but not Gaussian
         elif self.name.lower() == "ωb97x-d3":
@@ -192,6 +197,14 @@ class Method:
             return ({ORCA_ROUTE: ["M062X"]}, warnings)
         elif self.name.upper() == "PBE1PBE":
             return ({ORCA_ROUTE: ["PBE0"]}, warnings)
+        elif self.name.upper() == "DSDPBEP86":
+            return ({ORCA_ROUTE: ["DSD-PBEP86"]}, warnings)
+        elif self.name.upper() == "DSDPBEP86":
+            return ({ORCA_ROUTE: ["DSD-PBEP86"]}, warnings)
+        elif self.name.upper() == "PBE0DH":
+            return ({ORCA_ROUTE: ["PBE0-DH"]}, warnings)
+        elif self.name.upper() == "PBEQIDH":
+            return ({ORCA_ROUTE: ["PBE-QIDH"]}, warnings)
 
         name = self.name.replace('ω', 'w')
         warning = self.sanity_check_method(name, "orca")

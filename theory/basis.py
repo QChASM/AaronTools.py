@@ -146,28 +146,44 @@ class Basis:
                     ele = ele.lstrip("!")
                     not_any = True
 
-                if ele.lower() == "all":
+                if ele is AnyNonTransitionMetal or isinstance(ele, AnyNonTransitionMetal):
+                    if not_any:
+                        ele_selection.append(AnyNonTransitionMetal())
+                    else:
+                        ele_selection.append(AnyTransitionMetal())
+                
+                elif ele is AnyTransitionMetal or isinstance(ele, AnyTransitionMetal):
+                    if not_any:
+                        ele_selection.append(AnyTransitionMetal())
+                    else:
+                        ele_selection.append(AnyNonTransitionMetal())
+                
+                elif ele.lower() == "all":
                     if not_any:
                         not_anys.append(AnyTransitionMetal())
                         not_anys.append(AnyNonTransitionMetal())
                     else:
                         ele_selection.append(AnyTransitionMetal())
                         ele_selection.append(AnyNonTransitionMetal())
+                
                 elif ele.lower() == "tm" and ele != "Tm":
                     if not_any:
                         ele_selection.append(AnyNonTransitionMetal())
                     else:
                         ele_selection.append(AnyTransitionMetal())
+                
                 elif ele.lower() == "!tm" and ele != "!Tm":
                     if not_any:
-                        ele_selection.append(AnyNonTransitionMetal())
+                        ele_selection.append(AnyTransitionMetal())
                     else:
                         ele_selection.append(AnyNonTransitionMetal())
+                
                 elif isinstance(ele, str) and ele in ELEMENTS:
                     if not_any:
                         not_anys.append(ele)
                     else:
                         ele_selection.append(ele)
+                
                 else:
                     warn("element not known: %s" % repr(ele))
 
@@ -1242,7 +1258,7 @@ class BasisSet:
                 if basis.elements and not basis.user_defined:
                     for ele in basis.elements:
                         out_str = "newECP            %-2s " % ele
-                        basis_name = Basis.get_orca(basis.name)
+                        basis_name = basis.get_orca(basis.name)
                         warning = basis.sanity_check_basis(basis_name, "orca")
                         if warning:
                             warnings.append(warning)
@@ -1528,7 +1544,6 @@ class BasisSet:
                         if basis.elements and not basis.user_defined:
                             if info[QCHEM_REM][label] == "General":
                                 for ele in basis.elements:
-    
                                     out_str += "%-2s 0\n    " % ele
                                     basis_name = Basis.get_qchem(basis.name)
                                     warning = basis.sanity_check_basis(

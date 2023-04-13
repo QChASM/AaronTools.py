@@ -3083,6 +3083,7 @@ class Geometry:
         return_vector=False,
         radii="bondi",
         at_L=None,
+        buried=False,
         max_error=None,
     ):
         """
@@ -3121,7 +3122,11 @@ class Geometry:
             for vectors to represent the parameters in 3D space
         :param float at_L: - L value to calculate sterimol parameters at
                
-               Used for Sterimol2Vec
+               Useful for Sterimol2Vec
+        :param float|bool buried: calculate buried sterimol using the given
+            buried radius (or 5.5 if buried is simply True)
+            
+            buried and at_L are incompatible
         :param float max_error: max. error in angstroms for B1
             higher error can sometimes make the calculation
             go slightly faster
@@ -3139,6 +3144,9 @@ class Geometry:
         if at_L:
             CITATION += "; doi:10.5281/zenodo.4702098"
         self.LOG.citation(CITATION)
+
+        if at_L not in (None, False) and buried not in (None, False):
+            raise RuntimeError("cannot calculate sterimol2vec and buried sterimol at the same time")
 
         targets = self.find(targets)
         start = self.find(start_atom)
@@ -3186,6 +3194,9 @@ class Geometry:
             "B4": None,
             "B5": None,
             "L": None,
+            "Bperp_big": None,
+            "Bperp_small": None,
+            "Bpar": None,
         }
         # for B1, we're going to use ConvexHull to find the minimum distance
         # from one face of a bounding box
@@ -3209,10 +3220,24 @@ class Geometry:
             radius_list = []
         coords = self.coordinates(targets)
         L_vals = []
+        
+        if radii_dict is not None:
+            radius_list = [radii_dict[atom.element] for atom in targets]
+        
+        if buried is not False:
+            if buried is True:
+                buried = 5.5
+            
+            for i, atom in enumerate(targets):
+                if radius_list[i] < 0:
+                    continue
+                if (start.dist(atom) + radius_list[i] / 2) > buried:
+                    radius_list[i] = -1
+
         for i, atom in enumerate(targets):
+            if radius_list[i] < 0:
+                continue
             test_v = start.bond(atom)
-            if radii_dict is not None:
-                radius_list.append(radii_dict[atom.element])
 
             # L
             test_L, L_vec = L_func(atom, start, radius_list[i], L_axis)
@@ -3262,6 +3287,8 @@ class Geometry:
             vector["L"] = (vector["L"][0], vector["L"][0] + L_vec)
             L = at_L
             for i in range(0, len(coords)):
+                if radius_list[i] < 0:
+                    continue
                 if L_vals[i] - 2 * radius_list[i] > at_L:
                     radius_list[i] = -1
                     continue
@@ -3294,6 +3321,7 @@ class Geometry:
                     vector["B5"] = (vector["L"][1], vector["L"][1])
                     vector["Bperp_small"] = (vector["L"][1], vector["L"][1])
                     vector["Bperp_big"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_small"] = (vector["L"][1], vector["L"][1])
                     return vector
                 params = {
                     "L": L,
@@ -3304,6 +3332,7 @@ class Geometry:
                     "B5": 0,
                     "Bperp_small": 0,
                     "Bperp_big": 0,
+                    "Bpar": 0,
                 }
                 return params
             raise RuntimeError("there are no atoms with a non-zero radius")
@@ -3506,6 +3535,7 @@ class Geometry:
                 vector["B2"] = max_v
             i += 1
 
+        vector["Bpar"] = par_vec
         if Bperp1 > Bperp2:
             vector["Bperp_small"] = perp_vec2
             vector["Bperp_big"] = perp_vec1
@@ -3521,6 +3551,7 @@ class Geometry:
             "B5": B5,
             "Bperp_small": min([Bperp1, Bperp2]),
             "Bperp_big": max([Bperp1, Bperp2]),
+            "Bpar": Bpar,
             "L": L,
         }
 
