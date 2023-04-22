@@ -2042,18 +2042,36 @@ class Geometry:
             )
         return [self.atoms[i] for i in path]
 
+#Modified to return monomers with original atom ordering (SEW)
+# -ordering within each monomer returned matches original
+# -monomer ordering matches the order within the dimer
     def get_monomers(self):
-        """returns a list of lists of atoms for each monomer of self"""
-        
-        all_atoms = set(self.atoms)
+        """returns a list of lists of atoms for each monomer of self in order"""
+
+        geom = self.copy()
         monomers = []
-        while all_atoms:
-            atom = all_atoms.pop()
-            monomer = set(self.get_all_connected(atom))
-            all_atoms -= monomer
+        while geom.num_atoms:
+            atom = geom.atoms[0]
+            monomer = geom.get_all_connected(atom)
+            geom -= monomer
+            monomer.sort(key=lambda a: int(a.name))
             monomers.append(monomer)
-        
-        return [list(monomer) for monomer in monomers]
+
+        return monomers
+
+#OLD
+#    def get_monomers(self):
+#        """returns a list of lists of atoms for each monomer of self"""
+#        
+#        all_atoms = set(self.atoms)
+#        monomers = []
+#        while all_atoms:
+#            atom = all_atoms.pop()
+#            monomer = set(self.get_all_connected(atom))
+#            all_atoms -= monomer
+#            monomers.append(monomer)
+#        
+#        return [list(monomer) for monomer in monomers]
 
     # geometry measurement
     def bond(self, a1, a2):
