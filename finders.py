@@ -43,14 +43,21 @@ class BondsFrom(Finder):
     def get_matching_atoms(self, atoms, geometry):
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
         matching_atoms = []
-        for atom in atoms:
-            try:
-                path = geometry.shortest_path(atom, self.central_atom, avoid=self.avoid)
-            except LookupError:
-                continue
-
-            if len(path) - 1 == self.number_of_bonds:
-                matching_atoms.append(atom)
+        stack = deque([self.central_atom])
+        next_stack = deque([])
+        frag = [self.central_atom]
+        n_bonds = 1
+        while stack and self.number_of_bonds:
+            next_connected = stack.popleft()
+            connected = next_connected.connected - set(frag)
+            frag += connected
+            next_stack.extend(connected)
+            if not stack:
+                if n_bonds == self.number_of_bonds:
+                    return list(next_stack)
+                n_bonds += 1
+                stack = next_stack
+                next_stack = deque([])
 
         return matching_atoms
 

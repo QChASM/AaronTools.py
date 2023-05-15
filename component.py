@@ -104,15 +104,19 @@ class Component(Geometry):
                 a.add_tag(tag)
 
         self.other = self.parse_comment()
-        try:
-            self.key_atoms = self.find("key")
-        except LookupError:
-            if "key_atoms" in self.other:
-                self.key_atoms = [
-                    self.atoms[i] for i in self.other["key_atoms"]
-                ]
         if key_atoms is not None:
+            # print("looking for key atoms:", key_atoms)
             self.key_atoms = self.find(key_atoms)
+            # print("found key atoms:", self.key_atoms)
+        else:
+            try:
+                self.key_atoms = self.find("key")
+            except LookupError:
+                if "key_atoms" in self.other:
+                    self.key_atoms = [
+                        self.atoms[i] for i in self.other["key_atoms"]
+                    ]
+
         for a in self.key_atoms:
             a.tags.add("key")
         if detect_backbone:
@@ -281,7 +285,6 @@ class Component(Geometry):
             self.atoms = self.backbone + sub_atoms
         else:
             self.backbone = self.atoms.copy()
-
 
     def get_frag_list(self, targets=None, max_order=None):
         """
@@ -461,7 +464,12 @@ class Component(Geometry):
         )
 
     def cone_angle(
-        self, center=None, method="exact", return_cones=False, radii="umn"
+        self,
+        center=None,
+        method="exact",
+        return_cones=False,
+        return_individual=False,
+        radii="umn",
     ):
         """
         returns cone angle in degrees
@@ -469,13 +477,13 @@ class Component(Geometry):
         :param Atom center: that this component is coordinating
             used as the apex of the cone
         :param str method: can be:
+            
             * 'Tolman' - Tolman cone angle for unsymmetric ligands
               
               See J. Am. Chem. Soc. 1974, 96, 1, 53–60 (DOI: 10.1021/ja00808a009)
                
               :NOTE: this does not make assumptions about the geometry
                
-              :NOTE: only works with monodentate and bidentate ligands
             * 'exact' - cone angle from Allen et. al.
               
               See Bilbrey, J.A., Kazez, A.H., Locklin, J. and Allen, W.D.
@@ -486,6 +494,8 @@ class Component(Geometry):
             
             for Tolman cone angles, multiple cones will be returned, one for
             each substituent coming off the coordinating atom
+        :param bool return_individual: return the angles for each individual
+            Tolman cone
         :param str|dict radii:
             * 'bondi' - Bondi vdW radii
             * 'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
@@ -516,24 +526,29 @@ class Component(Geometry):
 
         if method.lower() == "tolman":
             total_angle = 0
-            if len(key) > 2:
-                raise NotImplementedError(
-                    "Tolman cone angle not implemented for tridentate or more ligands\n" +
-                    "Coordinating atoms (should be 1 or 2 atoms): %s\n" % ", ".join(repr(a) for a in key) + 
-                    "Coordinated atom: %s" % repr(center)
-                )
-
-            elif len(key) == 2:
-                key1, key2 = key
-                try:
-                    bridge_path = self.shortest_path(key1, key2)
-                except LookupError:
-                    bridge_path = False
+            all_cones = {"substituents": [], "bridges": []}
+            bridges = dict()
+            if len(key) > 1:
+                for i, key1 in enumerate(key):
+                    bridges.setdefault(key1, [])
+                    for key2 in key[:i]:
+                        bridges.setdefault(key2, [])
+                        try:
+                            bridge = self.shortest_path(key1, key2, avoid=center)
+                            if any(k in bridge for k in key if k not in (key1, key2)):
+                                continue
+                            bridges[key1].append(bridge)
+                            bridges[key2].append(bridge)
+                        except LookupError:
+                            pass
 
             for key_atom in key:
                 L_axis = key_atom.coords - center.coords
                 L_axis /= np.linalg.norm(L_axis)
-                bonded_atoms = self.find(BondedTo(key_atom))
+                try:
+                    bonded_atoms = self.find(BondedTo(key_atom))
+                except LookupError:
+                    continue
                 for bonded_atom in bonded_atoms:
                     frag = self.get_fragment(bonded_atom, key_atom)
 
@@ -541,34 +556,41 @@ class Component(Geometry):
                     if any(k in frag for k in key):
                         # fragment on bidentate ligands that connects to
                         # the other coordinating atom
-                        k = self.find(frag, key)[0]
+                        ks = self.find(frag, key)
+                        k = sorted(
+                            ks,
+                            key=lambda x: len(self.shortest_path(x, key_atom)),
+                            reverse=False,
+                        )[0]
                         # the bridge might be part of a ring (e.g. BPY)
                         # to avoid double counting the bridge, check if the
                         # first atom in the fragment is the first atom on the
                         # path from one key atom to the other
-                        if frag[0] in bridge_path:
+                        if any(frag[0] in bridge_path for bridge_path in bridges[key_atom]):
                             use_bridge = True
 
                     if use_bridge:
                         # angle between one L-M bond and L-M-L bisecting vector
                         tolman_angle = center.angle(k, key_atom) / 2
+                        all_cones["bridges"].append(tolman_angle)
 
                     else:
                         tolman_angle = None
 
                         # for bidentate ligands with multiple bridges across, only use atoms that
                         # are closer to the key atom we are looking at right now
-                        if len(key) == 2:
-                            if bridge_path:
+                        if len(key) > 1:
+                            if bridges[key_atom]:
                                 if key_atom is key1:
                                     other_key = key2
                                 else:
                                     other_key = key1
+                                closer_atoms = (
+                                    CloserTo(key_atom, other_key, include_ties=True)
+                                    for other_key in key if other_key is not key_atom
+                                )
                                 frag = self.find(
-                                    frag,
-                                    CloserTo(
-                                        key_atom, other_key, include_ties=True
-                                    ),
+                                    frag, *closer_atoms,
                                 )
 
                         # some ligands like DuPhos have rings on the phosphorous atom
@@ -591,6 +613,8 @@ class Component(Geometry):
                             ):
                                 tolman_angle = test_angle
 
+                    all_cones["substituents"].append(tolman_angle)
+
                     scale = 5 * np.cos(tolman_angle)
 
                     cones.append(
@@ -603,10 +627,17 @@ class Component(Geometry):
 
                     total_angle += 2 * tolman_angle / len(bonded_atoms)
 
-            if return_cones:
-                return np.rad2deg(total_angle), cones
+            if not return_individual and not return_cones:
+                out = np.rad2deg(total_angle)
+            else:
+                out = [np.rad2deg(total_angle)]
+                if return_cones:
+                    out.append(cones)
+                
+                if return_individual:
+                    out.append(all_cones)
 
-            return np.rad2deg(total_angle)
+            return out
 
         elif method.lower() == "exact":
             beta = np.zeros(len(self.atoms), dtype=float)

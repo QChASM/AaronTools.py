@@ -12,3 +12,4 @@ test/ligand.xyz
 /test/*.xyz
 test/.coverage
 /test/htmlcov/
+.eggs

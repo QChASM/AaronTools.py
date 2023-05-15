@@ -1114,7 +1114,11 @@ class Geometry:
                     continue
 
                 frag_a = self.get_fragment(a, b)
+                if any(x in b.connected for x in frag_a[1:]):
+                    continue
                 frag_b = self.get_fragment(b, a)
+                if any(x in a.connected for x in frag_b[1:]):
+                    continue
 
                 if sorted(frag_a) == sorted(frag_b):
                     continue
@@ -1212,10 +1216,7 @@ class Geometry:
             but were screened out using the && argument form
         """
 
-        found_atoms = set()
-        checkable_atoms = self.atoms
-
-        def _find(arg, checkable_atoms):
+        def _find(arg):
             """find a single atom"""
             # print(arg)
             if isinstance(arg, Atom):
@@ -1225,7 +1226,7 @@ class Geometry:
             rv = []
             if isinstance(arg, Finder):
                 # print("finder")
-                rv += arg.get_matching_atoms(checkable_atoms, self)
+                rv += arg.get_matching_atoms(self.atoms, self)
 
             name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
             if isinstance(arg, str) and name_str.match(arg) is not None:
@@ -1234,12 +1235,12 @@ class Geometry:
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
                 test_name = re.compile("^" + test_name + "$")
                 # this is a name
-                for a in checkable_atoms:
+                for a in self.atoms:
                     if test_name.search(a.name) is not None:
                         rv += [a]
 
             elif arg == "all":
-                rv += [a for a in checkable_atoms]
+                rv += [a for a in self.atoms]
 
             elif isinstance(arg, str) and len(arg.split(",")) > 1:
                 # print("comma list")
@@ -1247,9 +1248,9 @@ class Geometry:
                 if len(list_style) > 1:
                     for i in list_style:
                         if len(i.split("-")) > 1:
-                            rv += _find_between(i, checkable_atoms)
+                            rv += _find_between(i)
                         else:
-                            rv += _find(i, checkable_atoms)
+                            rv += _find(i)
 
             elif (
                 isinstance(arg, str)
@@ -1257,7 +1258,7 @@ class Geometry:
                 and not re.search("[A-Za-z]", arg)
             ):
                 # print("range list")
-                rv += _find_between(arg, checkable_atoms)
+                rv += _find_between(arg)
 
             elif isinstance(arg, str) and arg in ELEMENTS:
                 # print("element")
@@ -1268,12 +1269,12 @@ class Geometry:
             else:
                 # print("tag")
                 # this is a tag
-                for a in checkable_atoms:
+                for a in self.atoms:
                     if arg in a.tags:
                         rv += [a]
             return rv
 
-        def _find_between(arg, checkable_atoms):
+        def _find_between(arg):
             """find sequence of atoms"""
 
             def _name2ints(name):
@@ -1281,8 +1282,8 @@ class Geometry:
                 return [int(i) for i in name]
 
             a1, a2 = tuple(arg.split("-"))
-            a1 = _find(a1, checkable_atoms)[0]
-            a2 = _find(a2, checkable_atoms)[0]
+            a1 = _find(a1)[0]
+            a2 = _find(a2)[0]
 
             rv = []
             for a in self.atoms:
@@ -1299,7 +1300,7 @@ class Geometry:
                         # don't want if test atom sorts after a2
                         break
                 else:
-                    rv += _find(a, checkable_atoms)
+                    rv += _find(a)
             return rv
 
         if len(args) == 1:
@@ -1312,15 +1313,10 @@ class Geometry:
                 # OR condition
                 tmp = []
                 for i in a:
-                    found = _find(i, checkable_atoms)
-                    tmp += found
-                    found_atoms.update(found)
-                    checkable_atoms = list(set(checkable_atoms) - found_atoms)
+                    tmp += _find(i)
                 rv += [tmp]
             else:
-                rv += [_find(a, checkable_atoms)]
-                found_atoms.update(rv[-1])
-            checkable_atoms = list(found_atoms)
+                rv += [_find(a)]
 
         # error if no atoms found (no error if AND filters out all found atoms)
         if len(rv) == 1:
