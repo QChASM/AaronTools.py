@@ -87,7 +87,6 @@ class Orbitals:
         self.exponents = filereader.other["Primitive exponents"]
         self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
         self.alpha_nrgs = filereader.other["Alpha Orbital Energies"]
-        self.scf_density = filereader.other["Total SCF Density"]
         self.beta_nrgs = None
         if "Beta Orbital Energies" in filereader.other:
             self.beta_nrgs = filereader.other["Beta Orbital Energies"]
