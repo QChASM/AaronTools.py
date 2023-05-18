@@ -2172,6 +2172,8 @@ class FileReader:
                 n += 1
 
         if get_all:
+            if not self.all_geom:
+                self.all_geom = []
             self.all_geom += [{
                 "atoms": self.atoms,
                 "data": self.other,
