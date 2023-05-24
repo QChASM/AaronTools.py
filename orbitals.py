@@ -20,19 +20,21 @@ class Orbitals:
     
     * basis_functions - list(len=n_shell) of lists(len=n_prim_per_shell)
       of functions
+      
       function takes the arguments:
+      
       * r2 - float array like, squared distance from the
         shell's center to each point being evaluated
-      * x - float or array like, distance from the shell's
+      * x, y, and z - float or array like, distance from the shell's
         center to the point(s) being evaluated along
         the x axis
-      * y and z - same as x for the corresponding axis
       * mo_coeffs - list(len=funcs_per_shell), MO coefficients
         for the functions in this shell (e.g. 3
         coefficients for the p shell); order
         might depend on input file format
         for example, FCHK files will be px, py, pz
         ORCA files will be pz, px, py
+    
     * funcs_per_shell - list(len=n_shell), number of basis functions for
       each shell
     * alpha_coefficients - array(shape=(n_mos, n_mos)), coefficients of
@@ -53,6 +55,7 @@ class Orbitals:
       in each shell
     * n_alpha - int, number of alpha electrons
     * n_beta - int, number of beta electrons
+    
     """
 
     LOG = None

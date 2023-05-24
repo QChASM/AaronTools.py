@@ -216,7 +216,8 @@ class FileWriter:
 
         :param Geometry geom: the Geometry to use
         :param str style: the file type style to generate
-            Currently supported options: xyz (default), com, inp, in
+            Currently supported options: "xyz" (default), "com",
+            "inp", "inq", "in", "sqmin", "cube", "xtb", "crest", "mol"
 
             if outfile has one of these extensions, default is that style
         :param bool append: for *.xyz, append geometry to the same file
@@ -1035,9 +1036,8 @@ class FileWriter:
 
         :param Geometry geom: structure
         :param Orbitals orbitals: orbital data
-        :param str outfile:output destination
+        :param str outfile: output destination
         :param str|int mo: index of molecular orbital or "homo" for ground state
-
             highest occupied molecular orbital or "lumo" for first
             ground state unoccupied MO
             can also be an array of MO coefficients
@@ -1046,7 +1046,6 @@ class FileWriter:
         :param float padding: padding around geom's coordinates
         :param float spacing: targeted spacing between points
         :param int n_jobs: number of parallel threads to use
-
             this is on top of NumPy's multithreading, so
             if NumPy uses 8 threads and n_jobs=2, you can
             expect to see 16 threads in use
@@ -1409,6 +1408,7 @@ class FileWriter:
 
         :param dict contents: keys are either a file name (includes a ".") or
             a file extension (no ".")
+        
         :param str dirname: where to write files
             e.g. calling with contents as
 
@@ -1470,8 +1470,9 @@ class FileReader:
         :param str nbo_name: Name of the file containing the NBO orbital coefficients
             in the AO basis. Only used when reading .47 files.
         :param int max_length: maximum array size to store from FCHK files
+            
             any array that would be larger than this will be the
-            size the array would be
+            size the array would be ignored
         """
         # Initialization
         self.name = ""

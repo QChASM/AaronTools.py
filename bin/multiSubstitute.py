@@ -138,9 +138,8 @@ for infile in glob_files(args.infile, parser=substitute_parser):
         # go through each substitution request combination
         for j, (ndx, sub_list) in enumerate(zip(target_list, sub_names)):
             sub_ndx = int(i / mod_array[j]) % len(sub_list)
-            sub_name = sub_list[sub_ndx]
-            sub_str += "_%s=%s" % (",".join(ndx), sub_name)
             for target in ndx:
+                sub_name = sub_list[sub_ndx]
                 if sub_name.lower().startswith("iupac:"):
                     sub_name = ":".join(sub_name.split(":")[1:])
                     sub = Substituent.from_string(sub_name, form="iupac")
@@ -153,6 +152,7 @@ for infile in glob_files(args.infile, parser=substitute_parser):
                 # replace old substituent with new substituent
                 new_geom.substitute(sub, target, minimize=args.mini)
                 new_geom.refresh_connected()
+            sub_str += "_%s=%s" % (",".join(ndx), sub_name)
 
         sub_str = sub_str.strip("_")
 

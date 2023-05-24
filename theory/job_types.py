@@ -1259,7 +1259,7 @@ class ForceJob(JobType):
 
 
 class ConformerSearchJob(JobType):
-    """conformer search"""
+    """conformer search (basically only for crest)"""
     
     def __init__(
         self,
@@ -1349,7 +1349,13 @@ class ConformerSearchJob(JobType):
 
 
 class TDDFTJob(JobType):
+    """TD-DFT job"""
     def __init__(self, roots, root_of_interest=0, compute_nacmes=False):
+        """
+        :param int roots: number of roots
+        :param int root_of_interest: root for further computations (e.g. forces)
+        :param bool compute_nacmes: request nonadiabatic coupling matrix elements
+        """
         self.root_of_interest = root_of_interest
         self.roots = roots
         self.compute_nacmes = compute_nacmes
@@ -1406,6 +1412,7 @@ class TDDFTJob(JobType):
         return out, warnings
     
     def get_qchem(self):
+        # TODO
         raise NotImplementedError("we currently don't support TD-DFT for Q-Chem")
     
     
