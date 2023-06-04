@@ -19,7 +19,7 @@ AaronTools documenation, including tutorials on the Python API, can be found on 
 See the <a href="https://aarontools.readthedocs.io/en/latest/tutorials/install.html">installation guide</a> for more details, including how to manually install from this GitHub repository.
 
 ## Citation
-If you use the Python AaronTools, please cite:
+If you use AaronTools, please cite:
 
 V. M. Ingman, A. J. Schaefer, L. R. Andreola, and S. E. Wheeler "QChASM: Quantum Chemistry Automation and Structure Manipulation" <a href="http://dx.doi.org/10.1002/wcms.1510" target="_blank"><i>WIREs Comp. Mol. Sci.</i> <b>11</b>, e1510 (2021)</a>
 
