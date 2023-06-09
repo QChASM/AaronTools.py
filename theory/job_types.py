@@ -927,6 +927,7 @@ class OptimizationJob(JobType):
         return dict(), warnings
 
     def get_qchem(self):
+        """returns dict for Q-Chem"""
         if self.transition_state:
             out = {QCHEM_REM: {"JOB_TYPE": "TS"}}
         else:
@@ -1052,6 +1053,15 @@ class OptimizationJob(JobType):
         """
         resolves optimization-specific errors
         errors resolved by JobType take priority
+        
+        :param str error: error code from FileReader["error"] 
+        :param Theory theory: theory used
+        :param str exec_type: program name (gaussian, psi4, orca...)
+        :param Geometry geometry: structure used when the error occured 
+        
+        Note that the geometry might be modified when resolving errors
+        
+        :rtype: None|Theory
         """
         try:
             return super(OptimizationJob, OptimizationJob).resolve_error(
