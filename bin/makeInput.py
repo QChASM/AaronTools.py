@@ -609,7 +609,10 @@ for f in glob_files(args.infile, parser=theory_parser):
         if "method" in infile.other:
             basis_sets = method.split("/")[-1]
         elif "theory" in infile.other:
-            basis_sets = infile.other["theory"].basis.basis
+            if infile["theory"].basis:
+                basis_sets = infile.other["theory"].basis.basis
+            else:
+                basis_sets = None
         else:
             basis_sets = None
 
@@ -627,7 +630,10 @@ for f in glob_files(args.infile, parser=theory_parser):
 
     elif args.use_prev:
         if "theory" in infile.other:
-            ecps = infile.other["theory"].basis.ecp
+            if infile["theory"].basis:
+                ecps = infile.other["theory"].basis.ecp
+            else:
+                ecps = None
         else:
             ecps = None
 

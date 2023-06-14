@@ -397,7 +397,7 @@ class Theory:
         if self.job_type is not None:
             if isinstance(self.job_type, str):
                 self.job_type = job_from_string(self.job_type)
-                
+
             if isinstance(self.job_type, JobType):
                 self.job_type = [self.job_type]
 
@@ -1361,6 +1361,11 @@ class Theory:
         elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)) and self.high_basis is None and self.medium_basis is None and self.low_basis is None:
             basis_info = {}
             warnings.append("no basis specified")
+
+        elif (
+            self.method is not None and self.method.is_semiempirical
+        ):
+            basis_info = {}
 
         out_str += "\n"
 
