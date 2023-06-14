@@ -11,7 +11,7 @@ from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename, glob_files
 
 split_parser = argparse.ArgumentParser(
-    description="print all structures from a given file",
+    description="print all structures from a given file to different files",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
