@@ -114,32 +114,32 @@ class CompOutput:
                 freq_name=freq_name,
                 conf_name=conf_name,
             )
-        elif isinstance(fname, FileReader):
+        elif isinstance(fname, FileReader) or isinstance(fname, dict):
             from_file = fname
         else:
             return
 
-        if from_file.atoms:
+        if from_file["atoms"]:
             self.geometry = Geometry(
-                from_file.atoms, comment=from_file.comment, name=from_file.name,
+                from_file["atoms"], comment=from_file["comment"], name=from_file["name"],
             )
-        if from_file.all_geom:
+        if from_file["all_geom"]:
             self.opts = []
-            for g in from_file.all_geom:
+            for g in from_file["all_geom"]:
                 self.opts += [Geometry(g["atoms"])]
-        if "conformers" in from_file.other:
+        if "conformers" in from_file.keys():
             self.conformers = []
-            for comment, atoms in from_file.other["conformers"]:
+            for comment, atoms in from_file["conformers"]:
                 self.conformers.append(Geometry(atoms, comment=comment))
-            del from_file.other["conformers"]
+            del from_file["conformers"]
 
         for k in keys:
-            if k in from_file.other:
-                setattr(self, k, from_file.other[k])
+            if k in from_file.keys():
+                setattr(self, k, from_file[k])
             else:
                 setattr(self, k, None)
         
-        self.other = {k:v for k, v in from_file.other.items() if k not in keys}
+        self.other = {k:v for k, v in from_file.items() if k not in keys}
 
         if self.rotational_temperature is None and self.geometry:
             self.compute_rot_temps()

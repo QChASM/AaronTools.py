@@ -7,7 +7,12 @@ import numpy as np
 from AaronTools.atoms import Atom
 from AaronTools.comp_output import CompOutput
 from AaronTools.component import Component
-from AaronTools.spectra import Frequency, HarmonicVibration
+from AaronTools.spectra import (
+    Frequency,
+    HarmonicVibration,
+    ValenceExcitations,
+    ValenceExcitation,
+)
 from AaronTools.finders import (
     Finder,
     AnyNonTransitionMetal,
@@ -44,7 +49,9 @@ class ATEncoder(json.JSONEncoder):
         elif isinstance(obj, CompOutput):
             return self._encode_comp_output(obj)
         elif isinstance(obj, Frequency):
-            return self._encode_frequency(obj)
+            return self._encode_signals(obj)
+        elif isinstance(obj, ValenceExcitations):
+            return self._encode_signals(obj)
         elif isinstance(obj, Theory):
             return self._encode_theory(obj)
         elif isinstance(obj, Finder):
@@ -134,7 +141,7 @@ class ATEncoder(json.JSONEncoder):
 
         return rv
 
-    def _encode_frequency(self, obj):
+    def _encode_signals(self, obj):
         rv = {"_type": obj.__class__.__name__}
         data = []
         for d in obj.data:
@@ -269,6 +276,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_geometry(obj)
         if obj["_type"] == "Frequency":
             return self._decode_frequency(obj)
+        if obj["_type"] == "ValenceExcitations":
+            return self._decode_valence_excitations(obj)
         if obj["_type"] == "CompOutput":
             return self._decode_comp_output(obj)
         if obj["_type"] == "Theory":
@@ -322,6 +331,16 @@ class ATDecoder(json.JSONDecoder):
                 HarmonicVibration(freq, **kw)
             ]
         return Frequency(data)
+
+    def _decode_valence_excitations(self, obj):
+        data = []
+        for d in obj["data"]:
+            kw = {k:v for k, v in d.items()}
+            freq = kw.pop("frequency")
+            data += [
+                ValenceExcitation(freq, **kw)
+            ]
+        return ValenceExcitations(data)
 
     def _decode_comp_output(self, obj):
         keys = [

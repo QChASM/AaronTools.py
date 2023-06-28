@@ -572,7 +572,7 @@ class Component(Geometry):
                     if use_bridge:
                         # angle between one L-M bond and L-M-L bisecting vector
                         tolman_angle = center.angle(k, key_atom) / 2
-                        all_cones["bridges"].append(tolman_angle)
+                        all_cones["bridges"].append(np.rad2deg(tolman_angle))
 
                     else:
                         tolman_angle = None
@@ -613,7 +613,7 @@ class Component(Geometry):
                             ):
                                 tolman_angle = test_angle
 
-                    all_cones["substituents"].append(tolman_angle)
+                        all_cones["substituents"].append(np.rad2deg(tolman_angle))
 
                     scale = 5 * np.cos(tolman_angle)
 

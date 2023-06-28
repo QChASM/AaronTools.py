@@ -61,38 +61,45 @@ class Orbitals:
     LOG = None
 
     def __init__(self, filereader):
-        if filereader.file_type == "fchk":
+        if filereader["file_type"] == "fchk":
             self._load_fchk_data(filereader)
-        elif filereader.file_type == "out":
+            self.fmt = "fchk"
+        elif filereader["file_type"] == "out":
             self._load_orca_out_data(filereader)
-        elif filereader.file_type == "47" or filereader.file_type == "31":
+            self.fmt = "orca"
+        elif filereader["file_type"] == "47" or filereader["file_type"] == "31":
             self._load_nbo_data(filereader)
+            self.fmt = "nbo"
         else:
             raise NotImplementedError(
-                "cannot load orbital info from %s files" % filereader.file_type
+                "cannot load orbital info from %s files" % filereader["file_type"]
             )
 
     def _load_fchk_data(self, filereader):
         self.alpha_occupancies = None
         self.beta_occupancies = None
-        if "Coordinates of each shell" in filereader.other:
+        if "Coordinates of each shell" in filereader.keys():
             self.shell_coords = np.reshape(
-                filereader.other["Coordinates of each shell"],
-                (len(filereader.other["Shell types"]), 3),
+                filereader["Coordinates of each shell"],
+                (len(filereader["Shell types"]), 3),
             )
         else:
             center_coords = []
-            for ndx in filereader.other["Shell to atom map"]:
-                center_coords.append(filereader.atoms[ndx - 1].coords)
+            for ndx in filereader["Shell to atom map"]:
+                center_coords.append(filereader["atoms"][ndx - 1].coords)
             self.center_coords = np.array(center_coords)
         self.shell_coords *= UNIT.A0_TO_BOHR
-        self.contraction_coeff = filereader.other["Contraction coefficients"]
-        self.exponents = filereader.other["Primitive exponents"]
-        self.n_prim_per_shell = filereader.other["Number of primitives per shell"]
-        self.alpha_nrgs = filereader.other["Alpha Orbital Energies"]
+        self.contraction_coeff = filereader["Contraction coefficients"]
+        try:
+            self.sp_contraction_coeff = filereader["P(S=P) Contraction coefficients"]
+        except (KeyError, AttributeError):
+            self.sp_contraction_coeff = None
+        self.exponents = filereader["Primitive exponents"]
+        self.n_prim_per_shell = filereader["Number of primitives per shell"]
+        self.alpha_nrgs = filereader["Alpha Orbital Energies"]
         self.beta_nrgs = None
-        if "Beta Orbital Energies" in filereader.other:
-            self.beta_nrgs = filereader.other["Beta Orbital Energies"]
+        if "Beta Orbital Energies" in filereader.keys():
+            self.beta_nrgs = filereader["Beta Orbital Energies"]
 
         self.funcs_per_shell = []
 
@@ -121,7 +128,7 @@ class Orbitals:
         shell_i = 0
         for n_prim, shell in zip(
             self.n_prim_per_shell,
-            filereader.other["Shell types"],
+            filereader["Shell types"],
         ):
             exponents = self.exponents[shell_i : shell_i + n_prim]
             con_coeff = self.contraction_coeff[shell_i : shell_i + n_prim]
@@ -193,7 +200,7 @@ class Orbitals:
                 self.funcs_per_shell.append(4)
                 norm_s = s_norm(exponents)
                 norm_p = p_norm(exponents)
-                sp_coeff = filereader.other["P(S=P) Contraction coefficients"][shell_i: shell_i + n_prim]
+                sp_coeff = filereader["P(S=P) Contraction coefficients"][shell_i: shell_i + n_prim]
                 if n_prim > 1:
                     def sp_shell(
                         r2, x, y, z, mo_coeffs,
@@ -672,31 +679,40 @@ class Orbitals:
             shell_i += n_prim
 
         self.alpha_coefficients = np.reshape(
-            filereader.other["Alpha MO coefficients"],
+            filereader["Alpha MO coefficients"],
             (self.n_mos, self.n_mos),
         )
-        if "Beta MO coefficients" in filereader.other:
+        if "Beta MO coefficients" in filereader.keys():
             self.beta_coefficients = np.reshape(
-                filereader.other["Beta MO coefficients"],
+                filereader["Beta MO coefficients"],
                 (self.n_mos, self.n_mos),
             )
         else:
             self.beta_coefficients = None
-        self.n_alpha = filereader.other["Number of alpha electrons"]
-        if "Number of beta electrons" in filereader.other:
-            self.n_beta = filereader.other["Number of beta electrons"]
+        self.n_alpha = filereader["Number of alpha electrons"]
+        if "Number of beta electrons" in filereader:
+            self.n_beta = filereader["Number of beta electrons"]
 
     def _load_nbo_data(self, filereader):
         self.alpha_occupancies = None
         self.beta_occupancies = None
         self.basis_functions = []
-        self.exponents = np.array(filereader.other["exponents"])
-        self.alpha_coefficients = np.array(filereader.other["alpha_coefficients"])
+        self.exponents = np.array(filereader["exponents"])
+        self.alpha_coefficients = np.array(filereader["alpha_coefficients"])
         self.beta_coefficients = None
         self.shell_coords = []
         self.funcs_per_shell = []
+        self.start_ndx = []
         self.shell_types = []
-        self.n_shell = len(filereader.other["n_prim_per_shell"])
+        self.n_shell = len(filereader["n_prim_per_shell"])
+        self.momentum_label = filereader["momentum_label"]
+        self.coeffs_by_type = dict()
+        for x in ["s", "p", "d", "f", "g"]:
+            try:
+                key = "%s_coeff" % x
+                self.coeffs_by_type[key] = filereader[key]
+            except (KeyError, AttributeError):
+                pass
         self.alpha_nrgs = [0 for x in self.alpha_coefficients]
         self.n_mos = len(self.alpha_coefficients)
         self.n_alpha = 0
@@ -707,9 +723,9 @@ class Orbitals:
         # NBO includes normalization constant with the contraction coefficient
         # so we don't have a gau_norm function like gaussian or orca
         for n_prim, n_funcs, shell_i in zip(
-            filereader.other["n_prim_per_shell"],
-            filereader.other["funcs_per_shell"],
-            filereader.other["start_ndx"],
+            filereader["n_prim_per_shell"],
+            filereader["funcs_per_shell"],
+            filereader["start_ndx"],
             
         ):
             shell_i -= 1
@@ -718,11 +734,12 @@ class Orbitals:
             con_coeffs = []
             shell_type = []
             self.funcs_per_shell.append(n_funcs)
+            self.start_ndx.append(shell_i)
             self.shell_coords.append(
-                filereader.atoms[filereader.other["shell_to_atom"][label_i] - 1].coords
+                filereader.atoms[filereader["shell_to_atom"][label_i] - 1].coords
             )
             for i in range(0, n_funcs):
-                shell = filereader.other["momentum_label"][label_i]
+                shell = filereader["momentum_label"][label_i]
                 label_i += 1
                 # XXX: each function is treated as a different
                 # shell because NBO allows them to be in any order
@@ -732,7 +749,7 @@ class Orbitals:
                 if shell < 100:
                     shell_type.append("s")
                     # s - shell can be 1 or 51
-                    con_coeff = filereader.other["s_coeff"][shell_i: shell_i + n_prim]
+                    con_coeff = filereader["s_coeff"][shell_i: shell_i + n_prim]
                     con_coeffs.append(con_coeff)
                     def s_shell(
                         r2, x, y, z, s_val
@@ -741,7 +758,7 @@ class Orbitals:
                     shell_funcs.append(s_shell)
                 elif shell < 200:
                     # p - shell can be 101, 102, 103, 151, 152, 153
-                    con_coeff = filereader.other["p_coeff"][shell_i: shell_i + n_prim]
+                    con_coeff = filereader["p_coeff"][shell_i: shell_i + n_prim]
                     con_coeffs.append(con_coeff)
                     if shell == 101 or shell == 151:
                         shell_type.append("px")
@@ -765,7 +782,7 @@ class Orbitals:
                             return s_val * z
                         shell_funcs.append(pz_shell)
                 elif shell < 300:
-                    con_coeff = filereader.other["d_coeff"][shell_i: shell_i + n_prim]
+                    con_coeff = filereader["d_coeff"][shell_i: shell_i + n_prim]
                     con_coeffs.append(con_coeff)
                     if shell == 201:
                         shell_type.append("dxx")
@@ -845,7 +862,7 @@ class Orbitals:
                             return (3 * z ** 2 - r2) * s_val / 2
                         shell_funcs.append(dz2_shell)
                 elif shell < 400:
-                    con_coeff = filereader.other["f_coeff"][shell_i: shell_i + n_prim]
+                    con_coeff = filereader["f_coeff"][shell_i: shell_i + n_prim]
                     con_coeffs.append(con_coeff)
                     if shell == 301:
                         shell_type.append("fxxx")
@@ -973,7 +990,7 @@ class Orbitals:
                         "g shell results have not been verified for NBO\n"
                         "any LCAO's may be invalid"
                     )
-                    con_coeff = filereader.other["g_coeff"][shell_i: shell_i + n_prim]
+                    con_coeff = filereader["g_coeff"][shell_i: shell_i + n_prim]
                     con_coeffs.append(con_coeff)
                     if shell == 401:
                         shell_type.append("gxxxx")
@@ -1177,14 +1194,16 @@ class Orbitals:
         self.beta_occupancies = None
         self.shell_coords = []
         self.basis_functions = []
-        self.alpha_nrgs = np.array(filereader.other["alpha_nrgs"])
-        self.alpha_coefficients = np.array(filereader.other["alpha_coefficients"])
-        if "beta_nrgs" not in filereader.other or not filereader.other["beta_nrgs"]:
+        self.atoms = filereader["atoms"]
+        self.basis_set_by_ele = filereader["basis_set_by_ele"]
+        self.alpha_nrgs = np.array(filereader["alpha_nrgs"])
+        self.alpha_coefficients = np.array(filereader["alpha_coefficients"])
+        if "beta_nrgs" not in filereader or not filereader["beta_nrgs"]:
             self.beta_nrgs = None
             self.beta_coefficients = None
         else:
-            self.beta_nrgs = np.array(filereader.other["beta_nrgs"])
-            self.beta_coefficients = np.array(filereader.other["beta_coefficients"])
+            self.beta_nrgs = np.array(filereader["beta_nrgs"])
+            self.beta_coefficients = np.array(filereader["beta_coefficients"])
         self.shell_types = []
         self.funcs_per_shell = []
         self.n_aos = 0
@@ -1214,11 +1233,11 @@ class Orbitals:
         # f(y^3 - 3x^2y) instead of f(3x^2y - y^3)
         # ORCA doesn't seem to print the coordinates of each
         # shell, but they should be the same as the atom coordinates
-        for atom in filereader.atoms:
+        for atom in filereader["atoms"]:
             ele = atom.element
-            if ele not in filereader.other["basis_set_by_ele"]:
+            if ele not in filereader["basis_set_by_ele"]:
                 continue
-            for shell_type, n_prim, exponents, con_coeff in filereader.other[
+            for shell_type, n_prim, exponents, con_coeff in filereader[
                 "basis_set_by_ele"
             ][ele]:
                 self.shell_coords.append(atom.coords)
@@ -1546,22 +1565,22 @@ class Orbitals:
 
         self.n_mos = len(self.alpha_coefficients)
 
-        if "n_alpha" not in filereader.other:
+        if "n_alpha" not in filereader.keys():
             tot_electrons = sum(
-                ELEMENTS.index(atom.element) for atom in filereader.atoms
+                ELEMENTS.index(atom.element) for atom in filereader["atoms"]
             )
             self.n_beta = tot_electrons // 2
             self.n_alpha = tot_electrons - self.n_beta
         else:
-            self.n_alpha = filereader.other["n_alpha"]
-            self.n_beta = filereader.other["n_beta"]
+            self.n_alpha = filereader["n_alpha"]
+            self.n_beta = filereader["n_beta"]
 
-        if "alpha_occupancies" in filereader.other:
-            self.alpha_occupancies = filereader.other["alpha_occupancies"]
+        if "alpha_occupancies" in filereader:
+            self.alpha_occupancies = filereader["alpha_occupancies"]
 
-        if "beta_occupancies" in filereader.other and filereader.other["beta_occupancies"]:
-            self.beta_occupancies = filereader.other["beta_occupancies"]
-        elif "alpha_occupancies" in filereader.other:
+        if "beta_occupancies" in filereader.keys() and filereader["beta_occupancies"]:
+            self.beta_occupancies = filereader["beta_occupancies"]
+        elif "alpha_occupancies" in filereader:
             self.alpha_occupancies = [occ / 2 for occ in self.alpha_occupancies]
 
     def _get_value(self, coords, arr):

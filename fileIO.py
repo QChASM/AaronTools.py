@@ -1583,7 +1583,12 @@ class FileReader:
     def keys(self):
         attr_keys = set(self.__dict__.keys())
         other_keys = set(self.other.keys())
-        return tuple(attr_keys.union(other_keys))
+        keys = attr_keys.union(other_keys)
+        keys -= set([
+            "content",
+            "other",
+        ])
+        return tuple(keys)
 
     def values(self):
         keys = self.keys()

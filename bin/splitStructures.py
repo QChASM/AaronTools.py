@@ -40,8 +40,7 @@ split_parser.add_argument(
     action="store_true",
     default=False,
     dest="include_parent",
-    help="include parent directory in $INFILE\n" +
-    "Default: False",
+    help="include parent directories in $INFILE"
 )
 
 split_parser.add_argument(
