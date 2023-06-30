@@ -3987,11 +3987,21 @@ class FileReader:
             # PERFORMANCE REASONS
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-            # most energies
-            elif re.search("\d+\.\d+", line):
+            elif "." in line and (
+                "0" in line or
+                "1" in line or
+                "2" in line or
+                "3" in line or
+                "4" in line or
+                "5" in line or
+                "6" in line or
+                "7" in line or
+                "8" in line or
+                "9" in line
+            ):
+            # elif re.search("\d+\.\d+", line):
                 nrg_match = most_energies.search(line)
                 mp_match = mp_energies.search(line)
-                # ^ matches many methods
                 # will also match the SCF line (hence the else here)
                 # the match in the SCF line could be confusing b/c
                 # the SCF line could be
@@ -4002,6 +4012,7 @@ class FileReader:
                 # * E(RB2PLYPD3) = -76.2887108570
                 # * E(B2PLYPD3) = -76.353361915801
                 # very similar names for very different energies...
+                # most energies
                 if nrg_match:
                     nrg = float(nrg_match.group(2).replace("D", "E"))
                     if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
