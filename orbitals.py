@@ -1580,7 +1580,7 @@ class Orbitals:
 
         if "beta_occupancies" in filereader.keys() and filereader["beta_occupancies"]:
             self.beta_occupancies = filereader["beta_occupancies"]
-        elif "alpha_occupancies" in filereader:
+        elif "alpha_occupancies" in filereader.keys():
             self.alpha_occupancies = [occ / 2 for occ in self.alpha_occupancies]
 
     def _get_value(self, coords, arr):

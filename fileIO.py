@@ -77,7 +77,7 @@ ERROR = {
     "galloc: could not allocate memory": "GALLOC",
     "Error imposing constraints": "CONSTR",
     "End of file reading basis center.": "BASIS_READ",
-    "Atomic number out of range for .* basis set.": "BASIS",
+    re.compile("Atomic number out of range for .* basis set."): "BASIS",
     "Unrecognized atomic symbol": "ATOM",
     "malloc failed.": "MEM",
     "A syntax error was detected in the input line": "SYNTAX",
@@ -1616,12 +1616,12 @@ class FileReader:
             the array would not be stored
         """
         if os.path.isfile(self.name):
-            f = open(self.name, "r", encoding="utf8")
+            f = open(self.name, "r")
         else:
             fname = ".".join([self.name, self.file_type])
             fname = os.path.expanduser(fname)
             if os.path.isfile(fname):
-                f = open(fname, "r", encoding="utf8")
+                f = open(fname, "r")
             else:
                 raise FileNotFoundError(
                     "Error while looking for %s: could not find %s or %s in %s"
@@ -3069,7 +3069,15 @@ class FileReader:
 
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
         """read gaussian output file"""
-        isotope = re.compile(" Atom\s+(\d+) has atomic number")
+        isotope = re.compile(r" Atom\s+(\d+) has atomic number")
+        # orientation = re.compile(r"(Standard|Input) orientation:\s*$")
+        # zmat = re.compile(r"Symbolic Z-matrix")
+        # modred = re.compile(r"The following ModRedundant input section has been read:")
+        # optimized_parameters = re.compile(r"!   Optimized Parameters   !")
+        most_energies = re.compile(r"\s+(E\(\S+\))\s*=\s*(\S+)")
+        mp_energies = re.compile(r"([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)")
+        # temperature = re.compile(r"^ Temperature\s*\d+\.\d+")
+        
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -3566,25 +3574,23 @@ class FileReader:
                     route += line[1:].splitlines()[0]
                     n += 1
                     line = f.readline()
+                oniom = "oniom" in route.lower()
             # archive entry
-            if line.strip().startswith("1\\1\\"):
+            elif line.strip().startswith("1\\1\\"):
                 found_archive = True
                 line = "@" + line.strip()[4:]
-            if found_archive and line.strip().endswith("@"):
+            elif found_archive and line.strip().endswith("@"):
                 self.other["archive"] = self.other["archive"][:-2] + "\\\\"
                 found_archive = False
             elif found_archive:
                 self.other["archive"] += line.strip()
 
-            if route is not None and "oniom" in route.lower():
-                oniom=True
-
             # input atom specs and charge/mult
-            if oniom==False and "Symbolic Z-matrix:" in line:
+            if not oniom and "Symbolic Z-matrix:" in line:
                 self.atoms, n = get_input(f, n)
 
             #Pseudopotential info
-            if "Pseudopotential Parameters" in line:
+            elif "Pseudopotential Parameters" in line:
                 self.other["ECP"] = []
                 self.skip_lines(f, 4)
                 n += 5
@@ -3601,7 +3607,10 @@ class FileReader:
                     line = f.readline()
 
             # geometry
-            if re.search("(Standard|Input) orientation:", line) and not oniom:
+            elif not oniom and (
+                "Input orientation" in line or
+                "Standard orientation" in line
+            ):
                 record_coords = True
                 if "scan" in constraints:
                     if scan_read_all == False:
@@ -3630,7 +3639,10 @@ class FileReader:
                     self.atoms, n = get_atoms(f, n)
                 self.other["opt_steps"] += 1
 
-            if re.search("(Standard|Input) orientation:", line) and oniom == True:
+            elif oniom and (
+                "Input orientation" in line or
+                "Standard orientation" in line
+            ):
                  if get_all and len(self.atoms) > 0:
                     self.all_geom += [{
                         "atoms": deepcopy(self.atoms),
@@ -3640,82 +3652,48 @@ class FileReader:
                  self.other["opt_steps"] += 1
 
             #oniom atom types and input charges
-            if oniom == True and re.search("Symbolic Z-matrix", line):
+            elif oniom and "Symbolic Z-matrix" in line:
                 self.atoms, n = get_oniom_info(f, n)
 
-            if re.search(
-                "The following ModRedundant input section has been read:", line
-            ):
+            elif "The following ModRedundant input section has been read:" in line:
                 constraints, n = get_modredundant(f, n)
 
-            if just_geom:
+            elif just_geom:
                 line = f.readline()
                 n += 1
                 continue
                 # z-matrix parameters
-            if re.search("Optimized Parameters", line):
+            # elif "!   Optimized Parameters   !" in line:
+            elif "!   Optimized Parameters   !" in line:
                 self.other["params"], n = get_params(f, n)
 
             # status
-            if NORM_FINISH in line:
+            elif NORM_FINISH in line:
                 self.other["finished"] = True
 
             # read energies from different methods
-            if "SCF Done" in line:
+            elif "SCF Done" in line:
                 tmp = [word.strip() for word in line.split()]
                 idx = tmp.index("=")
                 self.other["energy"] = float(tmp[idx + 1])
                 self.other["scf_energy"] = float(tmp[idx + 1])
 
-            else:
-                nrg_match = re.search("\s+(E\(\S+\))\s*=\s*(\S+)", line)
-                # ^ matches many methods
-                # will also match the SCF line (hence the else here)
-                # the match in the SCF line could be confusing b/c
-                # the SCF line could be
-                # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
-                # and later on, there will be a line...
-                #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
-                # this will give:
-                # * E(RB2PLYPD3) = -76.2887108570
-                # * E(B2PLYPD3) = -76.353361915801
-                # very similar names for very different energies...
-                if nrg_match:
-                    nrg = float(nrg_match.group(2).replace("D", "E"))
-                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
-                        self.other["energy"] = nrg
-                    self.other[nrg_match.group(1)] = nrg
-
-            if line.startswith(" Energy= "):
+            elif line.startswith(" Energy= "):
                 self.other["energy"] = float(line.split()[1])
 
             # CC energy
-            if line.startswith(" CCSD(T)= "):
+            elif line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))
                 self.other["E(CCSD(T))"] = self.other["energy"]
 
-            # MP energies
-            mp_match = re.search("([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)", line)
-            if mp_match:
-                self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
-                self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
-
-            if "Molecular mass:" in line:
-                self.other["mass"] = float(float_num.search(line).group(0))
-                self.other["mass"] *= UNIT.AMU_TO_KG
-
-            if isotope.match(line):
-                ndx = int(isotope.match(line).group(1)) - 1
-                self.atoms[ndx]._mass = float(line.split()[-1])
-
             # basis set details
-            if line.startswith(" NBasis") and "NFC" in line:
+            elif line.startswith(" NBasis") and "NFC" in line:
                 n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
                 self.other["n_basis"] = n_basis
                 n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
                 self.other["n_frozen"] = n_frozen
 
-            if line.startswith(" NROrb"):
+            elif line.startswith(" NROrb"):
                 n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
                 self.other["n_occupied_alpha"] = n_occupied_alpha
                 n_occupied_beta = int(re.search(" NOB=\s*(\d+)", line).group(1))
@@ -3725,10 +3703,10 @@ class FileReader:
                 n_virtual_beta = int(re.search(" NVB=\s*(\d+)", line).group(1))
                 self.other["n_virtual_beta"] = n_virtual_beta
 
-            # Frequencies
-            if route is not None and "hpmodes" in route.lower():
-                self.other["hpmodes"] = True
-            if "Harmonic frequencies" in line:
+            # Frequencies 
+            elif "Harmonic frequencies" in line:
+                if route is not None and "hpmodes" in route.lower():
+                    self.other["hpmodes"] = True
                 freq_str = line
                 line = f.readline()
                 while line.strip():
@@ -3741,7 +3719,7 @@ class FileReader:
                     freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                 )
 
-            if "Anharmonic Infrared Spectroscopy" in line:
+            elif "Anharmonic Infrared Spectroscopy" in line:
                 self.skip_lines(f, 5)
                 n += 5
                 anharm_str = ""
@@ -3762,7 +3740,7 @@ class FileReader:
                 )
 
             # X matrix for anharmonic
-            if "Total Anharmonic X Matrix" in line:
+            elif "Total Anharmonic X Matrix" in line:
                 self.skip_lines(f, 1)
                 n += 1
                 n_freq = len(self.other["frequency"].data)
@@ -3783,11 +3761,11 @@ class FileReader:
                 x_matrix += np.tril(x_matrix, k=-1).T
                 self.other["X_matrix"] = x_matrix
 
-            if "Total X0" in line:
+            elif "Total X0" in line:
                 self.other["X0"] = float(line.split()[5])
 
             # TD-DFT output
-            if line.strip().startswith("Ground to excited state"):
+            elif line.strip().startswith("Ground to excited state"):
                 uv_vis = ""
                 highest_state = 0
                 done = False
@@ -3815,16 +3793,27 @@ class FileReader:
                     uv_vis, style="gaussian"
                 )
 
-            if line.startswith(" S**2 before annihilation"):
+            elif line.startswith(" S**2 before annihilation"):
                 self.other["S^2 before"] = float(line.split()[3].strip(","))
                 self.other["S^2 annihilated"] = float(line.split()[-1])
 
             # Thermo
-            if re.search("Temperature\s*\d+\.\d+", line):
+            # elif temperature.match(line):
+            elif line.startswith(" Temperature"):
                 self.other["temperature"] = float(
                     float_num.search(line).group(0)
                 )
-            if "Rotational constants (GHZ):" in line:
+                line = f.readline()
+                while line and not line.startswith(" Molecular mass:"):
+                    if isotope.match(line):
+                        ndx = int(isotope.match(line).group(1)) - 1
+                        self.atoms[ndx]._mass = float(line.split()[-1])
+                    line = f.readline()
+                
+                self.other["mass"] = float(float_num.search(line).group(0))
+                self.other["mass"] *= UNIT.AMU_TO_KG
+
+            elif "Rotational constants (GHZ):" in line:
                 rot = float_num.findall(line)
                 rot = [
                     float(r) * PHYSICAL.PLANCK * (10 ** 9) / PHYSICAL.KB
@@ -3833,7 +3822,7 @@ class FileReader:
                 self.other["rotational_temperature"] = rot
 
             # rotational constants from anharmonic frequency jobs
-            if "Rotational Constants (in MHz)" in line:
+            elif "Rotational Constants (in MHz)" in line:
                 self.skip_lines(f, 2)
                 n += 2
                 equilibrium_rotational_temperature = np.zeros(3)
@@ -3868,23 +3857,23 @@ class FileReader:
                     "centr_rotational_temperature"
                 ] = centr_rotational_temperature
 
-            if "Sum of electronic and zero-point Energies=" in line:
+            elif "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
-            if "Sum of electronic and thermal Enthalpies=" in line:
+            elif "Sum of electronic and thermal Enthalpies=" in line:
                 self.other["enthalpy"] = float(float_num.search(line).group(0))
-            if "Sum of electronic and thermal Free Energies=" in line:
+            elif "Sum of electronic and thermal Free Energies=" in line:
                 self.other["free_energy"] = float(
                     float_num.search(line).group(0)
                 )
-            if "Zero-point correction=" in line:
+            elif "Zero-point correction=" in line:
                 self.other["ZPVE"] = float(float_num.search(line).group(0))
-            if "Rotational symmetry number" in line:
+            elif "Rotational symmetry number" in line:
                 self.other["rotational_symmetry_number"] = int(
                     re.search("\d+", line).group(0)
                 )
 
             # Gradient
-            if re.search("Threshold\s+Converged", line) is not None:
+            elif "Threshold  Converged?" in line:
                 line = f.readline()
                 n += 1
                 grad = {}
@@ -3914,7 +3903,7 @@ class FileReader:
                 self.other["gradient"] = grad
 
             # electronic properties
-            if "Electrostatic Properties (Atomic Units)" in line:
+            elif "Electrostatic Properties (Atomic Units)" in line:
                 self.skip_lines(f, 5)
                 n += 5
                 self.other["electric_potential"] = []
@@ -3930,23 +3919,23 @@ class FileReader:
                 self.other["electric_field"] = np.array(self.other["electric_field"])
 
             # optical features
-            if "[Alpha]" in line:
+            elif "[Alpha]" in line:
                 alpha_match = re.search("\[Alpha\].*\(\s*(.*\s?.*)\)\s*=\s*(-?\d+\.\d+)", line)
                 self.other["optical_rotation_(%s)" % alpha_match.group(1)] = \
                 float(alpha_match.group(2))
 
             # symmetry
-            if "Full point group" in line:
+            elif "Full point group" in line:
                 self.other["full_point_group"] = line.split()[-3]
 
-            if "Largest Abelian subgroup" in line:
+            elif "Largest Abelian subgroup" in line:
                 self.other["abelian_subgroup"] = line.split()[-3]
 
-            if "Largest concise Abelian subgroup" in line:
+            elif "Largest concise Abelian subgroup" in line:
                 self.other["concise_abelian_subgroup"] = line.split()[-3]
 
             # forces
-            if "Forces (Hartrees/Bohr)" in line:
+            elif "Forces (Hartrees/Bohr)" in line:
                 gradient = np.zeros((len(self.atoms), 3))
                 self.skip_lines(f, 2)
                 n += 2
@@ -3959,11 +3948,11 @@ class FileReader:
                 self.other["forces"] = gradient
 
             # nbo stuff
-            if "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
+            elif "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
                 self.read_nbo(f)
 
             # atomic charges
-            if any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
                 charge_match = re.search("(\S+) charges.*:", line)
                 if charge_match:
                     self.skip_lines(f, 1)
@@ -3976,7 +3965,7 @@ class FileReader:
                         self.atoms[i].charge = float(line.split()[2])
                     self.other[charge_match.group(1) + " Charges"] = charges
 
-            if "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
+            elif "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
                 self.skip_lines(f, 1)
                 n += 1
                 cm5_charges = []
@@ -3992,11 +3981,48 @@ class FileReader:
                 self.other["Hirshfeld Charges"] = hirshfeld_charges
                 self.other["CM5 Charges"] = cm5_charges
 
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # BE CAREFUL ABOUT WHAT'S AFTER THIS
+            # WE PUT A REGEX FOR FLOATING POINT NUMBERS HERE FOR
+            # PERFORMANCE REASONS
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            # most energies
+            elif re.search("\d+\.\d+", line):
+                nrg_match = most_energies.search(line)
+                mp_match = mp_energies.search(line)
+                # ^ matches many methods
+                # will also match the SCF line (hence the else here)
+                # the match in the SCF line could be confusing b/c
+                # the SCF line could be
+                # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
+                # and later on, there will be a line...
+                #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
+                # this will give:
+                # * E(RB2PLYPD3) = -76.2887108570
+                # * E(B2PLYPD3) = -76.353361915801
+                # very similar names for very different energies...
+                if nrg_match:
+                    nrg = float(nrg_match.group(2).replace("D", "E"))
+                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
+                        self.other["energy"] = nrg
+                    self.other[nrg_match.group(1)] = nrg
+                # MP energies
+                elif mp_match:
+                    self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                    self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
+
             # capture errors
             # only keep first error, want to fix one at a time
-            if "error" not in self.other:
+            elif "error" not in self.other:
                 for err in ERROR:
-                    if re.search(err, line):
+                    if isinstance(err, str):
+                        if err in line:
+                            self.other["error"] = ERROR[err]
+                            self.other["error_msg"] = line.strip()
+                            break
+
+                    elif err.search(line):
                         self.other["error"] = ERROR[err]
                         self.other["error_msg"] = line.strip()
                         break

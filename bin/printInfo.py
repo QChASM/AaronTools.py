@@ -8,6 +8,11 @@ import numpy as np
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import glob_files
 
+# from cProfile import Profile
+# 
+# profile = Profile()
+# profile.enable()
+
 info_parser = argparse.ArgumentParser(
     description="print information in Gaussian, ORCA, or Psi4 output files",
     formatter_class=argparse.RawTextHelpFormatter
@@ -170,3 +175,6 @@ if not args.outfile:
 else:
     with open(args.outfile, "a") as f:
         f.write(s.strip())
+
+# profile.disable()
+# profile.print_stats()

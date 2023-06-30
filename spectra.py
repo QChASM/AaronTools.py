@@ -749,6 +749,8 @@ class Frequency(Signals):
             raise TypeError(
                 "hpmodes argument required when data is a string"
             )
+        hpmodes_re = re.compile("^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$")
+        regmodes_re = re.compile("^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$")
         num_head = 0
         for line in lines:
             if "Harmonic frequencies" in line:
@@ -818,9 +820,7 @@ class Frequency(Signals):
                 continue
 
             if hpmodes:
-                match = re.search(
-                    r"^\s+\d+\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line
-                )
+                match = hpmodes_re.search(line)
                 if match is None:
                     continue
                 values = float_num.findall(line)
@@ -838,12 +838,13 @@ class Frequency(Signals):
                     vector[coord] = m
                     modes[-tmp][atom] = vector
             else:
-                match = re.search(r"^\s+\d+\s+\d+(\s+[+-]?\d+\.\d+)+$", line)
+                match = regmodes_re.search(line)
                 if match is None:
                     continue
-                values = float_num.findall(line)
-                atom = int(values[0]) - 1
-                moves = np.array(values[2:], dtype=np.float)
+                data = line.split()
+                # values = float_num.findall(line)
+                atom = int(data[0]) - 1
+                moves = np.array(data[2:], dtype=float)
                 n_moves = len(moves) // 3
                 for i in range(-n_moves, 0):
                     modes[i].append(
@@ -998,7 +999,7 @@ class Frequency(Signals):
                 continue
             ndx += 1
             values = float_num.findall(line)
-            moves = np.array(values, dtype=np.float)
+            moves = np.array(values, dtype=float)
             n_moves = len(moves) // 3
             for i in range(-n_moves, 0):
                 modes[i].append(
