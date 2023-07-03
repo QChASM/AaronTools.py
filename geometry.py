@@ -692,17 +692,13 @@ class Geometry:
 
     # utilities
     def __str__(self):
-        s = ""
-        for a in self:
-            s += a.__str__() + "\n"
-        return s
+        xyz = FileWriter.write_file(self, outfile=False)
+        return xyz
 
     def __repr__(self):
         """string representation"""
-        s = ""
-        for a in self:
-            s += a.__repr__() + "\n"
-        return s
+        xyz = FileWriter.write_file(self, outfile=False)
+        return xyz
 
     def __eq__(self, other):
         """
@@ -833,6 +829,47 @@ class Geometry:
         self.name = tmp
         if out is not None:
             return out
+
+    #show py3Dmol interactive model if available and in Jupyter notebook
+    #this could be made much fancier, for example, to display ONIOM molecules in a way
+    #that shows the different layers, but I'll leave that to someone else. SEW
+    def display(self, style="stick"):
+        """
+        Displays py3Dmol viewer from Geometry using "stick" (default), "sphere", or "line" style
+        """
+
+        def is_notebook():
+            try:
+                shell = get_ipython().__class__.__name__
+                if shell == 'ZMQInteractiveShell':
+                    return True   # Jupyter notebook or qtconsole
+                elif shell == 'TerminalInteractiveShell':
+                    return False  # Terminal running IPython
+                else:
+                    return False  # Other type (?)
+            except NameError:
+                return False      # Probably standard Python interpreter
+
+        if is_notebook():
+            try:
+                import py3Dmol
+                view = py3Dmol.view(data=self.write(outfile=False),style={style:{}})
+                #display labels on mouse hover using js
+                view.setHoverable({},True,'''function(atom,viewer,event,container) {
+                       if(!atom.label) {
+                        atom.label = viewer.addLabel(atom.atom+":"+atom.index,{position: atom, backgroundColor: 'white', fontColor:'black'});
+                       }}''',
+                   '''function(atom,viewer) {
+                       if(atom.label) {
+                        viewer.removeLabel(atom.label);
+                        delete atom.label;
+                       }
+                    }''')
+                view.show()
+            except ImportError:
+                print("py3Dmol required to display 3D representations")
+        else:
+            print(self.write(outfile=False))
 
     def copy(self, atoms=None, name=None, comment=None, copy_atoms=True):
         """
