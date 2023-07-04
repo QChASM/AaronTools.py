@@ -692,12 +692,12 @@ class Geometry:
 
     # utilities
     def __str__(self):
-        xyz = FileWriter.write_file(self, outfile=False)
+        xyz = self.write(outfile=False)
         return xyz
 
     def __repr__(self):
         """string representation"""
-        xyz = FileWriter.write_file(self, outfile=False)
+        xyz = self.write(outfile=False)
         return xyz
 
     def __eq__(self, other):
@@ -833,7 +833,7 @@ class Geometry:
     #show py3Dmol interactive model if available and in Jupyter notebook
     #this could be made much fancier, for example, to display ONIOM molecules in a way
     #that shows the different layers, but I'll leave that to someone else. SEW
-    def display(self, style="stick"):
+    def display(self, style="stick", colorscheme="Jmol"):
         """
         Displays py3Dmol viewer from Geometry using "stick" (default), "sphere", or "line" style
         """
@@ -853,11 +853,18 @@ class Geometry:
         if is_notebook():
             try:
                 import py3Dmol
-                view = py3Dmol.view(data=self.write(outfile=False),style={style:{}})
+                view = py3Dmol.view(
+                    data=self.write(outfile=False),
+                    style={style: {'colorscheme': colorscheme}},
+                )
                 #display labels on mouse hover using js
                 view.setHoverable({},True,'''function(atom,viewer,event,container) {
                        if(!atom.label) {
-                        atom.label = viewer.addLabel(atom.atom+":"+atom.index,{position: atom, backgroundColor: 'white', fontColor:'black'});
+                        var ndx = atom.index + 1;
+                        atom.label = viewer.addLabel(
+                            atom.atom + ":" + ndx,
+                            {position: atom, backgroundColor: 'white', fontColor:'black'}
+                        );
                        }}''',
                    '''function(atom,viewer) {
                        if(atom.label) {
