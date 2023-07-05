@@ -10,8 +10,11 @@ from AaronTools.component import Component
 from AaronTools.spectra import (
     Frequency,
     HarmonicVibration,
+    AnharmonicVibration,
     ValenceExcitations,
     ValenceExcitation,
+    TransientExcitation,
+    SOCExcitation,
 )
 from AaronTools.finders import (
     Finder,
@@ -49,9 +52,11 @@ class ATEncoder(json.JSONEncoder):
         elif isinstance(obj, CompOutput):
             return self._encode_comp_output(obj)
         elif isinstance(obj, Frequency):
-            return self._encode_signals(obj)
+            return self._encode_frequency(obj)
         elif isinstance(obj, ValenceExcitations):
-            return self._encode_signals(obj)
+            return self._encode_valence_excitations(obj)
+        elif isinstance(obj, HarmonicVibration) or isinstance(obj, AnharmonicVibration):
+            return self._encode_vibration(obj)
         elif isinstance(obj, Theory):
             return self._encode_theory(obj)
         elif isinstance(obj, Finder):
@@ -141,7 +146,7 @@ class ATEncoder(json.JSONEncoder):
 
         return rv
 
-    def _encode_signals(self, obj):
+    def _encode_frequency(self, obj):
         rv = {"_type": obj.__class__.__name__}
         data = []
         for d in obj.data:
@@ -152,6 +157,57 @@ class ATEncoder(json.JSONEncoder):
                 entry[k] = v
             data += [entry.copy()]
         rv["data"] = data
+        if obj.anharm_data:
+            anharm_data = []
+            for d in obj.anharm_data:
+                entry = {}
+                for k, v in d.__dict__.items():
+                    if isinstance(v, np.ndarray):
+                        v = v.tolist()
+                    entry[k] = v
+                anharm_data += [entry.copy()]
+            rv["anharm_data"] = anharm_data
+        return rv
+
+    def _encode_vibration(self, obj):
+        rv = {"_type": obj.__class__.__name__}
+        for k, v in obj.__dict__.items():
+            if isinstance(v, np.ndarray):
+                v = v.tolist()
+            rv[k] = v
+        return rv
+
+    def _encode_valence_excitations(self, obj):
+        rv = {"_type": obj.__class__.__name__}
+        data = []
+        for d in obj.data:
+            entry = {}
+            for k, v in d.__dict__.items():
+                if isinstance(v, np.ndarray):
+                    v = v.tolist()
+                entry[k] = v
+            data += [entry.copy()]
+        rv["data"] = data
+        if obj.transient_data:
+            transient_data = []
+            for d in obj.transient_data:
+                entry = {}
+                for k, v in d.__dict__.items():
+                    if isinstance(v, np.ndarray):
+                        v = v.tolist()
+                    entry[k] = v
+                transient_data += [entry.copy()]
+            rv["transient_data"] = transient_data
+        if obj.spin_orbit_data:
+            spin_orbit_data = []
+            for d in obj.spin_orbit_data:
+                entry = {}
+                for k, v in d.__dict__.items():
+                    if isinstance(v, np.ndarray):
+                        v = v.tolist()
+                    entry[k] = v
+                spin_orbit_data += [entry.copy()]
+            rv["spin_orbit_data"] = spin_orbit_data
         return rv
 
     def _encode_theory(self, obj):
@@ -276,6 +332,10 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_geometry(obj)
         if obj["_type"] == "Frequency":
             return self._decode_frequency(obj)
+        if obj["_type"] == "HarmonicVibration":
+            return self._decode_vibration(obj, cls=HarmonicVibration)
+        if obj["_type"] == "AnharmonicVibration":
+            return self._decode_vibration(obj, cls=AnharmonicVibration)
         if obj["_type"] == "ValenceExcitations":
             return self._decode_valence_excitations(obj)
         if obj["_type"] == "CompOutput":
@@ -327,20 +387,63 @@ class ATDecoder(json.JSONDecoder):
         for d in obj["data"]:
             kw = {k:v for k, v in d.items()}
             freq = kw.pop("frequency")
+            kw["vector"] = np.array(kw["vector"])
             data += [
                 HarmonicVibration(freq, **kw)
             ]
-        return Frequency(data)
+        freq_obj = Frequency(data)
+        if "anharm_data" in obj:
+            anharm_data = []
+            for d in obj["anharm_data"]:
+                kw = {k:v for k, v in d.items()}
+                freq = kw.pop("frequency")
+                anharm_data += [
+                    AnharmonicVibration(freq, **kw)
+                ]
+            freq_obj.anharm_data = anharm_data
+        return freq_obj
+
+    def _decode_vibration(self, obj, cls=None):
+        data = {}
+        for k, v in obj.items():
+            if k == "_type":
+                continue
+            if k == "frequency":
+                continue
+            data[k] = v
+        if "vector" in data:
+            data["vector"] = np.array(data["vector"])
+        out = cls(obj["frequency"], **data)
+        return out
 
     def _decode_valence_excitations(self, obj):
         data = []
         for d in obj["data"]:
             kw = {k:v for k, v in d.items()}
-            freq = kw.pop("frequency")
+            excitation_energy = kw.pop("excitation_energy")
             data += [
-                ValenceExcitation(freq, **kw)
+                ValenceExcitation(excitation_energy, **kw)
             ]
-        return ValenceExcitations(data)
+        excitation_obj = ValenceExcitations(data)
+        if "transient_data" in obj and obj["transient_data"]:
+            transient_data = []
+            for d in obj["transient_data"]:
+                kw = {k:v for k, v in d.items()}
+                excitation_energy = kw.pop("excitation_energy")
+                transient_data += [
+                    TransientExcitation(excitation_energy, **kw)
+                ]
+            excitation_obj.transient_data = transient_data
+        if "spin_orbit_data" in obj and obj["spin_orbit_data"]:
+            spin_orbit_data = []
+            for d in obj["spin_orbit_data"]:
+                kw = {k:v for k, v in d.items()}
+                excitation_energy = kw.pop("excitation_energy")
+                spin_orbit_data += [
+                    TransientExcitation(excitation_energy, **kw)
+                ]
+            excitation_obj.spin_orbit_data = spin_orbit_data
+        return excitation_obj
 
     def _decode_comp_output(self, obj):
         keys = [
@@ -353,7 +456,6 @@ class ATDecoder(json.JSONDecoder):
             "free_energy",
             "grimme_g",
             "gradient",
-            "frequency",
             "E_ZPVE",
             "ZPVE",
             "mass",
