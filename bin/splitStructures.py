@@ -44,6 +44,14 @@ split_parser.add_argument(
 )
 
 split_parser.add_argument(
+    "-n", "--no-append",
+    action="store_false",
+    default=True,
+    dest="append",
+    help="do not append structures to existing files"
+)
+
+split_parser.add_argument(
     "-if", "--input-format",
     type=str,
     default=None,
@@ -85,5 +93,4 @@ for f in glob_files(args.infile, parser=split_parser):
                 get_filename(f, include_parent_dir=args.include_parent)
             )
             outfile = outfile.replace("$N", n_fmt % (i + 1))
-            os.makedirs(os.path.dirname(outfile), exist_ok=True)
-            geom.write(outfile=outfile)
+            geom.write(outfile=outfile, append=args.append)
