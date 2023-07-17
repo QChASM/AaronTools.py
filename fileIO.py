@@ -13,7 +13,11 @@ from AaronTools.atoms import Atom
 from AaronTools.oniomatoms import OniomAtom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.orbitals import Orbitals
-from AaronTools.spectra import Frequency, ValenceExcitations
+from AaronTools.spectra import (
+    Frequency,
+    ValenceExcitations,
+    NMR,
+)
 from AaronTools.theory import *
 from AaronTools.utils.utils import (
     is_alpha,
@@ -2396,6 +2400,16 @@ class FileReader:
                         self.other["frequency"] = Frequency(
                             freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                         )
+
+                elif line.startswith("CHEMICAL SHIFTS"):
+                    nmr_data = []
+                    while line:
+                        nmr_data.append(line)
+                        n += 1
+                        line = f.readline()
+                        if "Maximum memory used throughout the entire EPRNMR-calculation:" in line:
+                            break
+                    self.other["nmr"] = NMR("".join(nmr_data), style="orca")
 
                 elif line.startswith("Temperature"):
                     self.other["temperature"] = float(line.split()[2])

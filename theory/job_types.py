@@ -1426,3 +1426,49 @@ class TDDFTJob(JobType):
         raise NotImplementedError("we currently don't support TD-DFT for Q-Chem")
     
     
+class NMRJob(JobType):
+    """NMR job"""
+    def __init__(self, geometry=None, atoms=None, coupling_type=None):
+        super().__init__()
+        self.geometry = geometry
+        self.atoms = atoms
+        self.coupling_type = coupling_type
+    
+    def get_gaussian(self):
+        out = {GAUSSIAN_ROUTE: {"NMR": []}}
+        warnings = []
+        if self.coupling_type == "spin-spin":
+            out[GAUSSIAN_ROUTE]["NMR"].append("SpinSpin")
+        elif self.coupling_type == "mixed":
+            out[GAUSSIAN_ROUTE]["NMR"].append("Mixed")
+        elif self.coupling_type:
+            warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
+            out[GAUSSIAN_ROUTE]["NMR"].append(self.coupling_type)
+        if self.atoms:
+            atoms = self.geometry.find(self.atoms)
+            ndx = {a: str(i) for i, a in enumerate(atoms)}
+            out[GAUSSIAN_ROUTE]["NMR"].append(
+                "atoms=%s" % ",".join([ndx[a] for a in atoms])
+            )
+    
+        return out, warnings
+    
+    def get_orca(self):
+        out = {ORCA_ROUTE: ["NMR"]}
+        out[ORCA_BLOCKS] = {"eprnmr": []}
+        warnings = []
+        if self.atoms:
+            atoms = self.geometry.find(self.atoms)
+            for i, a in enumerate(atoms):
+                spec = "Nuclei = %i " % (i + 1)
+                kind = "shift"
+                if self.coupling_type == "spin-spin":
+                    kind = "ssall"
+                elif self.coupling_type:
+                    warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
+                    kind = self.coupling_type
+                spec += "{ %s }" % kind
+                out[ORCA_BLOCKS]["eprnmr"].append(spec)
+        
+        return out, warnings
+        

@@ -665,6 +665,7 @@ class InternalCoordinateSet:
                         for atom in linear_atoms_2:
                             if atom in nonlinear_atoms_2[0].connected:
                                 central_atom2 = atom
+                        
                         for a1, a2 in unique_combinations(
                             nonlinear_atoms_1, nonlinear_atoms_2
                         ):

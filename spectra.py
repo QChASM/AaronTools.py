@@ -5,7 +5,7 @@ import numpy as np
 
 from AaronTools import addlogger
 from AaronTools.const import UNIT, PHYSICAL
-from AaronTools.utils.utils import float_num
+from AaronTools.utils.utils import float_num, pascals_triangle
 
 
 class Signal:
@@ -1951,5 +1951,364 @@ class ValenceExcitations(Signals):
             plot_type=plot_type,
             x_label=x_label,
             y_label=y_label,
+            rotate_x_ticks=rotate_x_ticks,
+        )
+
+
+class Shift(Signal):
+    x_attr = "shift"
+    required_attrs = ("ndx", "element")
+
+
+class NMR(Signals):
+    def __init__(self, *args, **kwargs):
+        self.coupling = {}
+        super().__init__(*args, **kwargs)
+    
+    def parse_orca_lines(self, lines, *args, **kwargs):
+        nuc = []
+        element = None
+        ndx = None
+        ndx_a = None
+        ndx_b = None
+        ele_a = None
+        ele_a = None
+        nuc_regex = re.compile("Nucleus\s*(\d+)([A-Za-z]+)")
+        coupl_regex = re.compile(
+            "NUCLEUS A =\s*([A-Za-z]+)\s*(\d+)\s*NUCLEUS B =\s*([A-Za-z]+)\s*(\d+)"
+        )
+        for line in lines:
+            if nuc_regex.search(line):
+                shift_info = nuc_regex.search(line)
+                ndx = int(shift_info.group(1))
+                element = shift_info.group(2)
+            elif line.startswith(" Total") and "iso=" in line:
+                if ndx_a is None:
+                    shift = float(line.split()[-1])
+                    self.data.append(Shift(shift, ndx=ndx, element=element, intensity=1))
+                else:
+                    coupling = float(line.split()[-1])
+                    self.coupling[ndx_a][ndx_b] = coupling
+                    self.coupling[ndx_b][ndx_a] = coupling
+            elif line.startswith(" NUCLEUS A ="):
+                coupl_info = coupl_regex.search(line)
+                ele_a = coupl_info.group(1)
+                ndx_a = int(coupl_info.group(2))
+                ele_b = coupl_info.group(3)
+                ndx_b = int(coupl_info.group(4))
+                self.coupling.setdefault(ndx_a, {})
+                self.coupling.setdefault(ndx_b, {})
+
+    @classmethod
+    def get_mixed_signals(cls, *args, **kwargs):
+        raise NotImplementedError
+    
+    def get_spectrum_functions(
+        self,
+        fwhm=5.0,
+        peak_type="lorentzian",
+        voigt_mixing=0.5,
+        scalar_scale=0.0,
+        linear_scale=0.0,
+        quadratic_scale=0.0,
+        intensity_attr="intensity",
+        data_attr="data",
+        pulse_frequency=60.0,
+        equivalent_nuclei=None,
+        geometry=None,
+        coupling_threshold=0.5,
+        element="H",
+    ):
+        """
+        returns a list of functions that can be evaluated to
+        produce a spectrum
+        
+        :param float fwhm: full width at half max of each peak (Hz)
+        :param str peak_type: gaussian, lorentzian, pseudo-voigt, or delta
+        :param float voigt_mixing: ratio of pseudo-voigt that is gaussian
+        :param float scalar_scale: shift x data
+        :param float linear_scale: scale x data
+        :param float quadratic_scale: scale x data
+            
+            x' = (1 - linear_scale * x - quadratic_scale * x^2 - scalar_scale)
+        :param str intensity_attr: attribute of Signal used for the intensity
+            of that signal
+        :param str data_attr: attribute of self for the list of Signal()
+        :param float pulse_frequency: magnet pulse frequency
+        :param list equivalent_nuclei: list of lists of equivalent nuclei
+        :param Geometry geometry: used to determine equivalent nuclei if equivalent_nuclei is not given
+        """
+        data = getattr(self, data_attr)
+        x_attr = data[0].x_attr
+        
+        fwhm = (fwhm / pulse_frequency)
+        print("fwhm", fwhm)
+        
+        # determine equivalent nuclei
+        if equivalent_nuclei is None and geometry is not None:
+            ranks = geometry.canonical_rank(break_ties=False)
+            rank_map = {}
+            equivalent_nuclei = []
+            i = 0
+            while ranks:
+                rank = ranks.pop(0)
+                try:
+                    pos = rank_map[rank]
+                except KeyError:
+                    pos = len(equivalent_nuclei)
+                    rank_map[rank] = pos
+                    equivalent_nuclei.append([])
+                equivalent_nuclei[pos].append(i)
+                i += 1
+        
+        elif equivalent_nuclei is None and geometry is None:
+            equivalent_nuclei = [[shift.ndx] for shift in data]
+
+        couplings = []
+        for group in equivalent_nuclei:
+            found_neighbors = set()
+            couplings.append([])
+            for nuc in group:
+                if nuc not in self.coupling:
+                    continue
+                for ndx_b in self.coupling[nuc]:
+                    if ndx_b in group:
+                        continue
+                    if ndx_b in found_neighbors:
+                        continue
+                    couplings[-1].append([])
+                    for group_b in equivalent_nuclei:
+                        if ndx_b in group_b:
+                            found_neighbors.update(group_b)
+                            for neighbor in group_b:
+                                couplings[-1][-1].append(self.coupling[nuc][ndx_b])
+                            break
+        
+        new_data = []
+        for group, coupled_neighbors in zip(equivalent_nuclei, couplings):
+            average_shift = 0
+            found_ele = False
+            for shift in data:
+                if shift.ndx in group and shift.element == element:
+                    average_shift += shift.shift / len(group)
+                    found_ele = True
+            if not found_ele:
+                continue
+            if not coupled_neighbors:
+                new_data.append(Shift(average_shift, intensity=len(group)))
+                continue
+            neighbor_couplings = [
+                sum([x for x in coupling]) / len(coupling)
+                for coupling in coupled_neighbors
+            ]
+            neighbor_couplings.sort(reverse=False)
+            split_intensities = [len(group)]
+            split_positions = [average_shift]
+            print("average_shift:", average_shift, group)
+            for coupling_j, neighbors in zip(neighbor_couplings, coupled_neighbors):
+                if abs(coupling_j) < coupling_threshold:
+                    print(coupling_j, "is less than threshold", coupling_threshold)
+                    print("skipping coupling with", neighbors)
+                    continue
+                print("splitting", neighbors)
+                coupling_j /= pulse_frequency
+                n_split = len(neighbors)
+                pattern = pascals_triangle(n_split)
+                print("%i-et" % len(pattern))
+                pattern = [x / sum(pattern) for x in pattern]
+                new_split_intensities = []
+                new_split_positions = []
+                for position, intensity in zip(split_positions, split_intensities):
+                    for i, ratio in enumerate(pattern):
+                        i -= len(pattern) // 2
+                        if len(pattern) % 2 == 0:
+                            i += 0.5
+                        new_split_intensities.append(ratio * intensity)
+                        new_split_positions.append(i * coupling_j + position)
+                split_intensities = new_split_intensities
+                split_positions = new_split_positions
+            
+            for position, intensity in zip(split_positions, split_intensities):
+                new_data.append(Shift(position, intensity=intensity))
+        
+        data = new_data
+        
+        # scale x positions
+        if not data[0].nested:
+            x_positions = np.array(
+                [getattr(d, x_attr) for d in data if self.filter_data(d)]
+            )
+    
+            intensities = [
+                getattr(d, intensity_attr) for d in data if self.filter_data(d)
+            ]
+        else:
+            x_positions = []
+            intensities = []
+            x_positions.extend(
+                [getattr(d, x_attr) for d in data if self.filter_data(d)]
+            )
+            intensities.extend(
+                [getattr(d, intensity_attr) for d in data if self.filter_data(d)]
+            )
+            for nest in data[0].nested:
+                for d in data:
+                    nest_attr = getattr(d, nest)
+                    if isinstance(nest_attr, dict):
+                        for value in nest_attr.values():
+                            if hasattr(value, "__iter__"):
+                                for item in value:
+                                    x_positions.append(getattr(item, x_attr))
+                                    intensities.append(getattr(item, intensity_attr))
+                            else:
+                                x_positions.append(getattr(value, x_attr))
+                                intensities.append(getattr(value, intensity_attr))
+                    elif hasattr(nest_attr, "__iter__"):
+                        for item in nest_attr:
+                            x_positions.append(getattr(item, x_attr))
+                            intensities.append(getattr(item, intensity_attr))
+                    else:
+                        x_positions.append(getattr(nest_attr, x_attr))
+                        intensities.append(getattr(nest_attr, intensity_attr))
+                
+            x_positions = np.array(x_positions)
+
+        x_positions -= (
+            linear_scale * x_positions + quadratic_scale * x_positions ** 2
+        )
+        x_positions += scalar_scale
+
+        e_factor = -4 * np.log(2) / fwhm ** 2
+        sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+
+        functions = []
+
+        for x_pos, intensity in zip(x_positions, intensities):
+            if intensity is not None:
+                if peak_type.lower() == "gaussian":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * np.exp(e_factor * (x - x0) ** 2)
+                        * fwhm / (2 * np.sqrt(2 * np.log(2)))
+                    )
+
+                elif peak_type.lower() == "lorentzian":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * (
+                            0.5 * fwhm
+                            / (np.pi * ((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                        )
+                    )
+
+                elif peak_type.lower() == "pseudo-voigt":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * (
+                            (1 - voigt_mixing)
+                            * (
+                                (0.5 * fwhm) ** 2
+                                / (((x - x0) ** 2 + (0.5 * fwhm) ** 2))
+                            )
+                            + voigt_mixing
+                            * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
+                        )
+                    )
+
+                elif peak_type.lower() == "delta":
+                    functions.append(
+                        lambda x, x0=x_pos, inten=intensity: inten
+                        * int(x == x0)
+                    )
+
+        return functions, x_positions, intensities
+
+    def plot_nmr(
+        self,
+        figure,
+        centers=None,
+        widths=None,
+        exp_data=None,
+        plot_type="nmr",
+        peak_type="lorentzian",
+        reverse_x=True,
+        y_label=None,
+        point_spacing=None,
+        normalize=True,
+        fwhm=0.1,
+        rotate_x_ticks=False,
+        show_functions=None,
+        pulse_frequency=60.0,
+        **kwargs,
+    ):
+        """
+        plot IR data on figure
+        
+        :param matplotlib.pyplot.Figure figure: matplotlib figure
+        :param np.ndarray centers: array-like of float, plot is split into sections centered
+            on the frequency specified by centers
+            
+            default is to not split into sections
+        :param np.ndarray widths: array-like of float, defines the width of each section
+        :param list exp_data: other data to plot
+            
+            should be a list of (x_data, y_data, color)
+        :param bool reverse_x: if True, 0 cm^-1 will be on the right
+        :param str plot_type: see Frequency.get_plot_data
+        :param str peak_type: any value allowed by Frequency.get_plot_data
+        :param kwargs: keywords for Frequency.get_spectrum_functions
+        """
+
+        if "intensity_attr" not in kwargs:
+            kwargs["intensity_attr"] = "intensity"
+
+        data_attr = "data"
+
+        functions, frequencies, intensities = self.get_spectrum_functions(
+            peak_type=peak_type,
+            fwhm=fwhm,
+            data_attr=data_attr,
+            pulse_frequency=pulse_frequency,
+            **kwargs,
+        )
+
+        other_y_style = None
+        ndx_list = None
+        if show_functions is not None:
+            ndx_list = [info[0] for info in show_functions]
+            other_y_style = list(info[1:] for info in show_functions)
+
+        data = self.get_plot_data(
+            functions,
+            frequencies,
+            fwhm=fwhm / pulse_frequency,
+            transmittance=plot_type.lower().startswith("transmittance"),
+            peak_type=peak_type,
+            point_spacing=point_spacing,
+            normalize=normalize,
+            show_functions=ndx_list,
+        )
+        if data is None:
+            return
+
+        x_values, y_values, other_y_values = data
+
+        if y_label is None:
+            y_label = "intensity (arb.)"
+
+        self.plot_spectrum(
+            figure,
+            x_values,
+            y_values,
+            other_y_values=other_y_values,
+            other_y_style=other_y_style,
+            centers=centers,
+            widths=widths,
+            exp_data=exp_data,
+            reverse_x=reverse_x,
+            peak_type=peak_type,
+            plot_type=plot_type,
+            y_label=y_label,
+            x_label="shift (ppm)",
             rotate_x_ticks=rotate_x_ticks,
         )

@@ -9,6 +9,7 @@ import numpy as np
 from AaronTools.const import AARONTOOLS, PHYSICAL
 
 _loaded_leb_grids = dict()
+_pascal_triangles = {0: [1]}
 
 
 def range_list(number_list, sep=",", sort=True):
@@ -917,5 +918,30 @@ def unique_combinations(*args):
             output[-1].append(option)
     
     return output
+
+
+def pascals_triangle(n):
+    """returns row n of pascal's triangle"""
+    try:
+        return _pascal_triangles[n]
+    except KeyError:
+        # if the row isn't cached, fill in all rows in between
+        # the last cached row
+        i = n - 1
+        while i >= 0:
+            try:
+                _pascal_triangles[i]
+                break
+            except KeyError:
+                i -= 1
+        previous_row = _pascal_triangles[i]
+        for j in range(i + 1, n + 1):
+            row = [1]
+            for i in range(0, j - 1):
+                row.append(previous_row[i] + previous_row[i + 1])
+            row.append(1)
+            _pascal_triangles[j] = row
+            previous_row = row
+        return row
 
 float_num = re.compile("[-+]?\d+\.?\d*")
