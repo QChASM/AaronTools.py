@@ -3,7 +3,7 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer="", atomtype="", charge="", link_info=None, res = "", atom=None):
+    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer=None, atomtype=None, charge=None, link_info=None, res = "", atom=None):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
         atomtype = str(atomtype).strip()
@@ -128,6 +128,7 @@ class OniomAtom(Atom):
         else:
             return False
 
+
 class ChargeSum:
     def __init__(self):
         pass
@@ -145,6 +146,7 @@ class ChargeSum:
             return np.sum(totalcharge)
         else:
             raise TypeError("function only accepts a list, tuple, or array of atoms")
+
 
 class OniomSanity:
     def __init__(self):

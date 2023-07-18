@@ -1030,7 +1030,7 @@ class Theory:
                             if GAUSSIAN_ROUTE in basis_info:
                                 out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
 
-                elif method.is_mm == True:
+                elif method.is_mm:
                     if GAUSSIAN_MM in other_kw_dict.keys():
                         for option in other_kw_dict[GAUSSIAN_MM].keys():
                             known_opts = []
@@ -1193,6 +1193,7 @@ class Theory:
         # atom specs need flag column before coords if any atoms frozen
         has_frozen = False
         oniom = False
+        mm = False
         has_type = False
         has_charge = False
         for atom in self.geometry.atoms:
@@ -1202,11 +1203,13 @@ class Theory:
         test_atom = self.geometry.atoms[0]
         if self.method is None and self.high_method is not None:
             oniom = True
+        elif self.method is not None and self.method.is_mm:
+            mm = True
         if hasattr(test_atom, "atomtype"):
-            if atom.atomtype != "" and oniom==True:
+            if atom.atomtype != "" and (oniom or mm):
                 has_type = True
         if hasattr(test_atom, "charge"):
-            if atom.charge != "" and atom.charge != None:
+            if atom.charge is not None and (oniom or mm):
                 has_charge = True
         for i, atom in enumerate(self.geometry.atoms):
             spec = ""
@@ -1230,17 +1233,15 @@ class Theory:
                 coord = other_kw_dict[GAUSSIAN_COORDINATES]["coords"][i]
                 for val in coord:
                     s += "  "
-                    if isinstance(val, float):
+                    try:
                         s += " %9.5f" % val
-                    elif isinstance(val, str):
-                        s += " %5s" % val
-                    elif isinstance(val, int):
-                        s += " %3i" % val
-                    else:
-                        warnings.append("unknown coordinate type: %s" % type(val))
+                    except TypeError:
+                        s += " %5s" % str(val)
+
             except KeyError:
                 coord = tuple(atom.coords)
                 s += "   %9.5f   %9.5f   %9.5f" % coord
+
             if oniom:
                 s += " %s" % atom.layer
                 if atom.link_info =={}:
