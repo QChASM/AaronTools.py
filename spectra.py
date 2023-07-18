@@ -4,7 +4,7 @@ import re
 import numpy as np
 
 from AaronTools import addlogger
-from AaronTools.const import UNIT, PHYSICAL
+from AaronTools.const import UNIT, PHYSICAL, COMMONLY_ODD_ISOTOPES
 from AaronTools.utils.utils import float_num, pascals_triangle
 
 
@@ -32,6 +32,7 @@ class Signals:
     parent class for storing data for different signals in the
     spectrum and plotting a simulated spectrum
     """
+    
     # label for x axis - should be set by child classes
     x_label = None
     
@@ -256,18 +257,28 @@ class Signals:
                 x_values = np.array(x_values)
             
             else:
+                xmax = max(signal_centers) + 10 * (fwhm + 1)
+                xmin = min(signal_centers) - 10 * (fwhm + 1)
+                if xmax > 0:
+                    xmax *= 1.1
+                else:
+                    xmax *= 0.9
+                if xmin < 0:
+                    xmin *= 1.1
+                else:
+                    xmin *= 0.9
                 x_values = np.linspace(
-                    0,
-                    max(signal_centers) - 10 * fwhm,
-                    num=100
+                    xmin,
+                    xmax,
+                    num=1000,
                 ).tolist()
             
                 for freq in signal_centers:
                     x_values.extend(
                         np.linspace(
-                            max(freq - (7.5 * fwhm), 0),
-                            freq + (7.5 * fwhm),
-                            num=75,
+                            freq - (10 * fwhm),
+                            freq + (10 * fwhm),
+                            num=250,
                         ).tolist()
                     )
                     x_values.append(freq)
@@ -1961,6 +1972,8 @@ class Shift(Signal):
 
 
 class NMR(Signals):
+    x_label = "shift (ppm)"
+    
     def __init__(self, *args, **kwargs):
         self.coupling = {}
         super().__init__(*args, **kwargs)
@@ -2005,11 +2018,11 @@ class NMR(Signals):
     
     def get_spectrum_functions(
         self,
-        fwhm=5.0,
+        fwhm=2.5,
         peak_type="lorentzian",
         voigt_mixing=0.5,
         scalar_scale=0.0,
-        linear_scale=0.0,
+        linear_scale=1.0,
         quadratic_scale=0.0,
         intensity_attr="intensity",
         data_attr="data",
@@ -2018,6 +2031,7 @@ class NMR(Signals):
         geometry=None,
         coupling_threshold=0.5,
         element="H",
+        couple_with=COMMONLY_ODD_ISOTOPES,
     ):
         """
         returns a list of functions that can be evaluated to
@@ -2029,8 +2043,7 @@ class NMR(Signals):
         :param float scalar_scale: shift x data
         :param float linear_scale: scale x data
         :param float quadratic_scale: scale x data
-            
-            x' = (1 - linear_scale * x - quadratic_scale * x^2 - scalar_scale)
+            x' = scalar_scale - linear_scale * x - quadratic_scale * x^2
         :param str intensity_attr: attribute of Signal used for the intensity
             of that signal
         :param str data_attr: attribute of self for the list of Signal()
@@ -2040,9 +2053,9 @@ class NMR(Signals):
         """
         data = getattr(self, data_attr)
         x_attr = data[0].x_attr
-        
-        fwhm = (fwhm / pulse_frequency)
-        print("fwhm", fwhm)
+
+        if couple_with == "all" and geometry:
+            couple_with = set(geometry.elements)
         
         # determine equivalent nuclei
         if equivalent_nuclei is None and geometry is not None:
@@ -2074,6 +2087,9 @@ class NMR(Signals):
                 for ndx_b in self.coupling[nuc]:
                     if ndx_b in group:
                         continue
+                    for shift in data:
+                        if shift.element not in couple_with:
+                            found_neighbors.add(ndx_b)
                     if ndx_b in found_neighbors:
                         continue
                     couplings[-1].append([])
@@ -2083,7 +2099,7 @@ class NMR(Signals):
                             for neighbor in group_b:
                                 couplings[-1][-1].append(self.coupling[nuc][ndx_b])
                             break
-        
+
         new_data = []
         for group, coupled_neighbors in zip(equivalent_nuclei, couplings):
             average_shift = 0
@@ -2101,20 +2117,14 @@ class NMR(Signals):
                 sum([x for x in coupling]) / len(coupling)
                 for coupling in coupled_neighbors
             ]
-            neighbor_couplings.sort(reverse=False)
             split_intensities = [len(group)]
             split_positions = [average_shift]
-            print("average_shift:", average_shift, group)
             for coupling_j, neighbors in zip(neighbor_couplings, coupled_neighbors):
                 if abs(coupling_j) < coupling_threshold:
-                    print(coupling_j, "is less than threshold", coupling_threshold)
-                    print("skipping coupling with", neighbors)
                     continue
-                print("splitting", neighbors)
                 coupling_j /= pulse_frequency
                 n_split = len(neighbors)
                 pattern = pascals_triangle(n_split)
-                print("%i-et" % len(pattern))
                 pattern = [x / sum(pattern) for x in pattern]
                 new_split_intensities = []
                 new_split_positions = []
@@ -2173,10 +2183,7 @@ class NMR(Signals):
                 
             x_positions = np.array(x_positions)
 
-        x_positions -= (
-            linear_scale * x_positions + quadratic_scale * x_positions ** 2
-        )
-        x_positions += scalar_scale
+        x_positions = scalar_scale - linear_scale * x_positions - quadratic_scale * linear_scale ** 2
 
         e_factor = -4 * np.log(2) / fwhm ** 2
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
@@ -2234,11 +2241,14 @@ class NMR(Signals):
         reverse_x=True,
         y_label=None,
         point_spacing=None,
-        normalize=True,
-        fwhm=0.1,
+        normalize=False,
+        fwhm=2.5,
         rotate_x_ticks=False,
         show_functions=None,
         pulse_frequency=60.0,
+        scalar_scale=0.0,
+        linear_scale=1.0,
+        quadratic_scale=0.0,
         **kwargs,
     ):
         """
@@ -2256,6 +2266,7 @@ class NMR(Signals):
         :param bool reverse_x: if True, 0 cm^-1 will be on the right
         :param str plot_type: see Frequency.get_plot_data
         :param str peak_type: any value allowed by Frequency.get_plot_data
+        :param float pulse_frequency: pulse frequency in MHz
         :param kwargs: keywords for Frequency.get_spectrum_functions
         """
 
@@ -2263,12 +2274,33 @@ class NMR(Signals):
             kwargs["intensity_attr"] = "intensity"
 
         data_attr = "data"
+        
+        fwhm /= pulse_frequency
+   
+        if not centers:
+            data_list = getattr(self, data_attr)
+            data_min = None
+            data_max = None
+            for data in data_list:
+                shift = data.shift
+                shift = scalar_scale - linear_scale * shift - quadratic_scale * shift ** 2
+                if data_min is None or shift < data_min:
+                    data_min = shift
+                if data_max is None or shift > data_max:
+                    data_max = shift
+            centers = [(data_min + data_max) / 2]
+            widths = [1.5 * (data_max - data_min)]
+            if widths[0] == 0:
+                widths = [4 * fwhm]
 
         functions, frequencies, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
             fwhm=fwhm,
             data_attr=data_attr,
             pulse_frequency=pulse_frequency,
+            scalar_scale=scalar_scale,
+            linear_scale=linear_scale,
+            quadratic_scale=quadratic_scale,
             **kwargs,
         )
 
@@ -2281,8 +2313,8 @@ class NMR(Signals):
         data = self.get_plot_data(
             functions,
             frequencies,
-            fwhm=fwhm / pulse_frequency,
-            transmittance=plot_type.lower().startswith("transmittance"),
+            fwhm=fwhm,
+            transmittance=False,
             peak_type=peak_type,
             point_spacing=point_spacing,
             normalize=normalize,

@@ -69,10 +69,10 @@ nmr_parser.add_argument(
 
 nmr_parser.add_argument(
     "-j", "--coupling-threshold",
-    default=1.0,
+    default=0.0,
     type=float,
     dest="coupling_threshold",
-    help="coupling threshold when applying splits\nDefault: 1 Hz"
+    help="coupling threshold when applying splits\nDefault: 0 Hz"
 )
 
 peak_options = nmr_parser.add_argument_group("peak options")
@@ -96,9 +96,9 @@ peak_options.add_argument(
 peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
-    default=5,
+    default=2.5,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 5 Hz",
+    help="full width at half max. of peaks\nDefault: 2.5 Hz",
 )
 
 nmr_parser.add_argument(
@@ -110,16 +110,24 @@ nmr_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
-scale_options = nmr_parser.add_argument_group("scale frequencies")
+scale_options = nmr_parser.add_argument_group("scale shifts")
 scale_options.add_argument(
     "-ss", "--scalar-shift",
     type=float,
     default=0.0,
     dest="scalar_scale",
-    help="subtract scalar from each shift\n"
+    help="shift centers\n"
     "Default: 0 (no shift)",
 )
 
+scale_options.add_argument(
+    "-l", "--linear-scale",
+    type=float,
+    default=1.0,
+    dest="linear_scale",
+    help="multiply the center of each shift by linear_scale\n"
+    "Default: 1 (no scaling)",
+)
 
 nmr_parser.add_argument(
     "-nr", "--no-reverse",
@@ -239,6 +247,7 @@ for f in glob_files(args.infiles, parser=nmr_parser):
         point_spacing=args.point_spacing,
         voigt_mixing=args.voigt_mixing,
         scalar_scale=args.scalar_scale,
+        linear_scale=args.linear_scale,
         exp_data=exp_data,
         rotate_x_ticks=args.rotate_x_ticks,
         pulse_frequency=args.pulse_frequency,
