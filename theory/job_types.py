@@ -2,11 +2,13 @@
 import numpy as np
 
 from AaronTools import addlogger
+from AaronTools.const import ELEMENTS
 from AaronTools.finders import FlaggedAtoms
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_POST,
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
@@ -481,10 +483,12 @@ class OptimizationJob(JobType):
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
+                    ndx2 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "B %2i %2i F" % (ndx1, ndx2)
@@ -501,12 +505,15 @@ class OptimizationJob(JobType):
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
                     atom1, atom2, atom3 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
-                    ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3)
                     ndx3 -= dummies[ndx3]
+                    ndx3 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
@@ -523,14 +530,18 @@ class OptimizationJob(JobType):
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
                     atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
-                    ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3)
                     ndx3 -= dummies[ndx3]
-                    ndx4 = self.geometry.atoms.index(atom4) + 1
+                    ndx3 += 1
+                    ndx4 = self.geometry.atoms.index(atom4)
                     ndx4 -= dummies[ndx4]
+                    ndx4 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)
@@ -1445,11 +1456,14 @@ class NMRJob(JobType):
             warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
             out[GAUSSIAN_ROUTE]["NMR"].append(self.coupling_type)
         if self.atoms:
-            atoms = self.geometry.find(self.atoms)
-            ndx = {a: str(i) for i, a in enumerate(atoms)}
-            out[GAUSSIAN_ROUTE]["NMR"].append(
-                "atoms=%s" % ",".join([ndx[a] for a in atoms])
-            )
+            out[GAUSSIAN_ROUTE]["NMR"].append("ReadAtoms")
+            if all(x in ELEMENTS for x in self.atoms):
+                out[GAUSSIAN_POST] = ["atoms=%s" % ",".join(self.atoms)]
+                
+            else:
+                atoms = self.geometry.find(self.atoms)
+                ndx = {a: str(i + 1) for i, a in enumerate(atoms)}
+                out[GAUSSIAN_POST] = ["atoms=%s" % ",".join([ndx[a] for a in atoms])]
     
         return out, warnings
     
@@ -1458,16 +1472,24 @@ class NMRJob(JobType):
         out[ORCA_BLOCKS] = {"eprnmr": []}
         warnings = []
         if self.atoms:
-            atoms = self.geometry.find(self.atoms)
+            use_symbols = True
+            if all(x in ELEMENTS for x in self.atoms):
+                atoms = self.atoms
+            else:
+                atoms = self.geometry.find(self.atoms)
+                use_symbols = False
             for i, a in enumerate(atoms):
-                spec = "Nuclei = %i " % (i + 1)
-                kind = "shift"
+                if use_symbols:
+                    spec = "Nuclei = %s " % a
+                else:
+                    spec = "Nuclei = %i " % (i + 1)
+                kind = ["shift"]
                 if self.coupling_type == "spin-spin":
-                    kind = "ssall"
+                    kind.append("ssall")
                 elif self.coupling_type:
                     warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
-                    kind = self.coupling_type
-                spec += "{ %s }" % kind
+                    kind = [self.coupling_type]
+                spec += "{ %s }" % ", ".join(kind)
                 out[ORCA_BLOCKS]["eprnmr"].append(spec)
         
         return out, warnings

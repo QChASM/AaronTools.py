@@ -672,6 +672,8 @@ class Theory:
         """
         if geom is None:
             geom = self.geometry
+        else:
+            self.geometry = geom
 
         if conditional_kwargs is None:
             conditional_kwargs = {}
