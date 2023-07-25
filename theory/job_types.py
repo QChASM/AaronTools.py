@@ -1363,8 +1363,8 @@ class ConformerSearchJob(JobType):
             }
             relaxed = range_list(relaxed)
             out[XTB_CONTROL_BLOCKS]["metadyn"] = ["  atoms: {}".format(relaxed)]
-            out[XTB_COMMAND_LINE] = {}
-            out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
+            # out[XTB_COMMAND_LINE] = {}
+            # out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
 
         return out, []
 
