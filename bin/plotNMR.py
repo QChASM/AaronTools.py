@@ -3,6 +3,7 @@
 import argparse
 import sys
 
+from AaronTools.const import COMMONLY_ODD_ISOTOPES
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import get_filename, glob_files
@@ -68,6 +69,20 @@ nmr_parser.add_argument(
 )
 
 nmr_parser.add_argument(
+    "-e", "--element",
+    default="H",
+    dest="element",
+    help="plot shifts for specified element\nDefault: H"
+)
+
+nmr_parser.add_argument(
+    "-c", "--couple-with",
+    default=None,
+    dest="couple_with",
+    help="split only with the specified elements\nDefault: some common odd isotopes"
+)
+
+nmr_parser.add_argument(
     "-j", "--coupling-threshold",
     default=0.0,
     type=float,
@@ -123,10 +138,10 @@ scale_options.add_argument(
 scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
-    default=1.0,
+    default=-1.0,
     dest="linear_scale",
     help="multiply the center of each shift by linear_scale\n"
-    "Default: 1 (no scaling)",
+    "Default: -1 (no scaling)",
 )
 
 nmr_parser.add_argument(
@@ -198,6 +213,12 @@ nmr_parser.add_argument(
 
 args = nmr_parser.parse_args()
 
+couple_with = args.couple_with
+if not args.couple_with:
+    args.couple_with = COMMONLY_ODD_ISOTOPES
+else:
+    couple_with = couple_with.split(",")
+
 if bool(args.centers) != bool(args.widths):
     sys.stderr.write(
         "both -sw/--section-widths and -sc/--section-centers must be specified"
@@ -252,6 +273,8 @@ for f in glob_files(args.infiles, parser=nmr_parser):
         rotate_x_ticks=args.rotate_x_ticks,
         pulse_frequency=args.pulse_frequency,
         coupling_threshold=args.coupling_threshold,
+        element=args.element,
+        couple_with=args.couple_with,
         geometry=geom,
     )
 

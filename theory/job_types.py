@@ -303,7 +303,7 @@ class OptimizationJob(JobType):
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
 
         coords = dict()
-        vars = []
+        con_vars = []
         consts = []
         use_zmat = False
 
@@ -338,8 +338,8 @@ class OptimizationJob(JobType):
                     if atom in x_atoms:
                         var_name = "x%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[0]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [var_name, coords[i][1], coords[i][2]]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][0] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -351,8 +351,8 @@ class OptimizationJob(JobType):
                     if atom in y_atoms:
                         var_name = "y%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[1]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [coords[i][0], var_name, coords[i][2]]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][1] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -364,8 +364,8 @@ class OptimizationJob(JobType):
                     if atom in z_atoms:
                         var_name = "z%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[2]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [coords[i][0], coords[i][1], var_name]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][2] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -384,11 +384,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in x_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [var_name, coords[i][1], coords[i][2]]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][0] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -407,11 +407,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in y_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [coords[i][0], var_name, coords[i][2]]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][1] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -430,11 +430,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in z_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [coords[i][0], coords[i][1], var_name]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][2] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -454,11 +454,11 @@ class OptimizationJob(JobType):
                         for j, coord in enumerate(coords[ndx - 1]):
                             if isinstance(coord, str):
                                 var_name = coord
-                                for k, var in enumerate(vars):
+                                for k, var in enumerate(con_vars):
                                     if var[0] == coord and not var[
                                         0
                                     ].startswith("g"):
-                                        vars.pop(k)
+                                        con_vars.pop(k)
                                         break
                                 else:
                                     var_name = "%s%i" % (
@@ -544,21 +544,23 @@ class OptimizationJob(JobType):
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
                     out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
-        if consts or vars:
-            for i, coord in enumerate(coords):
+        print(coords)
+
+        if consts or con_vars:
+            for i, coord in enumerate(coords.values()):
                 for j, ax in enumerate(["x", "y", "z"]):
                     if isinstance(coord[j], float):
                         var_name = "%s%i" % (ax, i + 1)
-                        vars.append((var_name, coord[j]))
+                        con_vars.append((var_name, coord[j]))
                         coord[j] = var_name
 
-        if consts or vars:
-            for coord in coords:
+        if consts or con_vars:
+            for coord in coords.values():
                 coord.insert(0, 0)
 
         out[GAUSSIAN_COORDINATES] = {
             "coords": coords,
-            "variables": vars,
+            "variables": con_vars,
             "constants": consts,
         }
 

@@ -2022,7 +2022,7 @@ class NMR(Signals):
         peak_type="lorentzian",
         voigt_mixing=0.5,
         scalar_scale=0.0,
-        linear_scale=1.0,
+        linear_scale=-1.0,
         quadratic_scale=0.0,
         intensity_attr="intensity",
         data_attr="data",
@@ -2143,6 +2143,9 @@ class NMR(Signals):
         
         data = new_data
         
+        if not data:
+            raise RuntimeError("no shifts for the specified element: %s" % element)
+        
         # scale x positions
         if not data[0].nested:
             x_positions = np.array(
@@ -2183,7 +2186,7 @@ class NMR(Signals):
                 
             x_positions = np.array(x_positions)
 
-        x_positions = scalar_scale - linear_scale * x_positions - quadratic_scale * linear_scale ** 2
+        x_positions = scalar_scale + linear_scale * x_positions + quadratic_scale * linear_scale ** 2
 
         e_factor = -4 * np.log(2) / fwhm ** 2
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
@@ -2247,7 +2250,7 @@ class NMR(Signals):
         show_functions=None,
         pulse_frequency=60.0,
         scalar_scale=0.0,
-        linear_scale=1.0,
+        linear_scale=-1.0,
         quadratic_scale=0.0,
         **kwargs,
     ):
@@ -2283,7 +2286,7 @@ class NMR(Signals):
             data_max = None
             for data in data_list:
                 shift = data.shift
-                shift = scalar_scale - linear_scale * shift - quadratic_scale * shift ** 2
+                shift = scalar_scale + linear_scale * shift + quadratic_scale * shift ** 2
                 if data_min is None or shift < data_min:
                     data_min = shift
                 if data_max is None or shift > data_max:

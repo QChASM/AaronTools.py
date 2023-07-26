@@ -1234,9 +1234,12 @@ class Theory:
                 for val in coord:
                     s += "  "
                     try:
-                        s += " %9.5f" % val
+                        s += " %i" % val
                     except TypeError:
-                        s += " %5s" % str(val)
+                        try:
+                            s += " %9.5f" % val
+                        except TypeError:
+                            s += " %5s" % str(val)
 
             except KeyError:
                 coord = tuple(atom.coords)
