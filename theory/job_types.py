@@ -555,8 +555,6 @@ class OptimizationJob(JobType):
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
                     out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
-        print(coords)
-
         if consts or con_vars:
             for i, coord in enumerate(coords.values()):
                 for j, ax in enumerate(["x", "y", "z"]):
@@ -1482,7 +1480,7 @@ class NMRJob(JobType):
                 use_symbols = False
             for i, a in enumerate(atoms):
                 if use_symbols:
-                    spec = "Nuclei = %s " % a
+                    spec = "Nuclei = all %s " % a
                 else:
                     spec = "Nuclei = %i " % (i + 1)
                 kind = ["shift"]

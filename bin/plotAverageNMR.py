@@ -1,13 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import sys
-from warnings import warn
 
 from AaronTools.comp_output import CompOutput
+from AaronTools.const import COMMONLY_ODD_ISOTOPES
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.spectra import ValenceExcitations
+from AaronTools.spectra import NMR
 from AaronTools.utils.utils import get_filename, glob_files
 
 from matplotlib import rcParams
@@ -19,12 +19,18 @@ rcParams["savefig.dpi"] = 300
 
 
 peak_types = ["pseudo-voigt", "gaussian", "lorentzian", "delta"]
-plot_types = [
-    "transmittance", "transmittance-velocity",
-    "uv-vis", "uv-vis-velocity",
-    "ecd", "ecd-velocity"
-]
 weight_types = ["electronic", "zero-point", "enthalpy", "free", "quasi-rrho", "quasi-harmonic"]
+
+
+def weight_type(x):
+    out = [y for y in weight_types if y.startswith(x)]
+    if len(out) == 1:
+        return out[0]
+    raise TypeError(
+        "weight type must be one of: %s" % ", ".join(
+            weight_types
+        )
+    )
 
 def peak_type(x):
     out = [y for y in peak_types if y.startswith(x)]
@@ -46,71 +52,65 @@ def plot_type(x):
         )
     )
 
-def weight_type(x):
-    out = [y for y in weight_types if y.startswith(x)]
-    if len(out) == 1:
-        return out[0]
-    raise TypeError(
-        "weight type must be one of: %s" % ", ".join(
-            weight_types
-        )
-    )
 
-
-uvvis_parser = argparse.ArgumentParser(
-    description="plot Boltzmann-averaged UV/vis spectrum",
+nmr_parser = argparse.ArgumentParser(
+    description="plot NMR spectrum",
     formatter_class=argparse.RawTextHelpFormatter
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "infiles", metavar="files",
     type=str,
     nargs="+",
-    help="TD-DFT or EOM job output files"
+    help="NMR job output file(s)"
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "-o", "--output",
     type=str,
     default=None,
     dest="outfile",
-    help="output destination\n"
-    "if the file extension is .csv, a CSV file will be written\n"
-    "Default: show plot"
+    help="output destination\nDefault: show plot",
 )
 
-uvvis_parser.add_argument(
-    "-t", "--plot-type",
-    type=plot_type,
-    choices=plot_types,
-    default="uv-vis-velocity",
-    dest="plot_type",
-    help="type of plot\nDefault: uv-vis-velocity",
+nmr_parser.add_argument(
+    "-pf", "--pulse-frequency",
+    default=60.0,
+    type=float,
+    dest="pulse_frequency",
+    help="pulse frequency\nDefault: 60 MHz"
 )
 
-uvvis_parser.add_argument(
-    "-u", "--transient",
-    action="store_true",
-    dest="transient",
-    help="use transient excitation data",
+nmr_parser.add_argument(
+    "-e", "--element",
+    default="H",
+    dest="element",
+    help="plot shifts for specified element\nDefault: H"
 )
 
-uvvis_parser.add_argument(
-    "-ev", "--electron-volt",
-    action="store_true",
-    default=False,
-    dest="ev_unit",
-    help="use eV on x axis instead of nm",
+nmr_parser.add_argument(
+    "-c", "--couple-with",
+    default=None,
+    dest="couple_with",
+    help="split only with the specified elements\nDefault: some common odd isotopes"
 )
 
-peak_options = uvvis_parser.add_argument_group("peak options")
+nmr_parser.add_argument(
+    "-j", "--coupling-threshold",
+    default=0.0,
+    type=float,
+    dest="coupling_threshold",
+    help="coupling threshold when applying splits\nDefault: 0 Hz"
+)
+
+peak_options = nmr_parser.add_argument_group("peak options")
 peak_options.add_argument(
     "-p", "--peak-type",
     type=peak_type,
     choices=peak_types,
-    default="gaussian",
+    default="lorentzian",
     dest="peak_type",
-    help="function for peaks\nDefault: gaussian",
+    help="function for peaks\nDefault: lorentzian",
 )
 
 peak_options.add_argument(
@@ -124,12 +124,12 @@ peak_options.add_argument(
 peak_options.add_argument(
     "-fwhm", "--full-width-half-max",
     type=float,
-    default=0.5,
+    default=2.5,
     dest="fwhm",
-    help="full width at half max. of peaks\nDefault: 0.5 eV",
+    help="full width at half max. of peaks\nDefault: 2.5 Hz",
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "-s", "--point-spacing",
     default=None,
     type=float,
@@ -138,36 +138,34 @@ uvvis_parser.add_argument(
     "Default: a non-uniform spacing that is more dense near peaks",
 )
 
-
-scale_options = uvvis_parser.add_argument_group("scale energies (in eV)")
+scale_options = nmr_parser.add_argument_group("scale shifts")
 scale_options.add_argument(
     "-ss", "--scalar-shift",
     type=float,
     default=0.0,
     dest="scalar_scale",
-    help="subtract scalar shift from each excitation\n"
+    help="shift centers\n"
     "Default: 0 (no shift)",
 )
 
 scale_options.add_argument(
     "-l", "--linear-scale",
     type=float,
-    default=0.0,
+    default=-1.0,
     dest="linear_scale",
-    help="subtract linear_scale * energy from each excitation\n"
-    "Default: 0 (no scaling)",
+    help="multiply the center of each shift by linear_scale\n"
+    "Default: -1 (no scaling)",
 )
 
-scale_options.add_argument(
-    "-q", "--quadratic-scale",
-    type=float,
-    default=0.0,
-    dest="quadratic_scale",
-    help="subtract quadratic_scale * energy^2 from each excitation\n"
-    "Default: 0 (no scaling)",
+nmr_parser.add_argument(
+    "-nr", "--no-reverse",
+    action="store_false",
+    default=True,
+    dest="reverse_x",
+    help="do not reverse x-axis",
 )
 
-center_centric = uvvis_parser.add_argument_group("x-centered interruptions")
+center_centric = nmr_parser.add_argument_group("x-centered interruptions")
 center_centric.add_argument(
     "-sc", "--section-centers",
     type=lambda x: [float(v) for v in x.split(",")],
@@ -182,34 +180,34 @@ center_centric.add_argument(
     type=lambda x: [float(v) for v in x.split(",")],
     dest="widths",
     default=None,
-    help="width of each section specified by -sc/--section-centers\n"
+    help="width of each section specified by -c/--centers\n"
     "should be separated by commas, with one for each section"
 )
 
-minmax_centric = uvvis_parser.add_argument_group("x-range interruptions")
+minmax_centric = nmr_parser.add_argument_group("x-range interruptions")
 minmax_centric.add_argument(
     "-r", "--ranges",
     type=lambda x: [[float(v) for v in r.split("-")] for r in x.split(",")],
     dest="ranges",
     default=None,
-    help="split plot into sections (e.g. 200-350,400-650)"
+    help="split plot into sections (e.g. 0-4,7-10)"
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "-fw", "--figure-width",
     type=float,
     dest="fig_width",
     help="width of figure in inches"
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "-fh", "--figure-height",
     type=float,
     dest="fig_height",
     help="height of figure in inches"
 )
 
-uvvis_parser.add_argument(
+nmr_parser.add_argument(
     "-csv", "--experimental-csv",
     type=str,
     nargs="+",
@@ -218,7 +216,16 @@ uvvis_parser.add_argument(
     "frequency job files should not come directly after this flag"
 )
 
-energy_options = uvvis_parser.add_argument_group("energy weighting")
+nmr_parser.add_argument(
+    "-rx", "--rotate-x-ticks",
+    action="store_true",
+    dest="rotate_x_ticks",
+    default=False,
+    help="rotate x-axis tick labels by 45 degrees"
+)
+
+
+energy_options = nmr_parser.add_argument_group("energy weighting")
 energy_options.add_argument(
     "-w", "--weighting-energy",
     type=weight_type,
@@ -267,15 +274,14 @@ energy_options.add_argument(
     "Default: 100 cm^-1",
 )
 
-uvvis_parser.add_argument(
-    "-rx", "--rotate-x-ticks",
-    action="store_true",
-    dest="rotate_x_ticks",
-    default=False,
-    help="rotate x-axis tick labels by 45 degrees"
-)
 
-args = uvvis_parser.parse_args()
+args = nmr_parser.parse_args()
+
+couple_with = args.couple_with
+if not args.couple_with:
+    args.couple_with = COMMONLY_ODD_ISOTOPES
+else:
+    couple_with = couple_with.split(",")
 
 if bool(args.centers) != bool(args.widths):
     sys.stderr.write(
@@ -298,10 +304,6 @@ if args.ranges:
         centers.append((xmin + xmax) / 2)
         widths.append(abs(xmax - xmin))
 
-units = "nm"
-if args.ev_unit:
-    units = "eV"
-
 exp_data = None
 if args.exp_data:
     exp_data = []
@@ -312,7 +314,7 @@ if args.exp_data:
             exp_data.append((data[:,0], data[:,i], None))
 
 filereaders = []
-for f in glob_files(args.infiles, parser=uvvis_parser):
+for f in glob_files(args.infiles, parser=nmr_parser):
     fr = FileReader(f, just_geom=False)
     filereaders.append(fr)
 
@@ -320,13 +322,13 @@ sp_cos = []
 if args.sp_files is None:
     sp_cos = [CompOutput(f) for f in filereaders]
 else:
-    for f in glob_files(args.sp_files, parser=uvvis_parser):
+    for f in glob_files(args.sp_files, parser=nmr_parser):
         co = CompOutput(f)
         sp_cos.append(co)
 
 compouts = []
 if args.freq_files:
-    for f in glob_files(args.freq_files, parser=uvvis_parser):
+    for f in glob_files(args.freq_files, parser=nmr_parser):
         co = CompOutput(f)
         compouts.append(co)
 
@@ -338,13 +340,13 @@ for i, (fr, sp, freq) in enumerate(zip(filereaders, sp_cos, compouts)):
     rmsd = geom.RMSD(sp.geometry, sort=True)
     if rmsd > 1e-2:
         print(
-            "TD-DFT structure might not match SP energy file:\n"
+            "NMR structure might not match SP energy file:\n"
             "%s %s RMSD = %.2f" % (fr.name,  sp.geometry.name, rmsd)
         )
     rmsd = geom.RMSD(freq.geometry, sort=True)
     if rmsd > 1e-2:
         print(
-            "TD-DFT structure might not match frequency file:\n"
+            "NMR structure might not match frequency file:\n"
             "%s %s RMSD = %.2f" % (fr.name,  freq.geometry.name, rmsd)
         )
     for freq2 in compouts[:i]:
@@ -354,6 +356,7 @@ for i, (fr, sp, freq) in enumerate(zip(filereaders, sp_cos, compouts)):
                 "two frequency files appear to be identical:\n"
                 "%s %s RMSD = %.2f" % (freq2.geometry.name,  freq.geometry.name, rmsd)
             )
+
 if args.weighting == "electronic":
     weighting = CompOutput.ELECTRONIC_ENERGY
 elif args.weighting == "zero-point":
@@ -376,35 +379,29 @@ weights = CompOutput.boltzmann_weights(
 )
 
 
-data_attr = "data"
-if all(fr.other["uv_vis"].transient_data for fr in filereaders) and args.transient:
-    data_attr = "transient_data"
-
-mixed_uvvis = ValenceExcitations.get_mixed_signals(
-    [fr.other["uv_vis"] for fr in filereaders],
+mixed_nmr = NMR.get_mixed_signals(
+    [fr["nmr"] for fr in filereaders],
     weights=weights,
-    data_attr=data_attr,
 )
 
 if not args.outfile or not args.outfile.lower().endswith("csv"):
     fig = plt.gcf()
     fig.clear()
     
-    mixed_uvvis.plot_uv_vis(
+    mixed_nmr.plot_nmr(
         fig,
         centers=centers,
         widths=widths,
-        plot_type=args.plot_type,
         peak_type=args.peak_type,
         fwhm=args.fwhm,
         point_spacing=args.point_spacing,
         voigt_mixing=args.voigt_mixing,
         scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
-        quadratic_scale=args.quadratic_scale,
         exp_data=exp_data,
-        units=units,
         rotate_x_ticks=args.rotate_x_ticks,
+        geometry=Geometry(filereaders[0]["atoms"]),
+        element=args.element,
     )
     
     if args.fig_width:
@@ -420,53 +417,26 @@ if not args.outfile or not args.outfile.lower().endswith("csv"):
         plt.show()
 
 else:
-    intensity_attr = "dipole_str"
-    if args.plot_type.lower() == "uv-vis-veloctiy":
-        intensity_attr = "dipole_vel"
-    if args.plot_type.lower() == "ecd":
-        intensity_attr = "rotatory_str_len"
-    if args.plot_type.lower() == "ecd-velocity":
-        intensity_attr = "rotatory_str_vel"
 
-    change_x_unit_func = ValenceExcitations.ev_to_nm
-    x_label = "wavelength (nm)"
-    if units == "eV":
-        change_x_unit_func = None
-        x_label = r"$h\nu$ (eV)"
+    x_label = "shift (ppm)"
 
-
-    funcs, x_positions, intensities = mixed_uvvis.get_spectrum_functions(
+    funcs, x_positions, intensities = mixed_nmr.get_spectrum_functions(
         fwhm=args.fwhm,
         peak_type=args.peak_type,
         voigt_mixing=args.voigt_mixing,
         scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
-        quadratic_scale=args.quadratic_scale,
-        intensity_attr=intensity_attr,
     )
 
-    x_values, y_values, _ = mixed_uvvis.get_plot_data(
+    x_values, y_values, _ = mixed_nmr.get_plot_data(
         funcs,
         x_positions,
         point_spacing=args.point_spacing,
-        transmittance=args.plot_type == "transmittance",
         peak_type=args.peak_type,
-        change_x_unit_func=change_x_unit_func,
         fwhm=args.fwhm,
     )
 
-    if "transmittance" in args.plot_type.lower():
-        y_label = "Transmittance (%)"
-    elif args.plot_type.lower() == "uv-vis":
-        y_label = "Absorbance (arb.)"
-    elif args.plot_type.lower() == "uv-vis-velocity":
-        y_label = "Absorbance (arb.)"
-    elif args.plot_type.lower() == "ecd":
-        y_label = "delta_Absorbance (arb.)"
-    elif args.plot_type.lower() == "ecd-velocity":
-        y_label = "delta_Absorbance (arb.)"
-    else:
-        y_label = "Absorbance (arb.)"
+    y_label = "Intensity (arb.)"
 
     with open(args.outfile, "w") as f:
         s = ",".join([x_label, y_label])

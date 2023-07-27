@@ -244,12 +244,11 @@ class Signals:
         """
         other_y_list = []
         if peak_type.lower() != "delta":
-            if point_spacing is not None and peak_type.lower():
+            if point_spacing is not None:
                 x_values = []
                 x = -point_spacing
                 stop = max(signal_centers)
-                if peak_type.lower() != "delta":
-                    stop += 5 * fwhm
+                stop += 5 * fwhm
                 while x < stop:
                     x += point_spacing
                     x_values.append(x)
@@ -2013,8 +2012,59 @@ class NMR(Signals):
                 self.coupling.setdefault(ndx_b, {})
 
     @classmethod
-    def get_mixed_signals(cls, *args, **kwargs):
-        raise NotImplementedError
+    def get_mixed_signals(
+        cls,
+        signal_groups,
+        weights,
+        data_attr="data",
+        **kwargs,
+    ):
+        """
+        get signals for a mixture of components or conformers
+        
+        :param list(Signal) signal_groups: list of Signals() instances or list of lists of Signals()
+            
+            a list of Signals() is a group of conformers
+
+        :param iterable weights: weights for each conformer, organized according to signal_groups
+        :param str data_attr: attribute of Signals() for data
+        :param kwargs: passed to cls.__init__, along with a new list of data
+        """
+
+        # TODO: warn about data mismatch
+        new_data = []
+        new_coupling = {}
+        for signals, weight in zip(signal_groups, weights):
+            data = getattr(signals, data_attr)
+            for i, d in enumerate(data):
+                x_val = getattr(d, d.x_attr)
+                vals = d.__dict__
+                data_cls = d.__class__
+                new_vals = dict()
+                try:
+                    new_data[i]
+                except IndexError:
+                    new_data.append(d.__class__(0, **d.__dict__))
+ 
+                for key, item in vals.items():
+                    if isinstance(item, float):
+                        setattr(new_data[i], key, getattr(new_data[i], key) + weight * item)
+                    else:
+                        setattr(new_data[i], key, item)
+
+                for j, d2 in enumerate(data[:i]):
+                    try:
+                        new_coupling.setdefault(d.ndx, {})
+                        new_coupling[d.ndx].setdefault(d2.ndx, 0)
+                        new_coupling[d.ndx][d2.ndx] += (
+                            weight * signals.coupling[d.ndx][d2.ndx]
+                        )
+                    except KeyError:
+                        pass
+
+        out = cls(new_data, **kwargs)
+        out.coupling = new_coupling
+        return out
     
     def get_spectrum_functions(
         self,
@@ -2296,7 +2346,7 @@ class NMR(Signals):
             if widths[0] == 0:
                 widths = [4 * fwhm]
 
-        functions, frequencies, intensities = self.get_spectrum_functions(
+        functions, shifts, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
             fwhm=fwhm,
             data_attr=data_attr,
@@ -2307,6 +2357,8 @@ class NMR(Signals):
             **kwargs,
         )
 
+        print(len(shifts))
+
         other_y_style = None
         ndx_list = None
         if show_functions is not None:
@@ -2315,7 +2367,7 @@ class NMR(Signals):
 
         data = self.get_plot_data(
             functions,
-            frequencies,
+            shifts,
             fwhm=fwhm,
             transmittance=False,
             peak_type=peak_type,
