@@ -481,10 +481,15 @@ class OptimizationJob(JobType):
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    print(atom1, atom2)
+                    for i, e in enumerate(dummies):
+                        print(i, e)
+                    ndx1 = self.geometry.atoms.index(atom1) 
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2) 
                     ndx2 -= dummies[ndx2]
+                    ndx2 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "B %2i %2i F" % (ndx1, ndx2)
@@ -501,12 +506,15 @@ class OptimizationJob(JobType):
             if "angles" in self.constraints:
                 for constraint in self.constraints["angles"]:
                     atom1, atom2, atom3 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2) 
                     ndx2 -= dummies[ndx2]
-                    ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3) 
                     ndx3 -= dummies[ndx3]
+                    ndx3 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
@@ -523,14 +531,18 @@ class OptimizationJob(JobType):
             if "torsions" in self.constraints:
                 for constraint in self.constraints["torsions"]:
                     atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) + 1
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
-                    ndx2 = self.geometry.atoms.index(atom2) + 1
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
-                    ndx3 = self.geometry.atoms.index(atom3) + 1
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3)
                     ndx3 -= dummies[ndx3]
-                    ndx4 = self.geometry.atoms.index(atom4) + 1
+                    ndx3 += 1
+                    ndx4 = self.geometry.atoms.index(atom4)
                     ndx4 -= dummies[ndx4]
+                    ndx4 += 1
                     if not use_zmat:
                         out[GAUSSIAN_CONSTRAINTS].append(
                             "D %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)

@@ -255,11 +255,17 @@ class FileWriter:
                 raise NotImplementedError(file_type_err.format(style))
 
         if (
-            outfile is None
-            and os.path.dirname(geom.name)
-            and not os.access(os.path.dirname(geom.name), os.W_OK)
+            outfile is None and
+            os.path.dirname(geom.name) and
+            not os.access(os.path.dirname(geom.name), os.W_OK)
         ):
             os.makedirs(os.path.dirname(geom.name))
+        elif (
+            isinstance(outfile, str) and
+            os.path.dirname(outfile) and
+            not os.access(os.path.dirname(outfile), os.W_OK)
+        ):
+            os.makedirs(os.path.dirname(outfile))
         if style.lower() == "xyz":
             if "oniom" in kwargs and "models" not in kwargs:
                 out = cls.write_oniom_xyz(geom, append, outfile, **kwargs)
