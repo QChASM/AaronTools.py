@@ -2,11 +2,13 @@
 import numpy as np
 
 from AaronTools import addlogger
+from AaronTools.const import ELEMENTS
 from AaronTools.finders import FlaggedAtoms
 from AaronTools.theory import (
     GAUSSIAN_CONSTRAINTS,
     GAUSSIAN_COORDINATES,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_POST,
     ORCA_BLOCKS,
     ORCA_ROUTE,
     PSI4_BEFORE_GEOM,
@@ -303,7 +305,7 @@ class OptimizationJob(JobType):
             out = {GAUSSIAN_ROUTE: {"Opt": []}}
 
         coords = dict()
-        vars = []
+        con_vars = []
         consts = []
         use_zmat = False
 
@@ -338,8 +340,8 @@ class OptimizationJob(JobType):
                     if atom in x_atoms:
                         var_name = "x%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[0]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [var_name, coords[i][1], coords[i][2]]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][0] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -351,8 +353,8 @@ class OptimizationJob(JobType):
                     if atom in y_atoms:
                         var_name = "y%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[1]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [coords[i][0], var_name, coords[i][2]]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][1] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -364,8 +366,8 @@ class OptimizationJob(JobType):
                     if atom in z_atoms:
                         var_name = "z%i" % (i + 1 - dummies[i])
                         consts.append((var_name, atom.coords[2]))
-                        coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                        coords[i] = [coords[i][0], coords[i][1], var_name]
+                        coords.setdefault(i, self.geometry.coords[i].tolist())
+                        coords[i][2] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -384,11 +386,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in x_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [var_name, coords[i][1], coords[i][2]]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][0] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -407,11 +409,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in y_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [coords[i][0], var_name, coords[i][2]]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][1] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -430,11 +432,11 @@ class OptimizationJob(JobType):
                     if hold:
                         consts.append([var_name, val])
                     else:
-                        vars.append([var_name, val])
+                        con_vars.append([var_name, val])
                     for i, atom in enumerate(self.geometry.atoms):
                         if atom in z_atoms:
-                            coords[i].setdefault(i, self.geometry.coords[i].tolist())
-                            coords[i] = [coords[i][0], coords[i][1], var_name]
+                            coords.setdefault(i, self.geometry.coords[i].tolist())
+                            coords[i][2] = var_name
 
                 if not use_zmat:
                     use_zmat = True
@@ -454,11 +456,11 @@ class OptimizationJob(JobType):
                         for j, coord in enumerate(coords[ndx - 1]):
                             if isinstance(coord, str):
                                 var_name = coord
-                                for k, var in enumerate(vars):
+                                for k, var in enumerate(con_vars):
                                     if var[0] == coord and not var[
                                         0
                                     ].startswith("g"):
-                                        vars.pop(k)
+                                        con_vars.pop(k)
                                         break
                                 else:
                                     var_name = "%s%i" % (
@@ -481,9 +483,6 @@ class OptimizationJob(JobType):
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
-                    print(atom1, atom2)
-                    for i, e in enumerate(dummies):
-                        print(i, e)
                     ndx1 = self.geometry.atoms.index(atom1) 
                     ndx1 -= dummies[ndx1]
                     ndx1 += 1
@@ -509,10 +508,10 @@ class OptimizationJob(JobType):
                     ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
                     ndx1 += 1
-                    ndx2 = self.geometry.atoms.index(atom2) 
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
                     ndx2 += 1
-                    ndx3 = self.geometry.atoms.index(atom3) 
+                    ndx3 = self.geometry.atoms.index(atom3)
                     ndx3 -= dummies[ndx3]
                     ndx3 += 1
                     if not use_zmat:
@@ -556,21 +555,21 @@ class OptimizationJob(JobType):
                 if "ModRedundant" not in out[GAUSSIAN_ROUTE]["Opt"]:
                     out[GAUSSIAN_ROUTE]["Opt"].append("ModRedundant")
 
-        if consts or vars:
-            for i, coord in enumerate(coords):
+        if consts or con_vars:
+            for i, coord in enumerate(coords.values()):
                 for j, ax in enumerate(["x", "y", "z"]):
                     if isinstance(coord[j], float):
                         var_name = "%s%i" % (ax, i + 1)
-                        vars.append((var_name, coord[j]))
+                        con_vars.append((var_name, coord[j]))
                         coord[j] = var_name
 
-        if consts or vars:
-            for coord in coords:
+        if consts or con_vars:
+            for coord in coords.values():
                 coord.insert(0, 0)
 
         out[GAUSSIAN_COORDINATES] = {
             "coords": coords,
-            "variables": vars,
+            "variables": con_vars,
             "constants": consts,
         }
 
@@ -1364,8 +1363,8 @@ class ConformerSearchJob(JobType):
             }
             relaxed = range_list(relaxed)
             out[XTB_CONTROL_BLOCKS]["metadyn"] = ["  atoms: {}".format(relaxed)]
-            out[XTB_COMMAND_LINE] = {}
-            out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
+            # out[XTB_COMMAND_LINE] = {}
+            # out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
 
         return out, []
 
@@ -1457,11 +1456,14 @@ class NMRJob(JobType):
             warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
             out[GAUSSIAN_ROUTE]["NMR"].append(self.coupling_type)
         if self.atoms:
-            atoms = self.geometry.find(self.atoms)
-            ndx = {a: str(i) for i, a in enumerate(atoms)}
-            out[GAUSSIAN_ROUTE]["NMR"].append(
-                "atoms=%s" % ",".join([ndx[a] for a in atoms])
-            )
+            out[GAUSSIAN_ROUTE]["NMR"].append("ReadAtoms")
+            if all(x in ELEMENTS for x in self.atoms):
+                out[GAUSSIAN_POST] = ["atoms=%s" % ",".join(self.atoms)]
+                
+            else:
+                atoms = self.geometry.find(self.atoms)
+                ndx = {a: str(i + 1) for i, a in enumerate(atoms)}
+                out[GAUSSIAN_POST] = ["atoms=%s" % ",".join([ndx[a] for a in atoms])]
     
         return out, warnings
     
@@ -1470,16 +1472,24 @@ class NMRJob(JobType):
         out[ORCA_BLOCKS] = {"eprnmr": []}
         warnings = []
         if self.atoms:
-            atoms = self.geometry.find(self.atoms)
+            use_symbols = True
+            if all(x in ELEMENTS for x in self.atoms):
+                atoms = self.atoms
+            else:
+                atoms = self.geometry.find(self.atoms)
+                use_symbols = False
             for i, a in enumerate(atoms):
-                spec = "Nuclei = %i " % (i + 1)
-                kind = "shift"
+                if use_symbols:
+                    spec = "Nuclei = all %s " % a
+                else:
+                    spec = "Nuclei = %i " % (i + 1)
+                kind = ["shift"]
                 if self.coupling_type == "spin-spin":
-                    kind = "ssall"
+                    kind.append("ssall")
                 elif self.coupling_type:
                     warnings.append("coupling_type '%s' might not be available" % self.coupling_type)
-                    kind = self.coupling_type
-                spec += "{ %s }" % kind
+                    kind = [self.coupling_type]
+                spec += "{ %s }" % ", ".join(kind)
                 out[ORCA_BLOCKS]["eprnmr"].append(spec)
         
         return out, warnings

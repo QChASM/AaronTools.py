@@ -96,7 +96,7 @@ ERROR_ORCA = {
     "SCF NOT CONVERGED AFTER": "SCF_CONV",
     # ORCA doesn't actually exit if the SCF doesn't converge...
     # "CONV_CDS": "",
-    "The optimization did not converge but reached the maximum number": "OPT_CONV",
+    "The optimization did not converge but reached the maximum": "OPT_CONV",
     # ORCA still prints the normal finish line if opt doesn't converge...
     # "FBX": "",
     # "CHK": "",

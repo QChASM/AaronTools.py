@@ -672,6 +672,8 @@ class Theory:
         """
         if geom is None:
             geom = self.geometry
+        else:
+            self.geometry = geom
 
         if conditional_kwargs is None:
             conditional_kwargs = {}
@@ -1234,9 +1236,12 @@ class Theory:
                 for val in coord:
                     s += "  "
                     try:
-                        s += " %9.5f" % val
+                        s += " %i" % val
                     except TypeError:
-                        s += " %5s" % str(val)
+                        try:
+                            s += " %9.5f" % val
+                        except TypeError:
+                            s += " %5s" % str(val)
 
             except KeyError:
                 coord = tuple(atom.coords)
@@ -2963,7 +2968,7 @@ class Theory:
 
         other_kw_dict = combine_dicts(other_kw_dict, conditional_kwargs, dict2_conditional=True)
 
-        out = ["crest", "{{ name }}.xyz", "{{ name }}.xc"]
+        out = ["crest", "{{ name }}.xyz", "--cinp", "{{ name }}.xc"]
         if CREST_COMMAND_LINE in other_kw_dict:
             for flag, option in other_kw_dict[CREST_COMMAND_LINE].items():
                 out.append("--%s" % flag)
