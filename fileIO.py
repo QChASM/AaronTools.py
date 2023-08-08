@@ -2618,7 +2618,7 @@ class FileReader:
                         ):
                             done = True
                         if "SOC stabilization of the ground state" in line:
-                            self.other["SOC GS stabilization energy"] = float(line[39:48]) / UNIT.HART_TO_EV
+                            self.other["SOC GS stabilization energy"] = float(line[39:48]) / UNIT.HARTREE_TO_WAVENUMBER
                         if "CALCULATED SOCME BETWEEN" in line:
                             # SOC in cm^-1
                             self.skip_lines(f, 4)
@@ -3956,16 +3956,20 @@ class FileReader:
 
             # forces
             elif "Forces (Hartrees/Bohr)" in line:
-                gradient = np.zeros((len(self.atoms), 3))
-                self.skip_lines(f, 2)
-                n += 2
-                for i in range(0, len(self.atoms)):
-                    n += 1
-                    line = f.readline()
-                    info = line.split()
-                    gradient[i] = np.array([float(x) for x in info[2:]])
+                try:
+                    gradient = np.zeros((len(self.atoms), 3))
+                    self.skip_lines(f, 2)
+                    n += 2
+                    for i in range(0, len(self.atoms)):
+                        n += 1
+                        line = f.readline()
+                        info = line.split()
+                        gradient[i] = np.array([float(x) for x in info[2:]])
 
-                self.other["forces"] = gradient
+                    self.other["forces"] = gradient
+
+                except Exception as e:
+                    self.LOG.warning("error parsing forces:\n %s" % e)
 
             # nbo stuff
             elif "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
