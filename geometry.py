@@ -5223,7 +5223,7 @@ class Geometry:
         def get_rotation(old_axis, new_axis):
             w = np.cross(old_axis, new_axis)
             # if old and new axes are colinear, use perp_vector
-            if np.linalg.norm(w) <= 1e-6:
+            if np.linalg.norm(w) <= 1e-4:
                 w = utils.perp_vector(old_axis)
             angle = np.dot(old_axis, new_axis)
             angle /= np.linalg.norm(old_axis)
@@ -5261,9 +5261,13 @@ class Geometry:
                 old_axis = old_key.coords - self.COM(self.center)
             else:
                 old_axis = self.COM(targets=targets) - old_key.coords
-            w, angle = get_rotation(old_axis, new_axis)
-            if np.linalg.norm(w) > 1e-4:
-                ligand.rotate(w, angle, center=new_key)
+            angle = 1
+            while angle > 1e-4:
+                w, angle = get_rotation(old_axis, new_axis)
+                if np.linalg.norm(w) > 1e-4:
+                    ligand.rotate(w, angle, center=new_key)
+                else:
+                    break
             return ligand
 
         def map_2_key(old_ligand, ligand, old_keys, new_keys, rev_ang=False):
