@@ -5,7 +5,7 @@ import os
 import re
 from glob import glob
 
-from AaronTools.const import AARONLIB, AARONTOOLS
+from AaronTools.const import AARONTOOLS
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 
@@ -19,7 +19,6 @@ class Ring(Geometry):
     * end
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Rings")
     BUILTIN = os.path.join(AARONTOOLS, "Rings")
 
     def __init__(self, frag, name=None, end=None):
@@ -89,6 +88,12 @@ class Ring(Geometry):
                 ]
             else:
                 self.end = None
+
+    @classmethod
+    @property
+    def AARON_LIBS(cls):
+        from AaronTools.const import AARONLIB
+        return os.path.join(AARONLIB, "Rings")
 
     @classmethod
     def from_string(cls, name, end_length, end_atom=None, form="smiles"):

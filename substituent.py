@@ -10,7 +10,7 @@ from copy import deepcopy
 import numpy as np
 
 from AaronTools import addlogger
-from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, VDW_RADII
+from AaronTools.const import AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import boltzmann_average
@@ -30,11 +30,11 @@ class Substituent(Geometry):
     """
 
     LOG = None
-    AARON_LIBS = os.path.join(AARONLIB, "Subs")
     BUILTIN = os.path.join(AARONTOOLS, "Substituents")
-    CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
 
     try:
+        from AaronTools.const import AARONLIB
+        CACHE_FILE = os.path.join(AARONLIB, "cache", "substituents.json")
         with open(CACHE_FILE) as f:
             cache = json.load(f)
     except (FileNotFoundError, json.decoder.JSONDecodeError):
@@ -179,6 +179,12 @@ class Substituent(Geometry):
             if a < b and not b < a:
                 return True
         return False
+
+    @classmethod
+    @property
+    def AARON_LIBS(cls):
+        from AaronTools.const import AARONLIB
+        return os.path.join(AARONLIB, "Subs")
 
     @staticmethod
     def weighted_sterimol(substituents, energies, temperature, *args, **kwargs):

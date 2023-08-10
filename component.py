@@ -7,7 +7,6 @@ import numpy as np
 from scipy.spatial import distance_matrix
 
 from AaronTools.const import (
-    AARONLIB,
     AARONTOOLS,
     BONDI_RADII,
     ELEMENTS,
@@ -39,7 +38,6 @@ class Component(Geometry):
     
     """
 
-    AARON_LIBS = os.path.join(AARONLIB, "Ligands")
     BUILTIN = os.path.join(AARONTOOLS, "Ligands")
     FROM_SUBSTITUENTS = set([])
 
@@ -130,6 +128,12 @@ class Component(Geometry):
             if a < b:
                 return True
         return False
+
+    @classmethod
+    @property
+    def AARON_LIBS(cls):
+        from AaronTools.const import AARONLIB
+        return os.path.join(AARONLIB, "Ligands")
 
     @classmethod
     def list(
