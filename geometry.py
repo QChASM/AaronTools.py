@@ -3431,6 +3431,36 @@ class Geometry:
         vector["B5"] = (start_x, end)
 
 
+        points = np.array(points)
+        if np.sum((points - points[0, np.newaxis]) ** 2) < 1e-8:
+            if at_L is not None:
+                self.LOG.warning(
+                    "%.2f along the L axis is close to the actual L; setting all parameters to 0" % at_L
+                )
+                if return_vector:
+                    vector["B1"] = (vector["L"][1], vector["L"][1])
+                    vector["B2"] = (vector["L"][1], vector["L"][1])
+                    vector["B3"] = (vector["L"][1], vector["L"][1])
+                    vector["B4"] = (vector["L"][1], vector["L"][1])
+                    vector["B5"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_small"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_big"] = (vector["L"][1], vector["L"][1])
+                    vector["Bperp_small"] = (vector["L"][1], vector["L"][1])
+                    return vector
+                params = {
+                    "L": L,
+                    "B1": 0,
+                    "B2": 0,
+                    "B3": 0,
+                    "B4": 0,
+                    "B5": 0,
+                    "Bperp_small": 0,
+                    "Bperp_big": 0,
+                    "Bpar": 0,
+                }
+                return params
+            raise RuntimeError("atom radii too small to safely determine sterimol parameters")
+
         # some things I thought would make this run faster
         # by reducing the number of points we give to
         # ConvexHull, but it turns out doing these is slower
@@ -3466,7 +3496,7 @@ class Geometry:
         # points = points[mask]
         # block_ndx = block_ndx[mask]
         # ndx = ndx[mask]
-        
+
         hull = ConvexHull(points)
 
         # import matplotlib.pyplot as plt
