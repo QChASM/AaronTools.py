@@ -37,7 +37,7 @@ class Method:
 
     LOG = None
 
-    def __init__(self, name, is_semiempirical=False, is_oniom=False, oniom_layer=None, is_mm=False):
+    def __init__(self, name, is_semiempirical=None, is_oniom=False, oniom_layer=None, is_mm=None):
         """
         :param str name: functional name
         :param bool is_semiempirical: basis set is not required
@@ -45,6 +45,11 @@ class Method:
         :param str oniom_layer: oniom layer method describes, must be "H", "M", or "L"
         :param bool is_mm: basis set is not required
         """
+        if is_semiempirical is None:
+            is_semiempirical = any(name.upper() in KNOWN_SEMI_EMPIRICAL)
+        if is_mm is None:
+            is_mm = any(name.split("=").upper() in KNOWN_MM)
+        
         self.name = name
         self.is_semiempirical = is_semiempirical
         self.is_oniom = is_oniom

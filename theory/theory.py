@@ -956,7 +956,11 @@ class Theory:
             if warning:
                 warnings.append(warning)
             out_str += "%s" % func
-            if not self.method.is_semiempirical and self.basis is not None:
+            if (
+                not self.method.is_semiempirical 
+                and not self.method.is_mm
+                and self.basis is not None
+            ):
                 basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
                 # check basis elements to make sure no element is
