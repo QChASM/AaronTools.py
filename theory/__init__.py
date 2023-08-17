@@ -31,6 +31,7 @@ The value should be as specified.
 * GAUSSIAN_PRE_ROUTE (link0): dict(list(str)) - keys are link0 minus %
 * GAUSSIAN_ROUTE (route): dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
 * GAUSSIAN_COORDINATES (coordinates): list of coordinates and variables/constants
+* GAUSSIAN_CONNECTIVITY (connectivity): list of connectivities (see connectivity section of geom in G16 manual)
 * GAUSSIAN_CONSTRAINTS (constraints): list(str)
 * GAUSSIAN_GEN_BASIS (gen_basis): list(str) - only filled by BasisSet automatically when writing footer
 * GAUSSIAN_GEN_ECP (gen_ecp): list(str) - only filled by BasisSet automatically when writing footer
@@ -87,6 +88,7 @@ GAUSSIAN_COMMENT = "comments" #comment line after the route
 GAUSSIAN_MM = "mm" #options for mm methods
 GAUSSIAN_ONIOM = "oniom" #oniom options like embedcharge
 GAUSSIAN_MM_PARAMS = "mm_parameters" #path to file with additional or total mm parameters
+GAUSSIAN_CONNECTIVITY = "connectivity" # connectivity table
 
 SQM_COMMENT = "comments"
 SQM_QMMM = "qmmm"

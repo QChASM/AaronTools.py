@@ -15,6 +15,7 @@ from AaronTools.theory import (
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_CONNECTIVITY,
     ORCA_BLOCKS,
     ORCA_COMMENT,
     ORCA_COORDINATES,
@@ -1279,6 +1280,8 @@ class Theory:
                     #        s += " %i" % int(scale_fac)
             s += "\n"
 
+        s += "\n"
+
         if (
             "variables" in other_kw_dict[GAUSSIAN_COORDINATES]
             and other_kw_dict[GAUSSIAN_COORDINATES]["variables"]
@@ -1294,6 +1297,13 @@ class Theory:
             s += "Constant:\n"
             for var in other_kw_dict[GAUSSIAN_COORDINATES]["constants"]:
                 s += "%4s = %9.5f\n" % tuple(var)
+
+        if (
+            GAUSSIAN_CONNECTIVITY in other_kw_dict
+            and other_kw_dict[GAUSSIAN_CONNECTIVITY]
+        ):
+            s += "\n".join(*other_kw_dict[GAUSSIAN_CONNECTIVITY])
+            s += "\n"
 
         if return_warnings:
             return s, warnings
@@ -1376,6 +1386,26 @@ class Theory:
 
             out_str += "\n"
 
+        print("basis", basis_info)
+
+        # write gen info
+        if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
+            try:
+                # check whether there is gen basis info
+                # IndexError or KeyError if there isn't
+                basis_info[GAUSSIAN_GEN_BASIS][0]
+                out_str += basis_info[GAUSSIAN_GEN_BASIS]
+                out_str += "\n"
+            except (KeyError, IndexError):
+                pass
+
+            try:
+                basis_info[GAUSSIAN_GEN_ECP][0]
+                out_str += basis_info[GAUSSIAN_GEN_ECP]
+                out_str += "\n"
+            except (KeyError, IndexError):
+                pass
+
         #mm param file
         if GAUSSIAN_MM_PARAMS in other_kw_dict:
             for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
@@ -1386,21 +1416,6 @@ class Theory:
                     warnings.append("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
                     if GAUSSIAN_CONSTRAINTS in other_kw_dict:
                         warnings.append("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
-                if GAUSSIAN_GEN_ECP in basis_info:
-                    out_str += "\n"
-                else:
-                    out_str += "\n\n"
-
-        # write gen info
-        if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
-            if GAUSSIAN_GEN_BASIS in basis_info:
-                out_str += basis_info[GAUSSIAN_GEN_BASIS]
-
-                out_str += "\n"
-
-            if GAUSSIAN_GEN_ECP in basis_info:
-                out_str += basis_info[GAUSSIAN_GEN_ECP]
-
                 out_str += "\n"
 
         # post info e.g. for NBOREAD
