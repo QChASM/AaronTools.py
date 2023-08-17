@@ -46,9 +46,9 @@ class Method:
         :param bool is_mm: basis set is not required
         """
         if is_semiempirical is None:
-            is_semiempirical = any(name.upper() in KNOWN_SEMI_EMPIRICAL)
+            is_semiempirical = name.upper() in KNOWN_SEMI_EMPIRICAL
         if is_mm is None:
-            is_mm = any(name.split("=").upper() in KNOWN_MM)
+            is_mm = name.split("=")[0].upper() in KNOWN_MM
         
         self.name = name
         self.is_semiempirical = is_semiempirical

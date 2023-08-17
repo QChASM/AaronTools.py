@@ -86,7 +86,7 @@ GAUSSIAN_POST = "end_of_file" #after everything else (e.g. NBO options)
 GAUSSIAN_COMMENT = "comments" #comment line after the route
 GAUSSIAN_MM = "mm" #options for mm methods
 GAUSSIAN_ONIOM = "oniom" #oniom options like embedcharge
-GAUSSIAN_MM_PARAMS = "parameters" #path to file with additional or total mm parameters
+GAUSSIAN_MM_PARAMS = "mm_parameters" #path to file with additional or total mm parameters
 
 SQM_COMMENT = "comments"
 SQM_QMMM = "qmmm"

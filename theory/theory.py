@@ -1197,44 +1197,33 @@ class Theory:
         s = ""
 
         # atom specs need flag column before coords if any atoms frozen
-        has_frozen = False
         oniom = False
         mm = False
-        has_type = False
-        has_charge = False
-        for atom in self.geometry.atoms:
-            if atom.flag:
-                has_frozen = True
-                break
-        test_atom = self.geometry.atoms[0]
+        
         if self.method is None and self.high_method is not None:
             oniom = True
-        elif self.method is not None and self.method.is_mm:
+        
+        if any(method is not None and method.is_mm for method in [
+            self.method, self.high_method, self.medium_method, self.low_method
+        ]):
             mm = True
-        if hasattr(test_atom, "atomtype"):
-            if atom.atomtype != "" and (oniom or mm):
-                has_type = True
-        if hasattr(test_atom, "charge"):
-            if atom.charge is not None and (oniom or mm):
-                has_charge = True
+
         for i, atom in enumerate(self.geometry.atoms):
-            spec = ""
-            if oniom:
-                s += "%s" % atom.element
-                spec += "%s" % atom.element
+            ele = ""
+            ele += "%s" % atom.element
+            
+            if mm:
+                try:
+                    ele += "-%s" % atom.atomtype
+                except AttributeError:
+                    pass
+
+                ele += "-%f" % atom.charge
+            
+                s += "%-20s" % ele
             else:
-                s += "%-2s" % atom.element
-            if has_type:
-                s += "-%s" % atom.atomtype
-                spec += "-%s" % atom.atomtype
-            if oniom and has_charge:
-                s += "-%f" % atom.charge
-                spec += "-%f" % atom.charge
-            if oniom:
-                num_spaces = 20-len(spec)
-                s += " " * num_spaces
-            if has_frozen:
-                s += " % 2d" % (-1 if atom.flag else 0)
+                s += "%-2s" % ele
+            
             try:
                 coord = other_kw_dict[GAUSSIAN_COORDINATES]["coords"][i]
                 for val in coord:
@@ -1253,9 +1242,9 @@ class Theory:
 
             if oniom:
                 s += " %s" % atom.layer
-                if atom.link_info =={}:
+                if not atom.link_info:
                     pass
-                elif atom.link_info != {}:
+                else:
                     s += " %s" % atom.link_info["element"]
                     if has_type:
                         try:
@@ -1389,18 +1378,18 @@ class Theory:
 
         #mm param file
         if GAUSSIAN_MM_PARAMS in other_kw_dict:
-            param_path = str(other_kw_dict[GAUSSIAN_MM_PARAMS][0])
-            #param_path_list = param_path.split("/")
-            #param_file = param_path_list[len(param_path_list)-1]
-            out_str += "@%s" % param_path
-            if GAUSSIAN_GEN_BASIS in basis_info:
-                self.LOG.warning("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
-                if GAUSSIAN_CONSTRAINTS in other_kw_dict:
-                    self.LOG.warning("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
-            if GAUSSIAN_GEN_ECP in basis_info:
-                out_str += "\n"
-            else:
-                out_str += "\n\n"
+            for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
+                #param_path_list = param_path.split("/")
+                #param_file = param_path_list[len(param_path_list)-1]
+                out_str += "@%s" % param_path
+                if GAUSSIAN_GEN_BASIS in basis_info:
+                    warnings.append("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
+                    if GAUSSIAN_CONSTRAINTS in other_kw_dict:
+                        warnings.append("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
+                if GAUSSIAN_GEN_ECP in basis_info:
+                    out_str += "\n"
+                else:
+                    out_str += "\n\n"
 
         # write gen info
         if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):

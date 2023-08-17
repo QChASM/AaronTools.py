@@ -109,7 +109,7 @@ class Orbitals:
             the exponential (a) and the total angular momentum (l)
             """
             t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3.0 / 4))
-            t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
+            t2 = np.sqrt(2 ** l / max(factorial2(2 * l - 1), 1))
             return t1 * t2
 
         # get functions for norm of s, p, 5d, and 7f
@@ -1215,7 +1215,7 @@ class Orbitals:
             the exponential (a) and the total angular momentum (l)
             """
             t1 = np.sqrt((2 * a) ** (l + 3 / 2)) / (np.pi ** (3.0 / 4))
-            t2 = np.sqrt(2 ** l / factorial2(2 * l - 1))
+            t2 = np.sqrt(2 ** l / max(factorial2(2 * l - 1), 1))
             return t1 * t2
 
         # get functions for norm of s, p, 5d, and 7f
