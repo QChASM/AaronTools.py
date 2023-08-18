@@ -292,7 +292,7 @@ for f in glob_files(args.infile, parser=find_parser):
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f))
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_ranks=False)
 
     geom_finders = [x for x in finders]
     # some finders require and atom upon instantiation

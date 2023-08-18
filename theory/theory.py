@@ -1376,8 +1376,6 @@ class Theory:
         ):
             basis_info = {}
 
-        out_str += "\n"
-
         # bond, angle, and torsion constraints
         if GAUSSIAN_CONSTRAINTS in other_kw_dict:
             for constraint in other_kw_dict[GAUSSIAN_CONSTRAINTS]:
@@ -1385,8 +1383,6 @@ class Theory:
                 out_str += "\n"
 
             out_str += "\n"
-
-        print("basis", basis_info)
 
         # write gen info
         if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
@@ -1408,6 +1404,8 @@ class Theory:
 
         #mm param file
         if GAUSSIAN_MM_PARAMS in other_kw_dict:
+            out_str += "\n"
+
             for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
                 #param_path_list = param_path.split("/")
                 #param_file = param_path_list[len(param_path_list)-1]

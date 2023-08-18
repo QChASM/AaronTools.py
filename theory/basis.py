@@ -1422,7 +1422,6 @@ class BasisSet:
                         continue
                     for ecp in self.ecp:
                         for element in ecp.elements:
-                            print("removing", element)
                             if element in elements_without_basis[basis.aux_type]:
                                 elements_without_basis[basis.aux_type].remove(element)
 
