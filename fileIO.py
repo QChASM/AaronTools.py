@@ -4837,7 +4837,7 @@ class FileReader:
         """
         line = f.readline()
         while line:
-            if "natural bond orbitals (summary):" in line.lower():
+            if "Leave Link  607" in line:
                 break
 
             if "NATURAL POPULATIONS:" in line:
