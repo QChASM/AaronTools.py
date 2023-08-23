@@ -103,6 +103,32 @@ def job_from_string(name, **kwargs):
     raise ValueError("cannot determine job type from string: %s" % name)
 
 
+def suggested_fix(error):
+    if error == "OPT_CONV":
+        return "add more optimization cycles or compute Hessians during optimization"
+    if error == "SCF_CONV":
+        return "use a different SCF algorithm, increase SCF step damping, or increase the number of SCF iterations"
+    if error == "FBX":
+        return "restart the job"
+    if error == "REDUND":
+        return "restart the job"
+    if error == "COORD":
+        return "restart the job"
+    if error == "INT_COORD":
+        return "restart the job or optimize with Cartesian coordinates"
+    if error == "CONSTR":
+        return "remove some constraints"
+    if error == "QUOTA":
+        return "hard drive or job scratch directory is full"
+    if error == "MEM":
+        return "increase the RAM:CPU ratio"
+    if error == "CLASH":
+        return "some atoms are too close - move them apart"
+    if error == "ICOORDS":
+        return "this is typically just a warning and the optimization usually recovers"
+
+    return None
+
 class JobType:
     """
     parent class of all job types
@@ -1082,11 +1108,11 @@ class OptimizationJob(JobType):
             pass
         
         if exec_type.lower() == "gaussian":
-            if error.upper() == "CONV_LINK":
+            if error.upper() == "OPT_CONV":
                 # optimization out of steps, add more steps
                 out_theory = theory.copy()
                 out_theory.kwargs = combine_dicts(
-                     {GAUSSIAN_ROUTE: {"opt": ["MaxCycles=300"]}}, out_theory.kwargs,
+                    {GAUSSIAN_ROUTE: {"opt": ["MaxCycles=300"]}}, out_theory.kwargs,
                 )
                 return out_theory
             

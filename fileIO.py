@@ -67,7 +67,7 @@ ERROR = {
     "SCF has not converged.  Gradients and post-SCF results would be GARBAGE!!": "SCF_CONV",
     "Convergence failure -- run terminated.": "SCF_CONV",
     "Inaccurate quadrature in CalDSu": "CONV_CDS",
-    "Error termination request processed by link 9999": "CONV_LINK",
+    "Error termination request processed by link 9999": "OPT_CONV",
     "FormBX had a problem": "FBX",
     "NtrErr Called from FileIO": "CHK",
     "Wrong number of Negative eigenvalues": "EIGEN",
