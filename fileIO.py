@@ -3097,7 +3097,10 @@ class FileReader:
         most_energies = re.compile(r"\s+(E\(\S+\))\s*=\s*(\S+)")
         mp_energies = re.compile(r"([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)")
         # temperature = re.compile(r"^ Temperature\s*\d+\.\d+")
-        
+       
+        input_count = 0
+        standard_count = 0
+
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -3631,19 +3634,21 @@ class FileReader:
                 "Input orientation" in line or
                 "Standard orientation" in line
             ):
+                if "Input" in line:
+                    input_count += 1
+                elif "Standard" in line:
+                    standard_count += 1
+                if input_count > 2 and input_count > standard_count and "Standard" in line:
+                    continue
                 record_coords = True
                 if "scan" in constraints:
-                    if scan_read_all == False:
+                    if not scan_read_all:
                         # only want to only record converged geometries for scans
                         record_coords = False
                         if "gradient" in self.other:
-                            true_count=0
-                            for i in self.other["gradient"]:
-                                if self.other["gradient"][i]["converged"] == True:
-                                    true_count+=1
-                            if true_count == len(self.other["gradient"]):
+                            if all(converged for converged in self.other["gradient"]):
                                 record_coords = True
-                    elif scan_read_all == True:
+                    elif scan_read_all:
                         record_coords = True
                 if get_all and self.atoms and record_coords:
                     self.all_geom += [{

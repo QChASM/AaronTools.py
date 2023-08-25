@@ -16,7 +16,7 @@ class EmpiricalDispersion:
         * Grimme D2 (or D2, -D2, GD2)
         * Zero-damped Grimme D3 (or D3, -D3, GD3)
         * Becke-Johnson damped Grimme D3 (or D3BJ, -D3BJ, GD3BJ)
-        * Becke-Johnson damped modified Grimme D3 (or B3MBJ, -D3MBJ)
+        * Becke-Johnson damped modified Grimme D3 (or D3MBJ, -D3MBJ)
         * Petersson-Frisch (or PFD)
         * Grimme D4 (or D4, -D4, GD4)
         * Chai & Head-Gordon (or CHG, -CHG)
