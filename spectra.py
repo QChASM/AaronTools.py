@@ -2103,6 +2103,9 @@ class NMR(Signals):
         """
         data = getattr(self, data_attr)
         x_attr = data[0].x_attr
+        if isinstance(element, str):
+            element = set([element])
+        
 
         if couple_with == "all" and geometry:
             couple_with = set(geometry.elements)
@@ -2155,7 +2158,7 @@ class NMR(Signals):
             average_shift = 0
             found_ele = False
             for shift in data:
-                if shift.ndx in group and shift.element == element:
+                if shift.ndx in group and shift.element in element:
                     average_shift += shift.shift / len(group)
                     found_ele = True
             if not found_ele:
