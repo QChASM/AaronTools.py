@@ -3100,6 +3100,8 @@ class FileReader:
        
         input_count = 0
         standard_count = 0
+        only_read_input = False
+        only_read_standard = False
 
         def get_atoms(f, n):
             rv = self.atoms
@@ -3638,18 +3640,26 @@ class FileReader:
                     input_count += 1
                 elif "Standard" in line:
                     standard_count += 1
-                if input_count > 2 and input_count > standard_count and "Standard" in line:
-                    continue
-                record_coords = True
+                if input_count >= 2 and input_count >= standard_count and not only_read_standard:
+                    only_read_input = True
+                elif standard_count >= 1 and standard_count >= input_count and not only_read_input:
+                    only_read_standard = True
+                
+                record_coords = (
+                    "Input" in line and only_read_input
+                ) or (
+                    "Standard" in line and only_read_standard
+                ) or not any((only_read_input, only_read_standard))
                 if "scan" in constraints:
+                    record_coords = False
                     if not scan_read_all:
                         # only want to only record converged geometries for scans
-                        record_coords = False
                         if "gradient" in self.other:
-                            if all(converged for converged in self.other["gradient"]):
+                            if all(converged["converged"] for converged in self.other["gradient"].values()):
                                 record_coords = True
                     elif scan_read_all:
                         record_coords = True
+
                 if get_all and self.atoms and record_coords:
                     self.all_geom += [{
                         "atoms": deepcopy(self.atoms),
