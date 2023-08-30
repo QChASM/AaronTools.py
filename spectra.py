@@ -4,8 +4,16 @@ import re
 import numpy as np
 
 from AaronTools import addlogger
-from AaronTools.const import UNIT, PHYSICAL, COMMONLY_ODD_ISOTOPES
-from AaronTools.utils.utils import float_num, pascals_triangle
+from AaronTools.const import (
+    UNIT,
+    PHYSICAL,
+    COMMONLY_ODD_ISOTOPES,
+)
+from AaronTools.utils.utils import (
+    float_num,
+    pascals_triangle,
+    shortest_path,
+)
 
 
 class Signal:
@@ -2079,6 +2087,7 @@ class NMR(Signals):
         pulse_frequency=60.0,
         equivalent_nuclei=None,
         geometry=None,
+        graph=None,
         coupling_threshold=0.5,
         element="H",
         couple_with=COMMONLY_ODD_ISOTOPES,
@@ -2105,12 +2114,17 @@ class NMR(Signals):
         x_attr = data[0].x_attr
         if isinstance(element, str):
             element = set([element])
-        
 
         if couple_with == "all" and geometry:
             couple_with = set(geometry.elements)
         
-        # determine equivalent nuclei
+        if geometry is not None and graph is None:
+            graph = [
+                [geometry.atoms.index(j) for j in i.connected if j in geometry.atoms]
+                for i in geometry.atoms
+            ]
+        
+        # determine equivalent nuclei for shifts
         if equivalent_nuclei is None and geometry is not None:
             ranks = geometry.canonical_rank(break_ties=False)
             rank_map = {}
@@ -2126,73 +2140,76 @@ class NMR(Signals):
                     equivalent_nuclei.append([])
                 equivalent_nuclei[pos].append(i)
                 i += 1
-        
+
         elif equivalent_nuclei is None and geometry is None:
             equivalent_nuclei = [[shift.ndx] for shift in data]
 
-        couplings = []
-        for group in equivalent_nuclei:
-            found_neighbors = set()
-            couplings.append([])
-            for nuc in group:
-                if nuc not in self.coupling:
-                    continue
-                for ndx_b in self.coupling[nuc]:
-                    if ndx_b in group:
-                        continue
-                    for shift in data:
-                        if shift.element not in couple_with:
-                            found_neighbors.add(ndx_b)
-                    if ndx_b in found_neighbors:
-                        continue
-                    couplings[-1].append([])
-                    for group_b in equivalent_nuclei:
-                        if ndx_b in group_b:
-                            found_neighbors.update(group_b)
-                            for neighbor in group_b:
-                                couplings[-1][-1].append(self.coupling[nuc][ndx_b])
-                            break
+        print(graph)
 
         new_data = []
-        for group, coupled_neighbors in zip(equivalent_nuclei, couplings):
+        for group in equivalent_nuclei:
             average_shift = 0
-            found_ele = False
+            intensity = 0
             for shift in data:
-                if shift.ndx in group and shift.element in element:
+                if shift.ndx in group:
                     average_shift += shift.shift / len(group)
-                    found_ele = True
-            if not found_ele:
+                    intensity += shift.intensity
+            if intensity == 0:
                 continue
-            if not coupled_neighbors:
-                new_data.append(Shift(average_shift, intensity=len(group)))
-                continue
-            neighbor_couplings = [
-                sum([x for x in coupling]) / len(coupling)
-                for coupling in coupled_neighbors
-            ]
-            split_intensities = [len(group)]
-            split_positions = [average_shift]
-            for coupling_j, neighbors in zip(neighbor_couplings, coupled_neighbors):
-                if abs(coupling_j) < coupling_threshold:
+            intensities = [intensity]
+            centers = [average_shift]
+            # determine splitting pattern based on how many
+            # equivalent nuclei are the same numer of bonds away
+            for group_b in equivalent_nuclei:
+                splits = dict()
+                split_count = dict()
+                if group is group_b:
                     continue
-                coupling_j /= pulse_frequency
-                n_split = len(neighbors)
-                pattern = pascals_triangle(n_split)
-                pattern = [x / sum(pattern) for x in pattern]
-                new_split_intensities = []
-                new_split_positions = []
-                for position, intensity in zip(split_positions, split_intensities):
-                    for i, ratio in enumerate(pattern):
-                        i -= len(pattern) // 2
-                        if len(pattern) % 2 == 0:
-                            i += 0.5
-                        new_split_intensities.append(ratio * intensity)
-                        new_split_positions.append(i * coupling_j + position)
-                split_intensities = new_split_intensities
-                split_positions = new_split_positions
+                
+                for nuc_a in group:
+                    for nuc_b in group_b:
+                        if graph is None:
+                            d = 0
+                        else:
+                            d = shortest_path(graph, nuc_a, nuc_b)
+                            if d is not None:
+                                d = len(d)
+                        splits.setdefault(d, [])
+                        split_count.setdefault(d, 0)
+                        try:
+                            splits[d].append(self.coupling[nuc_a][nuc_b])
+                            split_count[d] += 1
+                        except KeyError:
+                            try:
+                                splits[d].append(self.coupling[nuc_b][nuc_a])
+                                split_count[d] += 1
+                            except KeyError:
+                                pass
+                print(group)
+                print(group_b)
+                split_count = {d: int(split_count[d] / len(group)) for d in split_count}
+                print(average_shift, splits, split_count)
             
-            for position, intensity in zip(split_positions, split_intensities):
-                new_data.append(Shift(position, intensity=intensity))
+                for d in split_count:
+                    if not split_count[d]:
+                        continue
+                    j = sum(splits[d]) / (len(splits[d]) * pulse_frequency)
+                    pattern = pascals_triangle(split_count[d])
+                    pattern = [x / sum(pattern) for x in pattern]
+                    new_split_intensities = []
+                    new_split_positions = []
+                    for position, intensity in zip(centers, intensities):
+                        for i, ratio in enumerate(pattern):
+                            i -= len(pattern) // 2
+                            if len(pattern) % 2 == 0:
+                                i += 0.5
+                            new_split_intensities.append(ratio * intensity)
+                            new_split_positions.append(i * j + position)
+                    intensities = new_split_intensities
+                    centers = new_split_positions
+            
+            for x, y in zip(centers, intensities):
+                new_data.append(Shift(x, intensity=y))
         
         data = new_data
         

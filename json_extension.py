@@ -15,6 +15,8 @@ from AaronTools.spectra import (
     ValenceExcitation,
     TransientExcitation,
     SOCExcitation,
+    NMR,
+    Shift,
 )
 from AaronTools.finders import (
     Finder,
@@ -32,6 +34,7 @@ from AaronTools.theory import (
     FrequencyJob,
     ForceJob,
     SinglePointJob,
+    NMRJob,
     BasisSet,
     Basis,
     ECP,
@@ -61,6 +64,8 @@ class ATEncoder(json.JSONEncoder):
             return self._encode_theory(obj)
         elif isinstance(obj, Finder):
             return self._encode_finder(obj)
+        elif isinstance(obj, NMR):
+            return self._encode_nmr(obj)
         else:
             super().default(obj)
 
@@ -210,6 +215,19 @@ class ATEncoder(json.JSONEncoder):
             rv["spin_orbit_data"] = spin_orbit_data
         return rv
 
+    def _encode_nmr(self, obj):
+        rv = {"_type": obj.__class__.__name__}
+        data = []
+        for d in obj.data:
+            entry = {}
+            for k, v in d.__dict__.items():
+                if isinstance(v, np.ndarray):
+                    v = v.tolist()
+                entry[k] = v
+            data += [entry.copy()]
+        rv["data"] = data
+        rv["coupling"] = obj.coupling
+
     def _encode_theory(self, obj):
         rv = {"_type": obj.__class__.__name__}
         
@@ -344,6 +362,8 @@ class ATDecoder(json.JSONDecoder):
             return self._decode_theory(obj)
         if obj["_type"] == "Finder":
             return self._decode_finder(obj)
+        if obj["_type"] == "NMR":
+            return self._decode_nmr(obj)
 
     def _decode_atom(self, obj):
         kwargs = {}
@@ -445,6 +465,17 @@ class ATDecoder(json.JSONDecoder):
             excitation_obj.spin_orbit_data = spin_orbit_data
         return excitation_obj
 
+    def _decode_nmr(self, obj):
+        data = []
+        for d in obj["data"]:
+            kw = {k: v for k, v in d.items()}
+            shift = kw.pop("shift")
+            data += [
+                Shift(shift, **kw)
+            ]
+        nmr_obj = NMR(data)
+        nmr_obj.coupling = obj["coupling"]
+
     def _decode_comp_output(self, obj):
         keys = [
             "geometry",
@@ -506,6 +537,8 @@ class ATDecoder(json.JSONDecoder):
                     jobs.append(SinglePointJob(**obj["jobs"][job]))
                 elif job == "ForceJob":
                     jobs.append(ForceJob(**obj["jobs"][job]))
+                elif job == "NMRJob":
+                    jobs.append(NMRJob(**obj["jobs"][job]))
             rv.job_type = jobs
         
         if "basis" in obj or "ecp" in obj:

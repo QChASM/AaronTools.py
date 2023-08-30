@@ -1870,8 +1870,7 @@ class Geometry:
         """
         eles = dict()
         for ele in self.elements:
-            if ele not in eles:
-                eles[ele] = 0
+            eles.setdefault(ele, 0)
             eles[ele] += 1
 
         return eles
