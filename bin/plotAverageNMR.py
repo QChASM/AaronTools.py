@@ -426,6 +426,7 @@ else:
         voigt_mixing=args.voigt_mixing,
         scalar_scale=args.scalar_scale,
         linear_scale=args.linear_scale,
+        geometry=Geometry(filereaders[0]["atoms"]),
     )
 
     x_values, y_values, _ = mixed_nmr.get_plot_data(

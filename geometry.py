@@ -1181,6 +1181,12 @@ class Geometry:
                     frag_list += [(frag_b, b, a)]
         return frag_list
 
+    def get_graph(self):
+        """returns a graph based on connectivity"""
+        ndx = {a: i for i, a in enumerate(self.atoms)}
+        graph = [[ndx[b] for b in a.connected if b in ndx] for a in self.atoms]
+        return graph
+
     def detect_substituents(self):
         """sets self.substituents to a list of substituents"""
         from AaronTools.substituent import Substituent

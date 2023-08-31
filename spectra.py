@@ -2088,7 +2088,7 @@ class NMR(Signals):
         equivalent_nuclei=None,
         geometry=None,
         graph=None,
-        coupling_threshold=0.5,
+        coupling_threshold=0.05,
         element="H",
         couple_with=COMMONLY_ODD_ISOTOPES,
     ):
@@ -2119,14 +2119,12 @@ class NMR(Signals):
             couple_with = set(geometry.elements)
         
         if geometry is not None and graph is None:
-            graph = [
-                [geometry.atoms.index(j) for j in i.connected if j in geometry.atoms]
-                for i in geometry.atoms
-            ]
+            graph = geometry.get_graph()
         
         # determine equivalent nuclei for shifts
         if equivalent_nuclei is None and geometry is not None:
-            ranks = geometry.canonical_rank(break_ties=False)
+            # I don't know why, but not using invariants is often more reliable
+            ranks = geometry.canonical_rank(break_ties=False, invariant=False)
             rank_map = {}
             equivalent_nuclei = []
             i = 0
@@ -2163,11 +2161,13 @@ class NMR(Signals):
             for group_b in equivalent_nuclei:
                 splits = dict()
                 split_count = dict()
-                if group is group_b:
-                    continue
                 
                 for nuc_a in group:
                     for nuc_b in group_b:
+                        if graph is None and group_b is group_a:
+                            break
+                        elif group_b is group and len(shortest_path(graph, nuc_a, nuc_b)) == 3:
+                            continue
                         if graph is None:
                             d = 0
                         else:
@@ -2193,11 +2193,15 @@ class NMR(Signals):
                 for d in split_count:
                     if not split_count[d]:
                         continue
-                    j = sum(splits[d]) / (len(splits[d]) * pulse_frequency)
+                    j = sum([abs(x) for x in splits[d]]) / len(splits[d])
+                    if j < coupling_threshold:
+                        continue
+                    j /= pulse_frequency
                     pattern = pascals_triangle(split_count[d])
                     pattern = [x / sum(pattern) for x in pattern]
                     new_split_intensities = []
                     new_split_positions = []
+                    print("splitting", group, "into", len(pattern), j * pulse_frequency)
                     for position, intensity in zip(centers, intensities):
                         for i, ratio in enumerate(pattern):
                             i -= len(pattern) // 2
