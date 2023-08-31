@@ -2162,12 +2162,11 @@ class NMR(Signals):
                 splits = dict()
                 split_count = dict()
                 
+                if group_b is group:
+                    continue
+                
                 for nuc_a in group:
                     for nuc_b in group_b:
-                        if graph is None and group_b is group_a:
-                            break
-                        elif group_b is group and len(shortest_path(graph, nuc_a, nuc_b)) == 3:
-                            continue
                         if graph is None:
                             d = 0
                         else:
