@@ -2173,43 +2173,55 @@ class NMR(Signals):
                             d = shortest_path(graph, nuc_a, nuc_b)
                             if d is not None:
                                 d = len(d)
-                        splits.setdefault(d, [])
-                        split_count.setdefault(d, 0)
+                        splits.setdefault(d, {"+": [], "-": []})
+                        split_count.setdefault(d, {"+": 0, "-": 0})
                         try:
-                            splits[d].append(self.coupling[nuc_a][nuc_b])
-                            split_count[d] += 1
+                            if self.coupling[nuc_a][nuc_b] < 0:
+                                splits[d]["-"].append(self.coupling[nuc_a][nuc_b])
+                                split_count[d]["-"] += 1
+                            else:
+                                splits[d]["+"].append(self.coupling[nuc_a][nuc_b])
+                                split_count[d]["+"] += 1
+
                         except KeyError:
                             try:
-                                splits[d].append(self.coupling[nuc_b][nuc_a])
-                                split_count[d] += 1
+                                if self.coupling[nuc_b][nuc_a] < 0:
+                                    splits[d]["-"].append(self.coupling[nuc_b][nuc_a])
+                                    split_count[d]["-"] += 1
+                                else:
+                                    splits[d]["+"].append(self.coupling[nuc_b][nuc_a])
+                                    split_count[d]["+"] += 1
                             except KeyError:
                                 pass
                 print(group)
                 print(group_b)
-                split_count = {d: int(split_count[d] / len(group)) for d in split_count}
+                for d in split_count:
+                    split_count[d] = {sign: int(split_count[d][sign] / len(group)) for sign in split_count[d]}
                 print(average_shift, splits, split_count)
             
                 for d in split_count:
-                    if not split_count[d]:
-                        continue
-                    j = sum([abs(x) for x in splits[d]]) / len(splits[d])
-                    if j < coupling_threshold:
-                        continue
-                    j /= pulse_frequency
-                    pattern = pascals_triangle(split_count[d])
-                    pattern = [x / sum(pattern) for x in pattern]
-                    new_split_intensities = []
-                    new_split_positions = []
-                    print("splitting", group, "into", len(pattern), j * pulse_frequency)
-                    for position, intensity in zip(centers, intensities):
-                        for i, ratio in enumerate(pattern):
-                            i -= len(pattern) // 2
-                            if len(pattern) % 2 == 0:
-                                i += 0.5
-                            new_split_intensities.append(ratio * intensity)
-                            new_split_positions.append(i * j + position)
-                    intensities = new_split_intensities
-                    centers = new_split_positions
+                    for sign in ["+", "-"]:
+                        if not split_count[d][sign]:
+                            continue
+                        print(d, sign, splits[d][sign])
+                        j = sum([x for x in splits[d][sign]]) / len(splits[d][sign])
+                        if abs(j) < coupling_threshold:
+                            continue
+                        j /= pulse_frequency
+                        pattern = pascals_triangle(split_count[d][sign])
+                        pattern = [x / sum(pattern) for x in pattern]
+                        new_split_intensities = []
+                        new_split_positions = []
+                        print("splitting", group, "into", len(pattern), j * pulse_frequency)
+                        for position, intensity in zip(centers, intensities):
+                            for i, ratio in enumerate(pattern):
+                                i -= len(pattern) // 2
+                                if len(pattern) % 2 == 0:
+                                    i += 0.5
+                                new_split_intensities.append(ratio * intensity)
+                                new_split_positions.append(i * abs(j) + position)
+                        intensities = new_split_intensities
+                        centers = new_split_positions
             
             for x, y in zip(centers, intensities):
                 new_data.append(Shift(x, intensity=y))
