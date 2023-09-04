@@ -46,7 +46,9 @@ from AaronTools.utils.utils import combine_dicts, subtract_dicts
 from AaronTools.theory.basis import ECP, Basis, BasisSet
 from AaronTools.theory.emp_dispersion import EmpiricalDispersion
 from AaronTools.theory.grid import IntegrationGrid
-from AaronTools.theory.job_types import JobType, SinglePointJob
+from AaronTools.theory.job_types import (
+    JobType, SinglePointJob, OptimizationJob, NMRJob,
+)
 from AaronTools.theory.method import KNOWN_SEMI_EMPIRICAL, KNOWN_MM, Method, SAPTMethod
 
 
@@ -877,6 +879,8 @@ class Theory:
             conditional_kwargs = {}
 
         warnings = []
+        nmr = False
+        opt = False
         if self.job_type is not None:
             for job in self.job_type[::-1]:
                 if hasattr(job, "geometry"):
@@ -885,6 +889,12 @@ class Theory:
                 job_dict, job_warnings = job.get_gaussian()
                 other_kw_dict = combine_dicts(job_dict, other_kw_dict)
                 warnings.extend(job_warnings)
+                if isinstance(job, OptimizationJob):
+                    opt = True
+                if isinstance(job, NMRJob):
+                    nmr = True
+        if opt and nmr:
+            warnings.append("Opt+NMR is not allowed in Gaussian 16 and lower")
 
         if (
             GAUSSIAN_COMMENT not in other_kw_dict

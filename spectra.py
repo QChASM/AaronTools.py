@@ -2019,6 +2019,50 @@ class NMR(Signals):
                 self.coupling.setdefault(ndx_a, {})
                 self.coupling.setdefault(ndx_b, {})
 
+    def parse_gaussian_lines(self, lines, *args, **kwargs):
+        nuc = []
+        element = None
+        ndx = None
+        ndx_a = None
+        ndx_b = None
+        ele_a = None
+        ele_a = None
+        nuc_regex = re.compile("(\d+)\s*([A-Za-z]+)\s*Isotropic =\s*(-?\d+\.\d+)\s*Anisotropy")
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if nuc_regex.search(line):
+                shift_info = nuc_regex.search(line)
+                ndx = int(shift_info.group(1)) - 1
+                element = shift_info.group(2)
+                iso = float(shift_info.group(3))
+                self.data.append(
+                    Shift(iso, ndx=ndx, element=element, intensity=1)
+                )
+
+            elif "Total nuclear spin-spin coupling J" in line:
+                i += 1
+                while i < len(lines):
+                    line = lines[i]
+                    if "D" not in line:
+                        header = [int(x) - 1 for x in line.split()]
+                        i += 1
+                        continue
+                    info = line.split()
+                    try:
+                        m = int(info[0]) - 1
+                    except ValueError:
+                        break
+                    self.coupling.setdefault(m, {})
+                    for j, n in zip(info[1:], header):
+                        j = float(j.replace("D", "e"))
+                        if abs(j) != 0.0:
+                            self.coupling[m][n] = j
+
+                    i += 1
+            
+            i += 1
+
     @classmethod
     def get_mixed_signals(
         cls,
@@ -2088,9 +2132,10 @@ class NMR(Signals):
         equivalent_nuclei=None,
         geometry=None,
         graph=None,
-        coupling_threshold=0.05,
+        coupling_threshold=0.0,
         element="H",
         couple_with=COMMONLY_ODD_ISOTOPES,
+        shifts_only=False,
     ):
         """
         returns a list of functions that can be evaluated to
@@ -2142,16 +2187,20 @@ class NMR(Signals):
         elif equivalent_nuclei is None and geometry is None:
             equivalent_nuclei = [[shift.ndx] for shift in data]
 
-        print(graph)
-
         new_data = []
         for group in equivalent_nuclei:
+            valid_element = False
             average_shift = 0
             intensity = 0
             for shift in data:
                 if shift.ndx in group:
+                    valid_element = shift.element in element
+                    if not valid_element:
+                        break
                     average_shift += shift.shift / len(group)
                     intensity += shift.intensity
+            if not valid_element:
+                continue
             if intensity == 0:
                 continue
             intensities = [intensity]
@@ -2193,26 +2242,22 @@ class NMR(Signals):
                                     split_count[d]["+"] += 1
                             except KeyError:
                                 pass
-                print(group)
-                print(group_b)
+
                 for d in split_count:
                     split_count[d] = {sign: int(split_count[d][sign] / len(group)) for sign in split_count[d]}
-                print(average_shift, splits, split_count)
-            
+
                 for d in split_count:
                     for sign in ["+", "-"]:
                         if not split_count[d][sign]:
                             continue
-                        print(d, sign, splits[d][sign])
                         j = sum([x for x in splits[d][sign]]) / len(splits[d][sign])
-                        if abs(j) < coupling_threshold:
+                        if abs(j) <= coupling_threshold:
                             continue
                         j /= pulse_frequency
                         pattern = pascals_triangle(split_count[d][sign])
                         pattern = [x / sum(pattern) for x in pattern]
                         new_split_intensities = []
                         new_split_positions = []
-                        print("splitting", group, "into", len(pattern), j * pulse_frequency)
                         for position, intensity in zip(centers, intensities):
                             for i, ratio in enumerate(pattern):
                                 i -= len(pattern) // 2
@@ -2224,12 +2269,17 @@ class NMR(Signals):
                         centers = new_split_positions
             
             for x, y in zip(centers, intensities):
-                new_data.append(Shift(x, intensity=y))
+                new_data.append(
+                    Shift(x, intensity=y, origin=average_shift, ndx=group)
+                )
         
         data = new_data
-        
+
         if not data:
             raise RuntimeError("no shifts for the specified element: %s" % element)
+        
+        if shifts_only:
+            return data
         
         # scale x positions
         if not data[0].nested:
@@ -2364,22 +2414,6 @@ class NMR(Signals):
         data_attr = "data"
         
         fwhm /= pulse_frequency
-   
-        if not centers:
-            data_list = getattr(self, data_attr)
-            data_min = None
-            data_max = None
-            for data in data_list:
-                shift = data.shift
-                shift = scalar_scale + linear_scale * shift + quadratic_scale * shift ** 2
-                if data_min is None or shift < data_min:
-                    data_min = shift
-                if data_max is None or shift > data_max:
-                    data_max = shift
-            centers = [(data_min + data_max) / 2]
-            widths = [1.5 * (data_max - data_min)]
-            if widths[0] == 0:
-                widths = [4 * fwhm]
 
         functions, shifts, intensities = self.get_spectrum_functions(
             peak_type=peak_type,
@@ -2391,8 +2425,6 @@ class NMR(Signals):
             quadratic_scale=quadratic_scale,
             **kwargs,
         )
-
-        print(len(shifts))
 
         other_y_style = None
         ndx_list = None

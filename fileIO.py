@@ -3892,6 +3892,15 @@ class FileReader:
                     "centr_rotational_temperature"
                 ] = centr_rotational_temperature
 
+            # NMR
+            elif "Magnetic shielding tensor" in line:
+                nmr = ""
+                while line.strip():
+                    line = f.readline()
+                    nmr += line
+                    n += 1
+                self.other["nmr"] = NMR(nmr, style="gaussian")
+
             elif "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))
             elif "Sum of electronic and thermal Enthalpies=" in line:
