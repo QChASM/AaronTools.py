@@ -1568,7 +1568,7 @@ class Orbitals:
         if "n_alpha" not in filereader.keys():
             tot_electrons = sum(
                 ELEMENTS.index(atom.element) for atom in filereader["atoms"]
-            )
+            ) - filereader["charge"]
             self.n_beta = tot_electrons // 2
             self.n_alpha = tot_electrons - self.n_beta
         else:
