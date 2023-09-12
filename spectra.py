@@ -33,6 +33,22 @@ class Signal:
 
         setattr(self, self.x_attr, x_var)
 
+    def __repr__(self):
+        s = self.__class__.__name__
+        s += "("
+        s += str(getattr(self, self.x_attr))
+        s += ", "
+        for attr in self.__dict__:
+            if attr == self.x_attr:
+                continue
+            s += attr
+            s += "="
+            s += str(getattr(self, attr))
+            s += ", "
+        s.rstrip(", ")
+        s += ")"
+        return s
+
 
 @addlogger
 class Signals:
@@ -297,13 +313,22 @@ class Signals:
             y_values = np.sum([f(x_values) for f in functions], axis=0)
             
             if show_functions:
-                for (ndx1, ndx2) in show_functions:
-                    other_y_list.append(
-                        np.sum(
-                            [f(x_values) for f in functions[ndx1: ndx2]],
-                            axis=0,
+                if (
+                    len(show_functions[0]) == 2 and
+                    all(isinstance(n, int) for n in show_functions[0])
+                ):
+                    for (ndx1, ndx2) in show_functions:
+                        other_y_list.append(
+                            np.sum(
+                                [f(x_values) for f in functions[ndx1: ndx2]],
+                                axis=0,
+                            )
                         )
-                    )
+                else:
+                    for comp in show_functions:
+                        other_y_list.append(
+                            np.sum([f(x_values) for f in comp], axis=0)
+                        )
 
         else:
             x_values = []
@@ -1981,8 +2006,11 @@ class Shift(Signal):
 class NMR(Signals):
     x_label = "shift (ppm)"
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, n_atoms=0, coupling=None, **kwargs):
         self.coupling = {}
+        if coupling is not None:
+            self.coupling = coupling
+        self.n_atoms = n_atoms
         super().__init__(*args, **kwargs)
     
     def parse_orca_lines(self, lines, *args, **kwargs):
@@ -2116,6 +2144,7 @@ class NMR(Signals):
 
         out = cls(new_data, **kwargs)
         out.coupling = new_coupling
+        out.n_atoms = signal_groups[0].n_atoms
         return out
     
     def get_spectrum_functions(
@@ -2252,6 +2281,8 @@ class NMR(Signals):
                             continue
                         j = sum([x for x in splits[d][sign]]) / len(splits[d][sign])
                         if abs(j) <= coupling_threshold:
+                            continue
+                        if abs(j) <= 0:
                             continue
                         j /= pulse_frequency
                         pattern = pascals_triangle(split_count[d][sign])
@@ -2427,9 +2458,23 @@ class NMR(Signals):
         )
 
         other_y_style = None
-        ndx_list = None
+        func_list = None
         if show_functions is not None:
-            ndx_list = [info[0] for info in show_functions]
+            nmr_list = [
+                info[0].get_spectrum_functions(
+                    peak_type=peak_type,
+                    fwhm=fwhm,
+                    data_attr=data_attr,
+                    pulse_frequency=pulse_frequency,
+                    scalar_scale=scalar_scale,
+                    linear_scale=linear_scale,
+                    quadratic_scale=quadratic_scale,
+                    **kwargs,
+                ) for info in show_functions
+            ]
+            func_list = [x[0] for x in nmr_list]
+            for x in nmr_list:
+                shifts = np.concatenate((shifts, x[1]), axis=None)
             other_y_style = list(info[1:] for info in show_functions)
 
         data = self.get_plot_data(
@@ -2440,7 +2485,7 @@ class NMR(Signals):
             peak_type=peak_type,
             point_spacing=point_spacing,
             normalize=normalize,
-            show_functions=ndx_list,
+            show_functions=func_list,
         )
         if data is None:
             return

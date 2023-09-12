@@ -2415,7 +2415,7 @@ class FileReader:
                         line = f.readline()
                         if "Maximum memory used throughout the entire EPRNMR-calculation:" in line:
                             break
-                    self.other["nmr"] = NMR("".join(nmr_data), style="orca")
+                    self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
 
                 elif line.startswith("Temperature"):
                     self.other["temperature"] = float(line.split()[2])
@@ -3899,7 +3899,7 @@ class FileReader:
                     line = f.readline()
                     nmr += line
                     n += 1
-                self.other["nmr"] = NMR(nmr, style="gaussian")
+                self.other["nmr"] = NMR(nmr, style="gaussian", n_atoms=len(self.atoms))
 
             elif "Sum of electronic and zero-point Energies=" in line:
                 self.other["E_ZPVE"] = float(float_num.search(line).group(0))

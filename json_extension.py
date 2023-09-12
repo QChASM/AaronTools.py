@@ -227,6 +227,7 @@ class ATEncoder(json.JSONEncoder):
             data += [entry.copy()]
         rv["data"] = data
         rv["coupling"] = obj.coupling
+        rv["n_atoms"] = obj.n_atoms
         return rv
 
     def _encode_theory(self, obj):
@@ -474,7 +475,7 @@ class ATDecoder(json.JSONDecoder):
             data += [
                 Shift(shift, **kw)
             ]
-        nmr_obj = NMR(data)
+        nmr_obj = NMR(data, n_atoms=obj["n_atoms"])
         nmr_obj.coupling = {}
         for i in obj["coupling"]:
             nmr_obj.coupling.setdefault(int(i), {})
