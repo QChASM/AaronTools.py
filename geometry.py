@@ -5595,18 +5595,19 @@ class Geometry:
 
         self.rebuild()
         # rotate monodentate to relieve clashing
-        for ligand in self.components:
-            if len(ligand.key_atoms) == 1:
-                targets = ligand.atoms
-                key = ligand.key_atoms[0]
-                if self.center:
-                    start = self.COM(self.center)
-                    end = key.coords
-                else:
-                    start = key.coords
-                    end = self.COM(key.connected)
-                axis = end - start
-                self.minimize_torsion(targets, axis, center=key, increment=10)
+        if minimize:
+            for ligand in self.components:
+                if len(ligand.key_atoms) == 1:
+                    targets = ligand.atoms
+                    key = ligand.key_atoms[0]
+                    if self.center:
+                        start = self.COM(self.center)
+                        end = key.coords
+                    else:
+                        start = key.coords
+                        end = self.COM(key.connected)
+                    axis = end - start
+                    self.minimize_torsion(targets, axis, center=key, increment=10)
 
         self.remove_clash()
         if minimize:
