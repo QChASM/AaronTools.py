@@ -5596,7 +5596,7 @@ class Geometry:
         self.rebuild()
         # rotate monodentate to relieve clashing
         if minimize:
-            for ligand in self.components:
+            for ligand in ligands:
                 if len(ligand.key_atoms) == 1:
                     targets = ligand.atoms
                     key = ligand.key_atoms[0]

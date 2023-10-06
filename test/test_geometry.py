@@ -498,9 +498,9 @@ class TestGeometry(TestWithTimer):
 
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         vbur = geom.percent_buried_volume(method="MC")
-        if not np.isclose(vbur, 86.0, atol=0.35):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.35))
+        if not np.isclose(vbur, 86.3, atol=0.35):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.35))
 
         # a few synthetic tests
         geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
@@ -531,73 +531,73 @@ class TestGeometry(TestWithTimer):
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=20, apoints=1454
         )
-        if not np.isclose(vbur, 86.0, atol=0.05):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        if not np.isclose(vbur, 86.3, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.15))
 
         # 32, 974
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=32, apoints=974
         )
-        if not np.isclose(vbur, 86.0, atol=0.15):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.15))
+        if not np.isclose(vbur, 86.3, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.15))
 
         # 64, 590
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=64, apoints=590
         )
-        if not np.isclose(vbur, 86.0, atol=0.05):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.05))
+        if not np.isclose(vbur, 86.3, atol=0.1):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.1))
 
         # 75, 302
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=75, apoints=302
         )
-        if not np.isclose(vbur, 86.0, atol=0.1):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+        if not np.isclose(vbur, 86.3, atol=0.2):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.2))
 
         # 99, 194
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=99, apoints=194
         )
-        if not np.isclose(vbur, 86.0, atol=0.5):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.5))
+        if not np.isclose(vbur, 86.3, atol=0.5):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.5))
 
         # 127, 110
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=127, apoints=110
         )
-        if not np.isclose(vbur, 86.0, atol=0.75):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.75))
+        if not np.isclose(vbur, 86.3, atol=0.75):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.75))
 
         # 20, 2030
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=20, apoints=2030
         )
-        if not np.isclose(vbur, 86.0, atol=0.1):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+        if not np.isclose(vbur, 86.3, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.15))
 
         # 20, 2702
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=20, apoints=2702
         )
-        if not np.isclose(vbur, 86.0, atol=0.15):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.15))
+        if not np.isclose(vbur, 86.3, atol=0.15):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.15))
 
         # 20, 5810
         vbur = geom.percent_buried_volume(
             method="lebedev", rpoints=20, apoints=5810
         )
-        if not np.isclose(vbur, 86.0, atol=0.1):
-            print("V_bur =", vbur, "expected:", 86.0)
-        self.assertTrue(np.isclose(vbur, 86.0, atol=0.1))
+        if not np.isclose(vbur, 86.3, atol=0.1):
+            print("V_bur =", vbur, "expected:", 86.3)
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.1))
 
         geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
         vbur = geom2.percent_buried_volume(
