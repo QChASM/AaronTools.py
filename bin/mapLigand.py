@@ -173,6 +173,7 @@ for infile in glob_files(args.infile, parser=maplig_parser):
         for lig_name in lig_names:
             ligands = [Component(lig_name)]
             cat_copy = cat.copy()
+            cat_copy.detect_components(center=args.center)
 
             if key_atoms != []:
                 key = cat_copy.find(key_atoms)
