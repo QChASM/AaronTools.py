@@ -142,8 +142,8 @@ for infile in glob_files(args.infile, parser=substitute_parser):
     if args.outfile:
         outfile = get_outfile(
             args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
+            INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(infile),
         )
         geom.write(
             append=True,

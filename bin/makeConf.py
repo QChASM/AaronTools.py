@@ -270,8 +270,8 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
                 outfile = args.outfile.replace("$i", str(conf + 1))
             outfile = get_outfile(
                 outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
-                INDIR=os.path.dirname(f),
+                INFILE=get_filename(infile, include_parent_dir="$INDIR" in outfile),
+                INDIR=os.path.dirname(infile),
             )
             print_geom.write(outfile=outfile, append="$i" not in args.outfile)
 

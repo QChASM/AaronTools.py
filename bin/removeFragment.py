@@ -103,8 +103,8 @@ for infile in glob_files(args.infile, parser=remove_frag_parser):
     if args.outfile:
         outfile = get_outfile(
             args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=os.path.dirname(f),
+            INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=os.path.dirname(infile),
         )
         geom.write(append=False, outfile=outfile)
     else:
