@@ -167,8 +167,8 @@ for infile in glob_files(args.infile, parser=substitute_parser):
             do_append = True
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
+                INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(infile),
                 SUBSTITUTIONS=sub_str,
             )
             do_append = "$SUBSTITUTIONS" in outfile or "$INFILE" in outfile
