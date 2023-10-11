@@ -201,9 +201,9 @@ for infile in glob_files(args.infile, parser=maplig_parser):
             if args.outfile:
                 outfile = get_outfile(
                     args.outfile,
-                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
                     LIGAND=lig_name,
-                    INDIR=dirname(f),
+                    INDIR=dirname(infile),
                 )
                 cat_copy.write(append=False, outfile=outfile)
             else:
