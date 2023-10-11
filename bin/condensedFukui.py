@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import get_filename, glob_files, get_outfile
 
 fukui_parser = argparse.ArgumentParser(
     description="integrate weighted Fukui functions around atoms",
@@ -27,6 +28,7 @@ fukui_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -181,11 +183,13 @@ for n, f in enumerate(infiles):
     if not args.outfile:
         print(s)
     else:
-        outfile = args.outfile
         mode = "w"
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
-        elif n > 0:
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
+        if n > 0:
             mode = "a"
         with open(outfile, mode) as f:
             f.write(s)

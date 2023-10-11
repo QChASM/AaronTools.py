@@ -10,7 +10,9 @@ from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import BondedTo
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename, glob_files, get_outfile,
+)
 
 makeconf_parser = argparse.ArgumentParser(
     description="generate rotamers for substituents using a hierarchical method",
@@ -266,10 +268,11 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
 
             else:
                 outfile = args.outfile.replace("$i", str(conf + 1))
-
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(infile))
-
+            outfile = get_outfile(
+                outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INDIR=os.path.dirname(f),
+            )
             print_geom.write(outfile=outfile, append="$i" not in args.outfile)
 
 

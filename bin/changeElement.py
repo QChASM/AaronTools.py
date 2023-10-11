@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 from warnings import warn
 
 from AaronTools.atoms import Atom
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import get_filename, glob_files, get_outfile
 
 vsepr_choices = [
         "point",
@@ -77,6 +78,7 @@ element_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -193,9 +195,11 @@ for f in infiles:
             )
 
     if args.outfile:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         geom.write(append=f != infiles[0] and "$INFILE" not in outfile, outfile=outfile)
     else:
         print(geom.write(outfile=False))

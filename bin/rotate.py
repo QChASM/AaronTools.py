@@ -8,7 +8,7 @@ from warnings import warn
 import numpy as np
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import get_filename, glob_files, get_outfile
 
 rotate_parser = argparse.ArgumentParser(
     description="rotate a fragment or molecule's coordinates",
@@ -173,8 +173,11 @@ rotate_parser.add_argument(
     required=False,
     dest="outfile",
     help="output destination\n" +
-    "$INFILE, $AXIS, $ANGLE will be replaced with the name of the\n" +
-    "input file, rotation axis, and angle or rotation, respectively\nDefault: stdout",
+    "$INFILE will be replaced with the name of the input file\n"
+    "$INDIR will be replaced with the directory of the input file\n"
+    "$AXIS will be replaced with the axis of rotation\n"
+    "$ANGLE will be replaced with the rotation angle\n" +
+    "Default: stdout",
 )
 
 args = rotate_parser.parse_args()
@@ -264,15 +267,12 @@ for f in glob_files(args.infile, parser=rotate_parser):
         geom.rotate(vector, args.angle, targets=targets, center=center)
 
         if args.outfile is not False:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
-            outfile = outfile.replace(
-                "$AXIS", ".".join(["%.3f" % x for x in vector])
-            )
-            outfile = outfile.replace(
-                "$ANGLE",
-                str.zfill("%.2f" % np.rad2deg(args.angle * (i + 1)), 6),
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INDIR=os.path.dirname(f),
+                AXIS=".".join(["%.3f" % x for x in vector]),
+                ANGLE=str.zfill("%.2f" % np.rad2deg(args.angle * (i + 1)), 6),
             )
             parent_dir = os.path.dirname(outfile)
             if not os.path.isdir(parent_dir) and parent_dir != "":

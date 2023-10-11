@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
 import sys
-from os.path import splitext
+from os.path import splitext, dirname
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.theory import *
-from AaronTools.utils.utils import combine_dicts, get_filename, glob_files
+from AaronTools.utils.utils import (
+    combine_dicts, get_filename, glob_files, get_outfile
+)
 
 theory_parser = argparse.ArgumentParser(
     description="print CREST input files",
@@ -30,6 +32,7 @@ theory_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -285,9 +288,11 @@ for f in glob_files(args.infile, parser=theory_parser):
     )
 
     if args.outfile:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+            INDIR=dirname(f),
+        )
         warnings = geom.write(
             append=True,
             outfile=outfile,

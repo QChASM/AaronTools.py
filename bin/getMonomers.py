@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
+
 
 monomer_parser = argparse.ArgumentParser(
     description="split a structure into monomers",
@@ -28,6 +34,7 @@ monomer_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "$MONOMER will be replaced with the index of the monomer\n" +
     "Default: stdout"
 )
@@ -72,7 +79,10 @@ for f in glob_files(args.infile, parser=monomer_parser):
         if not args.outfile:
             print(monomer.write(outfile=False))
         else:
-            outfile = args.outfile
-            outfile = outfile.replace("$INFILE", get_filename(f))
-            outfile = outfile.replace("$MONOMER", str(i + 1))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+                MONOMER=str(i + 1),
+            )
             monomer.write(append=args.append, outfile=outfile)

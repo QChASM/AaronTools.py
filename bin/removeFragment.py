@@ -7,8 +7,11 @@ import sys
 import numpy as np
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import read_types, FileReader
-from AaronTools.utils.utils import glob_files, get_filename
-
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 remove_frag_parser = argparse.ArgumentParser(
     description="remove a fragment from a molecule",
@@ -42,6 +45,7 @@ remove_frag_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout",
 )
 
@@ -97,9 +101,11 @@ for infile in glob_files(args.infile, parser=remove_frag_parser):
                 geom -= atom
     
     if args.outfile:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(infile))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=os.path.dirname(f),
+        )
         geom.write(append=False, outfile=outfile)
     else:
         s = geom.write(outfile=False)

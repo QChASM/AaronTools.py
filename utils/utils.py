@@ -944,4 +944,12 @@ def pascals_triangle(n):
             previous_row = row
         return row
 
+def get_outfile(basename, **substitutions):
+    """replace text"""
+    new_name = basename
+    for pattern, replacement in substitutions.items():
+        new_name = new_name.replace("$%s" % pattern, replacement)
+
+    return new_name
+
 float_num = re.compile("[-+]?\d+\.?\d*")

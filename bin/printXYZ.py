@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 xyz_parser = argparse.ArgumentParser(
     description="print structure in xyz format",
@@ -28,6 +33,7 @@ xyz_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -83,7 +89,9 @@ for f in glob_files(args.infile, parser=xyz_parser):
     if not args.outfile:
         print(geom.write(outfile=False))
     else:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         geom.write(append=args.append, outfile=outfile)

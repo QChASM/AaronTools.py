@@ -158,7 +158,7 @@ for f in glob_files(args.infile, parser=info_parser):
                     for ndx1 in ndx_list1:
                         for ndx2 in ndx_list2:
                             if args.csv:
-                                s += "\"%s\"%s%i%s%i%s%s\n" % (
+                                s += "\"%s\"%s%i%s%i%s\n" % (
                                     key, sep, ndx1, sep, ndx2, str(val[ndx1, ndx2]),
                                 )
                             else:

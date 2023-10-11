@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 import sys
 
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 substitute_parser = argparse.ArgumentParser(
     description="replace an atom or substituent with another",
@@ -80,6 +85,7 @@ substitute_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -134,9 +140,11 @@ for infile in glob_files(args.infile, parser=substitute_parser):
             geom.refresh_connected()
 
     if args.outfile:
-        outfile = args.outfile
-        if "INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(infile))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         geom.write(
             append=True,
             outfile=outfile,

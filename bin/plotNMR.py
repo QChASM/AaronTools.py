@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 import sys
 
 from AaronTools.const import COMMONLY_ODD_ISOTOPES
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
@@ -26,16 +31,6 @@ def peak_type(x):
     raise TypeError(
         "peak type must be one of: %s" % ", ".join(
             peak_types
-        )
-    )
-
-def plot_type(x):
-    out = [y for y in plot_types if y.startswith(x)]
-    if out:
-        return out[0]
-    raise TypeError(
-        "plot type must be one of: %s" % ", ".join(
-            plot_types
         )
     )
 
@@ -285,7 +280,11 @@ for f in glob_files(args.infiles, parser=nmr_parser):
         fig.set_figheight(args.fig_height)
 
     if args.outfile:
-        outfile_name = args.outfile.replace("$INFILE", get_filename(f))
+        outfile_name = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir=False),
+            INDIR=dirname(f),
+        )
         plt.savefig(outfile_name, dpi=300)
     else:
         plt.show()

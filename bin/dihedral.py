@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import numpy as np
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import get_filename, glob_files, get_outfile
 
 def four_atoms_and_a_float(vals):
     """check to see if argument is four numbers and a float"""
@@ -112,6 +113,7 @@ dihedral_parser.add_argument(
     metavar="output destination",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -169,9 +171,11 @@ for f in glob_files(args.infile, dihedral_parser):
 
     if len(args.set_ang) + len(args.change) > 0:
         if args.outfile:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir=False),
+                INDIR=dirname(f),
+            )
             geom.write(append=True, outfile=outfile)
         else:
             print(geom.write(outfile=False))
@@ -180,8 +184,10 @@ for f in glob_files(args.infile, dihedral_parser):
         if not args.outfile:
             print(out)
         else:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
             with open(outfile, "a") as f:
-                f.write(out)
+                    f.write(out)

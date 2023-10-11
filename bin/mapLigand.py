@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 import sys
 
 from AaronTools.component import Component
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 def get_matching_ligands(name):
     name_info = name
@@ -121,6 +126,7 @@ maplig_parser.add_argument(
     help="output destination\n" +
     "$LIGAND will be replaced with ligand name\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout",
 )
 
@@ -193,9 +199,12 @@ for infile in glob_files(args.infile, parser=maplig_parser):
             cat_copy.map_ligand(ligands, key)
 
             if args.outfile:
-                if "$INFILE" in args.outfile:
-                    outfile = args.outfile.replace("$INFILE", get_filename(infile))
-                outfile = outfile.replace("$LIGAND", lig_name)
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    LIGAND=lig_name,
+                    INDIR=dirname(f),
+                )
                 cat_copy.write(append=False, outfile=outfile)
             else:
                 s = cat_copy.write(outfile=False)

@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 import sys
 
 from AaronTools.fileIO import FileReader
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
@@ -56,7 +61,10 @@ ir_parser.add_argument(
     type=str,
     default=None,
     dest="outfile",
-    help="output destination\nDefault: show plot",
+    help="output destination\n"
+    "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
+    "Default: show plot",
 )
 
 ir_parser.add_argument(
@@ -265,7 +273,11 @@ for f in glob_files(args.infiles, parser=ir_parser):
         fig.set_figheight(args.fig_height)
 
     if args.outfile:
-        outfile_name = args.outfile.replace("$INFILE", get_filename(f))
+        outfile_name = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir=False),
+            INDIR=dirname(f),
+        )
         plt.savefig(outfile_name, dpi=300)
     else:
         plt.show()

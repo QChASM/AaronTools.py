@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 from warnings import warn
 
 import numpy as np
 from AaronTools.fileIO import FileReader
 from AaronTools.geometry import Geometry
 from AaronTools.pathway import Pathway
-from AaronTools.utils.utils import get_filename
+from AaronTools.utils.utils import get_filename, get_outfile
 
 
 def width(n):
@@ -231,9 +232,14 @@ for i, mode in enumerate(modes):
                 )
             )
             if args.outfile:
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(args.input_file, include_parent_dir=False),
+                    INDIR=dirname(args.input_file),
+                )
                 followed_geom.write(
                     append=False,
-                    outfile=outfile.replace("$INFILE", get_filename(args.input_file))
+                    outfile=outfile,
                 )
             else:
                 print(followed_geom.write(outfile=False))
@@ -251,8 +257,11 @@ for i, mode in enumerate(modes):
 
         outfile = outfiles[i]
         if args.outfile:
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(args.input_file))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(args.input_file, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(args.input_file),
+            )
             followed_geom.write(append=True, outfile=outfile)
         else:
             print(followed_geom.write(outfile=False))

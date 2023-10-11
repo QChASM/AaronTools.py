@@ -2,10 +2,16 @@
 
 import sys
 import argparse
+from os.path import dirname
 from warnings import warn
+
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 def range2int(s):
     """split on "," and turn "-" into a range
@@ -134,6 +140,7 @@ output_options.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -195,18 +202,22 @@ for f in glob_files(args.infile, parser=rmsd_parser):
 
     if not args.value_only and not args.csv:
         if args.outfile:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
             geom.write(append=True, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     elif args.value_only:
         if args.outfile:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
             with open(outfile, "a") as f:
                 f.write("%f\n" % rmsd)
 
@@ -216,9 +227,11 @@ for f in glob_files(args.infile, parser=rmsd_parser):
     elif args.csv:
         s = delim.join([ref_geom.name, geom.name, "%f" % rmsd])
         if args.outfile:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace("$INFILE", get_filename(f))
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
             with open(outfile, "a") as f:
                 f.write(s + "\n")
         else:

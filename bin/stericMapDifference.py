@@ -2,6 +2,7 @@
 
 import sys
 import argparse
+from os.path import dirname
 import copy
 
 import numpy as np
@@ -10,7 +11,12 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import rotation_matrix, get_filename, glob_files
+from AaronTools.utils.utils import (
+    rotation_matrix,
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 
 steric_parser = argparse.ArgumentParser(
@@ -36,6 +42,7 @@ steric_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: show plot",
 )
 
@@ -410,12 +417,13 @@ for i, geom1 in enumerate(geoms):
         if not args.outfile:
             plt.show()
         else:
-            outfile = args.outfile
-            if "$INFILE" in outfile:
-                outfile = outfile.replace(
-                    "$INFILE", "%s_minus_%s" % (
-                        get_filename(geom1.name),
-                        get_filename(geom2.name),
-                    )
-                )
+            infiles = "%s_minus_%s" % (
+                get_filename(geom1.name, include_parent_dir="$INDIR" not in args.outfile),
+                get_filename(geom2.name, include_parent_dir="$INDIR" not in args.outfile),
+            )
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=infiles,
+                INDIR=dirname(f),
+            )
             plt.savefig(outfile, dpi=500)

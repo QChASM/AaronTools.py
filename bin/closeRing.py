@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+from os.path import dirname
 from sys import stdin
 
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.ring import Ring
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import get_filename, glob_files, get_outfile
 
 ring_parser = argparse.ArgumentParser(
     description="close rings on a geometry",
@@ -31,6 +32,7 @@ ring_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -137,9 +139,11 @@ for infile in glob_files(args.infile, parser=ring_parser):
             )
 
     if args.outfile:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(infile))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         geom.write(append=True, outfile=outfile)
     else:
         print(geom.write(outfile=False))

@@ -14,7 +14,7 @@ from AaronTools.utils.utils import glob_files
 # profile.enable()
 
 info_parser = argparse.ArgumentParser(
-    description="print information in Gaussian, ORCA, or Psi4 output files",
+    description="print information in QM output files",
     formatter_class=argparse.RawTextHelpFormatter
 )
 

@@ -2,11 +2,17 @@
 
 import sys
 import argparse
+from os.path import dirname
 import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 translate_parser = argparse.ArgumentParser(
     description="move atoms along a vector",
@@ -133,6 +139,7 @@ translate_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -196,9 +203,11 @@ for f in glob_files(args.infile, parser=translate_parser):
     geom.coord_shift(translate_vector, targets=targets)
 
     if args.outfile:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         geom.write(
             append=True,
             outfile=outfile,

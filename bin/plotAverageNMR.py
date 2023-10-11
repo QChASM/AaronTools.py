@@ -42,16 +42,6 @@ def peak_type(x):
         )
     )
 
-def plot_type(x):
-    out = [y for y in plot_types if y.startswith(x)]
-    if out:
-        return out[0]
-    raise TypeError(
-        "plot type must be one of: %s" % ", ".join(
-            plot_types
-        )
-    )
-
 
 nmr_parser = argparse.ArgumentParser(
     description="plot NMR spectrum",

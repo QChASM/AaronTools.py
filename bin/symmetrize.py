@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 
 import numpy as np
@@ -14,7 +15,12 @@ from AaronTools.symmetry import (
     ImproperRotation,
     MirrorPlane,
 )
-from AaronTools.utils.utils import perp_vector, glob_files, get_filename
+from AaronTools.utils.utils import (
+    perp_vector,
+    glob_files,
+    get_filename,
+    get_outfile,
+)
 
 pg_parser = argparse.ArgumentParser(
     description="print point group",
@@ -125,9 +131,11 @@ for f in glob_files(args.infile, parser=pg_parser):
     if not args.outfile:
         print(out)
     else:
-        outfile = args.outfile
-        if "$INFILE" in outfile:
-            outfile = outfile.replace("$INFILE", get_filename(f))
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
         with open(outfile, "w") as f:
             f.write(out)
 

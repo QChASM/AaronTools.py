@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 
 import sys
+from os.path import dirname
 import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.component import Component
 from AaronTools.finders import AnyTransitionMetal
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 # from cProfile import Profile
 
@@ -32,6 +37,7 @@ solid_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "Default: stdout"
 )
 
@@ -100,8 +106,6 @@ args = solid_parser.parse_args()
 # profile = Profile()
 # profile.enable()
 
-s = ""
-
 # args.radii = {
 #     "P": 1.8,
 #     "H": 1.2,
@@ -127,6 +131,7 @@ for f in glob_files(args.infile, parser=solid_parser):
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f))
 
+    s = ""
     geom = Geometry(infile, refresh_ranks=False)
 
     ligand = geom.get_fragment(args.key_atoms, stop=args.center)
@@ -154,11 +159,16 @@ for f in glob_files(args.infile, parser=solid_parser):
     else:
         s += "%4.3f\n" % angle
     
-if not args.outfile:
-    print(s.rstrip())
-else:
-    with open(args.outfile, "a") as f:
-        f.write(s.rstrip())
+    if not args.outfile:
+        print(s.rstrip())
+    else:
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
+        with open(outfile, "a") as f:
+            f.write(s.rstrip())
 
 # profile.disable()
 # profile.print_stats()

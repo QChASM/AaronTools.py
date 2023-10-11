@@ -8,7 +8,11 @@ import numpy as np
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import (
+    get_filename,
+    glob_files,
+    get_outfile,
+)
 
 split_parser = argparse.ArgumentParser(
     description="print all structures from a given file to different files",
@@ -31,6 +35,7 @@ split_parser.add_argument(
     dest="outfile",
     help="output destination\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory of the input file\n" +
     "$N will be replaced with the number of the structure\n" +
     "Default: print to stdout"
 )
@@ -87,10 +92,10 @@ for f in glob_files(args.infile, parser=split_parser):
         if not args.outfile:
             print(geom.write(outfile=False))
         else:
-            outfile = args.outfile
-            outfile = outfile.replace(
-                "$INFILE",
-                get_filename(f, include_parent_dir=args.include_parent)
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=os.path.dirname(f),
+                N=n_fmt % (i + 1),
             )
-            outfile = outfile.replace("$N", n_fmt % (i + 1))
             geom.write(outfile=outfile, append=args.append)

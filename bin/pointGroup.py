@@ -141,6 +141,7 @@ for f in glob_files(args.infile, parser=pg_parser):
                 z = ele.axis
                 x = perp_vector(z)
                 y = np.cross(x, z)
+                pt1 = None
                 for angle in np.linspace(0, 2 * np.pi, num=25):
                     pt2 = ele.n ** 0.9 * x * np.cos(angle)
                     pt2 += ele.n ** 0.9 * y * np.sin(angle)
