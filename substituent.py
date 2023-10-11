@@ -9,7 +9,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from AaronTools import addlogger
+from AaronTools import addlogger, classproperty
 from AaronTools.const import AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
@@ -180,11 +180,10 @@ class Substituent(Geometry):
                 return True
         return False
 
-    @classmethod
-    @property
-    def AARON_LIBS(cls):
+    @classproperty
+    def AARON_LIBS(self):
         from AaronTools.const import AARONLIB
-        return os.path.join(AARONLIB, "Subs")
+        return os.path.join(AARONLIB, "SUBS")
 
     @staticmethod
     def weighted_sterimol(substituents, energies, temperature, *args, **kwargs):
