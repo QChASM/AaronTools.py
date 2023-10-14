@@ -1312,7 +1312,7 @@ class Theory:
             GAUSSIAN_CONNECTIVITY in other_kw_dict
             and other_kw_dict[GAUSSIAN_CONNECTIVITY]
         ):
-            s += "\n".join(*other_kw_dict[GAUSSIAN_CONNECTIVITY])
+            s += "\n".join(other_kw_dict[GAUSSIAN_CONNECTIVITY])
             s += "\n"
 
         if return_warnings:
@@ -1414,6 +1414,7 @@ class Theory:
 
         #mm param file
         if GAUSSIAN_MM_PARAMS in other_kw_dict:
+            out_str = out_str.rstrip()
             out_str += "\n"
 
             for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
