@@ -7,7 +7,8 @@ class OniomAtom(Atom):
         super().__init__(element="", coords=[], flag=False, name="", tags=[])
 
         atomtype = str(atomtype).strip()
-        layer=str(layer).strip().upper()
+        if layer:
+            layer = str(layer).strip().upper()
 
         if atom != None and isinstance(atom, Atom):
             self.element = atom.element

@@ -247,14 +247,9 @@ class Theory:
 
         if high_method is not None:
             if not isinstance(high_method, Method):
-                if high_method.upper() in KNOWN_SEMI_EMPIRICAL:
-                    self.high_method = Method(
-                        high_method, is_semiempirical=True, is_oniom=True, oniom_layer = "H", is_mm=False
-                    )
-                else:
-                    self.high_method = Method(
-                        high_method, is_oniom=True, oniom_layer = "H", is_mm=False
-                    )
+                self.high_method = Method(
+                    high_method, is_oniom=True, oniom_layer = "H",
+                )
             elif isinstance(high_method, Method) and any((high_method.is_oniom == False, high_method.oniom_layer is None, high_method.oniom_layer in ['M', 'L'])):
                 high_method.is_oniom = True
                 high_method.oniom_layer = "H"
@@ -265,18 +260,9 @@ class Theory:
 
         if medium_method is not None:
             if not isinstance(medium_method, Method):
-                if medium_method.upper() in KNOWN_MM:
-                    self.medium_method = Method(
-                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=True
-                    )
-                elif medium_method.upper() in KNOWN_SEMI_EMPIRICAL:
-                    self.medium_method = Method(
-                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=False, is_semiempirical=True
-                    )
-                else:
-                    self.medium_method = Method(
-                        medium_method, is_oniom=True, oniom_layer = "M", is_mm=False
-                    )
+                self.medium_method = Method(
+                    medium_method, is_oniom=True, oniom_layer = "M",
+                )
             elif isinstance(medium_method,Method) and any((medium_method.is_oniom == False, medium_method.oniom_layer is None, medium_method.oniom_layer.upper() in ['H','L'])):
                 medium_method.is_oniom = True
                 medium_method.oniom_layer = "M"
@@ -286,18 +272,9 @@ class Theory:
 
         if low_method is not None:
             if not isinstance(low_method, Method):
-                if low_method.upper() in KNOWN_MM:
-                    self.low_method = Method(
-                        low_method, is_oniom=True, oniom_layer = "L", is_mm=True
-                    )
-                elif low_method.upper() in KNOWN_SEMI_EMPIRICAL:
-                    self.low_method = Method(
-                        low_method, is_oniom=True, oniom_layer = "L", is_mm=False, is_semiempirical=True
-                    )
-                else:
-                    self.low_method = Method(
-                        low_method, is_oniom=True, oniom_layer = "L", is_mm=False
-                    )
+                self.low_method = Method(
+                    low_method, is_oniom=True, oniom_layer="L",
+                )
             elif isinstance(low_method,Method) and any((low_method.is_oniom == False, low_method.oniom_layer is None, low_method.oniom_layer.upper() in ['H', 'M'])):
                 low_method.is_oniom = True
                 low_method.oniom_layer = "L"
@@ -1000,18 +977,37 @@ class Theory:
 
         if self.method is None and any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
             layered_charge_mult = True
-            if self.high_method is not None and self.medium_method is not None and self.low_method is not None:
-                methods = list((self.high_method, self.medium_method, self.low_method))
-            elif self.high_method is not None and self.medium_method is None and self.low_method is not None:
-                methods = list((self.high_method, self.low_method))
-            elif self.high_method is not None and self.medium_method is None and self.low_method is None:
-                raise ValueError("must have more than one method defined for ONIOM")
+            methods = {
+                layer: getattr(self, "%s_method" % layer) for layer in ["high", "medium", "low"]
+                if getattr(self, "%s_method" % layer) is not None
+            }
             n_layers = len(methods)
-            basis_sets = [getattr(self, "%s_basis" % layer) for layer in ["high", "medium", "low"] if getattr(self, "%s_method" % layer)]
-            #layers_written = 0
+            if n_layers < 2:
+                raise RuntimeError("at least two layers must be defined for ONIOM")
+            basis_sets = {layer: getattr(self, "%s_basis" % layer) for layer in ["high", "medium", "low"] if getattr(self, "%s_basis" % layer)}
+            if self.basis:
+                for basis in self.basis.basis:
+                    if basis.oniom_layer == "H":
+                        basis_sets.setdefault("high", [])
+                        basis_sets["high"].append(basis)
+                    elif basis.oniom_layer == "M":
+                        basis_sets.setdefault("medium", [])
+                        basis_sets["medium"].append(basis)
+                    elif basis.oniom_layer == "L":
+                        basis_sets.setdefault("low", [])
+                        basis_sets["low"].append(basis)
             out_str += "oniom("
-            for i, (method, basis) in enumerate(zip(methods, basis_sets), start=1):
-                #print(type(method))
+            for i, layer in enumerate(["high", "medium", "low"], start=1):
+                try:
+                    method = methods[layer]
+                except KeyError:
+                    try:
+                        if not basis_sets[layer].basis:
+                            continue
+                        raise RuntimeError("no method for %s layer" % layer)
+                    except KeyError:
+                        continue
+
                 func, warning = method.get_gaussian()
                 if warning is not None:
                     warnings.append(warning)
@@ -1019,21 +1015,24 @@ class Theory:
                 if warning:
                     warnings.append(warning)
                 out_str += "%s" % func
-                if not method.is_semiempirical and not method.is_mm:
-                    if basis is None:
+                if not (method.is_semiempirical or method.is_mm):
+                    try:
+                        basis = basis_sets[layer]
+                    except KeyError:
                         raise AttributeError("need to include a basis set for %s" % method.name)
                     basis_info, basis_warnings = basis.get_gaussian_basis_info()
                     warnings.extend(basis_warnings)
                     if GAUSSIAN_ROUTE in basis_info:
-                        out_str += "%s" % basis_info[GAUSSIAN_ROUTE]
+                        for key in basis_info[GAUSSIAN_ROUTE]:
+                            if "/" in key:
+                                out_str += "%s" % key
+                            del basis_info[GAUSSIAN_ROUTE][key]
+                            break
 
                     if isinstance(self.basis, Basis):
                         if basis.oniom_layer.upper() == method.oniom_layer.upper():
                             basis = BasisSet(basis=basis)
-                            (
-                                basis_info,
-                                basis_warnings,
-                            ) = basis.get_gaussian_basis_info()
+                            basis_info, basis_warnings = basis.get_gaussian_basis_info()
                             warnings.extend(basis_warnings)
                             # check basis elements to make sure no element is
                             # in two basis sets or left out of any
@@ -1060,10 +1059,11 @@ class Theory:
                                         known_opts.append(x)
                                         out_str += x
                                 out_str += ")"
-                if i < n_layers:
-                    out_str += ":"
-                elif i == n_layers:
-                    out_str += ")"
+                
+                out_str += ":"
+
+            out_str = out_str.rstrip(":")
+            out_str += ")"
 
             if GAUSSIAN_ONIOM in other_kw_dict.keys():
                 known_opts = []
