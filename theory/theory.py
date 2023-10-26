@@ -1018,6 +1018,7 @@ class Theory:
                 if not (method.is_semiempirical or method.is_mm):
                     try:
                         basis = basis_sets[layer]
+                        basis.refresh_elements(self.geometry)
                     except KeyError:
                         raise AttributeError("need to include a basis set for %s" % method.name)
                     basis_info, basis_warnings = basis.get_gaussian_basis_info()
@@ -1313,7 +1314,7 @@ class Theory:
             and other_kw_dict[GAUSSIAN_CONNECTIVITY]
         ):
             s += "\n".join(other_kw_dict[GAUSSIAN_CONNECTIVITY])
-            s += "\n"
+            s += "\n\n"
 
         if return_warnings:
             return s, warnings
@@ -1365,17 +1366,30 @@ class Theory:
             warnings.append("no basis specfied")
 
         elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
-            #if self.high_method is not None and not self.high_method.is_semiempirical and self.high_basis is not None:
-            #    high_basis_info, high_warnings = self.high_basis.get_gaussian_basis_info()
-            #if self.medium_method is not None and not self.medium_method.is_semiempirical and self.medium_basis is not None:
-            #    medium_basis_info = {} # medium_warnings = self.medium_basis.get_gaussian_basis_info()
-            #if self.low_method is not None and not self.low_method.is_semiempirical and self.low_basis is not None:
-            #    low_basis_info = {} # low_warnings = self.low_basis.get_gaussian_basis_info()
+            high_basis_info = {}
+            medium_basis_info = {}
+            low_basis_info = {}
+            high_warnings = []
+            medium_warnings = []
+            low_warnings = []
+            if self.high_method is not None and not self.high_method.is_semiempirical and self.high_basis is not None:
+                high_basis_info, high_warnings = self.high_basis.get_gaussian_basis_info()
+            if self.medium_method is not None and not self.medium_method.is_semiempirical and self.medium_basis is not None:
+                medium_basis_info, medium_warnings = self.medium_basis.get_gaussian_basis_info()
+                if GAUSSIAN_GEN_BASIS in medium_basis_info or GAUSSIAN_GEN_ECP in medium_basis_info:
+                    medium_basis_info = {}
+                    medium_warnings.append("ONIOM gen basis sets only supported for the high layer")
+            if self.low_method is not None and not self.low_method.is_semiempirical and self.low_basis is not None:
+                low_basis_info, low_warnings = self.low_basis.get_gaussian_basis_info()
+                if GAUSSIAN_GEN_BASIS in low_basis_info or GAUSSIAN_GEN_ECP in low_basis_info:
+                    low_basis_info = {}
+                    low_warnings.append("ONIOM gen basis sets only supported for the high layer")
 
             #basis_info = {} #list((high_basis_info, medium_basis_info, low_basis_info))
-            #warnings = list((high_basis_warnings, medium_basis_warnings, low_basis_warnings))
+            basis_info = combine_dicts(high_basis_info, medium_basis_info, low_basis_info)
+            warnings = [*high_warnings, *medium_warnings, *low_warnings]
 
-            basis_info, warnings = self.basis.get_gaussian_basis_info()
+            # basis_info, warnings = self.basis.get_gaussian_basis_info()
 
         elif any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)) and self.high_basis is None and self.medium_basis is None and self.low_basis is None:
             basis_info = {}
@@ -1388,6 +1402,8 @@ class Theory:
 
         # bond, angle, and torsion constraints
         if GAUSSIAN_CONSTRAINTS in other_kw_dict:
+            out_str = out_str.rstrip()
+            out_str += "\n\n"
             for constraint in other_kw_dict[GAUSSIAN_CONSTRAINTS]:
                 out_str += constraint
                 out_str += "\n"
@@ -1395,17 +1411,21 @@ class Theory:
             out_str += "\n"
 
         # write gen info
-        if any((self.method is not None, self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
+        if any(getattr(self, "%smethod" % layer) is not None for layer in ["", "high_", "medium_", "low_"]):
             try:
                 # check whether there is gen basis info
                 # IndexError or KeyError if there isn't
                 basis_info[GAUSSIAN_GEN_BASIS][0]
+                out_str = out_str.rstrip()
+                out_str += "\n\n"
                 out_str += basis_info[GAUSSIAN_GEN_BASIS]
                 out_str += "\n"
             except (KeyError, IndexError):
                 pass
 
             try:
+                out_str = out_str.rstrip()
+                out_str += "\n\n"
                 basis_info[GAUSSIAN_GEN_ECP][0]
                 out_str += basis_info[GAUSSIAN_GEN_ECP]
                 out_str += "\n"
@@ -1415,7 +1435,7 @@ class Theory:
         #mm param file
         if GAUSSIAN_MM_PARAMS in other_kw_dict:
             out_str = out_str.rstrip()
-            out_str += "\n"
+            out_str += "\n\n"
 
             for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
                 #param_path_list = param_path.split("/")
@@ -1429,6 +1449,8 @@ class Theory:
 
         # post info e.g. for NBOREAD
         if GAUSSIAN_POST in other_kw_dict:
+            out_str = out_str.rstrip()
+            out_str += "\n\n"
             for item in other_kw_dict[GAUSSIAN_POST]:
                 out_str += item
                 out_str += "\n"
@@ -1439,6 +1461,8 @@ class Theory:
 
         # new lines
         out_str += "\n\n\n"
+
+        out_str = out_str.lstrip()
 
         if return_warnings:
             return out_str, warnings
