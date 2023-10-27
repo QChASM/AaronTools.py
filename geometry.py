@@ -2309,7 +2309,7 @@ class Geometry:
                 u, s, vh = np.linalg.svd(H, compute_uv=True)
                 d = 1.0
                 if np.linalg.det(np.matmul(vh.T, u.T)) < 0:
-                    d = 1.0
+                    d = -1.0
                 m = np.diag([1.0, 1.0, d])
                 R = np.matmul(vh.T, m)
                 R = np.matmul(R, u.T)
@@ -5246,7 +5246,7 @@ class Geometry:
                         fix=2 if i == 0 else 1,
                     )
 
-    def map_ligand(self, ligands, old_keys, minimize=True):
+    def map_ligand(self, ligands, old_keys, minimize=True, center=None):
         """
         Maps new ligand according to key_map
 
@@ -5444,71 +5444,97 @@ class Geometry:
             # backbone fragments separated by rotatable bonds
             frag_list = ligand.get_frag_list(max_order=1)
             # ligand.write("ligand")
+            remove_centers = [c for c in old_keys if c in self.center]
 
-            remove_centers = []
+            old_key_coords = old_ligand.coordinates(old_keys)
+            old_center = np.mean(old_key_coords, axis=0)
+            old_key_coords -= old_center
+            new_key_coords = ligand.coordinates(new_keys)
+            new_key_coords -= np.mean(new_key_coords, axis=0)
+            
+            old_plane = np.dot(old_key_coords.T, old_key_coords)
+            new_plane = np.dot(new_key_coords.T, new_key_coords)
+            
+            u, s, vh = np.linalg.svd(old_plane, compute_uv=True)
+            d = 1.0
+            if np.linalg.det(np.matmul(vh.T, u.T)) < 0:
+                d = -1.0
+            old_basis = np.matmul(vh.T, u.T)
+            if np.linalg.det(old_basis) < 0:
+                old_basis = np.matmul(old_basis, np.diag([1.0, 1.0, -1.0]))
+            
 
-            # get key atoms on each side of rotatable bonds
-            key_count = {}
-            for frag, a, b in frag_list:
-                n_keys = []
-                for i in frag:
-                    if i not in ligand.key_atoms:
-                        continue
-                    n_keys += [i]
-                if len(n_keys) < 1 or len(n_keys) > 2:
-                    continue
-                if a in ligand.key_atoms or b in ligand.key_atoms:
-                    continue
-                if utils.same_cycle(ligand, a, b):
-                    continue
-                if len(n_keys) not in key_count:
-                    key_count[len(n_keys)] = [(frag, a, b)]
-                else:
-                    key_count[len(n_keys)] += [(frag, a, b)]
+            u, s, vh = np.linalg.svd(new_plane, compute_uv=True)
+            new_basis = np.matmul(vh.T, u.T)
+            if np.linalg.det(new_basis) < 0:
+                new_basis = np.matmul(new_basis, np.diag([1.0, 1.0, -1.0]))
 
-            partial_map = False
-            mapped_frags = []
-            for k in sorted(key_count.keys(), reverse=True):
-                if k == 2 and not partial_map:
-                    frag, a, b = key_count[k][0]
-                    ok = []
-                    nk = []
-                    for i, n in enumerate(new_keys):
-                        if n not in frag:
-                            continue
-                        ok += [old_keys[i]]
-                        nk += [n]
-                    remove_centers.extend(
-                        map_2_key(old_ligand, ligand, ok, nk)
-                    )
-                    partial_map = True
-                    mapped_frags += [frag]
-                    continue
-
-                if k == 1 and not partial_map:
-                    frag, a, b = key_count[k][0]
-                    for i, n in enumerate(new_keys):
-                        if n not in frag:
-                            continue
-                        map_1_key(self, ligand, n, old_keys[i])
-                        partial_map = True
-                        mapped_frags += [frag]
+            cob = np.matmul(np.linalg.inv(new_basis), old_basis)
+            ligand.coords = np.matmul(ligand.coords, cob)
+            
+            old_axis = np.zeros(3)
+            new_axis = np.zeros(3)
+            for ok, nk in zip(new_keys, old_keys):
+                old_axis += ok.coords
+                new_axis += nk.coords
+            old_axis /= np.linalg.norm(old_axis)
+            new_axis /= np.linalg.norm(new_axis)
+            rot_vec = np.cross(old_axis, new_axis)
+            angle = utils.angle_between_vectors(old_axis, new_axis)
+            if abs(angle - np.pi) < 1e-3:
+                rot_vec = utils.perp_vec(new_axis)
+            ligand.rotate(rot_vec, angle=angle)
+            
+            ligand.coords += old_center
+            
+            centers = []
+            for c in self.center:
+                centers.append([])
+                for ok in old_keys:
+                    if ok in c.connected:
+                        centers[-1].append(ok)
+            
+            use_center = None
+            for c, connected in zip(self.center, centers):
+                if c and use_center:
+                    return remove_centers
+                elif c:
+                    use_center = c
+            
+            new_axis = np.zeros(3)
+            for ok, nk in zip(new_keys, old_keys):
+                new_axis += (nk.coords - use_center.coords)
+            new_axis /= np.linalg.norm(new_axis)
+            target_distance = sum(nk._radii + c._radii for nk in new_keys)
+            actual_distance = sum(nk.dist(c) for nk in new_keys)
+            prev_dr = actual_distance - target_distance
+            steps = 20
+            if prev_dr < 0:
+                for i in range(1, steps):
+                    ligand.coords += new_axis / steps
+                    actual_distance_i = sum(nk.dist(c) for nk in new_keys)
+                    dr = actual_distance_i - target_distance
+                    # print(i, dr, prev_dr)
+                    if abs(dr) > prev_dr:
+                        ligand.coords -= new_axis / (2 * steps)
                         break
-                    continue
-
-                if k == 1 and partial_map:
-                    for frag, a, b in key_count[k]:
-                        for i, n in enumerate(new_keys):
-                            if n not in frag:
-                                continue
-                            map_rot_frag(frag, a, b, ligand, old_keys[i], n)
-                            mapped_frags += [frag]
-                            break
+                    prev_dr = abs(dr)
+            
+            else:
+                for i in range(1, steps):
+                    ligand.coords -= new_axis / steps
+                    actual_distance_i = sum(nk.dist(c) for nk in new_keys)
+                    dr = actual_distance_i - target_distance
+                    # print(i, dr, prev_dr)
+                    if abs(dr) > prev_dr:
+                        ligand.coords += new_axis / (2 * steps)
+                        break
+                    prev_dr = abs(dr)
 
             return remove_centers
 
         if not self.components:
-            self.detect_components()
+            self.detect_components(center=center)
 
         # find old and new keys
         old_keys = self.find(old_keys)
