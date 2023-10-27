@@ -79,6 +79,9 @@ PSI4_SOLVENT = "pcm_solver" # psi4 interface to pcmsolver
 
 GAUSSIAN_PRE_ROUTE = "link0" #can be used for things like %chk=some.chk
 GAUSSIAN_ROUTE = "route" #route specifies most options, e.g. #n B3LYP/3-21G opt
+GAUSSIAN_HIGH_ROUTE = "high_route" #route specifies most options, e.g. #n B3LYP/3-21G opt
+GAUSSIAN_MEDIUM_ROUTE = "medium_route" #route specifies most options, e.g. #n B3LYP/3-21G opt
+GAUSSIAN_LOW_ROUTE = "low_route" #route specifies most options, e.g. #n B3LYP/3-21G opt
 GAUSSIAN_COORDINATES = "coordinates" #coordinate section
 GAUSSIAN_CONSTRAINTS = "constraints" #constraints section (e.g. B 1 2 F)
 GAUSSIAN_GEN_BASIS = "gen_basis" #gen or genecp basis section

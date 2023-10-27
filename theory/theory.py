@@ -15,6 +15,9 @@ from AaronTools.theory import (
     GAUSSIAN_POST,
     GAUSSIAN_PRE_ROUTE,
     GAUSSIAN_ROUTE,
+    GAUSSIAN_HIGH_ROUTE,
+    GAUSSIAN_MEDIUM_ROUTE,
+    GAUSSIAN_LOW_ROUTE,
     GAUSSIAN_CONNECTIVITY,
     ORCA_BLOCKS,
     ORCA_COMMENT,
@@ -887,6 +890,13 @@ class Theory:
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
             disp, warning = self.empirical_dispersion.get_gaussian()
+            print(disp)
+            if sum([int(getattr(self, "%s_method" % layer) is not None) for layer in ["high", "medium", "low"]]) > 1:
+                try:
+                    disp[GAUSSIAN_HIGH_ROUTE] = disp[GAUSSIAN_ROUTE]
+                    del disp[GAUSSIAN_ROUTE]
+                except KeyError:
+                    pass
             other_kw_dict = combine_dicts(other_kw_dict, disp)
             if warning is not None:
                 warnings.append(warning)
@@ -1061,6 +1071,23 @@ class Theory:
                                         out_str += x
                                 out_str += ")"
                 
+                try:
+                    if layer == "high":
+                        layer_route = other_kw_dict[GAUSSIAN_HIGH_ROUTE]
+                    elif layer == "medium":
+                        layer_route = other_kw_dict[GAUSSIAN_MEDIUM_ROUTE]
+                    elif layer == "low":
+                        layer_route = other_kw_dict[GAUSSIAN_LOW_ROUTE]
+                    
+                    for key, items in layer_route.items():
+                        out_str += " "
+                        out_str += key
+                        if items:
+                            out_str += "=(%s)" % ",".join(items)
+
+                except KeyError:
+                    pass
+
                 out_str += ":"
 
             out_str = out_str.rstrip(":")
@@ -1080,57 +1107,56 @@ class Theory:
         # add other route options
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
-        if any(key == GAUSSIAN_ROUTE for key in other_kw_dict.keys()):
-            for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
-                known_opts = []
-                out_str += option
-                if option.lower() == "opt":
-                    # need to specified CalcFC for gaussian ts optimization
-                    if any(
-                        x.lower() == "ts"
-                        for x in other_kw_dict[GAUSSIAN_ROUTE][option]
-                    ) and not any(
-                        x.lower() == y
-                        for y in [
-                            "calcfc",
-                            "readfc",
-                            "rcfc",
-                            "readcartesianfc",
-                            "calcall",
-                            "calchffc",
-                        ]
-                        for x in other_kw_dict[GAUSSIAN_ROUTE][option]
-                    ):
-                        other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
-
-                if other_kw_dict[GAUSSIAN_ROUTE][option] or (
-                    other_kw_dict[GAUSSIAN_ROUTE][option]
-                    and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
-                    and (
-                        "=" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
-                        or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
-                    )
+        for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
+            known_opts = []
+            out_str += option
+            if option.lower() == "opt":
+                # need to specified CalcFC for gaussian ts optimization
+                if any(
+                    x.lower() == "ts"
+                    for x in other_kw_dict[GAUSSIAN_ROUTE][option]
+                ) and not any(
+                    x.lower() == y
+                    for y in [
+                        "calcfc",
+                        "readfc",
+                        "rcfc",
+                        "readcartesianfc",
+                        "calcall",
+                        "calchffc",
+                    ]
+                    for x in other_kw_dict[GAUSSIAN_ROUTE][option]
                 ):
-                    if option.lower() == "iop":
-                        out_str += "("
-                    else:
-                        out_str += "=("
-                    for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
-                        opt = x.split("=")[0]
-                        if opt not in known_opts:
-                            if known_opts:
-                                out_str += ","
-                            known_opts.append(opt)
-                            out_str += x
-                    out_str += ")"
+                    other_kw_dict[GAUSSIAN_ROUTE][option].append("CalcFC")
 
-                elif (
-                    other_kw_dict[GAUSSIAN_ROUTE][option]
-                    and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
-                ):
-                    out_str += "=%s" % other_kw_dict[GAUSSIAN_ROUTE][option][0]
+            if other_kw_dict[GAUSSIAN_ROUTE][option] or (
+                other_kw_dict[GAUSSIAN_ROUTE][option]
+                and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
+                and (
+                    "=" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
+                    or "(" in other_kw_dict[GAUSSIAN_ROUTE][option][0]
+                )
+            ):
+                if option.lower() == "iop":
+                    out_str += "("
+                else:
+                    out_str += "=("
+                for x in other_kw_dict[GAUSSIAN_ROUTE][option]:
+                    opt = x.split("=")[0]
+                    if opt not in known_opts:
+                        if known_opts:
+                            out_str += ","
+                        known_opts.append(opt)
+                        out_str += x
+                out_str += ")"
 
-                out_str += " "
+            elif (
+                other_kw_dict[GAUSSIAN_ROUTE][option]
+                and len(other_kw_dict[GAUSSIAN_ROUTE][option]) == 1
+            ):
+                out_str += "=%s" % other_kw_dict[GAUSSIAN_ROUTE][option][0]
+
+            out_str += " "
 
         out_str += "\n\n"
 
@@ -1410,6 +1436,21 @@ class Theory:
 
             out_str += "\n"
 
+        #mm param file
+        if GAUSSIAN_MM_PARAMS in other_kw_dict:
+            out_str = out_str.rstrip()
+            out_str += "\n\n"
+
+            for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
+                #param_path_list = param_path.split("/")
+                #param_file = param_path_list[len(param_path_list)-1]
+                out_str += "@%s" % param_path
+                if GAUSSIAN_GEN_BASIS in basis_info:
+                    warnings.append("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
+                    if GAUSSIAN_CONSTRAINTS in other_kw_dict:
+                        warnings.append("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
+                out_str += "\n"
+
         # write gen info
         if any(getattr(self, "%smethod" % layer) is not None for layer in ["", "high_", "medium_", "low_"]):
             try:
@@ -1431,21 +1472,6 @@ class Theory:
                 out_str += "\n"
             except (KeyError, IndexError):
                 pass
-
-        #mm param file
-        if GAUSSIAN_MM_PARAMS in other_kw_dict:
-            out_str = out_str.rstrip()
-            out_str += "\n\n"
-
-            for param_path in other_kw_dict[GAUSSIAN_MM_PARAMS]:
-                #param_path_list = param_path.split("/")
-                #param_file = param_path_list[len(param_path_list)-1]
-                out_str += "@%s" % param_path
-                if GAUSSIAN_GEN_BASIS in basis_info:
-                    warnings.append("Parameter file specification is according to Gaussian 16 syntax and will not work for Gaussian 09 jobs")
-                    if GAUSSIAN_CONSTRAINTS in other_kw_dict:
-                        warnings.append("If using Gaussian 09, constraints are incompatible with MM parameter files and job will not run.")
-                out_str += "\n"
 
         # post info e.g. for NBOREAD
         if GAUSSIAN_POST in other_kw_dict:
