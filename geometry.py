@@ -5501,6 +5501,9 @@ class Geometry:
                 elif c:
                     use_center = c
             
+            if use_center is None:
+                return remove_centers
+            
             new_axis = np.zeros(3)
             for ok, nk in zip(new_keys, old_keys):
                 new_axis += (nk.coords - use_center.coords)
