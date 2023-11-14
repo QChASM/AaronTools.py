@@ -3,8 +3,8 @@ from AaronTools.atoms import Atom
 from AaronTools.const import ATOM_TYPES, CONNECTIVITY, EIJ, ELEMENTS, MASS, RADII, RIJ
 
 class OniomAtom(Atom):
-    def __init__(self, element="", coords=[], flag=False, name="", tags=[], layer=None, atomtype=None, charge=None, link_info=None, res = "", atom=None):
-        super().__init__(element="", coords=[], flag=False, name="", tags=[])
+    def __init__(self, element="", coords=[], flag=False, name="", tags=None, layer=None, atomtype=None, charge=None, link_info=None, res = "", atom=None):
+        super().__init__(element="", coords=[], flag=False, name="", tags=None)
 
         atomtype = str(atomtype).strip()
         if layer:
