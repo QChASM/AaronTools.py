@@ -1986,6 +1986,7 @@ class Geometry:
                 )
             )
             self.components[i] = Component(frag, name)
+
         self.rebuild()
         return
 
@@ -2062,7 +2063,7 @@ class Geometry:
         """
         a1 = self.find(atom1)[0]
         a2 = self.find(atom2)[0]
-        if avoid is None:
+        if not avoid:
             path = utils.shortest_path(self, a1, a2)
         else:
             avoid = self.find(avoid)
@@ -5446,94 +5447,138 @@ class Geometry:
             # ligand.write("ligand")
             remove_centers = [c for c in old_keys if c in self.center]
 
-            old_key_coords = old_ligand.coordinates(old_keys)
-            old_center = np.mean(old_key_coords, axis=0)
-            old_key_coords -= old_center
-            new_key_coords = ligand.coordinates(new_keys)
-            new_key_coords -= np.mean(new_key_coords, axis=0)
-            
-            old_plane = np.dot(old_key_coords.T, old_key_coords)
-            new_plane = np.dot(new_key_coords.T, new_key_coords)
-            
-            u, s, vh = np.linalg.svd(old_plane, compute_uv=True)
-            d = 1.0
-            if np.linalg.det(np.matmul(vh.T, u.T)) < 0:
-                d = -1.0
-            old_basis = np.matmul(vh.T, u.T)
-            if np.linalg.det(old_basis) < 0:
-                old_basis = np.matmul(old_basis, np.diag([1.0, 1.0, -1.0]))
-            
+            target_neighbors = []
+            target_dists = []
+            weights = []
+            for ok, nk in zip(old_keys, new_keys):
+                target_neighbors.append([])
+                target_dists.append([])
+                weights.append([])
+                # print(ok.connected)
+                # for ok_neighbor in ok.connected:
+                #     if ok_neighbor in old_ligand.atoms:
+                #         continue
+                #     target_neighbors[-1].append(ok_neighbor)
+                #     target_dists[-1].append(nk._radii + ok_neighbor._radii)
+                #     weights[-1].append(0)
+                target_neighbors[-1].append(ok)
+                target_dists[-1].append(0)
+                weights[-1].append(1)
 
-            u, s, vh = np.linalg.svd(new_plane, compute_uv=True)
-            new_basis = np.matmul(vh.T, u.T)
-            if np.linalg.det(new_basis) < 0:
-                new_basis = np.matmul(new_basis, np.diag([1.0, 1.0, -1.0]))
+            # print("targets")
+            # for n, d, w in zip(target_neighbors, target_dists, weights):
+            #     print(n, d, w)
+            # 
+            # print("old key")
+            # print([k.name for k in old_keys])
+            # 
+            # print("new key")
+            # print([k.name for k in new_keys])
 
-            cob = np.matmul(np.linalg.inv(new_basis), old_basis)
-            ligand.coords = np.matmul(ligand.coords, cob)
-            
-            old_axis = np.zeros(3)
-            new_axis = np.zeros(3)
-            for ok, nk in zip(new_keys, old_keys):
-                old_axis += ok.coords
-                new_axis += nk.coords
-            old_axis /= np.linalg.norm(old_axis)
-            new_axis /= np.linalg.norm(new_axis)
-            rot_vec = np.cross(old_axis, new_axis)
-            angle = utils.angle_between_vectors(old_axis, new_axis)
-            if abs(angle - np.pi) < 1e-3:
-                rot_vec = utils.perp_vec(new_axis)
-            ligand.rotate(rot_vec, angle=angle)
-            
-            ligand.coords += old_center
-            
-            centers = []
-            for c in self.center:
-                centers.append([])
-                for ok in old_keys:
-                    if ok in c.connected:
-                        centers[-1].append(ok)
-            
-            use_center = None
-            for c, connected in zip(self.center, centers):
-                if c and use_center:
-                    return remove_centers
-                elif c:
-                    use_center = c
-            
-            if use_center is None:
-                return remove_centers
-            
-            new_axis = np.zeros(3)
-            for ok, nk in zip(new_keys, old_keys):
-                new_axis += (nk.coords - use_center.coords)
-            new_axis /= np.linalg.norm(new_axis)
-            target_distance = sum(nk._radii + c._radii for nk in new_keys)
-            actual_distance = sum(nk.dist(c) for nk in new_keys)
-            prev_dr = actual_distance - target_distance
-            steps = 20
-            if prev_dr < 0:
-                for i in range(1, steps):
-                    ligand.coords += new_axis / steps
-                    actual_distance_i = sum(nk.dist(c) for nk in new_keys)
-                    dr = actual_distance_i - target_distance
-                    # print(i, dr, prev_dr)
-                    if abs(dr) > prev_dr:
-                        ligand.coords -= new_axis / (2 * steps)
-                        break
-                    prev_dr = abs(dr)
-            
-            else:
-                for i in range(1, steps):
-                    ligand.coords -= new_axis / steps
-                    actual_distance_i = sum(nk.dist(c) for nk in new_keys)
-                    dr = actual_distance_i - target_distance
-                    # print(i, dr, prev_dr)
-                    if abs(dr) > prev_dr:
-                        ligand.coords += new_axis / (2 * steps)
-                        break
-                    prev_dr = abs(dr)
+            def difference(new_key_coords):
+                diff = 0
+                for i in range(0, len(new_keys)):
+                    coords = new_key_coords[i]
+                    for n, d, w in zip(target_neighbors[i], target_dists[i], weights[i]):
+                        cd = np.linalg.norm(n.coords - coords)
+                        dr = d - cd
+                        diff += w * dr
+                return diff
 
+            ndx = {a: i for i, a in enumerate(ligand.atoms)}
+            new_key_ndx = [ndx[nk] for nk in new_keys]
+
+            # self.write(outfile="test-maplig-1.xyz")
+            # ligand.write(outfile="test-maplig-2.xyz")
+
+            prev_dx = 0
+            prev_dy = 0
+            prev_dz = 0
+            for i in range(0, 500):
+                coords = ligand.coords
+                cur_diff = difference(coords[new_key_ndx])
+                # print(cur_diff)
+                centroid = ligand.COM()
+                
+                rot_step = 0.0001
+                trans_step = 0.0001
+                
+                ligand.rotate([1, 0, 0], angle=rot_step, center=centroid)
+                d_rx = difference(ligand.coords[new_key_ndx]) - cur_diff
+                d_rx /= rot_step
+                ligand.coords = coords
+    
+                ligand.rotate([0, 1, 0], angle=rot_step, center=centroid)
+                d_ry = difference(ligand.coords[new_key_ndx]) - cur_diff
+                d_ry /= rot_step
+                ligand.coords = coords
+    
+                ligand.rotate([0, 0, 1], angle=rot_step, center=centroid)
+                d_rz = difference(ligand.coords[new_key_ndx]) - cur_diff
+                d_rz /= rot_step
+                ligand.coords = coords
+
+                dx = difference(
+                    ligand.coords[new_key_ndx] + np.array([trans_step, 0, 0])
+                ) - cur_diff
+                dx /= trans_step
+                dy = difference(
+                    ligand.coords[new_key_ndx] + np.array([0, trans_step, 0])
+                ) - cur_diff
+                dy /= trans_step
+                dz = difference(
+                    ligand.coords[new_key_ndx] + np.array([0, 0, trans_step])
+                ) - cur_diff
+                dz /= trans_step
+
+                # print(d_rx, d_ry, d_rz, dx, dy, dz)
+
+                t_lr = 0.05
+                r_lr = 0.025
+                if i < 100:
+                    t_lr = 0.25
+                    r_lr = 0.1
+                if i > 250:
+                    r_lr = 0.01
+                if i > 450:
+                    t_lr = 0.001
+                    r_lr = 0.001
+
+                ligand.rotate([1, 0, 0], angle=r_lr * d_rx, center=centroid)
+                ligand.rotate([0, 1, 0], angle=r_lr * d_ry, center=centroid)
+                ligand.rotate([0, 0, 1], angle=r_lr * d_rz, center=centroid)
+                ligand.coords += np.array([0.9 * dx + 0.1 * prev_dx, 0, 0]) * t_lr
+                ligand.coords += np.array([0, 0.9 * dy + 0.1 * prev_dy, 0]) * t_lr
+                ligand.coords += np.array([0, 0, 0.9 * dz + 0.1 * prev_dz]) * t_lr
+
+                prev_d_rx = d_rx
+                prev_d_ry = d_ry
+                prev_d_rz = d_rz
+                prev_dx = dx
+                prev_dy = dy
+                prev_dz = dz
+                
+                # ligand.write(outfile="test-maplig-2.xyz", append=True)
+
+            neighbors = []
+            for nk, ok in zip(new_keys, old_keys):
+                neighbors.append([])
+                for con in ok.connected:
+                    if con in old_ligand.atoms:
+                        continue
+                    neighbors[-1].append(con)
+
+            for i in range(0, 50):
+                dx = np.zeros(3)
+                for nk, neighbor_group in zip(new_keys, neighbors):
+                    for n in neighbor_group:
+                        v = nk.coords - n.coords
+                        v /= np.linalg.norm(v)
+    
+                        dr = nk._radii + n._radii - nk.dist(n)
+                        dx += 0.1 * dr * v
+                ligand.coords += dx
+ 
             return remove_centers
 
         if not self.components:
@@ -5576,6 +5621,10 @@ class Geometry:
                     remove_components[j] -= 1
 
         old_ligand = Geometry(old_ligand)
+        for c in self.center:
+            for n in c.connected:
+                if n in old_ligand.atoms:
+                    n.connected.add(c)
 
         start = 0
         end = None

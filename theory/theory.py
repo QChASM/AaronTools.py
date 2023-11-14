@@ -890,7 +890,6 @@ class Theory:
         # add EmpiricalDispersion info
         if self.empirical_dispersion is not None:
             disp, warning = self.empirical_dispersion.get_gaussian()
-            print(disp)
             if sum([int(getattr(self, "%s_method" % layer) is not None) for layer in ["high", "medium", "low"]]) > 1:
                 try:
                     disp[GAUSSIAN_HIGH_ROUTE] = disp[GAUSSIAN_ROUTE]

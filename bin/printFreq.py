@@ -1,94 +1,12 @@
 #! /usr/bin/env python3
+import argparse
+from warnings import warn
+
 from AaronTools.fileIO import FileReader
+from AaronTools.utils.utils import glob_files
 
 
-def main(args):
-    fr = FileReader(args.filename, just_geom=False)
-    if args.show:
-        s = "frequency\t"
-        for x in args.show:
-            if x == "vector":
-                continue
-            s += "%s\t" % x
-        print(s)
-    freq = fr.other["frequency"]
-    if not any((args.fundamentals, args.overtones, args.combinations)):
-        for i, data in enumerate(sorted(freq.data, key=lambda x: x.frequency)):
-            if args.type == "neg" and data.frequency > 0:
-                continue
-            if args.type == "pos" and data.frequency < 0:
-                continue
-            if isinstance(args.type, int) and i + 1 > args.type:
-                break
-            s = "%9.4f\t" % data.frequency
-            for x in args.show:
-                if x == "vector":
-                    continue
-                val = getattr(data, x)
-                if isinstance(val, float):
-                    s += "%9.4f\t" % val
-                else:
-                    s += "%s\t" % str(val)
-            
-            print(s)
-            
-            if "vector" in args.show:
-                print(data.vector)
-                print()
-    if freq.anharm_data:
-        for i, data in enumerate(sorted(freq.anharm_data, key=lambda x: x.frequency)):
-            if args.fundamentals:
-                s = "%9.4f\t" % data.frequency
-                for x in args.show:
-                    if not hasattr(data, x):
-                        continue
-                    val = getattr(data, x)
-                    if isinstance(val, float):
-                        s += "%9.4f\t" % val
-                    else:
-                        s += "%s\t" % str(val)
-                
-                print(s)
-            
-            if args.overtones:
-                for k, overtone in enumerate(data.overtones):
-                    s = "%i x %9.4f = %9.4f\t" % (
-                        (k + 2), data.frequency, overtone.frequency
-                    )
-                    for x in args.show:
-                        if not hasattr(overtone, x):
-                            continue
-                        val = getattr(overtone, x)
-                        if isinstance(val, float):
-                            s += "%9.4f\t" % val
-                        else:
-                            s += "%s\t" % str(val)
-                    
-                    print(s)
-            
-            if args.combinations:
-                for key in data.combinations:
-                    for combo in data.combinations[key]:
-                        s = "%9.4f + %9.4f = %9.4f\t" % (
-                            data.frequency,
-                            freq.anharm_data[key].frequency,
-                            combo.frequency,
-                        )
-                        for x in args.show:
-                            if not hasattr(combo, x):
-                                continue
-                            val = getattr(combo, x)
-                            if isinstance(val, float):
-                                s += "%9.4f\t" % val
-                            else:
-                                s += "%s\t" % str(val)
-
-                        print(s)
-
-
-if __name__ == "__main__":
-    import argparse
-
+def main(args=None):
     parser = argparse.ArgumentParser(
         description="Prints frequencies from computational output file",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -152,4 +70,95 @@ if __name__ == "__main__":
             args.type = "neg"
         elif args.type in ["pos", "positive"]:
             args.type = "pos"
-    main(args)
+    
+    for f in glob_files(args.filename, parser=parser):
+        fr = FileReader(f, just_geom=False)
+        if args.show:
+            s = "frequency\t"
+            for x in args.show:
+                if x == "vector":
+                    continue
+                s += "%s\t" % x
+            print(s)
+        try:
+            freq = fr.other["frequency"]
+        except KeyError:
+            warn("no freq data in %s" % f)
+            continue
+        print(f)
+        if not any((args.fundamentals, args.overtones, args.combinations)):
+            for i, data in enumerate(sorted(freq.data, key=lambda x: x.frequency)):
+                if args.type == "neg" and data.frequency > 0:
+                    continue
+                if args.type == "pos" and data.frequency < 0:
+                    continue
+                if isinstance(args.type, int) and i + 1 > args.type:
+                    break
+                s = "%9.4f\t" % data.frequency
+                for x in args.show:
+                    if x == "vector":
+                        continue
+                    val = getattr(data, x)
+                    if isinstance(val, float):
+                        s += "%9.4f\t" % val
+                    else:
+                        s += "%s\t" % str(val)
+                
+                print(s)
+                
+                if "vector" in args.show:
+                    print(data.vector)
+                    print()
+        if freq.anharm_data:
+            for i, data in enumerate(sorted(freq.anharm_data, key=lambda x: x.frequency)):
+                if args.fundamentals:
+                    s = "%9.4f\t" % data.frequency
+                    for x in args.show:
+                        if not hasattr(data, x):
+                            continue
+                        val = getattr(data, x)
+                        if isinstance(val, float):
+                            s += "%9.4f\t" % val
+                        else:
+                            s += "%s\t" % str(val)
+                    
+                    print(s)
+                
+                if args.overtones:
+                    for k, overtone in enumerate(data.overtones):
+                        s = "%i x %9.4f = %9.4f\t" % (
+                            (k + 2), data.frequency, overtone.frequency
+                        )
+                        for x in args.show:
+                            if not hasattr(overtone, x):
+                                continue
+                            val = getattr(overtone, x)
+                            if isinstance(val, float):
+                                s += "%9.4f\t" % val
+                            else:
+                                s += "%s\t" % str(val)
+                        
+                        print(s)
+                
+                if args.combinations:
+                    for key in data.combinations:
+                        for combo in data.combinations[key]:
+                            s = "%9.4f + %9.4f = %9.4f\t" % (
+                                data.frequency,
+                                freq.anharm_data[key].frequency,
+                                combo.frequency,
+                            )
+                            for x in args.show:
+                                if not hasattr(combo, x):
+                                    continue
+                                val = getattr(combo, x)
+                                if isinstance(val, float):
+                                    s += "%9.4f\t" % val
+                                else:
+                                    s += "%s\t" % str(val)
+    
+                            print(s)
+
+
+if __name__ == "__main__":
+    main()

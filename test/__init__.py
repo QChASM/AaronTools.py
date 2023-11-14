@@ -117,12 +117,12 @@ class TestWithTimer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         TestWithTimer.total_time = time.time()
-
+    
     @classmethod
     def tearDownClass(cls):
         TestWithTimer.total_time = time.time() - TestWithTimer.total_time
-        print(TestWithTimer.get_status())
-
+        # print(TestWithTimer.get_status())
+    
         if TestWithTimer.errors - TestWithTimer.last_errors:
             status = "ERROR"
         elif TestWithTimer.fails - TestWithTimer.last_fails:
@@ -134,7 +134,7 @@ class TestWithTimer(unittest.TestCase):
         
         if TestWithTimer.last_result is None:
             print("Skipped some tests in %.4s    %s" % (TestWithTimer.total_time, status))
-
+    
         else:
             print(
                 "Ran %d tests in %.4fs  %s"
@@ -146,7 +146,7 @@ class TestWithTimer(unittest.TestCase):
             )
             TestWithTimer.test_count = TestWithTimer.last_result.testsRun
         print(unittest.TextTestResult.separator2)
-
+    
     @classmethod
     def get_status(cls):
         if TestWithTimer.last_result is None:
@@ -160,22 +160,21 @@ class TestWithTimer(unittest.TestCase):
         TestWithTimer.errors = len(TestWithTimer.last_result.errors)
         TestWithTimer.fails = len(TestWithTimer.last_result.failures)
         return status
-
+    
     def setUp(self):
         self.start_time = time.time()
-
+    
     def tearDown(self):
         t = time.time() - self.start_time
         TestWithTimer.last_result = self._outcome.result
         TestWithTimer.this_class, self.test_name = self.id().split(".")[-2:]
-
+    
         status = TestWithTimer.get_status()
+        
         if TestWithTimer.this_class != TestWithTimer.last_class:
             TestWithTimer.last_class = TestWithTimer.this_class
             print(TestWithTimer.this_class)
-        else:
-            print(status)
-
+            
         print(
             "\b   %2d. %-30s %.4fs  "
             % (
@@ -185,3 +184,6 @@ class TestWithTimer(unittest.TestCase):
             ),
             end="",
         )
+
+        print(status)
+    
