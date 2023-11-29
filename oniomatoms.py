@@ -76,9 +76,9 @@ class OniomAtom(Atom):
             self.flag = bool(flag)
             self.name = str(name).strip()
             if hasattr(tags, "__iter__") and not isinstance(tags, str) and atom == None:
-                self.tags = tags
-            else:
-                self.tags = set([tags])
+                self.tags.update(tags)
+            elif tags is not None:
+                self.tags.update([tags])
             if link_info == None:
                 self.link_info = dict()
             else:

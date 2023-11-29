@@ -91,7 +91,7 @@ class TestOniomAtoms(TestWithTimer):
             a.coords = np.array(line[1:4], dtype=float)
             a.flag = False
             a.name = str(i + 1)
-            a.tags = set([i])
+            a.tags.add(i)
             a.layer = line[4]
             a.atomtype = line[5]
             a.charge = line[6]

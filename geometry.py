@@ -2146,7 +2146,7 @@ class Geometry:
 
         return dihedral
 
-    def COM(self, targets=None, heavy_only=False, mass_weight=True):
+    def COM(self, targets=None, heavy_only=False, mass_weight=True, charge_weight=False):
         """
         calculates center of mass of the target atoms
         returns a vector from the origin to the center of mass
@@ -2154,6 +2154,9 @@ class Geometry:
         :param targets: the atoms to use in calculation, defaults to all
         :param bool heavy_only: exclude hydrogens, defaults to False
         """
+        if mass_weight and charge_weight:
+            raise RuntimeError("cannot use both charge_weight and mass_weight")
+        
         # get targets
         if targets:
             targets = self.find(targets)
@@ -2169,12 +2172,20 @@ class Geometry:
             for i in range(0, len(coords)):
                 coords[i] *= targets[i].mass
                 total_mass += targets[i].mass
-
+        if charge_weight:
+            total_charge = 0
+            for i in range(0, len(coords)):
+                charge = ELEMENTS.index(targets[i].element)
+                coords[i] *= charge
+                total_charge += charge
+                
         # COM = (1/M) * sum(m * r) = sum(m*r) / sum(m)
         center = np.mean(coords, axis=0)
 
         if mass_weight and total_mass:
             return center * len(targets) / total_mass
+        if charge_weight and total_charge:
+            return center * len(targets) / total_charge
         return center
 
     def RMSD(
