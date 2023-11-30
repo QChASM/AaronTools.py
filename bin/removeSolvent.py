@@ -76,21 +76,49 @@ for infile in glob_files(args.infile, parser=remove_frag_parser):
         else:
             f = FileReader(("from stdin", "xyz", infile))
 
-    geom = Geometry(f)
+    geom = Geometry(f, refresh_ranks=False)
 
-    monomers = geom.get_monomers()
+    monomers = [Geometry(m, refresh_connected=False, refresh_ranks=False) for m in geom.get_monomers()]
     keep_monomers = []
+    sol_elements = sol.element_counts()
+    sol_ranks = sol.canonical_rank(break_ties=False, update=False, invariant=False)
+    sorted_sol_atoms = [x for _, x in sorted(zip(sol_ranks, sol.atoms), key=lambda pair: pair[0])]
+    keep_mol = Geometry()
     for monomer in monomers:
         if len(monomer) != len(sol.atoms):
-            keep_monomers.append(monomer)
-    
+            keep_mol.atoms.extend(monomer.atoms)
+            continue
+
+        if monomer.element_counts() != sol_elements:
+            keep_mol.atoms.extend(monomer.atoms)
+            continue
+
+        frag_ranks = monomer.canonical_rank(break_ties=False, update=False, invariant=False)
+        sorted_frag_atoms = [x for _, x in sorted(zip(frag_ranks, monomer.atoms), key=lambda pair: pair[0])]
+        for a, b in zip(sorted_frag_atoms, sorted_sol_atoms):
+            if a.element != b.element:
+                keep_mol.atoms.extend(monomer.atoms)
+                break
+
+            if len(a.connected) != len(b.connected):
+                keep_mol.atoms.extend(monomer.atoms)
+                break
+
+            for j, k in zip(
+                sorted([aa.element for aa in a.connected]),
+                sorted([bb.element for bb in b.connected]),
+            ):
+                if j != k:
+                    keep_mol.atoms.extend(monomer.atoms)
+                    break
+
     if args.outfile:
         outfile = get_outfile(
             args.outfile,
             INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
             INDIR=os.path.dirname(infile),
         )
-        geom.write(append=False, outfile=outfile)
+        keep_mol.write(append=False, outfile=outfile)
     else:
-        s = geom.write(outfile=False)
+        s = keep_mol.write(outfile=False)
         print(s)
