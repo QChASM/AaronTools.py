@@ -2195,7 +2195,7 @@ class FileReader:
                 "data": self.other,
             }]
             
-        if "finished" not in self.other:
+        if not just_geom and "finished" not in self.other:
             self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
@@ -2825,8 +2825,6 @@ class FileReader:
                 "data": self.other,
             }]
 
-        if "finished" not in self.other:
-            self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
 
@@ -3088,8 +3086,6 @@ class FileReader:
                 "data": deepcopy(self.other),
             }]
             
-        if "finished" not in self.other:
-            self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
 
