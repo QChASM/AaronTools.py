@@ -1493,6 +1493,9 @@ class ValenceExcitations(Signals):
         rotatory_str_vel = []
         oscillator_str = []
         oscillator_vel = []
+        dipole_moments_len = []
+        dipole_moments_vel = []
+        magnetic_moments = []
         multiplicity = []
         mult = "Singlet"
         
@@ -1534,8 +1537,10 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     if info[3] == "spin":
                         oscillator_str.append(0)
+                        dipole_moments_len.append([0, 0, 0])
                     else:
                         oscillator_str.append(float(info[3]))
+                        dipole_moments_len.append([float(x) for x in info[5:8]])
                     i += 1
                     line = lines[i]
             elif (
@@ -1549,8 +1554,10 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     if info[3] == "spin":
                         oscillator_vel.append(0)
+                        dipole_moments_vel.append([0, 0, 0])
                     else:
                         oscillator_vel.append(float(info[3]))
+                        dipole_moments_vel.append([float(x) for x in info[5:8]])
                     i += 1
                     line = lines[i]
             elif (
@@ -1564,8 +1571,10 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     if info[3] == "spin":
                         rotatory_str_len.append(0)
+                        magnetic_moments.append([0, 0, 0])
                     else:
                         rotatory_str_len.append(float(info[3]))
+                        magnetic_moments.append([float(x) for x in info[4:7]])
                     i += 1
                     line = lines[i]
             elif (
@@ -1669,15 +1678,32 @@ class ValenceExcitations(Signals):
         if not oscillator_vel:
             oscillator_vel = [None for x in oscillator_str]
 
-        for nrg, rot_len, rot_vel, osc_len, osc_vel, mult in zip(
+        for (
+            nrg,
+            rot_len,
+            rot_vel,
+            osc_len,
+            osc_vel,
+            dip_vec_len,
+            dip_vec_vel,
+            mag_mom,
+            mult
+        ) in zip(
             nrgs, rotatory_str_len, rotatory_str_vel, oscillator_str,
-            oscillator_vel, multiplicity,
+            oscillator_vel, dipole_moments_len, dipole_moments_vel,
+            magnetic_moments, multiplicity,
         ):
             self.data.append(
                 ValenceExcitation(
-                    nrg, rotatory_str_len=rot_len,
-                    rotatory_str_vel=rot_vel, oscillator_str=osc_len,
-                    oscillator_str_vel=osc_vel, multiplicity=mult,
+                    nrg,
+                    rotatory_str_len=rot_len,
+                    rotatory_str_vel=rot_vel,
+                    oscillator_str=osc_len,
+                    oscillator_str_vel=osc_vel,
+                    dipole_len_vec=dip_vec_len,
+                    dipole_vel_vec=dip_vec_vel,
+                    magnetic_mom=mag_mom,
+                    multiplicity=mult,
                 )
             )
 
