@@ -89,6 +89,7 @@ ERROR = {
     "Atoms in 1 layers were given but there should be 2": "LAYER",
     "MM function not complete": "MM_PARAM",
     "PCMIOp: Cannot load options.": "PCM",
+    "Unrecognized potential number 6 in GetPot": "TYPO",
 }
 
 ERROR_ORCA = {
