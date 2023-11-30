@@ -3716,6 +3716,10 @@ class FileReader:
             elif line.startswith(" Energy= "):
                 self.other["energy"] = float(line.split()[1])
 
+            elif "ONIOM: extrapolated energy" in line:
+                self.other["ONIOM energy"] = float(line.split()[-1])
+                self.other["energy"] = self.other["ONIOM energy"]
+
             # CC energy
             elif line.startswith(" CCSD(T)= "):
                 self.other["energy"] = float(line.split()[-1].replace("D", "E"))
@@ -3828,7 +3832,7 @@ class FileReader:
                     uv_vis, style="gaussian"
                 )
 
-            elif line.startswith(" S**2 before annihilation"):
+            elif "S**2 before annihilation" in line:
                 self.other["S^2 before"] = float(line.split()[3].strip(","))
                 self.other["S^2 annihilated"] = float(line.split()[-1])
 
