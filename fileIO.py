@@ -2194,7 +2194,9 @@ class FileReader:
                 "atoms": self.atoms,
                 "data": self.other,
             }]
-
+            
+        if not just_geom and "finished" not in self.other:
+            self.other["finished"] = False
         if "error" not in self.other:
             self.other["error"] = None
 
@@ -3083,7 +3085,7 @@ class FileReader:
                 "atoms": deepcopy(self.atoms),
                 "data": deepcopy(self.other),
             }]
-
+            
         if "error" not in self.other:
             self.other["error"] = None
 
