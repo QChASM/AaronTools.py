@@ -1923,7 +1923,12 @@ class FileReader:
 
             elif line.startswith("    Geometry (in Bohr), charge"):
                 coord_unit_bohr = True
-
+                if not just_geom:
+                    self.other["charge"] = int(line.split()[5].strip(","))
+                    self.other["multiplicity"] = int(
+                        line.split()[8].strip(":")
+                    )
+                    
             elif line.strip().startswith("Center") and read_geom:
                 read_geom = False
                 if get_all and len(self.atoms) > 0:
