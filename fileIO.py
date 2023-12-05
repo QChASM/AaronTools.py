@@ -4007,19 +4007,6 @@ class FileReader:
                 self.read_nbo(f)
 
             # atomic charges
-            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
-                charge_match = re.search("(\S+) charges.*:", line)
-                if charge_match:
-                    self.skip_lines(f, 1)
-                    n += 1
-                    charges = []
-                    for i in range(0, len(self.atoms)):
-                        line = f.readline()
-                        n += 1
-                        charges.append(float(line.split()[2]))
-                        self.atoms[i].charge = float(line.split()[2])
-                    self.other[charge_match.group(1) + " Charges"] = charges
-
             elif "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
                 self.skip_lines(f, 1)
                 n += 1
@@ -4035,6 +4022,19 @@ class FileReader:
                     cm5_charges.append(cm5)
                 self.other["Hirshfeld Charges"] = hirshfeld_charges
                 self.other["CM5 Charges"] = cm5_charges
+
+            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+                charge_match = re.search("(\S+) charges.*:", line)
+                if charge_match:
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = []
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges.append(float(line.split()[2]))
+                        self.atoms[i].charge = float(line.split()[2])
+                    self.other[charge_match.group(1) + " Charges"] = charges
 
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             # BE CAREFUL ABOUT WHAT'S AFTER THIS

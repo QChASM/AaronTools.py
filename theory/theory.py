@@ -465,7 +465,6 @@ class Theory:
                             type(value)
                         )
                     )
-        print(new_dict)
 
         return self.__class__(**new_dict, **new_kwargs)
 
@@ -966,10 +965,6 @@ class Theory:
 
         layered_charge_mult = False
 
-        print("method", self.method)
-        print("high_method", self.high_method)
-        print("low_method", self.low_method)
-
         if self.method is None and any((self.high_method is not None, self.medium_method is not None, self.low_method is not None)):
             layered_charge_mult = True
             methods = {
@@ -1468,12 +1463,10 @@ class Theory:
 
             out_str += "\n"
 
-        out_str = out_str.rstrip()
+        out_str = out_str.strip()
 
         # new lines
-        out_str += "\n\n\n"
-
-        out_str = out_str.lstrip()
+        out_str += "\n\n\n\n\n"
 
         if return_warnings:
             return out_str, warnings
