@@ -817,7 +817,7 @@ def glob_files(infiles, parser=None):
     globs input files
     used for command line scripts because Windows doesn't support globbing...
     """
-    from glob import glob
+    from glob import glob, escape
     import sys
 
     if isinstance(infiles, str):
@@ -825,10 +825,11 @@ def glob_files(infiles, parser=None):
 
     outfiles = []
     for f in infiles:
-        if isinstance(f, str):
-            outfiles.extend(glob(f))
+        f_safe = escape(f)
+        if isinstance(f_safe, str):
+            outfiles.extend(glob(f_safe))
         elif len(sys.argv) > 1:
-            outfiles.append(f)
+            outfiles.append(f_safe)
 
     if not outfiles and all(isinstance(f, str) for f in infiles):
         raise RuntimeError(
