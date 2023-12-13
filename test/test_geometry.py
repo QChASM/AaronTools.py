@@ -847,7 +847,6 @@ class TestGeometry(TestWithTimer):
         ref = Geometry(os.path.join(prefix, "ref_files", "lig_map_4.xyz"))
         org_tri = Geometry(TestGeometry.org_tri)
         org_tri.map_ligand(tridentate, ["30", "28", "58"])
-        org_tri.write(outfile="test.xyz")
         self.assertTrue(
             validate(
                 org_tri, ref, thresh="loose", heavy_only=False, debug=False
