@@ -37,7 +37,7 @@ class Method:
 
     LOG = None
 
-    def __init__(self, name, is_semiempirical=None, is_oniom=False, oniom_layer=None, is_mm=None):
+    def __init__(self, name, is_semiempirical=None, is_mm=None):
         """
         :param str name: functional name
         :param bool is_semiempirical: basis set is not required
@@ -52,28 +52,16 @@ class Method:
         
         self.name = name
         self.is_semiempirical = is_semiempirical
-        self.is_oniom = is_oniom
-        self.oniom_layer = oniom_layer
         self.is_mm = is_mm
-        if self.is_oniom == True and self.oniom_layer is None:
-            raise ValueError("ONIOM method must include oniom_layer in kwargs")
 
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
             return False
-        if self.is_oniom == False:
-            return (
-                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
-                self.is_semiempirical == other.is_semiempirical
-            )
-        else:
-            return (
-                self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
-                self.is_semiempirical == other.is_semiempirical and
-                self.is_oniom == other.is_oniom and
-                self.oniom_layer == other.oniom_layer and
-                self.is_mm == other.is_mm
-            )
+        return (
+            self.get_gaussian()[0].lower() == other.get_gaussian()[0].lower() and
+            self.is_semiempirical == other.is_semiempirical and
+            self.is_mm == other.is_mm
+        )
 
     @staticmethod
     def sanity_check_method(name, program):

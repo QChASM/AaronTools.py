@@ -177,11 +177,11 @@ class Theory:
         low_basis=None,
         **kwargs,
     ):
-        if isinstance(charge,list):
-            self.charge=charge
-        elif isinstance(charge,int):
+        if isinstance(charge, list):
             self.charge = charge
-        elif isinstance(charge,str):
+        elif isinstance(charge, int):
+            self.charge = charge
+        elif isinstance(charge, str):
             if len(charge.split()) == 1:
                 self.charge = int(charge)
             elif len(charge.split()) > 1:
@@ -190,11 +190,11 @@ class Theory:
                     x = int(x)
                 self.charge = charge
 
-        if isinstance(multiplicity,list):
-            self.multiplicity=multiplicity
-        elif isinstance(multiplicity,int):
+        if isinstance(multiplicity, list):
             self.multiplicity = multiplicity
-        elif isinstance(multiplicity,str):
+        elif isinstance(multiplicity, int):
+            self.multiplicity = multiplicity
+        elif isinstance(multiplicity, str):
             if len(multiplicity.split()) == 1:
                 self.multiplicity = int(multiplicity)
             elif len(multiplicity.split()) > 1:
@@ -250,40 +250,21 @@ class Theory:
 
         if high_method is not None:
             if not isinstance(high_method, Method):
-                self.high_method = Method(
-                    high_method, is_oniom=True, oniom_layer = "H",
-                )
-            elif isinstance(high_method, Method) and any((high_method.is_oniom == False, high_method.oniom_layer is None, high_method.oniom_layer in ['M', 'L'])):
-                high_method.is_oniom = True
-                high_method.oniom_layer = "H"
+                self.high_method = Method(high_method)
+            elif isinstance(high_method, Method):
                 self.high_method = high_method
-            #print(self.high_method.get_gaussian())
-            #else:
-            #    self.high_method = high_method
 
         if medium_method is not None:
             if not isinstance(medium_method, Method):
-                self.medium_method = Method(
-                    medium_method, is_oniom=True, oniom_layer = "M",
-                )
-            elif isinstance(medium_method,Method) and any((medium_method.is_oniom == False, medium_method.oniom_layer is None, medium_method.oniom_layer.upper() in ['H','L'])):
-                medium_method.is_oniom = True
-                medium_method.oniom_layer = "M"
+                self.medium_method = Method(medium_method)
+            elif isinstance(medium_method, Method):
                 self.medium_method = medium_method
-            #else:
-            #    self.medium_method = medium_method
 
         if low_method is not None:
             if not isinstance(low_method, Method):
-                self.low_method = Method(
-                    low_method, is_oniom=True, oniom_layer="L",
-                )
-            elif isinstance(low_method,Method) and any((low_method.is_oniom == False, low_method.oniom_layer is None, low_method.oniom_layer.upper() in ['H', 'M'])):
-                low_method.is_oniom = True
-                low_method.oniom_layer = "L"
+                self.low_method = Method(low_method)
+            elif isinstance(low_method, Method):
                 self.low_method = low_method
-            #else:
-            #    self.low_method = low_method
 
         if grid is not None:
             if not isinstance(grid, IntegrationGrid):
@@ -484,7 +465,7 @@ class Theory:
                             type(value)
                         )
                     )
-        
+
         return self.__class__(**new_dict, **new_kwargs)
 
     def add_kwargs(self, **kwargs):
@@ -1040,7 +1021,7 @@ class Theory:
                             break
 
                     if isinstance(self.basis, Basis):
-                        if basis.oniom_layer.upper() == method.oniom_layer.upper():
+                        if basis.oniom_layer.lower() == layer[0]:
                             basis = BasisSet(basis=basis)
                             basis_info, basis_warnings = basis.get_gaussian_basis_info()
                             warnings.extend(basis_warnings)
@@ -1482,12 +1463,10 @@ class Theory:
 
             out_str += "\n"
 
-        out_str = out_str.rstrip()
+        out_str = out_str.strip()
 
         # new lines
-        out_str += "\n\n\n"
-
-        out_str = out_str.lstrip()
+        out_str += "\n\n\n\n\n"
 
         if return_warnings:
             return out_str, warnings

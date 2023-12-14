@@ -73,7 +73,7 @@ bond_parser.add_argument(
     "-m", "--measure",
     metavar=("atom1", "atom2"),
     action="append",
-    type=int,
+    type=str,
     nargs=2,
     default=[],
     required=False,
@@ -100,10 +100,16 @@ bond_parser.add_argument(
     nargs=3,
     default=[],
     required=False,
-    dest="set_ang",
+    dest="set_dist",
     help="set distance to the amount specified"
 )
 
+bond_parser.add_argument(
+    "-a", "--append",
+    action="store_true",
+    default=False,
+    help="append structures to output file",
+)
 
 args = bond_parser.parse_args()
 
@@ -122,37 +128,36 @@ for f in glob_files(args.infile, parser=bond_parser):
     geom = Geometry(infile)
 
     #set bond to specified value
-    for bond in args.set_ang:
+    for bond in args.set_dist:
         vals = two_atoms_and_a_float(bond)
-        a1 = geom.find(str(vals[0]))[0]
-        a2 = geom.find(str(vals[1]))[0]
+        a1 = geom.atoms[vals[0]]
+        a2 = geom.atoms[vals[1]]
         geom.change_distance(a1, a2, dist=vals[2], adjust=False)
 
     #change bond by specified amount
     for bond in args.change:
         vals = two_atoms_and_a_float(bond)
-        a1 = geom.find(str(vals[0]))[0]
-        a2 = geom.find(str(vals[1]))[0]
+        a1 = geom.atoms[vals[0]]
+        a2 = geom.atoms[vals[1]]
         geom.change_distance(a1, a2, dist=vals[2], adjust=True)
 
     #print specified bonds
     out = ""
     for bond in args.measure:
-        a1 = geom.find(str(bond[0]))[0]
-        a2 = geom.find(str(bond[1]))[0]
+        a1, a2 = geom.find(bond)
         val = a1.dist(a2)
         out += "%f\n" % val
 
     out = out.rstrip()
 
-    if len(args.set_ang) + len(args.change) > 0:
+    if len(args.set_dist) + len(args.change) > 0:
         if args.outfile:
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
-            geom.write(append=True, outfile=outfile)
+            geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
@@ -162,8 +167,9 @@ for f in glob_files(args.infile, parser=bond_parser):
         else:
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
-            with open(outfile, "a") as f:
+            mode = "a" if args.append else "w"
+            with open(outfile, mode) as f:
                 f.write(out)

@@ -434,7 +434,7 @@ psi4_options.add_argument(
     default=[],
     dest=PSI4_JOB,
     metavar="JOB",
-    help="other jobs to add\nexample: --job hessian\ninput file(s) should not be right after --job",
+    help="other jobs to add\ninput file(s) should not be right after --job",
 )
 
 psi4_options.add_argument(
@@ -476,7 +476,7 @@ psi4_options.add_argument(
     dest=PSI4_MOLECULE,
     metavar=("SETTING", "VALUE"),
     help="options to add to the molecule section\n" +
-    "example: --molecule units bohr\ninput file(s) should not be right after --molecule",
+    "input file(s) should not be right after --molecule",
 )
 
 
@@ -488,7 +488,7 @@ gaussian_options.add_argument(
     default=[],
     dest=GAUSSIAN_ROUTE,
     metavar=("KEYWORD", "OPTION"),
-    help="route options\nexample: --route freq hpmodes\n" +
+    help="route options\n" +
     "input file(s) should not be right after --route",
 )
 
@@ -500,7 +500,7 @@ gaussian_options.add_argument(
     dest=GAUSSIAN_PRE_ROUTE,
     metavar=("COMMAND", "VALUE"),
     help="Link 0 commands (without %%)\n" +
-    "example: --link0 chk asdf.chk\ninput file(s) should not be right after --link0",
+    "input file(s) should not be right after --link0",
 )
 
 gaussian_options.add_argument(

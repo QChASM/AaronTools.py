@@ -89,6 +89,7 @@ ERROR = {
     "Atoms in 1 layers were given but there should be 2": "LAYER",
     "MM function not complete": "MM_PARAM",
     "PCMIOp: Cannot load options.": "PCM",
+    "Unrecognized potential number 6 in GetPot": "TYPO",
 }
 
 ERROR_ORCA = {
@@ -1922,7 +1923,12 @@ class FileReader:
 
             elif line.startswith("    Geometry (in Bohr), charge"):
                 coord_unit_bohr = True
-
+                if not just_geom:
+                    self.other["charge"] = int(line.split()[5].strip(","))
+                    self.other["multiplicity"] = int(
+                        line.split()[8].strip(":")
+                    )
+                    
             elif line.strip().startswith("Center") and read_geom:
                 read_geom = False
                 if get_all and len(self.atoms) > 0:
@@ -4006,19 +4012,6 @@ class FileReader:
                 self.read_nbo(f)
 
             # atomic charges
-            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
-                charge_match = re.search("(\S+) charges.*:", line)
-                if charge_match:
-                    self.skip_lines(f, 1)
-                    n += 1
-                    charges = []
-                    for i in range(0, len(self.atoms)):
-                        line = f.readline()
-                        n += 1
-                        charges.append(float(line.split()[2]))
-                        self.atoms[i].charge = float(line.split()[2])
-                    self.other[charge_match.group(1) + " Charges"] = charges
-
             elif "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
                 self.skip_lines(f, 1)
                 n += 1
@@ -4034,6 +4027,19 @@ class FileReader:
                     cm5_charges.append(cm5)
                 self.other["Hirshfeld Charges"] = hirshfeld_charges
                 self.other["CM5 Charges"] = cm5_charges
+
+            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+                charge_match = re.search("(\S+) charges.*:", line)
+                if charge_match:
+                    self.skip_lines(f, 1)
+                    n += 1
+                    charges = []
+                    for i in range(0, len(self.atoms)):
+                        line = f.readline()
+                        n += 1
+                        charges.append(float(line.split()[2]))
+                        self.atoms[i].charge = float(line.split()[2])
+                    self.other[charge_match.group(1) + " Charges"] = charges
 
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             # BE CAREFUL ABOUT WHAT'S AFTER THIS

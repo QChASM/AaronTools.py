@@ -14,7 +14,7 @@ from AaronTools.utils.utils import (
 
 xyz_parser = argparse.ArgumentParser(
     description="print structure in xyz format",
-    formatter_class=argparse.RawTextHelpFormatter
+    formatter_class=argparse.RawTextHelpFormatter,
 )
 
 xyz_parser.add_argument(

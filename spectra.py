@@ -1546,7 +1546,8 @@ class ValenceExcitations(Signals):
             elif (
                 "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
                 "TRANSIENT" not in line and
-                "SPIN ORBIT" not in line
+                "SPIN ORBIT" not in line and
+                "SOC" not in line
             ):
                 i += 5
                 line = lines[i]
