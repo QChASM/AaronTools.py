@@ -2378,7 +2378,7 @@ class NMR(Signals):
                 
             x_positions = np.array(x_positions)
 
-        x_positions = scalar_scale + linear_scale * x_positions + quadratic_scale * linear_scale ** 2
+        x_positions = scalar_scale + linear_scale * x_positions + quadratic_scale * x_positions ** 2
 
         e_factor = -4 * np.log(2) / fwhm ** 2
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
