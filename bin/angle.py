@@ -65,7 +65,7 @@ angle_parser.add_argument(
     "--measure",
     metavar=("atom1", "center", "atom3"),
     action="append",
-    type=int,
+    type=str,
     nargs=3,
     default=[],
     required=False,
@@ -143,25 +143,23 @@ for f in glob_files(args.infile, parser=angle_parser):
     #set angle to specified value
     for angle in args.set_ang:
         vals = three_atoms_and_a_float(angle)
-        a1 = geom.find(str(vals[0]))[0]
-        a2 = geom.find(str(vals[1]))[0]
-        a3 = geom.find(str(vals[2]))[0]
+        a1 = geom.atoms[vals[0]]
+        a2 = geom.atoms[vals[1]]
+        a3 = geom.atoms[vals[2]]
         geom.change_angle(a1, a2, a3, vals[3], radians=args.radians, adjust=False)
 
     #change angle by specified amount
     for angle in args.change:
         vals = three_atoms_and_a_float(angle)
-        a1 = geom.find(str(vals[0]))[0]
-        a2 = geom.find(str(vals[1]))[0]
-        a3 = geom.find(str(vals[2]))[0]
+        a1 = geom.atoms[vals[0]]
+        a2 = geom.atoms[vals[1]]
+        a3 = geom.atoms[vals[2]]
         geom.change_angle(a1, a2, a3, vals[3], radians=args.radians, adjust=True)
 
     #print specified angles
     out = ""
     for angle in args.measure:
-        a1 = geom.find(str(angle[0]))[0]
-        a2 = geom.find(str(angle[1]))[0]
-        a3 = geom.find(str(angle[2]))[0]
+        a1, a2, a3 = geom.find(angle)
         val = geom.angle(a1, a2, a3)
         if not args.radians:
             val *= 180 / np.pi
@@ -174,7 +172,7 @@ for f in glob_files(args.infile, parser=angle_parser):
         if args.outfile:
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
             geom.write(append=True, outfile=outfile)
@@ -187,7 +185,7 @@ for f in glob_files(args.infile, parser=angle_parser):
         else:
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
             with open(outfile, "a") as f:
