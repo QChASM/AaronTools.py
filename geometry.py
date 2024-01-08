@@ -3864,8 +3864,10 @@ class Geometry:
         dist = a1.dist(a2)
 
         # adjustment vector for each atom
-        adj_a1 = (new_dist - dist) * a2.bond(a1) / a2.dist(a1)
-        adj_a2 = (new_dist - dist) * a1.bond(a2) / a1.dist(a2)
+        v = a2.bond(a1)
+        d = np.linalg.norm(v)
+        adj_a1 = (new_dist - dist) * v / d
+        adj_a2 = -adj_a1
         if fix == 0:
             adj_a1 /= 2
             adj_a2 /= 2

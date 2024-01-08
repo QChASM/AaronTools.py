@@ -73,8 +73,9 @@ for f in glob_files(args.infile, parser=monomer_parser):
                 infile = FileReader(("from stdin", "xyz", f))
 
     geom = Geometry(infile, refresh_ranks=False)
-    
-    for i, monomer in enumerate(sorted(geom.get_monomers(), key=len)):
+
+    # No longer sorting monomers by length.  Now both Python API and CLS return monomers in original order
+    for i, monomer in enumerate(geom.get_monomers()):
         monomer = Geometry(monomer)
         if not args.outfile:
             print(monomer.write(outfile=False))
