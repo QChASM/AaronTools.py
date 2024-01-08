@@ -5017,7 +5017,7 @@ class FileReader:
                     line = f.readline()
                     elem, x, y, z = line.split()
                     self.atoms.append(Atom(element=elem, coords=[x, y, z]))
-            if "normal termination" in line:
+            if "finished run" in line:
                 self.other["finished"] = True
             if "abnormal termination" in line:
                 self.other["error"] = "UNKNOWN"
