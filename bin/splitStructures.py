@@ -15,7 +15,7 @@ from AaronTools.utils.utils import (
 )
 
 split_parser = argparse.ArgumentParser(
-    description="print all structures from a given file to different files",
+    description="print all contiguous structures from a given file to different files",
     formatter_class=argparse.RawTextHelpFormatter
 )
 

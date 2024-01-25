@@ -14,7 +14,7 @@ from AaronTools.utils.utils import (
 )
 
 remove_frag_parser = argparse.ArgumentParser(
-    description="remove a fragment from a molecule",
+    description="remove all matching fragments from a structure",
     formatter_class=argparse.RawTextHelpFormatter,
 )
 
