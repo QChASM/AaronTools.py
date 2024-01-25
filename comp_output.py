@@ -133,6 +133,7 @@ class CompOutput:
                 self.conformers.append(Geometry(atoms, comment=comment))
             del from_file["conformers"]
 
+        self.temperature = 298.15
         for k in keys:
             if k in from_file.keys():
                 setattr(self, k, from_file[k])
