@@ -2048,11 +2048,16 @@ class FileReader:
                     # psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
                     if dE_tol is not None:
                         dE_conv = line[24:38]
-                        dE = float(dE_conv.split()[0])
-                        grad["Delta E"] = {}
-                        grad["Delta E"]["value"] = dE
-                        grad["Delta E"]["converged"] = "*" in dE_conv
-
+                        # psi4 doesn't print values for certain criteria on step one
+                        # instead it prints '-------'
+                        try:
+                            dE = float(dE_conv.split()[0])
+                            grad["Delta E"] = {}
+                            grad["Delta E"]["value"] = dE
+                            grad["Delta E"]["converged"] = "*" in dE_conv
+                        except ValueError:
+                            pass
+                        
                     if max_f_tol is not None:
                         max_f_conv = line[38:52]
                         max_f = float(max_f_conv.split()[0])
@@ -2069,17 +2074,23 @@ class FileReader:
 
                     if max_d_tol is not None:
                         max_d_conv = line[66:80]
-                        max_d = float(max_d_conv.split()[0])
-                        grad["Max Disp"] = {}
-                        grad["Max Disp"]["value"] = max_d
-                        grad["Max Disp"]["converged"] = "*" in max_d_conv
+                        try:
+                            max_d = float(max_d_conv.split()[0])
+                            grad["Max Disp"] = {}
+                            grad["Max Disp"]["value"] = max_d
+                            grad["Max Disp"]["converged"] = "*" in max_d_conv
+                        except ValueError:
+                            pass
 
                     if rms_d_tol is not None:
                         rms_d_conv = line[80:94]
-                        rms_d = float(rms_d_conv.split()[0])
-                        grad["RMS Disp"] = {}
-                        grad["RMS Disp"]["value"] = rms_d
-                        grad["RMS Disp"]["converged"] = "*" in max_d_conv
+                        try:
+                            rms_d = float(rms_d_conv.split()[0])
+                            grad["RMS Disp"] = {}
+                            grad["RMS Disp"]["value"] = rms_d
+                            grad["RMS Disp"]["converged"] = "*" in max_d_conv
+                        except ValueError:
+                            pass
 
                     self.other["gradient"] = grad
 

@@ -945,6 +945,7 @@ def pascals_triangle(n):
             previous_row = row
         return row
 
+
 def get_outfile(basename, **substitutions):
     """replace text"""
     new_name = basename

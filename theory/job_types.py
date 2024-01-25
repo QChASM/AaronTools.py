@@ -1462,7 +1462,7 @@ class TDDFTJob(JobType):
         # TODO
         raise NotImplementedError("we currently don't support TD-DFT for Q-Chem")
     
-    
+
 class NMRJob(JobType):
     """NMR job"""
     def __init__(self, geometry=None, atoms=None, coupling_type=None):
