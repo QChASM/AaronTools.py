@@ -133,12 +133,13 @@ class CompOutput:
                 self.conformers.append(Geometry(atoms, comment=comment))
             del from_file["conformers"]
 
-        self.temperature = 298.15
         for k in keys:
             if k in from_file.keys():
                 setattr(self, k, from_file[k])
             else:
                 setattr(self, k, None)
+        if self.temperature is None:
+            self.temperature = 298.15
         
         self.other = {k:v for k, v in from_file.items() if k not in keys}
 
