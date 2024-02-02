@@ -1906,7 +1906,7 @@ class ValenceExcitations(Signals):
         **kwargs,
     ):
         """
-        plot IR data on figure
+        plot UV/vis data on figure
         
         :param matplotlib.pyplot.Figure figure: matplotlib figure
         :param np.ndarray centers: array-like of float, plot is split into sections centered
@@ -1918,9 +1918,12 @@ class ValenceExcitations(Signals):
             
             should be a list of (x_data, y_data, color)
         :param bool reverse_x: if True, 0 cm^-1 will be on the right
-        :param str plot_type: see Frequency.get_plot_data
-        :param str peak_type: any value allowed by Frequency.get_plot_data
-        :param kwargs: keywords for Frequency.get_spectrum_functions
+        :param str plot_type: what type of data to plot: uv-vis,
+            uv-vis-velocity, ecd, ecd-velocity, transmittance, transmittance-velocity
+        :param str peak_type: any value allowed by :func:`Signals.get_plot_data <AaronTools.spectra.Signals.get_plot_data>`
+        :param kwargs: keywords for :func:`Signals.get_spectrum_functions <AaronTools.spectra.Signals.get_spectrum_functions>`
+        
+        most other input is passed to :func:`Signals.plot_spectrum <AaronTools.spectra.Signals.plot_spectrum>`
         """
 
         data_attr = "data"
@@ -2207,9 +2210,18 @@ class NMR(Signals):
         :param str intensity_attr: attribute of Signal used for the intensity
             of that signal
         :param str data_attr: attribute of self for the list of Signal()
-        :param float pulse_frequency: magnet pulse frequency
+        :param float pulse_frequency: magnet pulse frequency (megahertz)
         :param list equivalent_nuclei: list of lists of equivalent nuclei
         :param Geometry geometry: used to determine equivalent nuclei if equivalent_nuclei is not given
+        :param list graph: used to determine equivalent nuclei if given. See :func:`Geometry.get_graph <AaronTools.geometry.Geometry.get_graph>` for example graphs.
+        :param float coupling_threshold: coupling threshold for whether or not to split into multiplet
+        :param list element: include signals with these specified elements
+        :param list couple_with: list of element symbols to use when determining which nuclei cause splitting
+        :param bool shifts_only: only determine centers of shifts and not complete splitting pattern
+        
+        For nuclei to be coupling-equivalent, the must be equivalent nuclei, the
+        same number of bonds away from the coupled nucleus, and the sign of their
+        coupling constant must be the same. 
         """
         data = getattr(self, data_attr)
         x_attr = data[0].x_attr
@@ -2450,7 +2462,7 @@ class NMR(Signals):
         **kwargs,
     ):
         """
-        plot IR data on figure
+        plot NMR data on figure
         
         :param matplotlib.pyplot.Figure figure: matplotlib figure
         :param np.ndarray centers: array-like of float, plot is split into sections centered
@@ -2462,10 +2474,13 @@ class NMR(Signals):
             
             should be a list of (x_data, y_data, color)
         :param bool reverse_x: if True, 0 cm^-1 will be on the right
-        :param str plot_type: see Frequency.get_plot_data
-        :param str peak_type: any value allowed by Frequency.get_plot_data
+        :param str plot_type: see :func:`Signals.get_plot_data <AaronTools.spectra.Signals.get_plot_data>`
+        :param str peak_type: any value allowed by :func:`Signals.get_plot_data <AaronTools.spectra.Signals.get_plot_data>`
         :param float pulse_frequency: pulse frequency in MHz
-        :param kwargs: keywords for Frequency.get_spectrum_functions
+        :param kwargs: keywords for :func:`NMR.get_spectrum_functions <AaronTools.spectra.NMR.get_spectrum_functions>`
+        
+        other keyword arguments are passed to :func:`NMR.get_spectrum_functions <AaronTools.spectra.NMR.get_spectrum_functions>`
+        or :func:`Signals.plot_spectrum <AaronTools.spectra.Signals.plot_spectrum>`
         """
 
         if "intensity_attr" not in kwargs:
