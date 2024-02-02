@@ -100,7 +100,7 @@ for f in glob_files(args.infile, parser=pg_parser):
             infile = FileReader(f, just_geom=True)
     else:
         if args.input_format is not None:
-            infile = FileReader(("from stdin", args.input_format[0], f), just_geom=True)
+            infile = FileReader(("from stdin", args.input_format, f), just_geom=True)
         else:
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f), just_geom=True)
