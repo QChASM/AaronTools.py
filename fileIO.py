@@ -1322,6 +1322,7 @@ class FileWriter:
         **kwargs,
     ):
         """write input files for xtb"""
+        theory.geometry = geom
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
@@ -1336,6 +1337,7 @@ class FileWriter:
             return_warnings=True, **kwargs
         )
         contents["xc"] = xcontrol
+
 
         contents["xyz"] = cls.write_xyz(geom, append=False, outfile=False)
 
