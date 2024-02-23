@@ -273,7 +273,7 @@ class FileWriter:
             elif "oniom" in kwargs and "models" in kwargs:
                 out = cls.write_multi_xyz(geom, append, outfile, **kwargs)
             else:
-                out = cls.write_xyz(geom, append, outfile)
+                out = cls.write_xyz(geom, append, outfile, **kwargs)
 
         elif style.lower() == "mol":
             out = cls.write_mol(geom, outfile=outfile)
@@ -350,14 +350,17 @@ class FileWriter:
         return out
 
     @classmethod
-    def write_xyz(cls, geom, append, outfile=None):
+    def write_xyz(cls, geom, append, outfile=None, comment=None, **kwargs):
         """
         write xyz file
         """
         mode = "a" if append else "w"
         fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
         s = "%i\n" % len(geom.atoms)
-        s += "%s\n" % geom.comment
+        if comment is None:
+            s += "%s\n" % geom.comment
+        else:
+            s += comment.strip() + "\n"
         for atom in geom.atoms:
             s += fmt.format(atom.element, *atom.coords)
 

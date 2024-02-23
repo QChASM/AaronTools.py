@@ -464,6 +464,7 @@ class InternalCoordinateSet:
         geometry,
         use_improper_torsions=True,
         use_inverse_bonds=False,
+        torsion_type="combine-similar",
     ):
         self.geometry = geometry.copy(copy_atoms=True)
         geometry = self.geometry
@@ -509,6 +510,8 @@ class InternalCoordinateSet:
             self.geometry,
             use_improper_torsions=use_improper_torsions,
             use_inverse_bonds=use_inverse_bonds,
+            torsion_type=torsion_type,
+
         )
 
     @property
@@ -543,6 +546,7 @@ class InternalCoordinateSet:
         geometry,
         use_improper_torsions=True,
         use_inverse_bonds=False,
+        torsion_type="combine-similar",
     ):
         """
         determines the (redundant) internal coordinate set for the
@@ -656,59 +660,70 @@ class InternalCoordinateSet:
                             if atom in nonlinear_atoms_2[0].connected:
                                 central_atom2 = atom
                         
-                        nonlinear_groups_1 = []
-                        for atom in nonlinear_atoms_1:
-                            for group in nonlinear_groups_1:
-                                if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
-                                    group.append(atom)
-                                    break
-                            else:
-                                nonlinear_groups_1.append([atom])
 
-                        nonlinear_groups_2 = []
-                        for atom in nonlinear_atoms_2:
-                            for group in nonlinear_groups_2:
-                                if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
-                                    group.append(atom)
-                                    break
-                            else:
-                                nonlinear_groups_2.append([atom])
+                        if torsion_type == "combine-similar":
+                            nonlinear_groups_1 = []
+                            for atom in nonlinear_atoms_1:
+                                for group in nonlinear_groups_1:
+                                    if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
+                                        group.append(atom)
+                                        break
+                                else:
+                                    nonlinear_groups_1.append([atom])
+    
+                            nonlinear_groups_2 = []
+                            for atom in nonlinear_atoms_2:
+                                for group in nonlinear_groups_2:
+                                    if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
+                                        group.append(atom)
+                                        break
+                                else:
+                                    nonlinear_groups_2.append([atom])
+                            
+                            for group1, group2 in unique_combinations(
+                                nonlinear_groups_1, nonlinear_groups_2
+                            ):
+                                new_torsion = Torsion(
+                                    [ndx[a] for a in group1],
+                                    ndx[central_atom1],
+                                    ndx[central_atom2],
+                                    [ndx[a] for a in group2],
+                                )
+                                if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
+                                    added_coords = True
+                                    self.coordinates["torsions"].append(new_torsion)
                         
-                        for group1, group2 in unique_combinations(
-                            nonlinear_groups_1, nonlinear_groups_2
-                        ):
+                        elif torsion_type == "combine-all":
                             new_torsion = Torsion(
-                                [ndx[a] for a in group1],
+                                [ndx[a] for a in nonlinear_atoms_1],
                                 ndx[central_atom1],
                                 ndx[central_atom2],
-                                [ndx[a] for a in group2],
+                                [ndx[a] for a in nonlinear_atoms_2],
                             )
                             if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
                                 added_coords = True
                                 self.coordinates["torsions"].append(new_torsion)
-                        
-                        # for a1, a2 in unique_combinations(
-                        #     nonlinear_atoms_1, nonlinear_atoms_2
-                        # ):
-                        # print(a1, a2)
-                        # print(central_atom1, central_atom2)
-                        # new_torsion = Torsion(
-                        #     [ndx[a] for a in nonlinear_atoms_1],
-                        #     ndx[central_atom1],
-                        #     ndx[central_atom2],
-                        #     [ndx[a] for a in nonlinear_atoms_2],
-                        # )
-                        #     new_torsion = Torsion(
-                        #         [ndx[a1]], ndx[central_atom1], ndx[central_atom2], [ndx[a2]],
-                        #     )
-                        #     if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
-                        #         added_coords = True
-                        #         self.coordinates["torsions"].append(new_torsion)
-                        #         # print("new torsion:")
-                        #         # print("\t", [a.name for a in nonlinear_atoms_1])
-                        #         # print("\t", central_atom1.name)
-                        #         # print("\t", central_atom2.name)
-                        #         # print("\t", [a.name for a in nonlinear_atoms_2])
+
+                        elif torsion_type == "all":
+                            for a1, a2 in unique_combinations(
+                                nonlinear_atoms_1, nonlinear_atoms_2
+                            ):
+                            # print(a1, a2)
+                            # print(central_atom1, central_atom2)
+
+                                new_torsion = Torsion(
+                                    [ndx[a1]], ndx[central_atom1], ndx[central_atom2], [ndx[a2]],
+                                )
+                                if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
+                                    added_coords = True
+                                    self.coordinates["torsions"].append(new_torsion)
+                                    # print("new torsion:")
+                                    # print("\t", [a.name for a in nonlinear_atoms_1])
+                                    # print("\t", central_atom1.name)
+                                    # print("\t", central_atom2.name)
+                                    # print("\t", [a.name for a in nonlinear_atoms_2])
+                        else:
+                            raise NotImplementedError("torsion_type not known: %s" % torsion_type)
 
                     # else:
                     #     print("not adding torsions - not enough bonds to either", atom1, atom2)
