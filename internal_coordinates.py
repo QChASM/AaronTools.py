@@ -218,9 +218,10 @@ class LinearAngle(Coordinate):
             self.atom3,
         )
 
-    def value(self, coords, v=None):
-        if v is None:
-            v = perp_vector(e_ij(coords[self.atom1], coords[self.atom2]))
+    def value(self, coords):
+        v = e_ij(coords[self.atom1], coords[self.atom2])
+        w = e_ij(coords[self.atom3], coords[self.atom2])
+        return np.dot(v, w)
     
         v2 = np.cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
@@ -246,10 +247,10 @@ class LinearAngle(Coordinate):
             coords[self.atom2],
             coords[self.atom2] + v2,
         )
-
+        print(val1_a, val1_b, val2_a, val2_b)
         return np.array([val1_a + val1_b, val2_a + val2_b])
 
-    def s_vector(self, coords, v=None):
+    def s_vector(self, coords, w=None):
         s = np.zeros((2, 3 * len(coords)))
 
         if v is None:
@@ -267,6 +268,8 @@ class LinearAngle(Coordinate):
         s[1, 3 * self.atom3 : 3 * self.atom3 + 3] = -v2 / dist(coords[self.atom2], coords[self.atom3])
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom1 : 3 * self.atom1 + 3]
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom3 : 3 * self.atom3 + 3]
+        
+        print(s)
         
         return s
 
@@ -739,14 +742,19 @@ class InternalCoordinateSet:
                             # print("\t", atom2.name)
                     
                     for atom3 in set(linear_atoms_1).intersection(atom1.connected):
-                        new_linear_angle = LinearAngle(ndx[atom3], ndx[atom1], ndx[atom2])
-                        if not any(coord == new_linear_angle for coord in self.coordinates["linear angles"]):
-                            added_coords = True
-                            self.coordinates["linear angles"].append(new_linear_angle)
-                            # print("new linear angle:")
-                            # print("\t", atom3.name)
-                            # print("\t", atom1.name)
-                            # print("\t", atom2.name)
+                        new_linear_angle = [
+                            # CartesianCoordinate(ndx[atom1]),
+                            CartesianCoordinate(ndx[atom2]),
+                            # CartesianCoordinate(ndx[atom3])
+                        ]
+                        for xyz in new_linear_angle:
+                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                added_coords = True
+                                self.coordinates["linear angles"].append(xyz)
+                                # print("new linear angle:")
+                                # print("\t", atom3.name)
+                                # print("\t", atom1.name)
+                                # print("\t", atom2.name)
                     
                     for atom3 in set(nonlinear_atoms_2).intersection(atom2.connected):
                         new_angle = Angle(ndx[atom3], ndx[atom2], ndx[atom1])
@@ -759,15 +767,20 @@ class InternalCoordinateSet:
                             # print("\t", atom1.name)
                     
                     for atom3 in set(linear_atoms_2).intersection(atom2.connected):
-                        new_linear_angle = LinearAngle(ndx[atom3], ndx[atom2], ndx[atom1])
-                        if not any(coord == new_linear_angle for coord in self.coordinates["linear angles"]):
-                            added_coords = True
-                            self.coordinates["linear angles"].append(new_linear_angle)
-                            # print("new linear angle:")
-                            # print("\t", atom3.name)
-                            # print("\t", atom2.name)
-                            # print("\t", atom1.name)
-
+                        new_linear_angle = [
+                            # CartesianCoordinate(ndx[atom1]),
+                            CartesianCoordinate(ndx[atom2]),
+                            # CartesianCoordinate(ndx[atom3])
+                        ]
+                        for xyz in new_linear_angle:
+                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                added_coords = True
+                                self.coordinates["linear angles"].append(xyz)
+                                # print("new linear angle:")
+                                # print("\t", atom3.name)
+                                # print("\t", atom1.name)
+                                # print("\t", atom2.name)
+                    
         print("there are %i internal coordinates" % self.n_dimensions)
         print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
         # print(len(self.coordinates["torsions"]))
@@ -916,3 +929,20 @@ class InternalCoordinateSet:
             return np.reshape(x1, coords.shape), togo
         
         return np.reshape(best_struc, coords.shape), smallest_dq
+
+
+class CartesianCoordinateSet(InternalCoordinateSet):
+    def __init__(self, geometry):
+        self.geometry = geometry.copy(copy_atoms=True)
+        geometry = self.geometry
+        self.coordinates = {
+            "cartesian": [],
+        }
+
+        self.determine_coordinates(self.geometry)
+
+    def determine_coordinates(self, geometry):
+        for i, atom in enumerate(geometry.atoms):
+            cart = CartesianCoordinate(i)
+            if not any(x == cart for x in self.coordinates["cartesian"]):
+                self.coordinates["cartesian"].append(cart)
