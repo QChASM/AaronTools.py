@@ -2327,13 +2327,51 @@ class FileReader:
                 if line.startswith("FINAL SINGLE POINT ENERGY"):
                     # if the wavefunction doesn't converge, ORCA prints a message next
                     # to the energy so we can't use line.split()[-1]
-                    self.other["energy"] = float(line.split()[4])
+                    try:
+                        self.other["energy"] = float(line.split()[4])
+                    except ValueError:
+                        kind = line.split()[4]
+                        nrg = float(line.split()[5])
+                        self.other["energy " + kind] = nrg
 
                 if line.startswith("TOTAL SCF ENERGY"):
                     self.skip_lines(f, 2)
                     line = f.readline()
                     n += 3
                     self.other["scf_energy"] = float(line.split()[3])
+
+                if line.startswith("QM Subsystem"):
+                    atoms = [int(x) for x in line.split()[3:]]
+                    line = f.readline()
+                    n += 1
+                    while line.split()[0].isdigit():
+                        atoms.extend([int(x) for x in line.split()])
+                        line = f.readline()
+                        n += 1
+ 
+                    self.other["QM atoms"] = atoms
+
+                if line.startswith("Active atoms"):
+                    atoms = [int(x) for x in line.split()[3:]]
+                    line = f.readline()
+                    n += 1
+                    while line.split()[0].isdigit():
+                        atoms.extend([int(x) for x in line.split()])
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["active atoms"] = atoms
+
+                if line.startswith("Fixed atoms used in optimizer"):
+                    atoms = [int(x) for x in line.split()[6:]]
+                    line = f.readline()
+                    n += 1
+                    while line.split()[0].isdigit():
+                        atoms.extend([int(x) for x in line.split()])
+                        line = f.readline()
+                        n += 1
+                    
+                    self.other["fixed atoms"] = atoms
 
                 elif "E(SOC CIS)" in line:
                     self.other["SOC CIS/TD root energy"] = float(line.split()[3])
@@ -2366,6 +2404,32 @@ class FileReader:
 
                 elif "THE OPTIMIZATION HAS CONVERGED" in line:
                     step_converged = True
+
+                elif line.startswith("CARTESIAN GRADIENT (QM/MM)"):
+                    actives = []
+                    try:
+                        gradient = np.zeros((len(self.atoms), 3))
+                        if "NUMERICAL" in line:
+                            self.skip_lines(f, 1)
+                            n += 1
+                        else:
+                            self.skip_lines(f, 2)
+                            n += 2
+                        line = f.readline()
+                        n += 1
+                        while line.split()[0].isdigit():
+                            # orca prints a warning before gradient if some
+                            # coordinates are constrained
+                            if line.startswith("WARNING:"):
+                                continue
+                            info = line.split()
+                            gradient[i] = np.array([float(x) for x in info[3:6]])
+                            line = f.readline()
+                            n += 1
+    
+                        self.other["forces (QM/MM)"] = -gradient
+                    except ValueError:
+                        pass
 
                 elif line.startswith("CARTESIAN GRADIENT"):
                     try:
