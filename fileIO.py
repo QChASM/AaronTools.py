@@ -2417,7 +2417,7 @@ class FileReader:
                             n += 2
                         line = f.readline()
                         n += 1
-                        while line.split()[0].isdigit():
+                        while line.strip() and line.split()[0].isdigit():
                             # orca prints a warning before gradient if some
                             # coordinates are constrained
                             if line.startswith("WARNING:"):
