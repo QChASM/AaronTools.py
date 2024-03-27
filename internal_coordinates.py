@@ -218,9 +218,10 @@ class LinearAngle(Coordinate):
             self.atom3,
         )
 
-    def value(self, coords, v=None):
-        if v is None:
-            v = perp_vector(e_ij(coords[self.atom1], coords[self.atom2]))
+    def value(self, coords):
+        v = e_ij(coords[self.atom1], coords[self.atom2])
+        w = e_ij(coords[self.atom3], coords[self.atom2])
+        return np.dot(v, w)
     
         v2 = np.cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
@@ -246,10 +247,10 @@ class LinearAngle(Coordinate):
             coords[self.atom2],
             coords[self.atom2] + v2,
         )
-
+        print(val1_a, val1_b, val2_a, val2_b)
         return np.array([val1_a + val1_b, val2_a + val2_b])
 
-    def s_vector(self, coords, v=None):
+    def s_vector(self, coords, w=None):
         s = np.zeros((2, 3 * len(coords)))
 
         if v is None:
@@ -267,6 +268,8 @@ class LinearAngle(Coordinate):
         s[1, 3 * self.atom3 : 3 * self.atom3 + 3] = -v2 / dist(coords[self.atom2], coords[self.atom3])
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom1 : 3 * self.atom1 + 3]
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom3 : 3 * self.atom3 + 3]
+        
+        print(s)
         
         return s
 
@@ -364,20 +367,15 @@ class Torsion(Coordinate):
         if not isinstance(other, Torsion):
             return False
 
-        print(self, other)
-
         if self.improper:
             if self.group2[0] != other.group2[0]:
-                print("not equal")
                 return False
             
             self_plane = set([self.atom1, self.atom2, *self.group1])
             other_plane = set([other.atom1, other.atom2, *other.group1])
             if self_plane != other_plane:
-                print("not equal")
                 return False
             
-            print("equal")
             return True
 
         for a1 in self.group1:
@@ -386,7 +384,6 @@ class Torsion(Coordinate):
             ) or (
                 self.group1.count(a1) != other.group2.count(a1)
             ):
-                print("not equal")
                 return False
 
         for a2 in self.group2:
@@ -395,18 +392,14 @@ class Torsion(Coordinate):
             ) or (
                 self.group2.count(a2) != other.group1.count(a2)
             ):
-                print("not equal")
                 return False
 
         if self.atom1 == other.atom1 and self.atom2 == other.atom2:
-            print("equal")
             return True
 
         if self.atom1 == other.atom2 and self.atom2 == other.atom1:
-            print("equal")
             return True
         
-        print("not equal")
         return False
 
     def value(self, coords):
@@ -474,6 +467,7 @@ class InternalCoordinateSet:
         geometry,
         use_improper_torsions=True,
         use_inverse_bonds=False,
+        torsion_type="combine-similar",
     ):
         self.geometry = geometry.copy(copy_atoms=True)
         geometry = self.geometry
@@ -491,7 +485,6 @@ class InternalCoordinateSet:
             if not any(atom in fragment for fragment in fragments):
                 new_fragment = geometry.get_fragment(atom, stop=atom)
                 fragments.append(new_fragment)
-                print(len(new_fragment))
         
         # TODO: prioritize H-bonds
         while len(fragments) > 1:
@@ -507,7 +500,6 @@ class InternalCoordinateSet:
                         k = dist.argmin()
                         min_d = this_closest
                         ndx = np.where(dist == np.min(dist))
-                        print(ndx)
                         closest_ndx = (frag1, frag2, [ndx[0][0], ndx[1][0]])
             
             frag1, frag2, ndx = closest_ndx
@@ -521,6 +513,8 @@ class InternalCoordinateSet:
             self.geometry,
             use_improper_torsions=use_improper_torsions,
             use_inverse_bonds=use_inverse_bonds,
+            torsion_type=torsion_type,
+
         )
 
     @property
@@ -555,6 +549,7 @@ class InternalCoordinateSet:
         geometry,
         use_improper_torsions=True,
         use_inverse_bonds=False,
+        torsion_type="combine-similar",
     ):
         """
         determines the (redundant) internal coordinate set for the
@@ -569,6 +564,8 @@ class InternalCoordinateSet:
         if use_inverse_bonds:
             BondClass = InverseBond
             bond_type = "inverse bonds"
+ 
+        ranks = geometry.canonical_rank(break_ties=False)
  
         for atom1 in geometry.atoms:
             # TODO: replace the planarity check with SVD/eigenvalue decomp
@@ -593,18 +590,18 @@ class InternalCoordinateSet:
                         if not any(coord == oop_bend for coord in self.coordinates["out of plane bends"]):
                             added_coords = True
                             self.coordinates["out of plane bends"].append(oop_bend)
-                            print("added oop bend:")
-                            print("\t", atom1.name)
-                            print("\t", [a.name for a in trio])
+                            # print("added oop bend:")
+                            # print("\t", atom1.name)
+                            # print("\t", [a.name for a in trio])
                 
             for atom2 in atom1.connected:
                 new_bond = BondClass(ndx[atom1], ndx[atom2])
                 if not any(coord == new_bond for coord in self.coordinates[bond_type]):
                     added_coords = True
                     self.coordinates[bond_type].append(new_bond)
-                    print("new bond:")
-                    print("\t", atom1.name)
-                    print("\t", atom2.name)
+                    # print("new bond:")
+                    # print("\t", atom1.name)
+                    # print("\t", atom2.name)
                     
                     # we need to skip linear things when adding torsions
                     # consider allene:
@@ -656,7 +653,7 @@ class InternalCoordinateSet:
                             next_stack = deque([])
                     
                     if nonlinear_atoms_1 and nonlinear_atoms_2:
-                        print("non linear groups", nonlinear_atoms_1, nonlinear_atoms_2)
+                        # print("non linear groups", nonlinear_atoms_1, nonlinear_atoms_2)
                         central_atom1 = atom1
                         central_atom2 = atom2
                         for atom in linear_atoms_1:
@@ -666,72 +663,124 @@ class InternalCoordinateSet:
                             if atom in nonlinear_atoms_2[0].connected:
                                 central_atom2 = atom
                         
-                        for a1, a2 in unique_combinations(
-                            nonlinear_atoms_1, nonlinear_atoms_2
-                        ):
-                        # print(a1, a2)
-                        # print(central_atom1, central_atom2)
-                        # new_torsion = Torsion(
-                        #     [ndx[a] for a in nonlinear_atoms_1],
-                        #     ndx[central_atom1],
-                        #     ndx[central_atom2],
-                        #     [ndx[a] for a in nonlinear_atoms_2],
-                        # )
+
+                        if torsion_type == "combine-similar":
+                            nonlinear_groups_1 = []
+                            for atom in nonlinear_atoms_1:
+                                for group in nonlinear_groups_1:
+                                    if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
+                                        group.append(atom)
+                                        break
+                                else:
+                                    nonlinear_groups_1.append([atom])
+    
+                            nonlinear_groups_2 = []
+                            for atom in nonlinear_atoms_2:
+                                for group in nonlinear_groups_2:
+                                    if ranks[ndx[group[0]]] == ranks[ndx[atom]]:
+                                        group.append(atom)
+                                        break
+                                else:
+                                    nonlinear_groups_2.append([atom])
+                            
+                            for group1, group2 in unique_combinations(
+                                nonlinear_groups_1, nonlinear_groups_2
+                            ):
+                                new_torsion = Torsion(
+                                    [ndx[a] for a in group1],
+                                    ndx[central_atom1],
+                                    ndx[central_atom2],
+                                    [ndx[a] for a in group2],
+                                )
+                                if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
+                                    added_coords = True
+                                    self.coordinates["torsions"].append(new_torsion)
+                        
+                        elif torsion_type == "combine-all":
                             new_torsion = Torsion(
-                                [ndx[a1]], ndx[central_atom1], ndx[central_atom2], [ndx[a2]],
+                                [ndx[a] for a in nonlinear_atoms_1],
+                                ndx[central_atom1],
+                                ndx[central_atom2],
+                                [ndx[a] for a in nonlinear_atoms_2],
                             )
                             if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
                                 added_coords = True
                                 self.coordinates["torsions"].append(new_torsion)
-                                print("new torsion:")
-                                print("\t", [a.name for a in nonlinear_atoms_1])
-                                print("\t", central_atom1.name)
-                                print("\t", central_atom2.name)
-                                print("\t", [a.name for a in nonlinear_atoms_2])
 
-                    else:
-                        print("not adding torsions - not enough bonds to either", atom1, atom2)
+                        elif torsion_type == "all":
+                            for a1, a2 in unique_combinations(
+                                nonlinear_atoms_1, nonlinear_atoms_2
+                            ):
+                            # print(a1, a2)
+                            # print(central_atom1, central_atom2)
+
+                                new_torsion = Torsion(
+                                    [ndx[a1]], ndx[central_atom1], ndx[central_atom2], [ndx[a2]],
+                                )
+                                if not any(new_torsion == coord for coord in self.coordinates["torsions"]):
+                                    added_coords = True
+                                    self.coordinates["torsions"].append(new_torsion)
+                                    # print("new torsion:")
+                                    # print("\t", [a.name for a in nonlinear_atoms_1])
+                                    # print("\t", central_atom1.name)
+                                    # print("\t", central_atom2.name)
+                                    # print("\t", [a.name for a in nonlinear_atoms_2])
+                        else:
+                            raise NotImplementedError("torsion_type not known: %s" % torsion_type)
+
+                    # else:
+                    #     print("not adding torsions - not enough bonds to either", atom1, atom2)
 
                     for atom3 in set(nonlinear_atoms_1).intersection(atom1.connected):
                         new_angle = Angle(ndx[atom3], ndx[atom1], ndx[atom2])
                         if not any(coord == new_angle for coord in self.coordinates["angles"]):
                             added_coords = True
                             self.coordinates["angles"].append(new_angle)
-                            print("new angle:")
-                            print("\t", atom3.name)
-                            print("\t", atom1.name)
-                            print("\t", atom2.name)
+                            # print("new angle:")
+                            # print("\t", atom3.name)
+                            # print("\t", atom1.name)
+                            # print("\t", atom2.name)
                     
                     for atom3 in set(linear_atoms_1).intersection(atom1.connected):
-                        new_linear_angle = LinearAngle(ndx[atom3], ndx[atom1], ndx[atom2])
-                        if not any(coord == new_linear_angle for coord in self.coordinates["linear angles"]):
-                            added_coords = True
-                            self.coordinates["linear angles"].append(new_linear_angle)
-                            print("new linear angle:")
-                            print("\t", atom3.name)
-                            print("\t", atom1.name)
-                            print("\t", atom2.name)
+                        new_linear_angle = [
+                            # CartesianCoordinate(ndx[atom1]),
+                            CartesianCoordinate(ndx[atom2]),
+                            # CartesianCoordinate(ndx[atom3])
+                        ]
+                        for xyz in new_linear_angle:
+                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                added_coords = True
+                                self.coordinates["linear angles"].append(xyz)
+                                # print("new linear angle:")
+                                # print("\t", atom3.name)
+                                # print("\t", atom1.name)
+                                # print("\t", atom2.name)
                     
                     for atom3 in set(nonlinear_atoms_2).intersection(atom2.connected):
                         new_angle = Angle(ndx[atom3], ndx[atom2], ndx[atom1])
                         if not any(coord == new_angle for coord in self.coordinates["angles"]):
                             added_coords = True
                             self.coordinates["angles"].append(new_angle)
-                            print("new angle:")
-                            print("\t", atom3.name)
-                            print("\t", atom2.name)
-                            print("\t", atom1.name)
+                            # print("new angle:")
+                            # print("\t", atom3.name)
+                            # print("\t", atom2.name)
+                            # print("\t", atom1.name)
                     
                     for atom3 in set(linear_atoms_2).intersection(atom2.connected):
-                        new_linear_angle = LinearAngle(ndx[atom3], ndx[atom2], ndx[atom1])
-                        if not any(coord == new_linear_angle for coord in self.coordinates["linear angles"]):
-                            added_coords = True
-                            self.coordinates["linear angles"].append(new_linear_angle)
-                            print("new linear angle:")
-                            print("\t", atom3.name)
-                            print("\t", atom2.name)
-                            print("\t", atom1.name)
-
+                        new_linear_angle = [
+                            # CartesianCoordinate(ndx[atom1]),
+                            CartesianCoordinate(ndx[atom2]),
+                            # CartesianCoordinate(ndx[atom3])
+                        ]
+                        for xyz in new_linear_angle:
+                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                added_coords = True
+                                self.coordinates["linear angles"].append(xyz)
+                                # print("new linear angle:")
+                                # print("\t", atom3.name)
+                                # print("\t", atom1.name)
+                                # print("\t", atom2.name)
+                    
         print("there are %i internal coordinates" % self.n_dimensions)
         print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
         # print(len(self.coordinates["torsions"]))
@@ -827,7 +876,7 @@ class InternalCoordinateSet:
         self, coords, dq,
         use_delocalized=True,
         max_iterations=10,
-        convergence=1e-6,
+        convergence=1e-10,
     ):
         """
         change coords (Cartesian Nx3 array) by the specified 
@@ -838,9 +887,8 @@ class InternalCoordinateSet:
         convergence: end cycles if differences between actual step and dq
                      is less than this amount
         """
-        xi = x0 = best_struc = np.reshape(coords, -1)
+        x0 = best_struc = np.reshape(coords, -1)
         ddq = np.zeros(len(dq))
-        x0 = best_struc
         smallest_dq = None
         for i in range(0, max_iterations):
             B = self.B_matrix(np.reshape(x0, coords.shape))
@@ -874,9 +922,27 @@ class InternalCoordinateSet:
                 smallest_dq = togo
         
             if togo < convergence:
+                print("q -> r step", i, "error =", togo)
                 break
 
         if togo < convergence:
             return np.reshape(x1, coords.shape), togo
         
         return np.reshape(best_struc, coords.shape), smallest_dq
+
+
+class CartesianCoordinateSet(InternalCoordinateSet):
+    def __init__(self, geometry):
+        self.geometry = geometry.copy(copy_atoms=True)
+        geometry = self.geometry
+        self.coordinates = {
+            "cartesian": [],
+        }
+
+        self.determine_coordinates(self.geometry)
+
+    def determine_coordinates(self, geometry):
+        for i, atom in enumerate(geometry.atoms):
+            cart = CartesianCoordinate(i)
+            if not any(x == cart for x in self.coordinates["cartesian"]):
+                self.coordinates["cartesian"].append(cart)
