@@ -63,6 +63,7 @@ class CompOutput:
         get_all=True,
         freq_name=None,
         conf_name=None,
+        determine_pg=False,
     ):
         self.geometry = None
         self.opts = None
@@ -152,6 +153,11 @@ class CompOutput:
             # might be slightly different
             self.ZPVE = self.calc_zpe()
             self.E_ZPVE = self.energy + self.ZPVE
+
+        if determine_pg:
+            from AaronTools.symmetry import PointGroup
+            pg = PointGroup(self.geometry)
+            self.rotational_symmetry_number = pg.symmetry_number
 
     @staticmethod
     def boltzmann_weights(

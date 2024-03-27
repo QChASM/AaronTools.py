@@ -105,6 +105,16 @@ thermo_parser.add_argument(
     help="search subdirectories of current directory for files matching PATTERN"
 )
 
+thermo_parser.add_argument(
+    "-pg",
+    "--determine-point-group",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="pg",
+    help="determine the point group and rotational symmetry number using AaronTools instead of what's in the file"
+)
+
 
 args = thermo_parser.parse_args()
 
@@ -212,6 +222,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
 
     co = CompOutput(
         infile,
+        determine_pg=args.pg,
     )
 
     if sp_nrg is None:
@@ -270,6 +281,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
             output += "    E+ZPE(anh)        = %.6f Eh  (ZPE(anh) = %.6f)\n" % (
                 nrg + ZPVE_anh, ZPVE_anh
             )
+        output += "rotational symmetry number: %i\n" % co.rotational_symmetry_number
         output += "thermochemistry from %s at %.2f K:\n" % (f, t)
         output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
         output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)

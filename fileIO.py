@@ -3531,11 +3531,11 @@ class FileReader:
             line = f.readline()
             n += 1
             while line.strip():
-                atom_match = re.search("X\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
-                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
-                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line)
+                atom_match = re.search("X\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
+                bond_match = re.search("B\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
+                angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
                 torsion_match = re.search(
-                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(\d+\.\d?))?", line
+                    "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line
                 )
                 if atom_match:
                     if "atoms" not in rv:
@@ -4054,6 +4054,12 @@ class FileReader:
                         charges.append(float(line.split()[2]))
                         self.atoms[i].charge = float(line.split()[2])
                     self.other[charge_match.group(1) + " Charges"] = charges
+
+            elif "Dipole moment (field-independent basis, Debye)" in line:
+                n += 1
+                line = f.readline()
+                info = line.split()
+                self.other["dipole moment"] = [float(info[x]) for x in [1, 3, 5]]
 
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             # BE CAREFUL ABOUT WHAT'S AFTER THIS
