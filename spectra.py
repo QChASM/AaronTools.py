@@ -811,6 +811,8 @@ class Frequency(Signals):
                     # if hpmodes, want just the first set of freqs
                     break
                 continue
+            if not hpmodes and "Frequencies" in line and "---" in line:
+                hpmodes = True
             if "Frequencies" in line and (
                 (hpmodes and "---" in line) or (" -- " in line and not hpmodes)
             ):
@@ -1110,8 +1112,7 @@ class Frequency(Signals):
                 n_data -= 1
             else:
                 k += 1
-        
-        intensity_start = None
+
         for k, line in enumerate(lines):
             if line.strip() == "IR SPECTRUM":
                 order = lines[k + 1].split()
@@ -1125,17 +1126,16 @@ class Frequency(Signals):
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        if intensity_start is not None:
-            t = sum([1 for mode in self.data if mode.frequency < 0])
-            for line in lines[intensity_start:]:
-                if not re.match(r"\s*\d+:", line):
-                    continue
-                ir_info = line.split()
-                inten = float(ir_info[ndx])
-                self.data[t].intensity = inten
-                t += 1
-                if t >= len(self.data):
-                    break
+        t = sum([1 for mode in self.data if mode.frequency < 0])
+        for line in lines[intensity_start:]:
+            if not re.match(r"\s*\d+:", line):
+                continue
+            ir_info = line.split()
+            inten = float(ir_info[ndx])
+            self.data[t].intensity = inten
+            t += 1
+            if t >= len(self.data):
+                break
 
         for k, line in enumerate(lines):
             if line.strip() == "RAMAN SPECTRUM":

@@ -354,8 +354,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
         out_list = out.decode("utf-8").splitlines()
         self.assertTrue(out_list[0][-16:] == ref_list[0][-16:])
-        for i in [1, 3, 4, 6, 7]:
-            self.assertTrue(out_list[i][-34:] == ref_list[i][-34:])
+        for i in [1, 4, 6, 7, 8]:
+            self.assertTrue(out_list[i][-24:] == ref_list[i][-24:])
 
         # test CSV w/o sp file
         args = [
