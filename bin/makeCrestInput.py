@@ -188,13 +188,13 @@ for pos in [
 for f in glob_files(args.infile, parser=theory_parser):
     if isinstance(f, str):
         if args.input_format is not None:
-            infile = FileReader((f, args.input_format[0], None), just_geom=False, get_all=True)
+            infile = FileReader((f, args.input_format, None), just_geom=False, get_all=True)
         else:
             infile = FileReader(f, just_geom=False, get_all=True)
     else:
         if args.input_format is not None:
             infile = FileReader(
-                ("from stdin", args.input_format[0], f), just_geom=False, get_all=True
+                ("from stdin", args.input_format, f), just_geom=False, get_all=True
             )
         else:
             if len(sys.argv) >= 1:

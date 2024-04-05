@@ -271,12 +271,12 @@ if args.vbur is None:
 for f in glob_files(args.infile, parser=steric_parser):
     if isinstance(f, str):
         if args.input_format is not None:
-            infile = FileReader((f, args.input_format[0], None))
+            infile = FileReader((f, args.input_format, None))
         else:
             infile = FileReader(f, just_geom=False)
     else:
         if args.input_format is not None:
-            infile = FileReader(("from stdin", args.input_format[0], f))
+            infile = FileReader(("from stdin", args.input_format, f))
         else:
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f))

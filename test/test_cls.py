@@ -317,6 +317,7 @@ class TestCLS(TestWithTimer):
 
         ref = """electronic energy of test_files/normal.log = -1856.018658 Eh
     E+ZPE             = -1855.474686 Eh  (ZPE = 0.543972)
+rotational symmetry number: 1
 thermochemistry from test_files/normal.log at 298.00 K:
     H(RRHO)           = -1855.440616 Eh  (dH = 0.578042)
     G(RRHO)           = -1855.538017 Eh  (dG = 0.480642)
@@ -332,7 +333,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         # test sp energy
         self.assertTrue(out_list[0][-16:] == ref_list[0][-16:])
         # test thermochem
-        for i in [1, 3, 4, 6, 7]:
+        for i in [1, 2, 4, 5, 6, 7, 8]:
             self.assertTrue(out_list[i][-34:] == ref_list[i][-34:])
 
         # test regular output with sp
@@ -421,7 +422,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         out, err = proc.communicate()
 
         if len(err) != 0:
-            raise RuntimeError(err)
+            raise RuntimeError("error during %s:\n%s" % (" ".join(args), err))
 
         out_list = out.decode("utf-8").splitlines()
         ref_list = ref_csv.splitlines()
@@ -976,8 +977,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_substituentSterimol"))
-    suite.addTest(TestCLS("test_ligandSterimol"))
+    suite.addTest(TestCLS("test_grabThermo"))
     return suite
 
 

@@ -83,9 +83,12 @@ for f in glob_files(args.infile, parser=stat_parser):
 
     if co.gradient and co.gradient.keys():
         for crit in header_vals:
-            col = "%.2e/%s" % (
-                float(co.gradient[crit]["value"]), "YES" if co.gradient[crit]["converged"] else "NO"
-            )
+            try:
+                col = "%.2e/%s" % (
+                    float(co.gradient[crit]["value"]), "YES" if co.gradient[crit]["converged"] else "NO"
+                )
+            except ValueError:
+                col = co.gradient[crit]["value"] + "/" + "YES" if co.gradient[crit]["converged"] else "NO"
             s += "  %14s" % col
 
     if (

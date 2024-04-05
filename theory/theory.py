@@ -1232,11 +1232,15 @@ class Theory:
             
             if mm:
                 try:
-                    ele += "-%s" % atom.atomtype
+                    if atom.atomtype:
+                        ele += "-%s" % atom.atomtype
                 except AttributeError:
                     pass
 
-                ele += "-%f" % atom.charge
+                try:
+                    ele += "-%f" % atom.charge
+                except (AttributeError, TypeError):
+                    pass
             
                 s += "%-20s" % ele
             else:

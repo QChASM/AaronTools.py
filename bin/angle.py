@@ -111,6 +111,16 @@ angle_parser.add_argument(
 )
 
 angle_parser.add_argument(
+    "-a",
+    "--append",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="append",
+    help="append structure to existing output file instead of overwriting"
+)
+
+angle_parser.add_argument(
     "-o",
     "--output",
     type=str,
@@ -175,7 +185,7 @@ for f in glob_files(args.infile, parser=angle_parser):
                 INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
-            geom.write(append=True, outfile=outfile)
+            geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
@@ -188,5 +198,5 @@ for f in glob_files(args.infile, parser=angle_parser):
                 INFILE=get_filename(f, include_parent_dir="$INDIR" in args.outfile),
                 INDIR=dirname(f),
             )
-            with open(outfile, "a") as f:
+            with open(outfile, "a" if args.append else "w") as f:
                 f.write(out)

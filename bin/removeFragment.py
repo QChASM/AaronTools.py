@@ -83,12 +83,12 @@ args = remove_frag_parser.parse_args()
 for infile in glob_files(args.infile, parser=remove_frag_parser):
     if isinstance(infile, str):
         if args.input_format is not None:
-            f = FileReader((infile, args.input_format[0], infile))
+            f = FileReader((infile, args.input_format, infile))
         else:
             f = FileReader(infile)
     else:
         if args.input_format is not None:
-            f = FileReader(("from stdin", args.input_format[0], infile))
+            f = FileReader(("from stdin", args.input_format, infile))
         else:
             f = FileReader(("from stdin", "xyz", infile))
 
