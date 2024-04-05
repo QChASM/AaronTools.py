@@ -812,7 +812,7 @@ class Frequency(Signals):
                     break
                 continue
             if "Frequencies" in line and (
-                (hpmodes and "---" in line) or ("--" in line and not hpmodes)
+                (hpmodes and "---" in line) or (" -- " in line and not hpmodes)
             ):
                 for i, symm in zip(
                     float_num.findall(line), lines[k - 1].split()
