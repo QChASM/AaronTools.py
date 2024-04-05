@@ -468,6 +468,7 @@ class InternalCoordinateSet:
         use_improper_torsions=True,
         use_inverse_bonds=False,
         torsion_type="combine-similar",
+        oop_type="none",
     ):
         self.geometry = geometry.copy(copy_atoms=True)
         geometry = self.geometry
@@ -514,7 +515,7 @@ class InternalCoordinateSet:
             use_improper_torsions=use_improper_torsions,
             use_inverse_bonds=use_inverse_bonds,
             torsion_type=torsion_type,
-
+            oop_type="none",
         )
 
     @property
@@ -550,6 +551,7 @@ class InternalCoordinateSet:
         use_improper_torsions=True,
         use_inverse_bonds=False,
         torsion_type="combine-similar",
+        oop_type="none",
     ):
         """
         determines the (redundant) internal coordinate set for the
@@ -573,26 +575,27 @@ class InternalCoordinateSet:
             # a small singular value would indicate planarity
             # might have to do unit vectors instead of coordinates 
             # relative to atom1
-            if len(atom1.connected) > 2:
-                vsepr, _ = atom1.get_vsepr()
-                if vsepr and "planar" in vsepr:
-                    for trio in combinations(atom1.connected, 3):
-                        trio_ndx = [ndx[a] for a in trio]
-                        if not use_improper_torsions:
-                            oop_bend = OutOfPlaneBend(
-                                ndx[atom1], [ndx[a] for a in trio]
-                            )
-                        else:
-                            oop_bend = Torsion(
-                                [trio_ndx[0]], trio_ndx[1], trio_ndx[2], [ndx[atom1]],
-                                improper=True,
-                            )
-                        if not any(coord == oop_bend for coord in self.coordinates["out of plane bends"]):
-                            added_coords = True
-                            self.coordinates["out of plane bends"].append(oop_bend)
-                            # print("added oop bend:")
-                            # print("\t", atom1.name)
-                            # print("\t", [a.name for a in trio])
+            if oop_type != "none":
+                if len(atom1.connected) > 2:
+                    vsepr, _ = atom1.get_vsepr()
+                    if vsepr and "planar" in vsepr:
+                        for trio in combinations(atom1.connected, 3):
+                            trio_ndx = [ndx[a] for a in trio]
+                            if not use_improper_torsions:
+                                oop_bend = OutOfPlaneBend(
+                                    ndx[atom1], [ndx[a] for a in trio]
+                                )
+                            else:
+                                oop_bend = Torsion(
+                                    [trio_ndx[0]], trio_ndx[1], trio_ndx[2], [ndx[atom1]],
+                                    improper=True,
+                                )
+                            if not any(coord == oop_bend for coord in self.coordinates["out of plane bends"]):
+                                added_coords = True
+                                self.coordinates["out of plane bends"].append(oop_bend)
+                                # print("added oop bend:")
+                                # print("\t", atom1.name)
+                                # print("\t", [a.name for a in trio])
                 
             for atom2 in atom1.connected:
                 new_bond = BondClass(ndx[atom1], ndx[atom2])
