@@ -3133,6 +3133,8 @@ class Geometry:
             ys = ys[pt_in_shape]
         else:
             pt_in_shape = np.ones((num_pts, num_pts), dtype=bool)
+            xs = xs[pt_in_shape]
+            ys = ys[pt_in_shape]
         z = -1000 * np.ones((num_pts, num_pts))
         w = np.empty((num_pts, num_pts))
         w[:] = np.nan
