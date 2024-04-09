@@ -880,6 +880,7 @@ class InternalCoordinateSet:
         use_delocalized=True,
         max_iterations=10,
         convergence=1e-10,
+        debug=True,
     ):
         """
         change coords (Cartesian Nx3 array) by the specified 
@@ -925,7 +926,8 @@ class InternalCoordinateSet:
                 smallest_dq = togo
         
             if togo < convergence:
-                print("q -> r step", i, "error =", togo)
+                if debug:
+                    print("q -> r step", i, "error =", togo)
                 break
 
         if togo < convergence:

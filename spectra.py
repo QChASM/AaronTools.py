@@ -1113,6 +1113,7 @@ class Frequency(Signals):
             else:
                 k += 1
 
+        intensity_start = None
         for k, line in enumerate(lines):
             if line.strip() == "IR SPECTRUM":
                 order = lines[k + 1].split()
@@ -1126,29 +1127,30 @@ class Frequency(Signals):
         # the first column is the index of the mode
         # the second column is the frequency
         # the third is the intensity, which we read next
-        t = sum([1 for mode in self.data if mode.frequency < 0])
-        for line in lines[intensity_start:]:
-            if not re.match(r"\s*\d+:", line):
-                continue
-            ir_info = line.split()
-            inten = float(ir_info[ndx])
-            self.data[t].intensity = inten
-            t += 1
-            if t >= len(self.data):
-                break
-
-        for k, line in enumerate(lines):
-            if line.strip() == "RAMAN SPECTRUM":
-                t = 0
-                for line in lines[k + 1:]:
-                    if not re.match(r"\s*\d+:", line):
-                        continue
-                    ir_info = line.split()
-                    inten = float(ir_info[2])
-                    self.data[t].raman_activity = inten
-                    t += 1
-                    if t >= len(self.data):
-                        break
+        if intensity_start is not None:
+            t = sum([1 for mode in self.data if mode.frequency < 0])
+            for line in lines[intensity_start:]:
+                if not re.match(r"\s*\d+:", line):
+                    continue
+                ir_info = line.split()
+                inten = float(ir_info[ndx])
+                self.data[t].intensity = inten
+                t += 1
+                if t >= len(self.data):
+                    break
+    
+            for k, line in enumerate(lines):
+                if line.strip() == "RAMAN SPECTRUM":
+                    t = 0
+                    for line in lines[k + 1:]:
+                        if not re.match(r"\s*\d+:", line):
+                            continue
+                        ir_info = line.split()
+                        inten = float(ir_info[2])
+                        self.data[t].raman_activity = inten
+                        t += 1
+                        if t >= len(self.data):
+                            break
 
     def parse_psi4_lines(self, lines, *args, **kwargs):
         """parse lines of psi4 output related to frequencies
