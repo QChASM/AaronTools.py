@@ -2231,6 +2231,7 @@ class FileReader:
 
         is_scan_job = False
         step_converged = False
+        masses = []
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2288,6 +2289,17 @@ class FileReader:
                 return self.read_log(
                     f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                 )
+
+            if line.startswith("CARTESIAN COORDINATES (A.U.)") and not masses:
+                self.skip_lines(f, 2)
+                n += 2
+                line = f.readline()
+                while line.strip() and "--" not in line:
+                    info = line.split()
+                    mass = float(info[4])
+                    masses.append(mass)
+                    line = f.readline()
+                    n += 1
 
             if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
                 if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
@@ -2901,6 +2913,10 @@ class FileReader:
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
+
+            if masses:
+                for a, m in zip(self.atoms, masses):
+                    a._mass = m
 
             if (
                 "alpha_coefficients" in self.other
