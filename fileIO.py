@@ -2363,7 +2363,7 @@ class FileReader:
  
                     self.other["QM atoms"] = atoms
 
-                if line.startswith("Active atoms"):
+                if line.startswith("Active atoms") and line.split()[3] != "All":
                     atoms = [int(x) for x in line.split()[3:]]
                     line = f.readline()
                     n += 1
@@ -2420,13 +2420,13 @@ class FileReader:
                 elif line.startswith("CARTESIAN GRADIENT (QM/MM)"):
                     actives = []
                     try:
-                        gradient = np.zeros((len(self.atoms), 3))
+                        gradient = []
                         if "NUMERICAL" in line:
                             self.skip_lines(f, 1)
                             n += 1
                         else:
-                            self.skip_lines(f, 2)
-                            n += 2
+                            self.skip_lines(f, 1)
+                            n += 1
                         line = f.readline()
                         n += 1
                         while line.strip() and line.split()[0].isdigit():
@@ -2435,11 +2435,11 @@ class FileReader:
                             if line.startswith("WARNING:"):
                                 continue
                             info = line.split()
-                            gradient[i] = np.array([float(x) for x in info[3:6]])
+                            gradient.append(np.array([float(x) for x in info[3:6]]))
                             line = f.readline()
                             n += 1
     
-                        self.other["forces (QM/MM)"] = -gradient
+                        self.other["forces (QM/MM)"] = -np.array(gradient)
                     except ValueError:
                         pass
 
