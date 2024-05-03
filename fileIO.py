@@ -2417,6 +2417,32 @@ class FileReader:
                 elif "THE OPTIMIZATION HAS CONVERGED" in line:
                     step_converged = True
 
+                elif line.strip() == "CARTESIAN GRADIENT (MM)":
+                    actives = []
+                    try:
+                        gradient = []
+                        if "NUMERICAL" in line:
+                            self.skip_lines(f, 1)
+                            n += 1
+                        else:
+                            self.skip_lines(f, 1)
+                            n += 1
+                        line = f.readline()
+                        n += 1
+                        while line.strip() and line.split()[0].isdigit():
+                            # orca prints a warning before gradient if some
+                            # coordinates are constrained
+                            if line.startswith("WARNING:"):
+                                continue
+                            info = line.split()
+                            gradient.append(np.array([float(x) for x in info[3:6]]))
+                            line = f.readline()
+                            n += 1
+    
+                        self.other["forces (MM)"] = -np.array(gradient)
+                    except ValueError:
+                        pass
+                
                 elif line.startswith("CARTESIAN GRADIENT (QM/MM)"):
                     actives = []
                     try:
