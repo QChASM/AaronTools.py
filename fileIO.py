@@ -10,6 +10,7 @@ import numpy as np
 
 from AaronTools import addlogger
 from AaronTools.atoms import Atom
+from AaronTools.const import AARONTOOLS
 from AaronTools.oniomatoms import OniomAtom
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.orbitals import Orbitals
@@ -808,7 +809,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{{ name }}", name)
+            s = re.sub.replace("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -867,7 +868,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{{ name }}", name)
+            s = re.sub.replace("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -918,7 +919,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            out = out.replace("{{ name }}", name)
+            out = re.sub.replace("{{\s?name\s?}}", name, out)
             with open(outfile, "w") as f:
                 f.write(out)
 
@@ -971,7 +972,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{{ name }}", name)
+            s = re.sub.replace("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -1023,7 +1024,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = s.replace("{{ name }}", name)
+            s = re.sub.replace("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -1440,7 +1441,7 @@ class FileWriter:
                 output_path = os.path.join(dirname, "%s.%s" % (name, key))
 
             with open(output_path, "w") as f:
-                f.write(data.replace("{{ name }}", name))
+                f.write(re.sub.replace("{{\s?name\s?}}", name, data))
 
 
 @addlogger
@@ -4520,55 +4521,70 @@ class FileReader:
         found_constraint = False
         atoms = []
         other = {}
-        for line in f:
+        line = f.readline()
+        while line != "":
             # header
             if line.startswith("%"):
+                line = f.readline()
                 continue
             if line.startswith("#"):
-                method = re.search("^#([NnPpTt]\s+?)(\S+)|^#\s*?(\S+)", line)
-                # route can be #n functional/basis ...
-                # or #functional/basis ...
-                # or # functional/basis ...
-                if method.group(3):
-                    other["method"] = method.group(3)
-                else:
-                    other["method"] = method.group(2)
-                if "temperature=" in line:
+                route = line
+                line = f.readline()
+                while line.strip():
+                    route += line
+                methods = np.loadtxt(os.path.join(
+                        AARONTOOLS, "theory", "valid_methods", "gaussian.txt"
+                    ),
+                    dtype=str
+                )
+                
+                route_words = route.split()
+                other["method"] = ""
+                is_oniom = False
+                for word in route_words:
+                    for m in methods:
+                        m = m.replace("(", "\(").replace(")", "\)").replace("+", "\+")
+                        method_found = re.search("((?:RO|R|U)?%s)\\b" % m, word, re.IGNORECASE)
+                        if method_found:
+                            other["method"] = word.strip("#")
+                            break
+                    if other["method"]:
+                        break
+
+                if "oniom" in other["method"].lower():
+                    is_oniom = True
+
+                if "temperature=" in route.lower():
                     other["temperature"] = float(
-                        re.search("temperature=(\d+\.?\d*)", line).group(1)
+                        re.search("temperature=(\d+\.?\d*)", route, re.IGNORECASE).group(1)
                     )
-                if "solvent=" in line:
+                if "solvent=" in route.lower():
                     other["solvent"] = re.search(
-                        "solvent=(\S+)\)", line
+                        "solvent=(\S+)\)", route, re.IGNORECASE
                     ).group(1)
-                if "scrf=" in line:
+                if "scrf=" in route.lower():
                     # solvent model should be non-greedy b/c solvent name can have commas
                     other["solvent_model"] = re.search(
-                        "scrf=\((\S+?),", line
+                        "scrf=\((\S+?),", route, re.IGNORECASE
                     ).group(1)
-                if "EmpiricalDispersion=" in line:
+                if "empiricaldispersion=" in route.lower():
                     other["emp_dispersion"] = re.search(
-                        "EmpiricalDispersion=(\S+)", line
+                        "EmpiricalDispersion=(\S+)", route, re.IGNORECASE
                     ).group(1)
-                if "int=(grid" in line or "integral=(grid" in line.lower():
+                if "int=(grid" in route.lower() or "integral=(grid" in route.lower():
                     other["grid"] = re.search(
-                        "(?:int||Integral)=\(grid[(=](\S+?)\)", line
+                        "(?:int||Integral)=\(grid[(=](\S+?)\)", route, re.IGNORECASE
                     ).group(1)
                 # comments can be multiple lines long
                 # but there should be a blank line between the route and the comment
                 # and another between the comment and the charge+mult
                 blank_lines = 0
-                while blank_lines < 2:
-                    line = f.readline().strip()
-                    if len(line) == 0:
-                        blank_lines += 1
-                    else:
-                        if "comment" not in other:
-                            other["comment"] = ""
-                        other["comment"] += "%s\n" % line
-                other["comment"] = (
-                    other["comment"].strip() if "comment" in other else ""
-                )
+                other.setdefault("comment", "")
+                line = f.readline()
+                while line.strip():
+                    other["comment"] += line
+                    line = f.readline()
+                other["comment"] = other["comment"].strip()
                 line = f.readline()
                 if len(line.split()) > 1:
                     line = line.split()
@@ -4577,41 +4593,41 @@ class FileReader:
                 other["charge"] = int(line[0])
                 other["multiplicity"] = int(line[1])
                 found_atoms = True
+                line = f.readline()
                 continue
+
             # constraints
             if found_atoms and line.startswith("B") and line.endswith("F"):
                 found_constraint = True
                 if "constraint" not in other:
                     other["constraint"] = []
                 other["constraint"] += [float_num.findall(line)]
-                continue
+
             # footer
             if found_constraint:
                 if "footer" not in other:
                     other["footer"] = ""
                 other["footer"] += line
-                continue
+
             # atom coords
             nums = float_num.findall(line)
             line = line.split()
-            is_oniom = False
             flag = ""
             atomtype = ""
             charge = ""
             tags = []
             has_flag = False
-            if "oniom" in other["method"].lower():
-                is_oniom = True
             if not is_oniom:
                 if len(line) == 5 and is_alpha(line[0]) and len(nums) == 4:
                     if not is_int(line[1]):
+                        line = f.readline()
                         continue
                     a = Atom(element=line[0], coords=nums[1:], flag=nums[0])
                     atoms += [a]
                 elif len(line) == 4 and is_alpha(line[0]) and len(nums) == 3:
                     a = Atom(element=line[0], coords=nums)
                     atoms += [a]
-            elif is_oniom:
+            else:
                 link_info = {}
                 if len(line) > 0 and len(line[0].split("-")) > 0 and len(nums) > 2:
                     if len(line[0].split("-")) == 2:
@@ -4653,6 +4669,7 @@ class FileReader:
                         layer = line[len(line)-1]
                     a = OniomAtom(element=line[0].split("-")[0],flag=flag,coords=coords,layer=layer,atomtype=atomtype,charge=charge,link_info=link_info)
                     atoms += [a]
+            line = f.readline()
         for i, a in enumerate(atoms):
             a.name = str(i + 1)
         self.atoms = atoms
