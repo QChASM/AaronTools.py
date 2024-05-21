@@ -59,7 +59,7 @@ new_ligand.comment = "K:" + ",".join(
 if args.name is None:
     print(new_ligand.write(outfile=False))
 else:
-    lig_file = os.path.join(os.path.dirname(Component.AARON_LIBS), args.name + '.xyz')
+    lig_file = os.path.join(Component.AARON_LIBS, args.name + '.xyz')
     if os.path.exists(lig_file):
         overwrite = input(
             "%s already exists.\nWould you like to overwrite it? (YES/no)\n" % lig_file

@@ -89,7 +89,7 @@ if args.name is None:
     print(sub.write(outfile=False))
 else:
     sub_file = os.path.join(
-        os.path.dirname(Substituent.AARON_LIBS), args.name + ".xyz"
+        Substituent.AARON_LIBS, args.name + ".xyz"
     )
     if os.path.exists(sub_file):
         overwrite = input(

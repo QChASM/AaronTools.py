@@ -51,7 +51,7 @@ if args.name is None:
     print(ring.write(outfile=False))
 else:
     ring_lib = Ring.AARON_LIBS
-    ring_file = os.path.join(os.path.dirname(Ring.AARON_LIBS), args.name + '.xyz')
+    ring_file = os.path.join(Ring.AARON_LIBS, args.name + '.xyz')
     if os.path.exists(ring_file):
         overwrite = input(
             "%s already exists.\nWould you like to overwrite it? (YES/no)\n" % ring_file
