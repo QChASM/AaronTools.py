@@ -3117,7 +3117,7 @@ class Geometry:
                     radius_list.append(radii_dict[atom.element] ** 2)
             except KeyError:
                 raise KeyError("%s radii has no radius for %s" % (
-                    radii, atom.element
+                    str(radii), atom.element
                 ))
 
         atom_coords = np.dot(
