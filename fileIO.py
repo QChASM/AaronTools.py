@@ -809,7 +809,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.("{{\s?name\s?}}", name, s)
+            s = re.sub("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -868,7 +868,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.("{{\s?name\s?}}", name, s)
+            s = re.sub("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
