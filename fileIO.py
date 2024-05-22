@@ -809,7 +809,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.replace("{{\s?name\s?}}", name, s)
+            s = re.sub.("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -868,7 +868,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.replace("{{\s?name\s?}}", name, s)
+            s = re.sub.("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -919,7 +919,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            out = re.sub.replace("{{\s?name\s?}}", name, out)
+            out = re.sub("{{\s?name\s?}}", name, out)
             with open(outfile, "w") as f:
                 f.write(out)
 
@@ -972,7 +972,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.replace("{{\s?name\s?}}", name, s)
+            s = re.sub("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -1024,7 +1024,7 @@ class FileWriter:
             fname = os.path.basename(outfile)
             name, ext = os.path.splitext(fname)
             # could use jinja, but it's one thing...
-            s = re.sub.replace("{{\s?name\s?}}", name, s)
+            s = re.sub("{{\s?name\s?}}", name, s)
             with open(outfile, "w") as f:
                 f.write(s)
 
@@ -1441,7 +1441,7 @@ class FileWriter:
                 output_path = os.path.join(dirname, "%s.%s" % (name, key))
 
             with open(output_path, "w") as f:
-                f.write(re.sub.replace("{{\s?name\s?}}", name, data))
+                f.write(re.sub("{{\s?name\s?}}", name, data))
 
 
 @addlogger
