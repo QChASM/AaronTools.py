@@ -104,6 +104,8 @@ makeconf_parser.add_argument(
     "$i in the filename will be replaced with conformer number\n" +
     "if a directory is given, default is \"conformer-$i.xyz\" in that directory\n" +
     "$INFILE will be replaced with the name of the input file\n" +
+    "$INDIR will be replaced with the directory the input file\n" +
+    "$changes will be replaced with the substituent changes tally\n" +
     "Default: stdout"
 )
 
@@ -179,6 +181,9 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
                 except LookupError:
                     pass
 
+    # we only care about substituents with conformers
+    substituents = [s for s in substituents if s.conf_num > 1]
+
     if args.list_info:
         total_conf = 1
         if len(args.infile) > 1:
@@ -187,9 +192,8 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
             s += ""
         s += "Substituent \tRotamers\n"
         for sub in substituents:
-            if sub.conf_num > 1:
-                s += "%2s=%-10s\t%s\n" % (sub.end.name, sub.name, sub.conf_num)
-                total_conf *= sub.conf_num
+            s += "%2s=%-10s\t%s\n" % (sub.end.name, sub.name, sub.conf_num)
+            total_conf *= sub.conf_num
         s += "Total Number of Conformers = %i\n" % total_conf
         if infile is not args.infile[-1]:
             s += "\n"
@@ -212,18 +216,25 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
             mod_array[i] *= conformers[j]
 
     prev_conf = 0
+    prev_rots = [0 for sub in substituents]
+    rots = [0 for sub in substituents]
     for conf in range(0, int(prod(conformers))):
+        conf_string = ""
         for i, sub in enumerate(substituents):
             rot = int(conf / mod_array[i]) % conformers[i]
             rot -= int(prev_conf / mod_array[i]) % conformers[i]
             angle = rotations[i] * rot
+            rots[i] += rot
+            conf_string += "%s=%s-%i_" % (sub.end.name, sub.name, rots[i])
             if angle != 0:
                 sub_atom = sub.find_exact(BondedTo(sub.end))[0]
                 axis = sub_atom.bond(sub.end)
                 center = sub.end.coords
                 geom.rotate(axis, angle=angle, targets=sub.atoms, center=center)
 
+        prev_rots = rots
         prev_conf = conf
+        conf_string = conf_string[:-1]
 
         bad_subs = []
         print_geom = geom
@@ -257,7 +268,8 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
                 skipped += 1
                 continue
 
-        if args.outfile is None:
+        outfile = args.outfile
+        if outfile is None:
             s += print_geom.write(outfile=False)
             s += "\n"
         else:
@@ -266,13 +278,14 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
                     os.path.expanduser(args.outfile), "conformer-%i.xyz" % (conf + 1)
                 )
 
-            else:
-                outfile = args.outfile.replace("$i", str(conf + 1))
             outfile = get_outfile(
                 outfile,
                 INFILE=get_filename(infile, include_parent_dir="$INDIR" in outfile),
                 INDIR=os.path.dirname(infile),
+                i=str(conf + 1),
+                changes=conf_string,
             )
+            print("writing conformer %i to %s" % (conf + 1, outfile))
             print_geom.write(outfile=outfile, append="$i" not in args.outfile)
 
 
