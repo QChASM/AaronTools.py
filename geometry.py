@@ -17,7 +17,7 @@ from AaronTools import addlogger
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
-from AaronTools.fileIO import FileReader, FileWriter
+from AaronTools.fileIO import FileReader, FileWriter, read_types
 from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom 
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
@@ -635,6 +635,49 @@ class Geometry:
 
         return rv
 
+    @classmethod
+    def get_solvent(cls, solvent):
+        BUILTIN = os.path.join(AARONTOOLS, "Solvents")
+        AARON_LIBS = os.path.join(AARONLIB, "Solvents")
+        for lib in [AARON_LIBS, BUILTIN]:
+            if not os.path.exists(lib):
+                continue
+            for f in os.listdir(lib):
+                name, ext = os.path.splitext(os.path.basename(f))
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
+
+                if name == solvent:
+                    return cls(os.path.join(lib, f), name=solvent)
+
+        raise LookupError("solvent %s not found in library" % solvent)
+
+    @staticmethod
+    def list_solvents(include_ext=False):
+        names = []
+        solvents = []
+        BUILTIN = os.path.join(AARONTOOLS, "Solvents")
+        AARON_LIBS = os.path.join(AARONLIB, "Solvents")
+        for lib in [AARON_LIBS, BUILTIN]:
+            if not os.path.exists(lib):
+                continue
+            for f in os.listdir(lib):
+                name, ext = os.path.splitext(os.path.basename(f))
+                if not any(".%s" % x == ext for x in read_types):
+                    continue
+
+                if name in names:
+                    continue
+
+                names.append(name)
+
+                if include_ext:
+                    solvents.append(name + ext)
+                else:
+                    solvents.append(name)
+
+        return solvents
+
     # attribute access
     def _stack_coords(self, atoms=None):
         """
@@ -724,7 +767,8 @@ class Geometry:
             other_atypes = [atom.atomtype for atom in other.atoms]
             self_atcounts = {at: self_atypes.count(at) for at in set(self_atypes)}
             other_atcounts = {at: other_atypes.count(at) for at in set(other_atypes)}
-            if self_atcounts != other_atcounts: return False
+            if self_atcounts != other_atcounts:
+                return False
         except AttributeError:
             pass
 
@@ -2094,13 +2138,19 @@ class Geometry:
     def get_monomers(self):
         """returns a list of lists of atoms for each monomer of self in order"""
 
-        geom = self.copy()
+        all_atoms = [a for a in self.atoms]
+        ndx = {a: i for i, a in enumerate(self.atoms)}
         monomers = []
-        while geom.num_atoms:
-            atom = geom.atoms[0]
-            monomer = geom.get_all_connected(atom)
-            geom -= monomer
-            monomer.sort(key=lambda a: int(a.name))
+        while all_atoms:
+            atom = all_atoms.pop(0)
+            monomer = self.get_all_connected(atom)
+            for a in monomer:
+                try:
+                    all_atoms.remove(a)
+                except ValueError:
+                    # `atom` will not be in all_atoms because we popped it
+                    pass
+            monomer.sort(key=lambda a: ndx[a])
             monomers.append(monomer)
 
         return monomers
@@ -3734,9 +3784,7 @@ class Geometry:
 
         return atoms
 
-    def get_fragment(
-        self, start, stop=None, as_object=False, copy=False, biggest=False
-    ):
+    def get_fragment(self, start, stop=None, as_object=False, copy=False, biggest=False):
         """
 
         :param start: the atoms to start on
@@ -6593,62 +6641,20 @@ class Geometry:
         AARON_LIBS = os.path.join(AARONLIB, "Solvents")
         BUILTIN = os.path.join(AARONTOOLS, "Solvents")
 
-        if isinstance(solvent, str):
-            if ".xyz" not in solvent:
-                solventxyz = solvent + ".xyz"
-            else:
-                solventxyz = solvent
+        try:
+            solv = self.get_solvent(solvent)
+        except LookupError:
             try:
-                solv, x = Geometry(FileReader("%s/%s" % (BUILTIN,solventxyz))).reorder()
-            except OSError:
-                try:
-                    solv, x = Geometry(FileReader("%s/%s" % (AARON_LIBS, solventxyz))).reorder()
-                except OSError:
-                    solv, x = Geometry().from_string(solvent).reorder()
-            solv = Geometry(solv)
-        terminal_atoms = ["H", "F", "Cl", "Br", "I"]
-
-        def detect_mol(atom):
-            connected_list = [atm for atm in atom.connected]
-            molecule = []
-            molecule.append(atom)
-            complete = False
-            no_mol = False
-            while complete == False:
-                new_connected_list = []
-                for atom in connected_list:
-                    if atom not in molecule:
-                        molecule.append(atom)
-                        if atom.element not in terminal_atoms:
-                            for connected in atom.connected:
-                                if connected not in molecule:
-                                    new_connected_list += [connected]
-                                    molecule.append(connected)
-                if new_connected_list == []:
-                    complete = True
-                else:
-                    if len(molecule) > len(solv.atoms):
-                        no_mol = True
-                        complete=True
-                    else:
-                        connected_list = new_connected_list
-            if no_mol == True:
-                return False, molecule
-            elif no_mol == False:
-                if len(molecule) == len(solv.atoms):
-                    return True, molecule
-                else:
-                    return False, molecule
+                solv = Geometry(solvent)
+            except NotImplementedError:
+                solv = Geometry.from_string(solvent)
 
         mol_list = []
-        checked_atoms = []
-        for atom in self.atoms:
-            if atom.element not in terminal_atoms and atom not in checked_atoms:
-                is_mol, mol = detect_mol(atom)
-                checked_atoms = checked_atoms+mol
-                if is_mol == True:
-                    mol = Geometry(mol)
-                    mol_list.append(mol)
+        checked_atoms = set()
+        mol_list = [
+            Geometry(m, refresh_connected=False) for m in self.get_monomers()
+            if len(m) == len(solv.atoms)
+        ]
 
         solv_ndx = {atom: i for i, atom in enumerate(solv.atoms)}
         solv_connectivity = []
@@ -6660,19 +6666,46 @@ class Geometry:
 
         vetted_mols = []
 
+        solvent_elements = sorted([a.element for a in solv.atoms])
+        solvent_ranks = solv.canonical_rank(
+            update=False, break_ties=False, invariant=False
+        )
+        sorted_solvent_atoms = sorted(
+            [x for _, x in sorted(
+                zip(solvent_ranks, solv.atoms), key=lambda pair: pair[0])
+            ]
+        )
         for candidate in mol_list:
-            if solv.element_counts() == candidate.element_counts():
-                cand, x = candidate.reorder()
-                cand = Geometry(cand, refresh_ranks=True)
-                cand_ndx = {atom: i for i, atom in enumerate(cand.atoms)}
-                cand_connectivity = []
-                for atom in cand.atoms:
-                    cand_connectivity.append([])
-                    for a in atom.connected:
-                        cand_connectivity[-1].append(cand_ndx[a])
-                        cand_connectivity[-1] = sorted(cand_connectivity[-1])
-                if cand_connectivity == solv_connectivity:
-                    vetted_mols += [cand]
+            candidate_elements = sorted([a.element for a in candidate.atoms])
+            if not all([solvent_elements[i] == candidate_elements[i] for i in range(0, len(solv.atoms))]):
+                continue
+            candidate_ranks = candidate.canonical_rank(
+                update=False, break_ties=False, invariant=False
+            )
+            sorted_candidate_atoms = sorted(
+                [x for _, x in sorted(
+                    zip(candidate_ranks, candidate.atoms), key=lambda pair: pair[0])
+                ]
+            )
+            for a, b in zip(sorted_solvent_atoms, sorted_candidate_atoms):
+                if a.element != b.element:
+                    break
+                
+                if len(a.connected) != len(b.connected):
+                    break
+                
+                failed = False
+                for j, k in zip(
+                    sorted([aa.element for aa in a.connected]),
+                    sorted([bb.element for bb in b.connected]),
+                ):
+                    if j != k:
+                        failed = True
+                        break
+                if failed:
+                    break
+            else:
+                vetted_mols.append(candidate)
 
         return vetted_mols
 

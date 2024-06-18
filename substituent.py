@@ -381,6 +381,7 @@ class Substituent(Geometry):
     def list(cls, include_ext=False):
         """list substituents available from AaronTools or the user's library"""
         names = []
+        substituents = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
             if not os.path.exists(lib):
                 continue
@@ -391,13 +392,14 @@ class Substituent(Geometry):
 
                 if name in names:
                     continue
+                names.append(name)
 
                 if include_ext:
-                    names.append(name + ext)
+                    substituents.append(name + ext)
                 else:
-                    names.append(name)
+                    substituents.append(name)
 
-        return names
+        return substituents
 
     def detect_sub(self):
         """

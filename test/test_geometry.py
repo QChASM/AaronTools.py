@@ -960,7 +960,9 @@ class TestGeometry(TestWithTimer):
         solv_list = g.detect_solvent(solvent="ClC(Cl)Cl")
         counter = 0
         for i, mol in enumerate(solv_list):
-            if mol == ref[i]:
+            # this is difficult to validate b/c all the Cl atoms will have the same rank
+            # or effectively a random rank if you break ties
+            if np.linalg.norm(mol.COM() - ref[i].COM()) <= 1e-6:
                 counter += 1
         self.assertEqual(counter, len(ref))
 
