@@ -2295,7 +2295,7 @@ class FileReader:
                 self.skip_lines(f, 2)
                 n += 2
                 line = f.readline()
-                while line.strip() and "--" not in line:
+                while line.strip() and "--" not in line and not line.startswith("*"):
                     info = line.split()
                     mass = float(info[4])
                     masses.append(mass)
