@@ -310,8 +310,10 @@ class Signals:
                     x_values = np.array(list(set(x_values)))
                     x_values.sort()
 
-            y_values = np.sum([f(x_values) for f in functions], axis=0)
-            
+            y_values = np.zeros(len(x_values))
+            for i, f in enumerate(functions):
+                y_values += f(x_values)
+
             if show_functions:
                 if (
                     len(show_functions[0]) == 2 and
