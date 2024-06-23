@@ -194,6 +194,14 @@ class Geometry:
                 Atom("O", coords=[0.0, 0.0, 0.0], name="2"),
                 Atom("H", coords=[0.0, -0.7572, -0.4692], name="3"),
             ])
+        elif name == "ClC(Cl)Cl":
+            return cls([
+                Atom("Cl", coords=[-0.59020,  1.58610, -0.40730], name="1"),
+                Atom("C",  coords=[ 0.00140, -0.00160,  0.12250], name="2"),
+                Atom("Cl", coords=[-1.05120, -1.30360, -0.49820], name="3"),
+                Atom("Cl", coords=[ 1.66160, -0.20470, -0.44580], name="4"),
+                Atom("H",  coords=[-0.02170, -0.07610,  1.22880], name="5"),
+            ])
 
         def get_cactus_sd(smiles):
             if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
