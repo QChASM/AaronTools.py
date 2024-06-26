@@ -2290,7 +2290,11 @@ class NMR(Signals):
                 
                 for nuc_a in group:
                     for nuc_b in group_b:
-                        if self.data[nuc_b].element not in couple_with:
+                        signal_b = [d for d in data if d.ndx == nuc_b]
+                        if not signal_b:
+                            continue
+                        signal_b = signal_b[0]
+                        if signal_b.element not in couple_with:
                             continue
                         if graph is None:
                             d = 0
