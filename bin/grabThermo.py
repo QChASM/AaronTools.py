@@ -115,6 +115,16 @@ thermo_parser.add_argument(
     help="determine the point group and rotational symmetry number using AaronTools instead of what's in the file"
 )
 
+thermo_parser.add_argument(
+    "-qh",
+    "--quasi-rrho-enthalpy",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="qrrho_enthalpy",
+    help="use the quasi-RRHO approximation when calculating enthalpy"
+)
+
 
 args = thermo_parser.parse_args()
 
@@ -199,6 +209,8 @@ while len(sp_energies) < len(infiles):
 while len(infiles) < len(sp_filenames):
     infiles.extend(args.infile)
 
+enthalpy_method = "QRRHO" if args.qrrho_enthalpy else "RRHO"
+
 for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
     if isinstance(f, str):
         if args.input_format is not None:
@@ -239,12 +251,13 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
                 "%s\n%s" % (sp_geom.name, freq_geom.name)
             )
 
-    dE, dH, s = co.therm_corr(temperature=args.temp)
+    
+    dE, dH, s = co.therm_corr(temperature=args.temp, enthalpy_method=enthalpy_method)
     if freq.anharm_data:
         ZPVE_anh = co.calc_zpe(anharmonic=True)
-    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
-    qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO")
-    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM")
+    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO", enthalpy_method=enthalpy_method)
+    qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO", enthalpy_method=enthalpy_method)
+    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM", enthalpy_method=enthalpy_method)
 
     if args.temp is None:
         t = co.temperature

@@ -263,7 +263,7 @@ class CompOutput:
             zpve = 0.5 * hc * vib
         return zpve
 
-    def therm_corr(self, temperature=None, v0=100, method="RRHO", pressure=1):
+    def therm_corr(self, temperature=None, v0=100, method="RRHO", enthalpy_method="RRHO", pressure=1):
         """
         returns thermal correction to energy, enthalpy correction to energy, and entropy
         for the specified cutoff frequency and temperature
@@ -272,7 +272,7 @@ class CompOutput:
         :param float temperature: temperature in K- None will use self.temperature
         :param float pressure: pressure in atm
         :param float v0: float, cutoff/damping parameter for quasi G corrections
-        :param str method: type of free energy\:
+        :param str method: treatment of entropy\:
             * RRHO  - no quasi treatment
             * QRRHO - Grimme's quasi-RRHO
               see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
@@ -310,7 +310,7 @@ class CompOutput:
         vibtemps = np.array(
             [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
         )
-        if method == "QHARM":
+        if method == self.QUASI_HARMONIC:
             harm_vibtemps = np.array(
                 [
                     f_i * vib_unit_convert
@@ -398,7 +398,16 @@ class CompOutput:
                 + (1 - weights) * Sr_eff
             )
         
-        Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
+        if enthalpy_method == self.RRHO:
+            Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
+            # for f, h in zip(freqs, vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1))):
+            #     print(f, h)
+        elif enthalpy_method == self.QUASI_RRHO:
+            weights = 1 / (1 + (v0 / freqs) ** 4)
+            rrho_Ev = vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1))
+            Ev = np.dot(weights, rrho_Ev) + np.sum(1 - weights) * T / 2
+            # for f, h, w in zip(freqs, weights * rrho_Ev + (1 - weights) * 0.5 * T, weights):
+            #     print(f, h, w)
 
         Ev *= PHYSICAL.GAS_CONSTANT
         Sv *= PHYSICAL.GAS_CONSTANT
