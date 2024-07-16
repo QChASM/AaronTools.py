@@ -812,12 +812,12 @@ def boltzmann_average(energies, values, temperature, absolute=True):
     return avg
 
 
-def glob_files(infiles, parser=None, escape=True):
+def glob_files(infiles, parser=None, escape_brackets=True):
     """
     globs input files
     used for command line scripts because Windows doesn't support globbing...
     """
-    from glob import glob, escape
+    from glob import glob
     import sys
 
     if isinstance(infiles, str):
@@ -825,8 +825,8 @@ def glob_files(infiles, parser=None, escape=True):
 
     outfiles = []
     for f in infiles:
-        if escape:
-            f_safe = escape(f)
+        if escape_brackets:
+            f_safe = "[[]".join([x.replace("]", "[]]") for x in f.split("[")])
         else:
             f_safe = f
         if isinstance(f_safe, str):

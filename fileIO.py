@@ -1803,10 +1803,18 @@ class FileReader:
                         Atom(element=atom_info[3], coords=atom_info[0:3])
                     ]
 
-                for line in lines[i + natoms : i + natoms + nbonds]:
-                    a1, a2 = [int(line[3 * j: 3 * (j + 1)]) - 1 for j in [0, 1]]
-                    self.atoms[a1].connected.add(self.atoms[a2])
-                    self.atoms[a2].connected.add(self.atoms[a1])
+                try:
+                    for line in lines[i + natoms : i + natoms + nbonds]:
+                        a1, a2 = [int(line[3 * j: 3 * (j + 1)]) - 1 for j in [0, 1]]
+                        self.atoms[a1].connected.add(self.atoms[a2])
+                        self.atoms[a2].connected.add(self.atoms[a1])
+                except ValueError:
+                    for line in lines[i + natoms : i + natoms + nbonds]:
+                        a1, a2, _ = line.split()
+                        a1 = int(a1)
+                        a2 = int(a2)
+                        self.atoms[a1].connected.add(self.atoms[a2])
+                        self.atoms[a2].connected.add(self.atoms[a1])
 
                 for j, a in enumerate(self.atoms):
                     a.name = str(j + 1)
