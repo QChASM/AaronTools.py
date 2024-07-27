@@ -1491,7 +1491,7 @@ class ValenceExcitations(Signals):
                 )
             )
 
-    def parse_orca_lines(self, lines, *args, **kwargs):
+    def parse_orca_lines(self, lines, *args, orca_version=6, **kwargs):
         i = 0
         nrgs = []
         corr = []
@@ -1502,6 +1502,7 @@ class ValenceExcitations(Signals):
         dipole_moments_len = []
         dipole_moments_vel = []
         magnetic_moments = []
+        magnetic_velocities = []
         multiplicity = []
         mult = "Singlet"
         
@@ -1509,6 +1510,7 @@ class ValenceExcitations(Signals):
         soc_oscillator_str = []
         soc_oscillator_vel = []
         soc_rotatory_str_len = []
+        soc_rotatory_str_vel = []
 
         transient_oscillator_str = []
         transient_oscillator_vel = []
@@ -1541,12 +1543,16 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    if info[3] == "spin":
-                        oscillator_str.append(0)
-                        dipole_moments_len.append([0, 0, 0])
+                    if orca_version <= 5:
+                        if info[3] == "spin":
+                            oscillator_str.append(0)
+                            dipole_moments_len.append([0, 0, 0])
+                        else:
+                            oscillator_str.append(float(info[3]))
+                            dipole_moments_len.append([float(x) for x in info[5:8]])
                     else:
-                        oscillator_str.append(float(info[3]))
-                        dipole_moments_len.append([float(x) for x in info[5:8]])
+                        oscillator_str.append(float(info[6]))
+                        dipole_moments_len.append([float(x) for x in info[7:10]])
                     i += 1
                     line = lines[i]
             elif (
@@ -1559,29 +1565,40 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    if info[3] == "spin":
-                        oscillator_vel.append(0)
-                        dipole_moments_vel.append([0, 0, 0])
+                    if orca_version <= 5:
+                        if info[3] == "spin":
+                            oscillator_vel.append(0)
+                            dipole_moments_vel.append([0, 0, 0])
+                        else:
+                            oscillator_vel.append(float(info[3]))
+                            dipole_moments_vel.append([float(x) for x in info[5:8]])
                     else:
-                        oscillator_vel.append(float(info[3]))
-                        dipole_moments_vel.append([float(x) for x in info[5:8]])
+                        oscillator_vel.append(float(info[6]))
+                        dipole_moments_vel.append([float(x) for x in info[7:10]])
+
                     i += 1
                     line = lines[i]
             elif (
                 line.endswith("CD SPECTRUM") and
                 "TRANSIENT" not in line and
                 "SPIN ORBIT" not in line
+            ) or (
+                line.strip() == "CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
             ):
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    if info[3] == "spin":
-                        rotatory_str_len.append(0)
-                        magnetic_moments.append([0, 0, 0])
+                    if orca_version <= 5:
+                        if info[3] == "spin":
+                            rotatory_str_len.append(0)
+                            magnetic_moments.append([0, 0, 0])
+                        else:
+                            rotatory_str_len.append(float(info[3]))
+                            magnetic_moments.append([float(x) for x in info[4:7]])
                     else:
-                        rotatory_str_len.append(float(info[3]))
-                        magnetic_moments.append([float(x) for x in info[4:7]])
+                        rotatory_str_len.append(float(info[6]))
+                        magnetic_moments.append([float(x) for x in info[7:10]])
                     i += 1
                     line = lines[i]
             elif (
@@ -1593,10 +1610,14 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    if info[3] == "spin":
-                        rotatory_str_vel.append(0)
+                    if orca_version <= 5:
+                        if info[3] == "spin":
+                            rotatory_str_vel.append(0)
+                        else:
+                            rotatory_str_vel.append(float(info[3]))
                     else:
-                        rotatory_str_vel.append(float(info[3]))
+                        rotatory_str_vel.append(float(info[6]))
+                        magnetic_velocities.append([float(x) for x in info[7:10]])
                     i += 1
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1604,8 +1625,12 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    transient_oscillator_str.append(float(info[3]))
-                    transient_nrg.append(self.nm_to_ev(float(info[2])))
+                    if orca_version <= 5:
+                        transient_oscillator_str.append(float(info[3]))
+                        transient_nrg.append(self.nm_to_ev(float(info[2])))
+                    else:
+                        transient_oscillator_str.append(float(info[6]))
+                        transient_nrg.append(float(info[3]))
                     i += 1
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
@@ -1613,7 +1638,10 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    transient_oscillator_vel.append(float(info[3]))
+                    if orca_version <= 5:
+                        transient_oscillator_vel.append(float(info[3]))
+                    else:
+                        transient_oscillator_vel.append(float(info[6]))
                     i += 1
                     line = lines[i]
             elif "TRANSIENT CD SPECTRUM" in line:
@@ -1621,7 +1649,10 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    transient_rot_str.append(float(info[3]))
+                    if orca_version <= 5:
+                        transient_rot_str.append(float(info[3]))
+                    else:
+                        transient_rot_str.append(float(info[6]))
                     i += 1
                     line = lines[i]
             elif "CALCULATED SOLVENT SHIFTS" in line:
@@ -1651,6 +1682,15 @@ class ValenceExcitations(Signals):
                     i += 1
                     line = lines[i]
 
+            elif "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_str.append(float(info[6]))
+                    i += 1
+                    line = lines[i]
+
             elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
                 i += 5
                 line = lines[i]
@@ -1660,12 +1700,39 @@ class ValenceExcitations(Signals):
                     i += 1
                     line = lines[i]
 
+            elif "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_oscillator_vel.append(float(info[6]))
+                    i += 1
+                    line = lines[i]
+
             elif "SPIN ORBIT CORRECTED CD SPECTRUM" in line:
                 i += 5
                 line = lines[i]
                 while line.strip():
                     info = line.split()
                     soc_rotatory_str_len.append(float(info[4]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SOC CORRECTED CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_rotatory_str_len.append(float(info[6]))
+                    i += 1
+                    line = lines[i]
+
+            elif "SOC CORRECTED CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
+                i += 5
+                line = lines[i]
+                while line.strip():
+                    info = line.split()
+                    soc_rotatory_str_vel.append(float(info[6]))
                     i += 1
                     line = lines[i]
 
@@ -1685,6 +1752,12 @@ class ValenceExcitations(Signals):
         if not oscillator_vel:
             oscillator_vel = [None for x in oscillator_str]
 
+        if not magnetic_velocities:
+            magnetic_velocities = [None for x in oscillator_str]
+
+        if not soc_rotatory_str_vel:
+            soc_rotatory_str_vel = [None for x in oscillator_str]
+
         for (
             nrg,
             rot_len,
@@ -1694,11 +1767,12 @@ class ValenceExcitations(Signals):
             dip_vec_len,
             dip_vec_vel,
             mag_mom,
+            mag_vel,
             mult
         ) in zip(
             nrgs, rotatory_str_len, rotatory_str_vel, oscillator_str,
             oscillator_vel, dipole_moments_len, dipole_moments_vel,
-            magnetic_moments, multiplicity,
+            magnetic_moments, magnetic_velocities, multiplicity,
         ):
             self.data.append(
                 ValenceExcitation(
@@ -1710,6 +1784,7 @@ class ValenceExcitations(Signals):
                     dipole_len_vec=dip_vec_len,
                     dipole_vel_vec=dip_vec_vel,
                     magnetic_mom=mag_mom,
+                    magnetic_vel=mag_vel,
                     multiplicity=mult,
                 )
             )
@@ -1731,9 +1806,10 @@ class ValenceExcitations(Signals):
                 )
             )
 
-        for nrg, rot_len, osc_len, osc_vel in zip(
+        for nrg, rot_len, rot_vel, osc_len, osc_vel in zip(
             soc_nrgs,
             soc_rotatory_str_len,
+            soc_rotatory_str_vel,
             soc_oscillator_str,
             soc_oscillator_vel,
         ):
@@ -1743,6 +1819,7 @@ class ValenceExcitations(Signals):
                 SOCExcitation(
                     nrg,
                     rotatory_str_len=rot_len,
+                    rotatory_str_vel=rot_vel,
                     oscillator_str=osc_len,
                     oscillator_str_vel=osc_vel,
                 )
@@ -2071,6 +2148,7 @@ class NMR(Signals):
                     shift = float(line.split()[-1])
                     self.data.append(Shift(shift, ndx=ndx, element=element, intensity=1))
                 else:
+                    # orca 5 coupling
                     coupling = float(line.split()[-1])
                     self.coupling[ndx_a][ndx_b] = coupling
                     self.coupling[ndx_b][ndx_a] = coupling
@@ -2082,6 +2160,11 @@ class NMR(Signals):
                 ndx_b = int(coupl_info.group(4))
                 self.coupling.setdefault(ndx_a, {})
                 self.coupling.setdefault(ndx_b, {})
+            # orca 6 coupling
+            elif re.search("J\[\d+,\d+\]\(Total\)", line):
+                coupling = float(line.split()[-1])
+                self.coupling[ndx_a][ndx_b] = coupling
+                self.coupling[ndx_b][ndx_a] = coupling
 
     def parse_gaussian_lines(self, lines, *args, **kwargs):
         nuc = []
@@ -2236,6 +2319,12 @@ class NMR(Signals):
 
         if couple_with == "all" and geometry:
             couple_with = set(geometry.elements)
+        elif isinstance(couple_with, str) and couple_with.lower() == "none":
+            couple_with = []
+
+        if couple_with and not any(signal.element in couple_with for signal in self.data):
+            from warnings import warn
+            warn("coupling requested for %s, but these signals are not present" % repr(couple_with))
         
         if geometry is not None and graph is None:
             graph = geometry.get_graph()

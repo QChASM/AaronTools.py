@@ -2241,6 +2241,7 @@ class FileReader:
         is_scan_job = False
         step_converged = False
         masses = []
+        orca_version = 0
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2382,6 +2383,15 @@ class FileReader:
                         n += 1
                     
                     self.other["active atoms"] = atoms
+
+                if "Program Version 6" in line:
+                    orca_version = 6
+
+                if "Program Version 5" in line:
+                    orca_version = 5
+
+                if "Program Version 4" in line:
+                    orca_version = 4
 
                 if line.startswith("Fixed atoms used in optimizer"):
                     atoms = [int(x) for x in line.split()[6:]]
@@ -2545,7 +2555,7 @@ class FileReader:
                             freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                         )
 
-                elif line.startswith("CHEMICAL SHIFTS"):
+                elif line.startswith("CHEMICAL SHIFTS") or line.startswith("CHEMICAL SHIELDINGS"):
                     nmr_data = []
                     while line:
                         nmr_data.append(line)
@@ -2803,7 +2813,7 @@ class FileReader:
                                 self.other["soc z"].real ** 2 + self.other["soc z"].imag ** 2
                             )
 
-                    self.other["uv_vis"] = ValenceExcitations(s, style="orca")
+                    self.other["uv_vis"] = ValenceExcitations(s, orca_version=orca_version, style="orca")
 
                 if "INPUT FILE" in line:
                     try:
