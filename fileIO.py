@@ -2555,6 +2555,21 @@ class FileReader:
                             freq_str, hpmodes=False, style="orca", atoms=self.atoms,
                         )
 
+                elif "VCD SPECTRUM CALCULATION" in line:
+                    # VCD is optional and comes after thermochem output
+                    # it's probably easier to just parse it after the rest
+                    # of the freq data rather than try to figure out if we
+                    # need to read something after the thermochem data
+                    self.skip_lines(f, 8)
+                    n += 8
+                    line = f.readline()
+                    for mode in self.other["frequency"].data:
+                        # mode #, frequency, rotatory strength
+                        _, _, rot = line.split()
+                        mode.rotation = float(rot)
+                        line = f.readline()
+                        n += 1
+
                 elif line.startswith("CHEMICAL SHIFTS") or line.startswith("CHEMICAL SHIELDINGS"):
                     nmr_data = []
                     while line:
