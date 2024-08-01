@@ -511,10 +511,10 @@ class OptimizationJob(JobType):
             if "bonds" in self.constraints:
                 for constraint in self.constraints["bonds"]:
                     atom1, atom2 = self.geometry.find(constraint)
-                    ndx1 = self.geometry.atoms.index(atom1) 
+                    ndx1 = self.geometry.atoms.index(atom1)
                     ndx1 -= dummies[ndx1]
                     ndx1 += 1
-                    ndx2 = self.geometry.atoms.index(atom2) 
+                    ndx2 = self.geometry.atoms.index(atom2)
                     ndx2 -= dummies[ndx2]
                     ndx2 += 1
                     if not use_zmat:

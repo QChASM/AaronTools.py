@@ -115,16 +115,6 @@ thermo_parser.add_argument(
     help="determine the point group and rotational symmetry number using AaronTools instead of what's in the file"
 )
 
-thermo_parser.add_argument(
-    "-qh",
-    "--quasi-rrho-enthalpy",
-    action="store_true",
-    default=False,
-    required=False,
-    dest="qrrho_enthalpy",
-    help="use the quasi-RRHO approximation when calculating enthalpy"
-)
-
 
 args = thermo_parser.parse_args()
 
@@ -142,14 +132,16 @@ if args.csv:
         delim = " "
 
     anharm_header = delim.join([
-        "E", "E+ZPE", "E+ZPE(anh)", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)",
-        "ZPE", "ZPE(anh)", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
+        "E", "E+ZPE", "E+ZPE(anh)", "H(RRHO)", "H(Quasi-RRHO)", "G(RRHO)",
+        "G(Quasi-RRHO)", "G(full_Quasi-RRHO)", "G(Quasi-harmonic)","ZPE",
+        "ZPE(anh)", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
         "SP_File", "Thermo_File"
     ])
     harm_header = delim.join([
-        "E", "E+ZPE", "H(RRHO)", "G(RRHO)", "G(Quasi-RRHO)", "G(Quasi-harmonic)",
-        "ZPE", "dH(RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(Quasi-harmonic)",
-        "SP_File", "Thermo_File"
+        "E", "E+ZPE", "H(RRHO)", "H(Quasi-RRHO)", "G(RRHO)", "G(Quasi-RRHO)",
+        "G(full_Quasi-RRHO)", "G(Quasi-harmonic)", "ZPE", "dH(RRHO)",
+        "dH(Quasi-RRHO)", "dG(RRHO)", "dG(Quasi-RRHO)", "dG(full_Quasi-RRHO)",
+        "dG(Quasi-harmonic)", "SP_File", "Thermo_File"
     ])
 
 header = None
@@ -209,7 +201,6 @@ while len(sp_energies) < len(infiles):
 while len(infiles) < len(sp_filenames):
     infiles.extend(args.infile)
 
-enthalpy_method = "QRRHO" if args.qrrho_enthalpy else "RRHO"
 
 for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
     if isinstance(f, str):
@@ -251,18 +242,20 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
                 "%s\n%s" % (sp_geom.name, freq_geom.name)
             )
 
-    
-    dE, dH, s = co.therm_corr(temperature=args.temp, enthalpy_method=enthalpy_method)
-    if freq.anharm_data:
-        ZPVE_anh = co.calc_zpe(anharmonic=True)
-    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO", enthalpy_method=enthalpy_method)
-    qrrho_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QRRHO", enthalpy_method=enthalpy_method)
-    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM", enthalpy_method=enthalpy_method)
 
     if args.temp is None:
-        t = co.temperature
+        T = co.temperature
     else:
-        t = args.temp
+        T = args.temp
+
+    dE, dH, s = co.therm_corr(temperature=args.temp)
+    if freq.anharm_data:
+        ZPVE_anh = co.calc_zpe(anharmonic=True)
+    rrho_dG = co.calc_G_corr(v0=0, temperature=args.temp, method="RRHO")
+    _, qrrho_dH, qrrho_S = co.therm_corr(v0=args.w0, temperature=args.temp, method="QRRHO", enthalpy_method="QRRHO")
+    qrrho_dG = dH - T * qrrho_S
+    full_qrrho_dG = qrrho_dH - T * qrrho_S
+    qharm_dG = co.calc_G_corr(v0=args.w0, temperature=args.temp, method="QHARM")
 
     if args.csv:
         nrg_str = "%.6f" % nrg
@@ -275,7 +268,7 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         elif header != harm_header:
             output += "%s\n" % harm_header
             header = harm_header
-        corrections.extend([dH, rrho_dG, qrrho_dG, qharm_dG])
+        corrections.extend([dH, qrrho_dH, rrho_dG, qrrho_dG, full_qrrho_dG, qharm_dG])
         therm = [nrg + correction for correction in corrections]
         output += delim.join(
             [nrg_str] +
@@ -295,12 +288,14 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
                 nrg + ZPVE_anh, ZPVE_anh
             )
         output += "rotational symmetry number: %i\n" % co.rotational_symmetry_number
-        output += "thermochemistry from %s at %.2f K:\n" % (f, t)
-        output += "    H(RRHO)           = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
-        output += "    G(RRHO)           = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)
+        output += "thermochemistry from %s at %.2f K:\n" % (f, T)
+        output += "    H(RRHO)            = %.6f Eh  (dH = %.6f)\n" % (nrg + dH, dH)
+        output += "    H(Quasi-RRHO)      = %.6f Eh  (dH = %.6f)\n" % (nrg + qrrho_dH, qrrho_dH)
+        output += "    G(RRHO)            = %.6f Eh  (dG = %.6f)\n" % (nrg + rrho_dG, rrho_dG)
         output += "  quasi treatments for entropy (w0=%.1f cm^-1):\n" % args.w0
-        output += "    G(Quasi-RRHO)     = %.6f Eh  (dG = %.6f)\n" % (nrg + qrrho_dG, qrrho_dG)
-        output += "    G(Quasi-harmonic) = %.6f Eh  (dG = %.6f)\n" % (nrg + qharm_dG, qharm_dG)
+        output += "    G(Quasi-RRHO)      = %.6f Eh  (dG = %.6f)\n" % (nrg + qrrho_dG, qrrho_dG)
+        output += "    G(full_Quasi-RRHO) = %.6f Eh  (dG = %.6f)\n" % (nrg + full_qrrho_dG, full_qrrho_dG)
+        output += "    G(Quasi-harmonic)  = %.6f Eh  (dG = %.6f)\n" % (nrg + qharm_dG, qharm_dG)
 
         output += "\n"
 
