@@ -4597,9 +4597,12 @@ class FileReader:
                     ).group(1)
                 if "scrf=" in route.lower():
                     # solvent model should be non-greedy b/c solvent name can have commas
-                    other["solvent_model"] = re.search(
-                        "scrf=\((\S+?),", route, re.IGNORECASE
-                    ).group(1)
+                    try:
+                        other["solvent_model"] = re.search(
+                            "scrf=\((\S+?),", route, re.IGNORECASE
+                        ).group(1)
+                    except AttributeError:
+                        pass
                 if "empiricaldispersion=" in route.lower():
                     other["emp_dispersion"] = re.search(
                         "EmpiricalDispersion=(\S+)", route, re.IGNORECASE
