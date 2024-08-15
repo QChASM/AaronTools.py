@@ -1067,7 +1067,7 @@ class Frequency(Signals):
             if line == "NORMAL MODES":
                 break
 
-            if line.startswith("Scaling"):
+            if "cm**-1" not in line:
                 continue
 
             freq = line.split()[1]
@@ -1076,33 +1076,50 @@ class Frequency(Signals):
         atoms = kwargs["atoms"]
         masses = np.array([atom.mass for atom in atoms])
 
+        for line in lines[n:]:
+            try:
+                [int(x) for x in line.split()]
+                break
+            except ValueError:
+                n += 1
+
         # all 3N modes are printed with six modes in each block
         # each column corresponds to one mode
         # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
         displacements = np.zeros((len(self.data), len(self.data)))
         carryover = 0
-        start = 0
-        stop = 6
-        for i, line in enumerate(lines[n + 2 :]):
-            if "IR SPECTRUM" in line:
+        row = None
+        columns = None
+        i = n
+        symmetries = []
+        while i < len(lines):
+            if "IR SPECTRUM" in lines[i]:
                 break
 
-            if i % (len(self.data) + 1) == 0:
-                carryover = i // (len(self.data) + 1)
-                start = 6 * carryover
-                stop = start + 6
-                continue
+            if re.search("\s+\d+\s*$", lines[i]):
+                columns = [int(x) for x in re.findall("\d+", lines[i])]
+                try:
+                    [float(x) for x in lines[i + 1].split()]
+                except ValueError:
+                    sym = lines[i + 1].split()
+                    symmetries.extend(sym)
 
-            ndx = (i % (len(self.data) + 1)) - 1
-            mode_info = line.split()[1:]
+            elif re.search("\d+\s+-?\d+\.\d+", lines[i]):
+                mode_info = lines[i].split()
+                row = int(mode_info[0])
+                disp = [float(x) for x in mode_info[1:]]
 
-            displacements[ndx][start:stop] = [float(x) for x in mode_info]
+                displacements[row][columns] = disp
+            
+            i += 1
 
         # reshape columns into Nx3 arrays
         for k, data in enumerate(self.data):
             data.vector = np.reshape(
                 displacements[:, k], (len(self.data) // 3, 3)
             )
+            if symmetries:
+                data.symmetry = symmetries[k]
             
 
         # purge rotational and translational modes

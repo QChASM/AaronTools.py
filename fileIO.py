@@ -2549,7 +2549,7 @@ class FileReader:
 
                         n += 1
                         line = f.readline()
-                    
+
                     if all(hit.values()):
                         self.other["frequency"] = Frequency(
                             freq_str, hpmodes=False, style="orca", atoms=self.atoms,
@@ -2577,6 +2577,8 @@ class FileReader:
                         n += 1
                         line = f.readline()
                         if "Maximum memory used throughout the entire EPRNMR-calculation:" in line:
+                            break
+                        if "NMR shielding tensor and spin rotation calculation done" in line:
                             break
                     self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
 

@@ -945,7 +945,7 @@ class Geometry:
         atoms = self._fix_connectivity(atoms, copy=copy_atoms)
         if hasattr(self, "components") and self.components is not None and comment is None:
             self.fix_comment()
-        return Geometry(atoms, name, comment=comment, refresh_ranks=False)
+        return Geometry(atoms, name, comment=comment, refresh_ranks=False, refresh_connected=False)
 
     def parse_comment(self):
         """
@@ -6051,7 +6051,6 @@ class Geometry:
         print(tmp)
         self = self - tmp
         return self
-
  
     def fix_links(self):
         #connectivity = self.get_connectivity()
@@ -6126,7 +6125,6 @@ class Geometry:
                     conf_spec[start][0] -= 1
                     sub.rotate(reverse=True)
         return conf_spec, True
-
 
     def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
         """
@@ -6216,7 +6214,6 @@ class Geometry:
             return matching_atoms, charge, fused, rings
         else: 
             return matching_atoms, charge, fused
-
 
     def get_gaff_geom(self):
         """:returns: geometry comprised of OniomAtoms with GAFF atomtypes from OfType finder"""
