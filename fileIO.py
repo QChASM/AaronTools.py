@@ -2602,11 +2602,6 @@ class FileReader:
                         line.split()[-2]
                     )
 
-                elif "Symmetry Number:" in line:
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-1]
-                    )
-
                 elif line.startswith("Zero point energy"):
                     self.other["ZPVE"] = float(line.split()[4])
 
@@ -2630,14 +2625,6 @@ class FileReader:
                         / PHYSICAL.KB
                         for x in self.other["rotational_temperature"]
                     ]
-
-                elif "Point Group:" in line:
-                    self.other["full_point_group"] = line.split()[2][:-1]
-
-                elif "Symmetry Number" in line:
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-1]
-                    )
 
                 elif "sn is the rotational symmetry number" in line:
                     # older versions of orca print this differently
@@ -2767,6 +2754,21 @@ class FileReader:
 
                 elif "Basis Dimension" in line:
                     self.other["n_basis"] = int(line.split()[-1])
+
+                elif "Point group" in line:
+                    self.other["molecular_point_group"] = line.split()[-1]
+
+                elif "Point Group:" in line and "Symmetry Number:" in line:
+                    self.other["molecular_point_group"] = line.split()[2].strip(",")
+                    self.other["rotational_symmetry_number"] = int(line.split()[-1])
+
+                elif "Symmetry Number:" in line:
+                    self.other["rotational_symmetry_number"] = int(
+                        line.split()[-1]
+                    )
+
+                elif "Point Group:" in line:
+                    self.other["molecular_point_group"] = line.split()[-1]
 
                 elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
                     s = ""

@@ -319,11 +319,13 @@ class TestCLS(TestWithTimer):
     E+ZPE             = -1855.474686 Eh  (ZPE = 0.543972)
 rotational symmetry number: 1
 thermochemistry from test_files/normal.log at 298.00 K:
-    H(RRHO)           = -1855.440616 Eh  (dH = 0.578042)
-    G(RRHO)           = -1855.538017 Eh  (dG = 0.480642)
+    H(RRHO)            = -1855.440616 Eh  (dH = 0.578042)
+    H(Quasi-RRHO)      = -1855.445940 Eh  (dH = 0.572718)
+    G(RRHO)            = -1855.538017 Eh  (dG = 0.480642)
   quasi treatments for entropy (w0=100.0 cm^-1):
-    G(Quasi-RRHO)     = -1855.532805 Eh  (dG = 0.485854)
-    G(Quasi-harmonic) = -1855.532510 Eh  (dG = 0.486148)
+    G(Quasi-RRHO)      = -1855.532805 Eh  (dG = 0.485854)
+    G(full_Quasi-RRHO) = -1855.538129 Eh  (dG = 0.480530)
+    G(Quasi-harmonic)  = -1855.532510 Eh  (dG = 0.486148)
 """
         # strip b/c windows adds \r to the end of lines
         out_list = out.decode("utf-8").splitlines()
@@ -333,7 +335,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         # test sp energy
         self.assertTrue(out_list[0][-16:] == ref_list[0][-16:])
         # test thermochem
-        for i in [1, 2, 4, 5, 6, 7, 8]:
+        for i in [1, 2, 4, 5, 6, 7, 8, 9 ,10]:
             self.assertTrue(out_list[i][-34:] == ref_list[i][-34:])
 
         # test regular output with sp
@@ -371,11 +373,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         if len(err) != 0:
             raise RuntimeError(err)
 
-        ref_csv = """E,E+ZPE,H(RRHO),G(RRHO),G(Quasi-RRHO),G(Quasi-harmonic),ZPE,dH(RRHO),dG(RRHO),dG(Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
--1856.018658,-1855.474686,-1855.440616,-1855.538017,-1855.532805,-1855.532510,0.543972,0.578042,0.480642,0.485854,0.486148,test_files/normal.log,test_files/normal.log"""
-
-        out_list = out.decode("utf-8").splitlines()
-        ref_list = ref_csv.splitlines()
+        ref_csv = """E,E+ZPE,H(RRHO),H(Quasi-RRHO),G(RRHO),G(Quasi-RRHO),G(full_Quasi-RRHO),G(Quasi-harmonic),ZPE,dH(RRHO),dH(Quasi-RRHO),dG(RRHO),dG(Quasi-RRHO),dG(full_Quasi-RRHO),dG(Quasi-harmonic),SP_File,Thermo_File
+-1856.018658,-1855.474686,-1855.440616,-1855.445940,-1855.538017,-1855.532805,-1855.538129,-1855.532510,0.543972,0.578042,0.572718,0.480642,0.485854,0.480530,0.486148,test_files\normal.log,test_files\normal.log"""
 
         out_list = out.decode("utf-8").splitlines()
         ref_list = ref_csv.splitlines()
@@ -400,9 +399,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
         ref_list = ref_csv.splitlines()
 
         self.assertTrue(out_list[0] == ref_list[0])
-        self.assertTrue(
-            out_list[1].split(",")[:-2] == ref_list[1].split(",")[:-2]
-        )
+        for x, y in zip(out_list[1].split(",")[:-2], ref_list[1].split(",")[:-2]):
+            self.assertTrue(x == y)
 
         # test CSV with looking in subdirectories
         filename = os.path.basename(TestCLS.frequencies)
@@ -428,9 +426,9 @@ thermochemistry from test_files/normal.log at 298.00 K:
         ref_list = ref_csv.splitlines()
 
         self.assertTrue(out_list[0] == ref_list[0])
-        self.assertTrue(
-            out_list[1].split(",")[:-2] == ref_list[1].split(",")[:-2]
-        )
+        for x, y in zip(out_list[1].split(",")[:-2], ref_list[1].split(",")[:-2]):
+            self.assertTrue(x == y)
+
 
     def test_printXYZ(self):
         """test printXYZ.py"""
