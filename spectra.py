@@ -1092,17 +1092,20 @@ class Frequency(Signals):
         columns = None
         i = n
         symmetries = []
+        prev_columns = [-1]
         while i < len(lines):
             if "IR SPECTRUM" in lines[i]:
                 break
 
             if re.search("\s+\d+\s*$", lines[i]):
                 columns = [int(x) for x in re.findall("\d+", lines[i])]
-                try:
-                    [float(x) for x in lines[i + 1].split()]
-                except ValueError:
-                    sym = lines[i + 1].split()
-                    symmetries.extend(sym)
+                if columns[0] != prev_columns[0]:
+                    try:
+                        [float(x) for x in lines[i + 1].split()]
+                    except ValueError:
+                        sym = lines[i + 1].split()
+                        symmetries.extend(sym)
+                prev_columns = columns
 
             elif re.search("\d+\s+-?\d+\.\d+", lines[i]):
                 mode_info = lines[i].split()
