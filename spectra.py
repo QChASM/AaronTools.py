@@ -895,7 +895,7 @@ class Frequency(Signals):
                 n_moves = len(moves) // 3
                 for i in range(-n_moves, 0):
                     modes[i].append(
-                        moves[3 * n_moves + 3 * i : 4 * n_moves + 3 * i]
+                        moves[3 * n_moves + 3 * i : 3 * n_moves + 3 * (i + 1)]
                     )
 
         for mode, data in zip(modes, self.data):

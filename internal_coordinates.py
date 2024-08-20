@@ -539,7 +539,7 @@ class InternalCoordinateSet:
                     if coord1.atom2 != coord2.atom1:
                         continue
                 except AttributeError:
-                    pass
+                    continue
                 if coord1.atom1 == coord2.atom1 and coord1.atom3 == coord3.atom3:
                     remove_coords.append(i)
                 if coord1.atom3 == coord2.atom1 and coord1.atom1 == coord3.atom3:
