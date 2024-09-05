@@ -197,7 +197,7 @@ class JobType:
                 out_theory.add_kwargs(
                     GAUSSIAN_ROUTE={
                         "IOp": ["8/11=1"], # only warn about small energy gap
-                        "guess": ["TightConvergence"] # tighten convergence to try to offset error
+                        "SCF": ["Tight"] # tighten convergence to try to offset error
                     }
                 )
                 return out_theory
@@ -1345,7 +1345,7 @@ class OptimizationJob(JobType):
                 if geometry:
                     coords = geometry.coords
                     scale = 1e-3
-                    coords += scale * np.random.random_sample - scale / 2
+                    coords += scale * np.random.random_sample(coords.shape) - scale / 2
                     geometry.update_structure(coords)
                 return None
             
@@ -1354,7 +1354,7 @@ class OptimizationJob(JobType):
                 if geometry:
                     coords = geometry.coords
                     scale = 1e-3
-                    coords += scale * np.random.random_sample - scale / 2
+                    coords += scale * np.random.random_sample(coords.shape) - scale / 2
                     geometry.update_structure(coords)
                 return None                
         
