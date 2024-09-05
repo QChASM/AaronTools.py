@@ -280,7 +280,7 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
 
             outfile = get_outfile(
                 outfile,
-                INFILE=get_filename(infile, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(infile, include_parent_dir="$INDIR" not in outfile),
                 INDIR=os.path.dirname(infile),
                 i=str(conf + 1),
                 changes=conf_string,

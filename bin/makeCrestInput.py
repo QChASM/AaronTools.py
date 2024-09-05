@@ -290,7 +290,7 @@ for f in glob_files(args.infile, parser=theory_parser):
     if args.outfile:
         outfile = get_outfile(
             args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in outfile),
             INDIR=dirname(f),
         )
         warnings = geom.write(

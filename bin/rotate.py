@@ -269,7 +269,7 @@ for f in glob_files(args.infile, parser=rotate_parser):
         if args.outfile is not False:
             outfile = get_outfile(
                 args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" in outfile),
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in outfile),
                 INDIR=os.path.dirname(f),
                 AXIS=".".join(["%.3f" % x for x in vector]),
                 ANGLE=str.zfill("%.2f" % np.rad2deg(args.angle * (i + 1)), 6),

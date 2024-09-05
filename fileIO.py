@@ -91,6 +91,7 @@ ERROR = {
     "MM function not complete": "MM_PARAM",
     "PCMIOp: Cannot load options.": "PCM",
     "Unrecognized potential number 6 in GetPot": "TYPO",
+    "Inv3 failed in PCMMkU": "PCM",
 }
 
 ERROR_ORCA = {
