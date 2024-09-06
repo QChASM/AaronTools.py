@@ -822,6 +822,8 @@ def glob_files(infiles, parser=None, escape_brackets=True):
 
     if isinstance(infiles, str):
         infiles = [infiles]
+    else: # if stdin just retun original data
+        return infiles
 
     outfiles = []
     for f in infiles:
