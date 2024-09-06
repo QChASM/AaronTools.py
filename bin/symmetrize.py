@@ -126,6 +126,12 @@ for f in glob_files(args.infile, parser=pg_parser):
         print("total error after symmetrizing: %.4f" % tot_error)
         print("max. error after symmetrizing: %.4f (%s)" % (max_error, max_ele))
 
+    # add point group to comment
+    if geom.comment:
+        geom.comment += " (" + pg.name + ")"
+    else:
+        geom.comment = pg.name
+
     out = geom.write(outfile=False)
     
     if not args.outfile:

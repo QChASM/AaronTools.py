@@ -5540,3 +5540,47 @@ class FileReader:
 
         if nbo_name is not None:
             self._read_nbo_coeffs(nbo_name)
+
+# Utilities for Jupyter/IPython/py3Dmol
+    def write_mode(self, vibmode=0):
+        """
+        returns frequency and XYZ format including displacement vectors along selected vibrational mode (1-indexed)
+        """
+        try:
+            freq = self.other["frequency"]
+        except KeyError:
+            return 0
+
+        try:
+            data = sorted(freq.data, key=lambda x: x.frequency)[vibmode-1]
+        except IndexError:
+            print(f"Vibrational mode out of range (1 - {len(data)})")
+            return 0
+        freq_val = "%6.1f" % data.frequency
+
+        #build XYZ with displacement vectors
+        s = "%i\n" % len(self.atoms)
+        s += "Mode: %s cm-1\n" % freq_val
+        fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f} {: 10.5f} {: 10.5f} {: 10.5f}\n"
+        for atom in self.atoms:
+            s += fmt.format(atom.element, *atom.coords, *data.vector[int(atom.name)-1])
+
+        return freq_val, s.strip()
+
+    def animate(self, vibmode=1):
+        """
+        Display py3Dmol animation of selected mode
+        """
+
+        freq_val, mode = self.write_mode(vibmode=vibmode)
+        if mode:
+            view = py3Dmol.view()
+            view.addModel(mode,'xyz',{'vibrate': {'frames':10,'amplitude':1}})
+            view.setStyle({'stick':{}})
+            view.animate({'loop': 'backAndForth'})
+            view.show()
+            print("Vibrational Frequency", freq_val, "cm-1")
+        else:
+            print("Vibrational data not found.")
+
+
