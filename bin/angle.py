@@ -193,12 +193,15 @@ for f in glob_files(args.infile, parser=angle_parser):
             print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
-        if args.outfile and isinstance(f, str): # skip these replacements if reading stdin!
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
-            )
+        if args.outfile:
+            if isinstance(f, str): # skip these replacements if reading stdin!
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INDIR=dirname(f),
+                )
+            else:
+                outfile = args.outfile
             with open(outfile, "a" if args.append else "w") as f:
                 f.write(out)
         else:
