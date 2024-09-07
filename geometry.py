@@ -882,15 +882,12 @@ class Geometry:
         if out is not None:
             return out
 
-    #show py3Dmol interactive model if available and in Jupyter notebook
-    #this could be made much fancier, for example, to display ONIOM molecules in a way
-    #that shows the different layers, but I'll leave that to someone else. SEW
     def display(self, style="stick", colorscheme="Jmol"):
         """
         Display py3Dmol viewer from Geometry
 
-        param: string style: stick, sphere, or line (or other style supported by 3Dmol)
-        param: string colorscheme: one of py3Dmol color schemes (see https://3dmol.org/doc/global.html#ColorschemeSpec)
+        :param str style: stick, sphere, or line (or other style supported by 3Dmol.js)
+        :param str colorscheme: 3Dmol.js color scheme (see https://3dmol.org/doc/global.html#builtinColorSchemes)
         """
 
         def is_notebook():
@@ -932,6 +929,38 @@ class Geometry:
                 print("py3Dmol required to display 3D representations")
         else:
             print(self.write(outfile=False))
+
+    # Simple function to convert Geometry to basic Psi4 molecule.  Expand later to
+    # pass multiple fragments, etc.
+    def convert_to_Psi4(self, charge=0, mult=1, fix_com=True, fix_orientation=True):
+        """
+        converts Geometry into Psi4 Molecule object (requires Psi4)
+        :param int charge: total molecular charge
+        :param int mult: multiplicity
+        :param bool fix_com: whether to fix center of mass in Psi4 Molecule
+        :param bool fix_coordinates: whether to fix coordinates in Psi4 Molecule
+        :returns: activated Psi4 Molecule (or None if Psi4 not available)
+        """
+
+        try:
+            import psi4
+            import psi4.core as p4c
+        except:
+            return None
+
+        mol = psi4.core.Molecule.from_arrays(
+            elez = [ ELEMENTS.index(atom.element) for atom in self ],
+            fix_com = True,
+            fix_orientation = True,
+            molecular_multiplicity = mult,
+            molecular_charge = charge,
+            comment = self.comment,
+            geom = self.coords,
+            units = 'Angstrom'
+            )
+        psi4.activate(mol)
+        return mol 
+
 
     def copy(self, atoms=None, name=None, comment=None, copy_atoms=True):
         """
