@@ -887,9 +887,9 @@ class Geometry:
     #that shows the different layers, but I'll leave that to someone else. SEW
     def display(self, style="stick", colorscheme="Jmol"):
         """
-        Displays py3Dmol viewer from Geometry using "stick" (default), "sphere", or "line" style
-        param: string style one of 'stick', 'sphere, 'line'
-        param: string colorscheme one of py3Dmol color schemes (see https://3dmol.org/doc/global.html#ColorschemeSpec)
+        Displays py3Dmol viewer from Geometry
+        param: string style: stick, sphere, or line (or other style supported by 3Dmol)
+        param: string colorscheme: one of py3Dmol color schemes (see https://3dmol.org/doc/global.html#ColorschemeSpec)
         """
 
         def is_notebook():
