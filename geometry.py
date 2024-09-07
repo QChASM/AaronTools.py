@@ -888,6 +888,8 @@ class Geometry:
     def display(self, style="stick", colorscheme="Jmol"):
         """
         Displays py3Dmol viewer from Geometry using "stick" (default), "sphere", or "line" style
+        param: string style one of 'stick', 'sphere, 'line'
+        param: string colorscheme one of py3Dmol color schemes (see https://3dmol.org/doc/global.html#ColorschemeSpec)
         """
 
         def is_notebook():
@@ -1234,7 +1236,11 @@ class Geometry:
         return frag_list
 
     def get_graph(self):
-        """returns a graph based on connectivity"""
+        """
+        returns a graph based on connectivity
+           graph consists of a list for each atom consisting of a list of connected atoms
+           For example, for H2O with O as atom 1, graph = [[1,2], [0], [0]]
+        """
         ndx = {a: i for i, a in enumerate(self.atoms)}
         graph = [[ndx[b] for b in a.connected if b in ndx] for a in self.atoms]
         return graph
