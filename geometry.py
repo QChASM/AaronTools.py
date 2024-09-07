@@ -935,6 +935,7 @@ class Geometry:
     def convert_to_Psi4(self, charge=0, mult=1, fix_com=True, fix_orientation=True):
         """
         converts Geometry into Psi4 Molecule object (requires Psi4)
+
         :param int charge: total molecular charge
         :param int mult: multiplicity
         :param bool fix_com: whether to fix center of mass in Psi4 Molecule
