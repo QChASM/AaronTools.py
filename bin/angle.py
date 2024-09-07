@@ -180,19 +180,20 @@ for f in glob_files(args.infile, parser=angle_parser):
 
     if len(args.set_ang) + len(args.change) > 0:
         if args.outfile:
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
-            )
+            if isinstance(f, str): # skip these replacements if reading stdin!
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INDIR=dirname(f),
+                )
+            else:
+                outfile = args.outfile
             geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
-        if not args.outfile:
-            print(out)
-        else:
+        if args.outfile and isinstance(f, str): # skip these replacements if reading stdin!
             outfile = get_outfile(
                 args.outfile,
                 INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
@@ -200,3 +201,5 @@ for f in glob_files(args.infile, parser=angle_parser):
             )
             with open(outfile, "a" if args.append else "w") as f:
                 f.write(out)
+        else:
+            print(out)
