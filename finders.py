@@ -993,7 +993,7 @@ class SpiroCenters(Finder):
 
         return matching_atoms
 
-class Resiude(Finder):
+class Residue(Finder):
     """all atoms in a given residue"""
     def __init__(self, residue):
         super().__init__()

@@ -801,12 +801,14 @@ for f in glob_files(args.infile, parser=theory_parser):
 
     other_kwargs = combine_dicts(kwargs, other_kwargs)
 
-    if args.outfile and isinstance(f, str): # skip these replacements if reading stdin!
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+    if args.outfile:
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         warnings = geom.write(
             append=True,
             outfile=outfile,

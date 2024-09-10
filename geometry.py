@@ -562,6 +562,8 @@ class Geometry:
     @classmethod
     def get_diastereomers(cls, geometry, minimize=True):
         """
+        Generate diastereomers of Geometry
+
         :param Geometry geometry: chiral structure
         :return: list of all diastereomers for detected chiral centers
         :rtype: list(Geometry)
@@ -712,7 +714,9 @@ class Geometry:
 
     @property
     def num_atoms(self):
-        """number of atoms"""
+        """
+        number of atoms
+        """
         return len(self.atoms)
 
     @property

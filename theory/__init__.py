@@ -29,7 +29,7 @@ The value should be as specified.
 :Gaussian:
 
 * GAUSSIAN_PRE_ROUTE (link0): dict(list(str)) - keys are link0 minus %
-* GAUSSIAN_ROUTE (route): dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']}
+* GAUSSIAN_ROUTE (route): dict(list(str)) - e.g. {'opt': ['NoEigenTest', 'Tight']} or {'nosym':''}
 * GAUSSIAN_COORDINATES (coordinates): list of coordinates and variables/constants
 * GAUSSIAN_CONNECTIVITY (connectivity): list of connectivities (see connectivity section of geom in G16 manual)
 * GAUSSIAN_CONSTRAINTS (constraints): list(str)
