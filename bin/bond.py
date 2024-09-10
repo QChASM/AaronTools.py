@@ -148,28 +148,30 @@ for f in glob_files(args.infile, parser=bond_parser):
         val = a1.dist(a2)
         out += "%f\n" % val
 
-    out = out.rstrip()
-
     if len(args.set_dist) + len(args.change) > 0:
         if args.outfile:
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
-            )
+            outfile = args.outfile
+            if isinstance(f, str):
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INDIR=dirname(f),
+                )
             geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
-        if not args.outfile:
-            print(out)
-        else:
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
-            )
-            mode = "a" if args.append else "w"
-            with open(outfile, mode) as f:
+        if args.outfile:
+            outfile = args.outfile
+            if isinstance(f, str): # apply substitutions if a file path was given as input
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INDIR=dirname(f),
+                )
+            with open(outfile, "a" if args.append else "w") as f:
                 f.write(out)
+        else:
+            out = out.rstrip()
+            print(out)

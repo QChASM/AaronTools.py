@@ -176,33 +176,30 @@ for f in glob_files(args.infile, parser=angle_parser):
 
         out += "%f\n" % val
 
-    out = out.rstrip()
-
     if len(args.set_ang) + len(args.change) > 0:
         if args.outfile:
-            if isinstance(f, str): # skip these replacements if reading stdin!
+            outfile = args.outfile
+            if isinstance(f, str): # apply substitutions if a file path was given as input
                 outfile = get_outfile(
                     args.outfile,
                     INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
                     INDIR=dirname(f),
                 )
-            else:
-                outfile = args.outfile
             geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
         if args.outfile:
-            if isinstance(f, str): # skip these replacements if reading stdin!
+            outfile = args.outfile
+            if isinstance(f, str): # apply substitutions if a file path was given as input
                 outfile = get_outfile(
                     args.outfile,
                     INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
                     INDIR=dirname(f),
                 )
-            else:
-                outfile = args.outfile
             with open(outfile, "a" if args.append else "w") as f:
                 f.write(out)
         else:
+            out = out.rstrip()
             print(out)

@@ -159,16 +159,18 @@ for f in glob_files(args.infile, parser=solid_parser):
     else:
         s += "%4.3f\n" % angle
     
-    if not args.outfile:
-        print(s.rstrip())
-    else:
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+    if args.outfile:
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         with open(outfile, "a") as f:
             f.write(s.rstrip())
+    else:
+        print(s.rstrip())
 
 # profile.disable()
 # profile.print_stats()

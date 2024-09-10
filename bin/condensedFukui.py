@@ -184,11 +184,13 @@ for n, f in enumerate(infiles):
         print(s)
     else:
         mode = "w"
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         if n > 0:
             mode = "a"
         with open(outfile, mode) as f:

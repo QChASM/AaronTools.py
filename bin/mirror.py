@@ -107,11 +107,13 @@ for f in glob_files(args.infile, parser=mirror_parser):
     geom.update_geometry(np.dot(geom.coords, eye))
 
     if args.outfile:
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         geom.write(append=True, outfile=outfile)
     else:
         print(geom.write(outfile=False))

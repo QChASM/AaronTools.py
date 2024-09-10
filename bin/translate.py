@@ -143,6 +143,15 @@ translate_parser.add_argument(
     "Default: stdout"
 )
 
+translate_parser.add_argument(
+    "-a", "--append",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="append",
+    help="append structures to output file if it already exists\nDefault: false"
+)
+
 args = translate_parser.parse_args()
 
 for f in glob_files(args.infile, parser=translate_parser):
@@ -203,14 +212,13 @@ for f in glob_files(args.infile, parser=translate_parser):
     geom.coord_shift(translate_vector, targets=targets)
 
     if args.outfile:
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
-        geom.write(
-            append=True,
-            outfile=outfile,
-        )
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
+        geom.write(append=args.append, outfile=outfile)
     else:
         print(geom.write(outfile=False))

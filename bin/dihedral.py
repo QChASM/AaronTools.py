@@ -117,6 +117,15 @@ dihedral_parser.add_argument(
     "Default: stdout"
 )
 
+dihedral_parser.add_argument(
+    "-a", "--append",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="append",
+    help="append structures to output file if it already exists\nDefault: false"
+)
+
 args = dihedral_parser.parse_args()
 
 for f in glob_files(args.infile, dihedral_parser):
@@ -167,27 +176,31 @@ for f in glob_files(args.infile, dihedral_parser):
 
         out += "%f\n" % val
 
-    out = out.rstrip()
 
     if len(args.set_ang) + len(args.change) > 0:
         if args.outfile:
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir=False),
-                INDIR=dirname(f),
-            )
-            geom.write(append=True, outfile=outfile)
+            outfile = args.outfile
+            if isinstance(f, str): # apply substitutions if a file path was given as input
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir=False),
+                    INDIR=dirname(f),
+                )
+            geom.write(append=args.append, outfile=outfile)
         else:
             print(geom.write(outfile=False))
 
     if len(args.measure) > 0:
-        if not args.outfile:
-            print(out)
+        if args.outfile:
+            outfile = args.outfile
+            if isinstance(f, str): # apply substitutions if a file path was given as input
+                outfile = get_outfile(
+                    args.outfile,
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INDIR=dirname(f),
+                )
+            with open(outfile, "a" if args.append else "w") as f:
+                f.write(out)
         else:
-            outfile = get_outfile(
-                args.outfile,
-                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-                INDIR=dirname(f),
-            )
-            with open(outfile, "a") as f:
-                    f.write(out)
+            out = out.rstrip()
+            print(out)

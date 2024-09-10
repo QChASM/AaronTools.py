@@ -89,6 +89,15 @@ substitute_parser.add_argument(
     "Default: stdout"
 )
 
+substitute_parser.add_argument(
+    "-a", "--append",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="append",
+    help="append structures to output file if it already exists\nDefault: false"
+)
+
 args = substitute_parser.parse_args()
 
 if args.list_avail:
@@ -145,9 +154,6 @@ for infile in glob_files(args.infile, parser=substitute_parser):
             INFILE=get_filename(infile, include_parent_dir="$INDIR" not in args.outfile),
             INDIR=dirname(infile),
         )
-        geom.write(
-            append=True,
-            outfile=outfile,
-        )
+        geom.write(append=args.append, outfile=outfile)
     else:
         print(geom.write(outfile=False))

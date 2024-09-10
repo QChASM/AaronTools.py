@@ -195,11 +195,13 @@ for f in infiles:
             )
 
     if args.outfile:
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         geom.write(append=f != infiles[0] and "$INFILE" not in outfile, outfile=outfile)
     else:
         print(geom.write(outfile=False))

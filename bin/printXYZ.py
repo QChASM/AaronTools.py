@@ -89,9 +89,11 @@ for f in glob_files(args.infile, parser=xyz_parser):
     if not args.outfile:
         print(geom.write(outfile=False))
     else:
-        outfile = get_outfile(
-            args.outfile,
-            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
-            INDIR=dirname(f),
-        )
+        outfile = args.outfile
+        if isinstance(f, str): # apply substitutions if a file path was given as input
+            outfile = get_outfile(
+                args.outfile,
+                INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                INDIR=dirname(f),
+            )
         geom.write(append=args.append, outfile=outfile)

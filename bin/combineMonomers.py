@@ -5,7 +5,7 @@ import argparse
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
-from AaronTools.utils.utils import get_filename, glob_files
+from AaronTools.utils.utils import glob_files
 
 combiner_parser = argparse.ArgumentParser(
         description="combine monomers into a supermolecule (e.g. dimer, trimer, etc).  Conserves monomer atom positions and order. Intended to build non-bonded complexes so does not check for clashes, etc.",
