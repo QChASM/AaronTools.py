@@ -929,10 +929,13 @@ class Frequency(Signals):
                 info = line.split()
                 mode1 = mode_re.search(info[0])
                 mode2 = mode_re.search(info[1])
-                ndx_1 = int(mode1.group(1))
-                exp_1 = int(mode1.group(2))
-                ndx_2 = int(mode2.group(1))
-                exp_2 = int(mode2.group(2))
+                try:
+                    ndx_1 = int(mode1.group(1))
+                    exp_1 = int(mode1.group(2))
+                    ndx_2 = int(mode2.group(1))
+                    exp_2 = int(mode2.group(2))
+                except AttributeError:
+                    raise RuntimeError("error while parsing anharmonic frequencies: %s" % line)
                 harm_freq = float(info[2])
                 anharm_freq = float(info[3])
                 anharm_inten = float(info[4])
@@ -952,8 +955,11 @@ class Frequency(Signals):
             elif reading_overtones:
                 info = line.split()
                 mode = mode_re.search(info[0])
-                ndx = int(mode.group(1))
-                exp = int(mode.group(2))
+                try:
+                    ndx = int(mode.group(1))
+                    exp = int(mode.group(2))
+                except AttributeError:
+                    raise RuntimeError("error while parsing overtones: %s" % line)
                 harm_freq = float(info[1])
                 anharm_freq = float(info[2])
                 anharm_inten = float(info[3])
@@ -1482,11 +1488,18 @@ class ValenceExcitations(Signals):
                     )
                     multiplicity.append(None)
                     symmetry.append(None)
-                    nrgs.append(float(excitation_data.group(1)))
+                    try:
+                        nrgs.append(float(excitation_data.group(1)))
+                    except AttributeError:
+                        raise RuntimeError("error while parsing gaussian UV/vis data:\n%s" % lines[i])
                 else:
-                    multiplicity.append(excitation_data.group(1))
-                    symmetry.append(excitation_data.group(2))
-                    nrgs.append(float(excitation_data.group(3)))
+                    try:
+                        multiplicity.append(excitation_data.group(1))
+                        symmetry.append(excitation_data.group(2))
+                        nrgs.append(float(excitation_data.group(3)))
+                    except AttributeError:
+                        raise RuntimeError("error while parsing gaussian UV/vis data:\n%s" % lines[i])
+
                 i += 1
             else:
                 i += 1
@@ -1546,12 +1559,16 @@ class ValenceExcitations(Signals):
                 mult = "Triplet"
                 i += 1
             elif re.search("IROOT=.+?(\d+\.\d+)\seV", line):
+                # could use walrus
                 info = re.search("IROOT=.+?(\d+\.\d+)\seV", line)
                 nrgs.append(float(info.group(1)))
                 i += 1
             elif line.startswith("STATE"):
                 info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line)
-                nrgs.append(float(info.group(1)))
+                try:
+                    nrgs.append(float(info.group(1)))
+                except AttributeError:
+                    raise RuntimeError("error while parsing ORCA UV/vis data: %s" % line)
                 multiplicity.append(mult)
                 i += 1
             elif (
@@ -1863,7 +1880,10 @@ class ValenceExcitations(Signals):
                 oscillator_str_vel.append(None)
             elif re.search("\| State\s*\d+", line):
                 info = re.search("(\d+\.\d+)\s*eV", line)
-                energy.append(float(info.group(1)))
+                try:
+                    energy.append(float(info.group(1)))
+                except AttributeError:
+                    raise RuntimeError("error while parsing psi4 UV/vis data: %s" % line)
             elif re.search("Oscillator strength \(length", line):
                 oscillator_str.append(float(line.split()[-1]))
             elif re.search("Oscillator strength \(velocity", line):
@@ -1922,8 +1942,11 @@ class ValenceExcitations(Signals):
                 
             if re.search("Excited state\s+\d+\s*\(", line):
                 info = re.search("\((\S+), (\S+)\)", line)
-                multiplicity.append(info.group(1).capitalize())
-                symmetry.append(info.group(2))
+                try:
+                    multiplicity.append(info.group(1).capitalize())
+                    symmetry.append(info.group(2))
+                except AttributeError:
+                    raise RuntimeError("error while parsing Q-Chem UV/vis data: %s" % line)
             
             if re.search("Excitation energy:", line):
                 if len(energy) > len(oscillator_str):
@@ -2160,6 +2183,7 @@ class NMR(Signals):
         )
         for line in lines:
             if nuc_regex.search(line):
+                # could use walrus
                 shift_info = nuc_regex.search(line)
                 ndx = int(shift_info.group(1))
                 element = shift_info.group(2)
@@ -2174,10 +2198,13 @@ class NMR(Signals):
                     self.coupling[ndx_b][ndx_a] = coupling
             elif line.startswith(" NUCLEUS A ="):
                 coupl_info = coupl_regex.search(line)
-                ele_a = coupl_info.group(1)
-                ndx_a = int(coupl_info.group(2))
-                ele_b = coupl_info.group(3)
-                ndx_b = int(coupl_info.group(4))
+                try:
+                    ele_a = coupl_info.group(1)
+                    ndx_a = int(coupl_info.group(2))
+                    ele_b = coupl_info.group(3)
+                    ndx_b = int(coupl_info.group(4))
+                except AttributeError:
+                    raise RuntimeError("error while parsing ORCA NMR data: %s" % line)
                 self.coupling.setdefault(ndx_a, {})
                 self.coupling.setdefault(ndx_b, {})
             # orca 6 coupling
@@ -2199,6 +2226,7 @@ class NMR(Signals):
         while i < len(lines):
             line = lines[i]
             if nuc_regex.search(line):
+                # could use walrus
                 shift_info = nuc_regex.search(line)
                 ndx = int(shift_info.group(1)) - 1
                 element = shift_info.group(2)

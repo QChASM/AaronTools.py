@@ -1878,7 +1878,7 @@ class FileReader:
                 "atoms": self.atoms,
             })
 
-    def read_psi4_out(self, f, get_all=False, just_geom=True):
+    def read_psi4_out(self, f, get_all=False, just_geom=True, log=None):
         """read psi4 output file"""
         uv_vis = ""
         coord_unit_bohr = False
@@ -1913,311 +1913,340 @@ class FileReader:
         n = 1
         read_geom = False
         while line != "":
-            if "* O   R   C   A *" in line:
-                self.file_type = "out"
-                return self.read_orca_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if "A Quantum Leap Into The Future Of Chemistry" in line:
-                self.file_type = "qout"
-                return self.read_qchem_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if line.startswith("    Geometry (in Angstrom), charge"):
-                coord_unit_bohr = False
-                if not just_geom:
-                    self.other["charge"] = int(line.split()[5].strip(","))
-                    self.other["multiplicity"] = int(
-                        line.split()[8].strip(":")
+            try:
+                if "* O   R   C   A *" in line:
+                    self.file_type = "out"
+                    return self.read_orca_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-
-            elif line.strip() == "SCF":
-                read_geom = True
-
-            elif line.startswith("    Geometry (in Bohr), charge"):
-                coord_unit_bohr = True
-                if not just_geom:
-                    self.other["charge"] = int(line.split()[5].strip(","))
-                    self.other["multiplicity"] = int(
-                        line.split()[8].strip(":")
+    
+                if "A Quantum Leap Into The Future Of Chemistry" in line:
+                    self.file_type = "qout"
+                    return self.read_qchem_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-                    
-            elif line.strip().startswith("Center") and read_geom:
-                read_geom = False
-                if get_all and len(self.atoms) > 0:
-                    if self.all_geom is None:
-                        self.all_geom = []
-
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-
-                self.atoms, mass, n = get_atoms(f, n, coord_unit_bohr)
-                if not just_geom:
-                    self.other["mass"] = mass
-                    self.other["mass"] *= UNIT.AMU_TO_KG
-
-            if just_geom:
-                line = f.readline()
-                n += 1
-                continue
-            else:
-                if line.strip().startswith("Total Energy ="):
-                    self.other["energy"] = float(line.split()[-1])
-
-                elif line.strip().startswith("Total E0"):
-                    self.other["energy"] = float(line.split()[-2])
-
-                elif line.strip().startswith("Correction ZPE"):
-                    self.other["ZPVE"] = float(line.split()[-4])
-
-                elif line.strip().startswith("Total ZPE"):
-                    self.other["E_ZPVE"] = float(line.split()[-2])
-
-                elif line.strip().startswith("Total H, Enthalpy"):
-                    self.other["enthalpy"] = float(line.split()[-2])
-
-                elif line.strip().startswith("Total G, Free"):
-                    self.other["free_energy"] = float(line.split()[-2])
-                    self.other["temperature"] = float(line.split()[-4])
-
-                elif "symmetry no. =" in line:
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-1].strip(")")
-                    )
-
-                elif (
-                    line.strip().startswith("Rotational constants:")
-                    and line.strip().endswith("[cm^-1]")
-                    and "rotational_temperature" not in self.other
-                ):
-                    self.other["rotational_temperature"] = [
-                        float(x) if is_num(x) else 0
-                        for x in line.split()[-8:-1:3]
-                    ]
-                    self.other["rotational_temperature"] = [
-                        x
-                        * PHYSICAL.SPEED_OF_LIGHT
-                        * PHYSICAL.PLANCK
-                        / PHYSICAL.KB
-                        for x in self.other["rotational_temperature"]
-                    ]
-
-                elif line.startswith("  Vibration "):
-                    freq_str = ""
-                    while not line.strip().startswith("=="):
-                        freq_str += line
-                        line = f.readline()
-                        n += 1
-
-                    self.other["frequency"] = Frequency(
-                        freq_str, hpmodes=False, style="psi4", atoms=self.atoms,
-                    )
-
-                elif PSI4_NORM_FINISH in line:
-                    self.other["finished"] = True
-
-                elif line.startswith("    Convergence Criteria"):
-                    # for tolerances:
-                    # psi4 puts '*' next to converged values and 'o' in place of things that aren't monitored
-                    grad = {}
-
-                    dE_tol = line[24:38]
-                    if "o" in dE_tol:
-                        dE_tol = None
-                    else:
-                        dE_tol = dE_tol.split()[0]
-
-                    max_f_tol = line[38:52]
-                    if "o" in max_f_tol:
-                        max_f_tol = None
-                    else:
-                        max_f_tol = max_f_tol.split()[0]
-
-                    rms_f_tol = line[52:66]
-                    if "o" in rms_f_tol:
-                        rms_f_tol = None
-                    else:
-                        rms_f_tol = rms_f_tol.split()[0]
-
-                    max_d_tol = line[66:80]
-                    if "o" in max_d_tol:
-                        max_d_tol = None
-                    else:
-                        max_d_tol = max_d_tol.split()[0]
-
-                    rms_d_tol = line[80:94]
-                    if "o" in rms_d_tol:
-                        rms_d_tol = None
-                    else:
-                        rms_d_tol = rms_d_tol.split()[0]
-
-                    line = f.readline()
-                    line = f.readline()
-                    n += 2
-
-                    # for convergence:
-                    # psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
-                    if dE_tol is not None:
-                        dE_conv = line[24:38]
-                        # psi4 doesn't print values for certain criteria on step one
-                        # instead it prints '-------'
-                        try:
-                            dE = float(dE_conv.split()[0])
-                            grad["Delta E"] = {}
-                            grad["Delta E"]["value"] = dE
-                            grad["Delta E"]["converged"] = "*" in dE_conv
-                        except ValueError:
-                            pass
+    
+                if line.startswith("    Geometry (in Angstrom), charge"):
+                    coord_unit_bohr = False
+                    if not just_geom:
+                        self.other["charge"] = int(line.split()[5].strip(","))
+                        self.other["multiplicity"] = int(
+                            line.split()[8].strip(":")
+                        )
+    
+                elif line.strip() == "SCF":
+                    read_geom = True
+    
+                elif line.startswith("    Geometry (in Bohr), charge"):
+                    coord_unit_bohr = True
+                    if not just_geom:
+                        self.other["charge"] = int(line.split()[5].strip(","))
+                        self.other["multiplicity"] = int(
+                            line.split()[8].strip(":")
+                        )
                         
-                    if max_f_tol is not None:
-                        max_f_conv = line[38:52]
-                        max_f = float(max_f_conv.split()[0])
-                        grad["Max Force"] = {}
-                        grad["Max Force"]["value"] = max_f
-                        grad["Max Force"]["converged"] = "*" in max_f_conv
-
-                    if rms_f_tol is not None:
-                        rms_f_conv = line[52:66]
-                        rms_f = float(rms_f_conv.split()[0])
-                        grad["RMS Force"] = {}
-                        grad["RMS Force"]["value"] = rms_f
-                        grad["RMS Force"]["converged"] = "*" in rms_f_conv
-
-                    if max_d_tol is not None:
-                        max_d_conv = line[66:80]
-                        try:
-                            max_d = float(max_d_conv.split()[0])
-                            grad["Max Disp"] = {}
-                            grad["Max Disp"]["value"] = max_d
-                            grad["Max Disp"]["converged"] = "*" in max_d_conv
-                        except ValueError:
-                            pass
-
-                    if rms_d_tol is not None:
-                        rms_d_conv = line[80:94]
-                        try:
-                            rms_d = float(rms_d_conv.split()[0])
-                            grad["RMS Disp"] = {}
-                            grad["RMS Disp"]["value"] = rms_d
-                            grad["RMS Disp"]["converged"] = "*" in max_d_conv
-                        except ValueError:
-                            pass
-
-                    self.other["gradient"] = grad
-
-                elif "Total Gradient" in line:
-                    gradient = np.zeros((len(self.atoms), 3))
-                    self.skip_lines(f, 2)
-                    n += 2
-                    for i in range(0, len(self.atoms)):
-                        n += 1
-                        line = f.readline()
-                        info = line.split()
-                        gradient[i] = np.array([float(x) for x in info[1:]])
-
-                    self.other["forces"] = -gradient
-
-                elif "SAPT Results" in line:
-                    self.skip_lines(f, 1)
+                elif line.strip().startswith("Center") and read_geom:
+                    read_geom = False
+                    if get_all and len(self.atoms) > 0:
+                        if self.all_geom is None:
+                            self.all_geom = []
+    
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+    
+                    self.atoms, mass, n = get_atoms(f, n, coord_unit_bohr)
+                    if not just_geom:
+                        self.other["mass"] = mass
+                        self.other["mass"] *= UNIT.AMU_TO_KG
+    
+                if just_geom:
+                    line = f.readline()
                     n += 1
-                    while "Total sSAPT" not in line:
-                        n += 1
+                    continue
+                else:
+                    if line.startswith("  ==> Input File <=="):
+                        while "--------" not in line:
+                            line = f.readline()
+                        input_file = ""
                         line = f.readline()
-                        if "---" in line:
-                            break
-                        if len(line.strip()) > 0:
-                            if "Special recipe" in line:
-                                continue
-                            item = line[:26].strip()
-                            val = 1e-3 * float(line[34:47])
-                            self.other[item] = val
-
-                elif "SCF energy" in line:
-                    self.other["scf_energy"] = float(line.split()[-1])
-
-                elif "correlation energy" in line and "=" in line:
-                    item = line.split("=")[0].strip()
-                    self.other[item] = float(line.split()[-1])
-
-                elif "Full point group" in line:
-                    self.other["full_point_group"] = line.split()[-1]
-
-                elif "Molecular point group" in line:
-                    self.other["molecular_point_group"] = line.split()[-1]
-
-                elif (
-                    "total energy" in line
-                    and "=" in line
-                    or re.search("\(.\) energy", line)
-                ):
-                    item = line.split("=")[0].strip().strip("*").strip()
-                    self.other[item] = float(line.split()[-1])
-                    # hopefully the highest level energy gets printed last
-                    self.other["energy"] = self.other[item]
-
-                elif "Total Energy" in line and "=" in line:
-                    item = line.split("=")[0].strip().strip("*").strip()
-                    self.other[item] = float(line.split()[-2])
-                    # hopefully the highest level energy gets printed last
-                    self.other["energy"] = self.other[item]
-
-                elif "Correlation Energy" in line and "=" in line:
-                    item = line.split("=")[0].strip().strip("*").strip()
-                    if "DFT Exchange-Correlation" in item:
+                        while "---------" not in line:
+                            input_file += line
+                            line = f.readline()
+                
+                    if line.strip().startswith("Total Energy ="):
+                        self.other["energy"] = float(line.split()[-1])
+    
+                    elif line.strip().startswith("Total E0"):
+                        self.other["energy"] = float(line.split()[-2])
+    
+                    elif line.strip().startswith("Correction ZPE"):
+                        self.other["ZPVE"] = float(line.split()[-4])
+    
+                    elif line.strip().startswith("Total ZPE"):
+                        self.other["E_ZPVE"] = float(line.split()[-2])
+    
+                    elif line.strip().startswith("Total H, Enthalpy"):
+                        self.other["enthalpy"] = float(line.split()[-2])
+    
+                    elif line.strip().startswith("Total G, Free"):
+                        self.other["free_energy"] = float(line.split()[-2])
+                        self.other["temperature"] = float(line.split()[-4])
+    
+                    elif "symmetry no. =" in line:
+                        self.other["rotational_symmetry_number"] = int(
+                            line.split()[-1].strip(")")
+                        )
+    
+                    elif (
+                        line.strip().startswith("Rotational constants:")
+                        and line.strip().endswith("[cm^-1]")
+                        and "rotational_temperature" not in self.other
+                    ):
+                        self.other["rotational_temperature"] = [
+                            float(x) if is_num(x) else 0
+                            for x in line.split()[-8:-1:3]
+                        ]
+                        self.other["rotational_temperature"] = [
+                            x
+                            * PHYSICAL.SPEED_OF_LIGHT
+                            * PHYSICAL.PLANCK
+                            / PHYSICAL.KB
+                            for x in self.other["rotational_temperature"]
+                        ]
+    
+                    elif line.startswith("  Vibration "):
+                        freq_str = ""
+                        while not line.strip().startswith("=="):
+                            freq_str += line
+                            line = f.readline()
+                            n += 1
+    
+                        try:
+                            self.other["frequency"] = Frequency(
+                                freq_str, hpmodes=False, style="psi4", atoms=self.atoms,
+                            )
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing Psi4 frequency data")
+                            log.warning("data read:\n%s" % freq_str)
+                            raise e
+    
+                    elif PSI4_NORM_FINISH in line:
+                        self.other["finished"] = True
+    
+                    elif line.startswith("    Convergence Criteria"):
+                        # for tolerances:
+                        # psi4 puts '*' next to converged values and 'o' in place of things that aren't monitored
+                        grad = {}
+    
+                        dE_tol = line[24:38]
+                        if "o" in dE_tol:
+                            dE_tol = None
+                        else:
+                            dE_tol = dE_tol.split()[0]
+    
+                        max_f_tol = line[38:52]
+                        if "o" in max_f_tol:
+                            max_f_tol = None
+                        else:
+                            max_f_tol = max_f_tol.split()[0]
+    
+                        rms_f_tol = line[52:66]
+                        if "o" in rms_f_tol:
+                            rms_f_tol = None
+                        else:
+                            rms_f_tol = rms_f_tol.split()[0]
+    
+                        max_d_tol = line[66:80]
+                        if "o" in max_d_tol:
+                            max_d_tol = None
+                        else:
+                            max_d_tol = max_d_tol.split()[0]
+    
+                        rms_d_tol = line[80:94]
+                        if "o" in rms_d_tol:
+                            rms_d_tol = None
+                        else:
+                            rms_d_tol = rms_d_tol.split()[0]
+    
+                        line = f.readline()
+                        line = f.readline()
+                        n += 2
+    
+                        # for convergence:
+                        # psi4 puts '*' next to converged values and 'o' next to things that aren't monitored
+                        if dE_tol is not None:
+                            dE_conv = line[24:38]
+                            # psi4 doesn't print values for certain criteria on step one
+                            # instead it prints '-------'
+                            try:
+                                dE = float(dE_conv.split()[0])
+                                grad["Delta E"] = {}
+                                grad["Delta E"]["value"] = dE
+                                grad["Delta E"]["converged"] = "*" in dE_conv
+                            except ValueError:
+                                pass
+                            
+                        if max_f_tol is not None:
+                            max_f_conv = line[38:52]
+                            max_f = float(max_f_conv.split()[0])
+                            grad["Max Force"] = {}
+                            grad["Max Force"]["value"] = max_f
+                            grad["Max Force"]["converged"] = "*" in max_f_conv
+    
+                        if rms_f_tol is not None:
+                            rms_f_conv = line[52:66]
+                            rms_f = float(rms_f_conv.split()[0])
+                            grad["RMS Force"] = {}
+                            grad["RMS Force"]["value"] = rms_f
+                            grad["RMS Force"]["converged"] = "*" in rms_f_conv
+    
+                        if max_d_tol is not None:
+                            max_d_conv = line[66:80]
+                            try:
+                                max_d = float(max_d_conv.split()[0])
+                                grad["Max Disp"] = {}
+                                grad["Max Disp"]["value"] = max_d
+                                grad["Max Disp"]["converged"] = "*" in max_d_conv
+                            except ValueError:
+                                pass
+    
+                        if rms_d_tol is not None:
+                            rms_d_conv = line[80:94]
+                            try:
+                                rms_d = float(rms_d_conv.split()[0])
+                                grad["RMS Disp"] = {}
+                                grad["RMS Disp"]["value"] = rms_d
+                                grad["RMS Disp"]["converged"] = "*" in max_d_conv
+                            except ValueError:
+                                pass
+    
+                        self.other["gradient"] = grad
+    
+                    elif "Total Gradient" in line:
+                        gradient = np.zeros((len(self.atoms), 3))
+                        self.skip_lines(f, 2)
+                        n += 2
+                        for i in range(0, len(self.atoms)):
+                            n += 1
+                            line = f.readline()
+                            info = line.split()
+                            gradient[i] = np.array([float(x) for x in info[1:]])
+    
+                        self.other["forces"] = -gradient
+    
+                    elif "SAPT Results" in line:
+                        self.skip_lines(f, 1)
+                        n += 1
+                        while "Total sSAPT" not in line:
+                            n += 1
+                            line = f.readline()
+                            if "---" in line:
+                                break
+                            if len(line.strip()) > 0:
+                                if "Special recipe" in line:
+                                    continue
+                                item = line[:26].strip()
+                                val = 1e-3 * float(line[34:47])
+                                self.other[item] = val
+    
+                    elif "SCF energy" in line:
+                        self.other["scf_energy"] = float(line.split()[-1])
+    
+                    elif "correlation energy" in line and "=" in line:
+                        item = line.split("=")[0].strip()
                         self.other[item] = float(line.split()[-1])
-                    else:
+    
+                    elif "Full point group" in line:
+                        self.other["full_point_group"] = line.split()[-1]
+    
+                    elif "Molecular point group" in line:
+                        self.other["molecular_point_group"] = line.split()[-1]
+    
+                    elif (
+                        "total energy" in line
+                        and "=" in line
+                        or re.search("\(.\) energy", line)
+                    ):
+                        item = line.split("=")[0].strip().strip("*").strip()
+                        self.other[item] = float(line.split()[-1])
+                        # hopefully the highest level energy gets printed last
+                        self.other["energy"] = self.other[item]
+    
+                    elif "Total Energy" in line and "=" in line:
+                        item = line.split("=")[0].strip().strip("*").strip()
                         self.other[item] = float(line.split()[-2])
-
-                elif "Ground State -> Excited State Transitions" in line:
-                    self.skip_lines(f, 3)
-                    n += 3
-                    line = f.readline()
-                    s = ""
-                    while line.strip():
-                        s += line
-                        n += 1
+                        # hopefully the highest level energy gets printed last
+                        self.other["energy"] = self.other[item]
+    
+                    elif "Correlation Energy" in line and "=" in line:
+                        item = line.split("=")[0].strip().strip("*").strip()
+                        if "DFT Exchange-Correlation" in item:
+                            self.other[item] = float(line.split()[-1])
+                        else:
+                            self.other[item] = float(line.split()[-2])
+    
+                    elif "Ground State -> Excited State Transitions" in line:
+                        self.skip_lines(f, 3)
+                        n += 3
                         line = f.readline()
-
-                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
-
-                elif "Excitation Energy" in line and "Rotatory" in line:
-                    self.skip_lines(f, 2)
-                    n += 2
-                    line = f.readline()
-                    s = ""
-                    while line.strip():
-                        s += line
-                        n += 1
+                        s = ""
+                        while line.strip():
+                            s += line
+                            n += 1
+                            line = f.readline()
+    
+                        self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+    
+                    elif "Excitation Energy" in line and "Rotatory" in line:
+                        self.skip_lines(f, 2)
+                        n += 2
                         line = f.readline()
-
-                    self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
-
-                elif re.search("\| State\s*\d+", line):
-                    # read energies from property calculation
-                    uv_vis += line
-
-                elif "Excited state properties:" in line:
-                    # read osc str or rotation from property calculation
-                    while line.strip():
+                        s = ""
+                        while line.strip():
+                            s += line
+                            n += 1
+                            line = f.readline()
+    
+                        self.other["uv_vis"] = ValenceExcitations(s, style="psi4")
+    
+                    elif re.search("\| State\s*\d+", line):
+                        # read energies from property calculation
                         uv_vis += line
-                        n += 1
-                        line = f.readline()
-
-                    if "Oscillator" in uv_vis or "Rotation" in uv_vis:
-                        self.other["uv_vis"] = ValenceExcitations(uv_vis, style="psi4")
-
-                if "error" not in self.other:
-                    for err in ERROR_PSI4:
-                        if err in line:
-                            self.other["error"] = ERROR_PSI4[err]
-                            self.other["error_msg"] = line.strip()
-
-                line = f.readline()
-                n += 1
+    
+                    elif "Excited state properties:" in line:
+                        # read osc str or rotation from property calculation
+                        while line.strip():
+                            uv_vis += line
+                            n += 1
+                            line = f.readline()
+    
+                        if "Oscillator" in uv_vis or "Rotation" in uv_vis:
+                            self.other["uv_vis"] = ValenceExcitations(uv_vis, style="psi4")
+    
+                    if "error" not in self.other:
+                        for err in ERROR_PSI4:
+                            if err in line:
+                                self.other["error"] = ERROR_PSI4[err]
+                                self.other["error_msg"] = line.strip()
+    
+                    line = f.readline()
+                    n += 1
+            
+            except Exception as e:
+                if not log:
+                    log = self.LOG
+                log.warning("error while parsing Psi4 output")
+                log.warning("last line read: %s" % line)
+                try:
+                    log.warning("input file:\n%s" % input_file)
+                except NameError:
+                    pass
+                log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
+                raise e
 
         if get_all:
             if not self.all_geom:
@@ -2232,7 +2261,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False):
+    def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
         """read orca output file"""
 
         self.all_geom = []
@@ -2274,706 +2303,750 @@ class FileReader:
         line = f.readline()
         n = 1
         while line != "":
-            if (
-                "Psi4: An Open-Source Ab Initio Electronic Structure Package"
-                in line
-            ):
-                self.file_type = "dat"
-                return self.read_psi4_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if (
-                "A Quantum Leap Into The Future Of Chemistry"
-                in line
-            ):
-                self.file_type = "qout"
-                return self.read_qchem_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if (
-                "Entering Gaussian System"
-                in line
-            ):
-                self.file_type = "log"
-                return self.read_log(
-                    f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
-                )
-
-            if line.startswith("CARTESIAN COORDINATES (A.U.)") and not masses:
-                self.skip_lines(f, 2)
-                n += 2
-                line = f.readline()
-                while line.strip() and "--" not in line and not line.startswith("*"):
-                    info = line.split()
-                    mass = float(info[4])
-                    masses.append(mass)
-                    line = f.readline()
-                    n += 1
-
-            if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
-                if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
-                    if self.all_geom is None:
-                        self.all_geom = []
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-
-                elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
-                    if self.all_geom is None:
-                        self.all_geom = []
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-
-                self.atoms, n = get_atoms(f, n)
-                step_converged = False
-
-            if just_geom:
-                line = f.readline()
-                n += 1
-                continue
-            else:
-
-                nrg = nrg_regex.match(line)
-                if nrg is not None:
-                    nrg_type = nrg.group(1)
-                    # for some reason, ORCA prints MP2 correlation energy
-                    # as E(MP2) for CC jobs
-                    if nrg_type == "MP2":
-                        nrg_type = "MP2 CORR"
-                        self.other["E(%s)" % nrg_type] = float(nrg.group(2))
-
-                if line.startswith("FINAL SINGLE POINT ENERGY"):
-                    # if the wavefunction doesn't converge, ORCA prints a message next
-                    # to the energy so we can't use line.split()[-1]
-                    try:
-                        self.other["energy"] = float(line.split()[4])
-                    except ValueError:
-                        kind = line.split()[4]
-                        nrg = float(line.split()[5])
-                        self.other["energy " + kind] = nrg
-
-                if line.startswith("TOTAL SCF ENERGY"):
-                    self.skip_lines(f, 2)
-                    line = f.readline()
-                    n += 3
-                    self.other["scf_energy"] = float(line.split()[3])
-
-                if line.startswith("QM Subsystem"):
-                    atoms = [int(x) for x in line.split()[3:]]
-                    line = f.readline()
-                    n += 1
-                    while line.split()[0].isdigit():
-                        atoms.extend([int(x) for x in line.split()])
-                        line = f.readline()
-                        n += 1
- 
-                    self.other["QM atoms"] = atoms
-
-                if line.startswith("Active atoms") and line.split()[3] != "All":
-                    atoms = [int(x) for x in line.split()[3:]]
-                    line = f.readline()
-                    n += 1
-                    while line.split()[0].isdigit():
-                        atoms.extend([int(x) for x in line.split()])
-                        line = f.readline()
-                        n += 1
-                    
-                    self.other["active atoms"] = atoms
-
-                if "Program Version 6" in line:
-                    orca_version = 6
-
-                if "Program Version 5" in line:
-                    orca_version = 5
-
-                if "Program Version 4" in line:
-                    orca_version = 4
-
-                if line.startswith("Fixed atoms used in optimizer"):
-                    atoms = [int(x) for x in line.split()[6:]]
-                    line = f.readline()
-                    n += 1
-                    while line.split()[0].isdigit():
-                        atoms.extend([int(x) for x in line.split()])
-                        line = f.readline()
-                        n += 1
-                    
-                    self.other["fixed atoms"] = atoms
-
-                elif "E(SOC CIS)" in line:
-                    self.other["SOC CIS/TD root energy"] = float(line.split()[3])
-
-                elif "DE(CIS)" in line:
-                    self.other["CIS/TD root energy"] = float(line.split()[2])
-
-                elif "Dispersion correction" in line:
-                    try:
-                        self.other["dispersion correction energy"] = float(line.split()[2])
-                    except ValueError:
-                        pass
-
-                elif "TOTAL ENERGY:" in line:
-                    item = line.split()[-5] + " energy"
-                    self.other[item] = float(line.split()[-2])
-
-                elif "CORRELATION ENERGY" in line and "Eh" in line:
-                    energy_type = re.search("\s*([\S\s]+) CORRELATION ENERGY", line).group(1)
-                    item = energy_type + " correlation energy"
-                    self.other[item] = float(line.split()[-2])
-
-                elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
-                    nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
-                    self.other["energy"] = float(nrg.group(2))
-                    self.other[nrg.group(1)] = float(nrg.group(2))
-
-                elif "*    Relaxed Surface Scan    *" in line:
-                    is_scan_job = True
-
-                elif "THE OPTIMIZATION HAS CONVERGED" in line:
-                    step_converged = True
-
-                elif line.strip() == "CARTESIAN GRADIENT (MM)":
-                    actives = []
-                    try:
-                        gradient = []
-                        if "NUMERICAL" in line:
-                            self.skip_lines(f, 1)
-                            n += 1
-                        else:
-                            self.skip_lines(f, 1)
-                            n += 1
-                        line = f.readline()
-                        n += 1
-                        while line.strip() and line.split()[0].isdigit():
-                            # orca prints a warning before gradient if some
-                            # coordinates are constrained
-                            if line.startswith("WARNING:"):
-                                continue
-                            info = line.split()
-                            gradient.append(np.array([float(x) for x in info[3:6]]))
-                            line = f.readline()
-                            n += 1
-    
-                        self.other["forces (MM)"] = -np.array(gradient)
-                    except ValueError:
-                        pass
-                
-                elif line.startswith("CARTESIAN GRADIENT (QM/MM)"):
-                    actives = []
-                    try:
-                        gradient = []
-                        if "NUMERICAL" in line:
-                            self.skip_lines(f, 1)
-                            n += 1
-                        else:
-                            self.skip_lines(f, 1)
-                            n += 1
-                        line = f.readline()
-                        n += 1
-                        while line.strip() and line.split()[0].isdigit():
-                            # orca prints a warning before gradient if some
-                            # coordinates are constrained
-                            if line.startswith("WARNING:"):
-                                continue
-                            info = line.split()
-                            gradient.append(np.array([float(x) for x in info[3:6]]))
-                            line = f.readline()
-                            n += 1
-    
-                        self.other["forces (QM/MM)"] = -np.array(gradient)
-                    except ValueError:
-                        pass
-
-                elif line.startswith("CARTESIAN GRADIENT"):
-                    try:
-                        gradient = np.zeros((len(self.atoms), 3))
-                        if "NUMERICAL" in line:
-                            self.skip_lines(f, 1)
-                            n += 1
-                        else:
-                            self.skip_lines(f, 2)
-                            n += 2
-                        for i in range(0, len(self.atoms)):
-                            n += 1
-                            line = f.readline()
-                            # orca prints a warning before gradient if some
-                            # coordinates are constrained
-                            if line.startswith("WARNING:"):
-                                continue
-                            info = line.split()
-                            gradient[i] = np.array([float(x) for x in info[3:]])
-    
-                        self.other["forces"] = -gradient
-                    except ValueError:
-                        pass
-
-                elif line.startswith("VIBRATIONAL FREQUENCIES"):
-                    stage = "frequencies"
-                    freq_str = "VIBRATIONAL FREQUENCIES\n"
-                    self.skip_lines(f, 2)
-                    n += 3
-                    line = f.readline()
-                    hit = {
-                        "modes": False,
-                        "spectrum": False,
-                    }
-                    while not (stage == "THERMO" and line == "\n") and line:
-                        if "--" not in line and line != "\n":
-                            freq_str += line
-
-                        if "NORMAL MODES" in line:
-                            stage = "modes"
-                            hit["modes"] = True
-                            self.skip_lines(f, 6)
-                            n += 6
-
-                        if "RAMAN SPECTRUM" in line:
-                            stage = "RAMAN"
-                            self.skip_lines(f, 2)
-                            n += 2
-
-                        if "IR SPECTRUM" in line:
-                            if not hit["modes"]:
-                                break
-                            hit["spectrum"] = True
-                            stage = "IR"
-                            self.skip_lines(f, 2)
-                            n += 2
-
-                        if "THERMOCHEMISTRY" in line:
-                            stage = "THERMO"
-
-                        n += 1
-                        line = f.readline()
-
-                    if all(hit.values()):
-                        self.other["frequency"] = Frequency(
-                            freq_str, hpmodes=False, style="orca", atoms=self.atoms,
-                        )
-
-                elif "VCD SPECTRUM CALCULATION" in line:
-                    # VCD is optional and comes after thermochem output
-                    # it's probably easier to just parse it after the rest
-                    # of the freq data rather than try to figure out if we
-                    # need to read something after the thermochem data
-                    self.skip_lines(f, 8)
-                    n += 8
-                    line = f.readline()
-                    for mode in self.other["frequency"].data:
-                        # mode #, frequency, rotatory strength
-                        _, _, rot = line.split()
-                        mode.rotation = float(rot)
-                        line = f.readline()
-                        n += 1
-
-                elif line.startswith("CHEMICAL SHIFTS") or line.startswith("CHEMICAL SHIELDINGS"):
-                    nmr_data = []
-                    while line:
-                        nmr_data.append(line)
-                        n += 1
-                        line = f.readline()
-                        if "Maximum memory used throughout the entire EPRNMR-calculation:" in line:
-                            break
-                        if "NMR shielding tensor and spin rotation calculation done" in line:
-                            break
-                    self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
-
-                elif line.startswith("Temperature"):
-                    self.other["temperature"] = float(line.split()[2])
-
-                elif line.startswith("Total Mass"):
-                    # this may only get printed for freq jobs
-                    self.other["mass"] = float(line.split()[3])
-                    self.other["mass"] *= UNIT.AMU_TO_KG
-
-                elif line.startswith(" Total Charge"):
-                    self.other["charge"] = int(line.split()[-1])
-
-                elif line.startswith(" Multiplicity"):
-                    self.other["multiplicity"] = int(line.split()[-1])
-
-                elif "rotational symmetry number" in line:
-                    # TODO: make this cleaner
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-2]
+            try:
+                if (
+                    "Psi4: An Open-Source Ab Initio Electronic Structure Package"
+                    in line
+                ):
+                    self.file_type = "dat"
+                    return self.read_psi4_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-
-                elif line.startswith("Zero point energy"):
-                    self.other["ZPVE"] = float(line.split()[4])
-
-                elif line.startswith("Total Enthalpy"):
-                    self.other["enthalpy"] = float(line.split()[3])
-
-                elif line.startswith("Final Gibbs"):
-                    # NOTE - Orca seems to only print Grimme's Quasi-RRHO free energy
-                    # RRHO can be computed in AaronTool's CompOutput by setting the w0 to 0
-                    self.other["free_energy"] = float(line.split()[5])
-
-                elif line.startswith("Rotational constants in cm-1:"):
-                    # orca doesn't seem to print rotational constants in older versions
-                    self.other["rotational_temperature"] = [
-                        float(x) for x in line.split()[-3:]
-                    ]
-                    self.other["rotational_temperature"] = [
-                        x
-                        * PHYSICAL.SPEED_OF_LIGHT
-                        * PHYSICAL.PLANCK
-                        / PHYSICAL.KB
-                        for x in self.other["rotational_temperature"]
-                    ]
-
-                elif "sn is the rotational symmetry number" in line:
-                    # older versions of orca print this differently
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-2]
+    
+                if (
+                    "A Quantum Leap Into The Future Of Chemistry"
+                    in line
+                ):
+                    self.file_type = "qout"
+                    return self.read_qchem_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-
-                elif "Geometry convergence" in line:
-                    grad = {}
-                    self.skip_lines(f, 2)
-                    n += 3
-                    line = f.readline()
-                    while line and re.search("\w", line):
-                        if re.search("Energy\schange", line):
-                            add_grad(grad, "Delta E", line)
-                        elif re.search("RMS\sgradient", line):
-                            add_grad(grad, "RMS Force", line)
-                        elif re.search("MAX\sgradient", line):
-                            add_grad(grad, "Max Force", line)
-                        elif re.search("RMS\sstep", line):
-                            add_grad(grad, "RMS Disp", line)
-                        elif re.search("MAX\sstep", line):
-                            add_grad(grad, "Max Disp", line)
-
-                        line = f.readline()
-                        n += 1
-
-                    self.other["gradient"] = grad
-
-                elif "MAYER POPULATION ANALYSIS" in line:
+    
+                if (
+                    "Entering Gaussian System"
+                    in line
+                ):
+                    self.file_type = "log"
+                    return self.read_log(
+                        f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
+                    )
+    
+                if line.startswith("CARTESIAN COORDINATES (A.U.)") and not masses:
                     self.skip_lines(f, 2)
                     n += 2
                     line = f.readline()
-                    data = dict()
-                    headers = []
-                    while line.strip():
+                    while line.strip() and "--" not in line and not line.startswith("*"):
                         info = line.split()
-                        header = info[0]
-                        name = " ".join(info[2:])
-                        headers.append(header)
-                        data[header] = (name, [])
-                        line = f.readline()
-                    self.skip_lines(f, 1)
-                    n += 1
-                    for i in range(0, len(self.atoms)):
-                        line = f.readline()
-                        info = line.split()[2:]
-                        for header, val in zip(headers, info):
-                            data[header][1].append(float(val))
-
-                    for header in headers:
-                        self.other[data[header][0]] = np.array(data[header][1])
-
-                elif line.startswith("LOEWDIN ATOMIC CHARGES"):
-                    self.skip_lines(f, 1)
-                    n += 1
-                    charges = np.zeros(len(self.atoms))
-                    for i in range(0, len(self.atoms)):
+                        mass = float(info[4])
+                        masses.append(mass)
                         line = f.readline()
                         n += 1
-                        charges[i] = float(line.split()[-1])
-                    self.other["Löwdin Charges"] = charges
-
-                elif line.startswith("MULLIKEN ATOMIC CHARGES"):
-                    self.skip_lines(f, 1)
-                    n += 1
-                    charges = np.zeros(len(self.atoms))
-                    for i in range(0, len(self.atoms)):
-                        line = f.readline()
-                        n += 1
-                        charges[i] = float(line.split()[-1])
-                    self.other["Mulliken Charges"] = charges
-
-                elif line.startswith("BASIS SET IN INPUT FORMAT"):
-                    # read basis set primitive info
-                    self.skip_lines(f, 3)
-                    n += 3
+    
+                if line.startswith("CARTESIAN COORDINATES (ANGSTROEM)"):
+                    if is_scan_job and not scan_read_all and step_converged and get_all and len(self.atoms) > 0:
+                        if self.all_geom is None:
+                            self.all_geom = []
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+    
+                    elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
+                        if self.all_geom is None:
+                            self.all_geom = []
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+    
+                    self.atoms, n = get_atoms(f, n)
+                    step_converged = False
+    
+                if just_geom:
                     line = f.readline()
                     n += 1
-                    self.other["basis_set_by_ele"] = dict()
-                    while "--" not in line and line != "":
-                        members = re.search("Members:([\S\s]+)", line)
-                        new_gto = re.search("NewGTO\s+(\S+)", line)
-                        ele = None
-                        names = None
-                        if new_gto:
-                            ele = new_gto.group(1)
-                        elif members:
-                            names = map(int, members.group(1).split()[1::2])
+                    continue
+                else:
+    
+                    nrg = nrg_regex.match(line)
+                    if nrg is not None:
+                        nrg_type = nrg.group(1)
+                        # for some reason, ORCA prints MP2 correlation energy
+                        # as E(MP2) for CC jobs
+                        if nrg_type == "MP2":
+                            nrg_type = "MP2 CORR"
+                            self.other["E(%s)" % nrg_type] = float(nrg.group(2))
+    
+                    if line.startswith("FINAL SINGLE POINT ENERGY"):
+                        # if the wavefunction doesn't converge, ORCA prints a message next
+                        # to the energy so we can't use line.split()[-1]
+                        try:
+                            self.other["energy"] = float(line.split()[4])
+                        except ValueError:
+                            kind = line.split()[4]
+                            nrg = float(line.split()[5])
+                            self.other["energy " + kind] = nrg
+    
+                    if line.startswith("TOTAL SCF ENERGY"):
+                        self.skip_lines(f, 2)
+                        line = f.readline()
+                        n += 3
+                        self.other["scf_energy"] = float(line.split()[3])
+    
+                    if line.startswith("QM Subsystem"):
+                        atoms = [int(x) for x in line.split()[3:]]
+                        line = f.readline()
+                        n += 1
+                        while line.split()[0].isdigit():
+                            atoms.extend([int(x) for x in line.split()])
                             line = f.readline()
                             n += 1
-
-                        if new_gto or members:
+    
+                        self.other["QM atoms"] = atoms
+    
+                    if line.startswith("Active atoms") and line.split()[3] != "All":
+                        atoms = [int(x) for x in line.split()[3:]]
+                        line = f.readline()
+                        n += 1
+                        while line.split()[0].isdigit():
+                            atoms.extend([int(x) for x in line.split()])
                             line = f.readline()
                             n += 1
-                            primitives = []
-                            while "end" not in line and line.strip():
-                                shell_type, n_prim = line.split()
-                                n_prim = int(n_prim)
-                                exponents = []
-                                con_coeffs = []
-                                for i in range(0, n_prim):
+                        
+                        self.other["active atoms"] = atoms
+    
+                    if "Program Version 6" in line:
+                        orca_version = 6
+    
+                    if "Program Version 5" in line:
+                        orca_version = 5
+    
+                    if "Program Version 4" in line:
+                        orca_version = 4
+    
+                    if line.startswith("Fixed atoms used in optimizer"):
+                        atoms = [int(x) for x in line.split()[6:]]
+                        line = f.readline()
+                        n += 1
+                        while line.split()[0].isdigit():
+                            atoms.extend([int(x) for x in line.split()])
+                            line = f.readline()
+                            n += 1
+                        
+                        self.other["fixed atoms"] = atoms
+    
+                    elif "E(SOC CIS)" in line:
+                        self.other["SOC CIS/TD root energy"] = float(line.split()[3])
+    
+                    elif "DE(CIS)" in line:
+                        self.other["CIS/TD root energy"] = float(line.split()[2])
+    
+                    elif "Dispersion correction" in line:
+                        try:
+                            self.other["dispersion correction energy"] = float(line.split()[2])
+                        except ValueError:
+                            pass
+    
+                    elif "TOTAL ENERGY:" in line:
+                        item = line.split()[-5] + " energy"
+                        self.other[item] = float(line.split()[-2])
+    
+                    elif "CORRELATION ENERGY" in line and "Eh" in line:
+                        energy_type = re.search("\s*([\S\s]+) CORRELATION ENERGY", line).group(1)
+                        item = energy_type + " correlation energy"
+                        self.other[item] = float(line.split()[-2])
+    
+                    elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
+                        nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
+                        self.other["energy"] = float(nrg.group(2))
+                        self.other[nrg.group(1)] = float(nrg.group(2))
+    
+                    elif "*    Relaxed Surface Scan    *" in line:
+                        is_scan_job = True
+    
+                    elif "THE OPTIMIZATION HAS CONVERGED" in line:
+                        step_converged = True
+    
+                    elif line.strip() == "CARTESIAN GRADIENT (MM)":
+                        actives = []
+                        try:
+                            gradient = []
+                            if "NUMERICAL" in line:
+                                self.skip_lines(f, 1)
+                                n += 1
+                            else:
+                                self.skip_lines(f, 1)
+                                n += 1
+                            line = f.readline()
+                            n += 1
+                            while line.strip() and line.split()[0].isdigit():
+                                # orca prints a warning before gradient if some
+                                # coordinates are constrained
+                                if line.startswith("WARNING:"):
+                                    continue
+                                info = line.split()
+                                gradient.append(np.array([float(x) for x in info[3:6]]))
+                                line = f.readline()
+                                n += 1
+        
+                            self.other["forces (MM)"] = -np.array(gradient)
+                        except ValueError:
+                            if log is None:
+                                log = self.LOG
+                            log.warning("error while reading ORCA MM gradient")
+                            log.warning("data read:\n%s" % repr(gradient))
+                            pass
+                    
+                    elif line.startswith("CARTESIAN GRADIENT (QM/MM)"):
+                        actives = []
+                        try:
+                            gradient = []
+                            if "NUMERICAL" in line:
+                                self.skip_lines(f, 1)
+                                n += 1
+                            else:
+                                self.skip_lines(f, 1)
+                                n += 1
+                            line = f.readline()
+                            n += 1
+                            while line.strip() and line.split()[0].isdigit():
+                                # orca prints a warning before gradient if some
+                                # coordinates are constrained
+                                if line.startswith("WARNING:"):
+                                    continue
+                                info = line.split()
+                                gradient.append(np.array([float(x) for x in info[3:6]]))
+                                line = f.readline()
+                                n += 1
+        
+                            self.other["forces (QM/MM)"] = -np.array(gradient)
+                        except ValueError:
+                            if log is None:
+                                log = self.LOG
+                            log.warning("error while reading ORCA QM/MM gradient")
+                            log.warning("data read:\n%s" % repr(gradient))
+                            pass
+    
+                    elif line.startswith("CARTESIAN GRADIENT"):
+                        try:
+                            gradient = np.zeros((len(self.atoms), 3))
+                            if "NUMERICAL" in line:
+                                self.skip_lines(f, 1)
+                                n += 1
+                            else:
+                                self.skip_lines(f, 2)
+                                n += 2
+                            for i in range(0, len(self.atoms)):
+                                n += 1
+                                line = f.readline()
+                                # orca prints a warning before gradient if some
+                                # coordinates are constrained
+                                if line.startswith("WARNING:"):
+                                    continue
+                                info = line.split()
+                                gradient[i] = np.array([float(x) for x in info[3:]])
+        
+                            self.other["forces"] = -gradient
+                        except ValueError:
+                            if log is None:
+                                log = self.LOG
+                            log.warning("error while reading ORCA gradient")
+                            log.warning("data read:\n%s" % repr(gradient))
+                            pass
+    
+                    elif line.startswith("VIBRATIONAL FREQUENCIES"):
+                        stage = "frequencies"
+                        freq_str = "VIBRATIONAL FREQUENCIES\n"
+                        self.skip_lines(f, 2)
+                        n += 3
+                        line = f.readline()
+                        hit = {
+                            "modes": False,
+                            "spectrum": False,
+                        }
+                        while not (stage == "THERMO" and line == "\n") and line:
+                            if "--" not in line and line != "\n":
+                                freq_str += line
+    
+                            if "NORMAL MODES" in line:
+                                stage = "modes"
+                                hit["modes"] = True
+                                self.skip_lines(f, 6)
+                                n += 6
+    
+                            if "RAMAN SPECTRUM" in line:
+                                stage = "RAMAN"
+                                self.skip_lines(f, 2)
+                                n += 2
+    
+                            if "IR SPECTRUM" in line:
+                                if not hit["modes"]:
+                                    break
+                                hit["spectrum"] = True
+                                stage = "IR"
+                                self.skip_lines(f, 2)
+                                n += 2
+    
+                            if "THERMOCHEMISTRY" in line:
+                                stage = "THERMO"
+    
+                            n += 1
+                            line = f.readline()
+    
+                        if all(hit.values()):
+                            try:
+                                self.other["frequency"] = Frequency(
+                                    freq_str, hpmodes=False, style="orca", atoms=self.atoms,
+                                )
+                            except Exception as e:
+                                if not log:
+                                    log = self.LOG
+                                log.warning("error while parsing ORCA frequency data")
+                                log.warning("data read:\n%s" % freq_str)
+                                raise e
+    
+                    elif "VCD SPECTRUM CALCULATION" in line:
+                        # VCD is optional and comes after thermochem output
+                        # it's probably easier to just parse it after the rest
+                        # of the freq data rather than try to figure out if we
+                        # need to read something after the thermochem data
+                        self.skip_lines(f, 8)
+                        n += 8
+                        line = f.readline()
+                        for mode in self.other["frequency"].data:
+                            # mode #, frequency, rotatory strength
+                            _, _, rot = line.split()
+                            mode.rotation = float(rot)
+                            line = f.readline()
+                            n += 1
+    
+                    elif line.startswith("CHEMICAL SHIFTS") or line.startswith("CHEMICAL SHIELDINGS"):
+                        nmr_data = []
+                        while line:
+                            nmr_data.append(line)
+                            n += 1
+                            line = f.readline()
+                            if "Maximum memory used throughout the entire EPRNMR-calculation:" in line:
+                                break
+                            if "NMR shielding tensor and spin rotation calculation done" in line:
+                                break
+                        try:
+                            self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing ORCA NMR data")
+                            log.warning("NMR data read:\n" % "".join(nmr_data))
+                            log.warning("number of atoms: %i" % len(self.atoms))
+                            raise e
+    
+                    elif line.startswith("Temperature"):
+                        self.other["temperature"] = float(line.split()[2])
+    
+                    elif line.startswith("Total Mass"):
+                        # this may only get printed for freq jobs
+                        self.other["mass"] = float(line.split()[3])
+                        self.other["mass"] *= UNIT.AMU_TO_KG
+    
+                    elif line.startswith(" Total Charge"):
+                        self.other["charge"] = int(line.split()[-1])
+    
+                    elif line.startswith(" Multiplicity"):
+                        self.other["multiplicity"] = int(line.split()[-1])
+    
+                    elif "rotational symmetry number" in line:
+                        # TODO: make this cleaner
+                        self.other["rotational_symmetry_number"] = int(
+                            line.split()[-2]
+                        )
+    
+                    elif line.startswith("Zero point energy"):
+                        self.other["ZPVE"] = float(line.split()[4])
+    
+                    elif line.startswith("Total Enthalpy"):
+                        self.other["enthalpy"] = float(line.split()[3])
+    
+                    elif line.startswith("Final Gibbs"):
+                        # NOTE - Orca seems to only print Grimme's Quasi-RRHO free energy
+                        # RRHO can be computed in AaronTool's CompOutput by setting the w0 to 0
+                        self.other["free_energy"] = float(line.split()[5])
+    
+                    elif line.startswith("Rotational constants in cm-1:"):
+                        # orca doesn't seem to print rotational constants in older versions
+                        self.other["rotational_temperature"] = [
+                            float(x) for x in line.split()[-3:]
+                        ]
+                        self.other["rotational_temperature"] = [
+                            x
+                            * PHYSICAL.SPEED_OF_LIGHT
+                            * PHYSICAL.PLANCK
+                            / PHYSICAL.KB
+                            for x in self.other["rotational_temperature"]
+                        ]
+    
+                    elif "sn is the rotational symmetry number" in line:
+                        # older versions of orca print this differently
+                        self.other["rotational_symmetry_number"] = int(
+                            line.split()[-2]
+                        )
+    
+                    elif "Geometry convergence" in line:
+                        grad = {}
+                        self.skip_lines(f, 2)
+                        n += 3
+                        line = f.readline()
+                        while line and re.search("\w", line):
+                            if re.search("Energy\schange", line):
+                                add_grad(grad, "Delta E", line)
+                            elif re.search("RMS\sgradient", line):
+                                add_grad(grad, "RMS Force", line)
+                            elif re.search("MAX\sgradient", line):
+                                add_grad(grad, "Max Force", line)
+                            elif re.search("RMS\sstep", line):
+                                add_grad(grad, "RMS Disp", line)
+                            elif re.search("MAX\sstep", line):
+                                add_grad(grad, "Max Disp", line)
+    
+                            line = f.readline()
+                            n += 1
+    
+                        self.other["gradient"] = grad
+    
+                    elif "MAYER POPULATION ANALYSIS" in line:
+                        self.skip_lines(f, 2)
+                        n += 2
+                        line = f.readline()
+                        data = dict()
+                        headers = []
+                        while line.strip():
+                            info = line.split()
+                            header = info[0]
+                            name = " ".join(info[2:])
+                            headers.append(header)
+                            data[header] = (name, [])
+                            line = f.readline()
+                        self.skip_lines(f, 1)
+                        n += 1
+                        for i in range(0, len(self.atoms)):
+                            line = f.readline()
+                            info = line.split()[2:]
+                            for header, val in zip(headers, info):
+                                data[header][1].append(float(val))
+    
+                        for header in headers:
+                            self.other[data[header][0]] = np.array(data[header][1])
+    
+                    elif line.startswith("LOEWDIN ATOMIC CHARGES"):
+                        self.skip_lines(f, 1)
+                        n += 1
+                        charges = np.zeros(len(self.atoms))
+                        for i in range(0, len(self.atoms)):
+                            line = f.readline()
+                            n += 1
+                            charges[i] = float(line.split()[-1])
+                        self.other["Löwdin Charges"] = charges
+    
+                    elif line.startswith("MULLIKEN ATOMIC CHARGES"):
+                        self.skip_lines(f, 1)
+                        n += 1
+                        charges = np.zeros(len(self.atoms))
+                        for i in range(0, len(self.atoms)):
+                            line = f.readline()
+                            n += 1
+                            charges[i] = float(line.split()[-1])
+                        self.other["Mulliken Charges"] = charges
+    
+                    elif line.startswith("BASIS SET IN INPUT FORMAT"):
+                        # read basis set primitive info
+                        self.skip_lines(f, 3)
+                        n += 3
+                        line = f.readline()
+                        n += 1
+                        self.other["basis_set_by_ele"] = dict()
+                        while "--" not in line and line != "":
+                            members = re.search("Members:([\S\s]+)", line)
+                            new_gto = re.search("NewGTO\s+(\S+)", line)
+                            ele = None
+                            names = None
+                            if new_gto:
+                                ele = new_gto.group(1)
+                            elif members:
+                                names = map(int, members.group(1).split()[1::2])
+                                line = f.readline()
+                                n += 1
+    
+                            if new_gto or members:
+                                line = f.readline()
+                                n += 1
+                                primitives = []
+                                while "end" not in line and line.strip():
+                                    shell_type, n_prim = line.split()
+                                    n_prim = int(n_prim)
+                                    exponents = []
+                                    con_coeffs = []
+                                    for i in range(0, n_prim):
+                                        line = f.readline()
+                                        n += 1
+                                        info = line.split()
+                                        exponent = float(info[1])
+                                        con_coeff = [float(x) for x in info[2:]]
+                                        exponents.append(exponent)
+                                        con_coeffs.extend(con_coeff)
+                                    primitives.append(
+                                        (
+                                            shell_type,
+                                            n_prim,
+                                            exponents,
+                                            con_coeffs,
+                                        )
+                                    )
                                     line = f.readline()
                                     n += 1
-                                    info = line.split()
-                                    exponent = float(info[1])
-                                    con_coeff = [float(x) for x in info[2:]]
-                                    exponents.append(exponent)
-                                    con_coeffs.extend(con_coeff)
-                                primitives.append(
-                                    (
-                                        shell_type,
-                                        n_prim,
-                                        exponents,
-                                        con_coeffs,
-                                    )
+                                if ele:
+                                    self.other["basis_set_by_ele"][ele] = primitives
+                                else:
+                                    for name in names:
+                                        self.other["basis_set_by_ele"][name] = primitives
+                            line = f.readline()
+                            n += 1
+    
+                    elif "Basis Dimension" in line:
+                        self.other["n_basis"] = int(line.split()[-1])
+    
+                    elif "Point group" in line:
+                        self.other["molecular_point_group"] = line.split()[-1]
+    
+                    elif "Point Group:" in line and "Symmetry Number:" in line:
+                        self.other["molecular_point_group"] = line.split()[2].strip(",")
+                        self.other["rotational_symmetry_number"] = int(line.split()[-1])
+    
+                    elif "Symmetry Number:" in line:
+                        self.other["rotational_symmetry_number"] = int(
+                            line.split()[-1]
+                        )
+    
+                    elif "Point Group:" in line:
+                        self.other["molecular_point_group"] = line.split()[-1]
+    
+                    elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
+                        s = ""
+                        done = False
+                        while not done:
+                            s += line
+                            n += 1
+                            line = f.readline()
+                            if (
+                                "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
+                                re.search("TDM done", line) or
+                                "TIMINGS" in line or
+                                line == ""
+                            ):
+                                done = True
+                            if "SOC stabilization of the ground state" in line:
+                                self.other["SOC GS stabilization energy"] = float(line[39:48]) / UNIT.HARTREE_TO_WAVENUMBER
+                            if "CALCULATED SOCME BETWEEN" in line:
+                                # SOC in cm^-1
+                                self.skip_lines(f, 4)
+                                n += 5
+                                line = f.readline()
+                                soc_x = []
+                                soc_y = []
+                                soc_z = []
+                                while line.strip():
+                                    re_z = float(line[23:30])
+                                    im_z = float(line[32:40])
+                                    soc_z.append(complex(re_z, im_z))
+                                    re_x = float(line[47:54])
+                                    im_x = float(line[56:64])
+                                    soc_x.append(complex(re_x, im_x))
+                                    re_y = float(line[71:78])
+                                    im_y = float(line[80:88])
+                                    soc_y.append(complex(re_y, im_y))
+                                    line = f.readline()
+                                    n += 1
+                                # determine number of roots
+                                roots = int(np.sqrt(1 + 4 * len(soc_x)) - 1)
+                                # +1 for ground state
+                                n_gs = int(roots / 2 + 1)
+                                n_flipped = int(roots / 2)
+                                socme_dim = n_gs + n_flipped
+                                self.other["soc x"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                                self.other["soc y"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                                self.other["soc z"] = np.zeros((socme_dim, socme_dim), dtype=complex)
+                                ndx = 0
+                                for i in range(0, n_flipped):
+                                    for j in range(0, n_gs):
+                                        self.other["soc x"][n_gs + i, j] = soc_x[ndx]
+                                        self.other["soc x"][j, n_gs + i] = soc_x[ndx]
+                                        self.other["soc y"][n_gs + i, j] = soc_y[ndx]
+                                        self.other["soc y"][j, n_gs + i] = soc_y[ndx]
+                                        self.other["soc z"][n_gs + i, j] = soc_z[ndx]
+                                        self.other["soc z"][j, n_gs + i] = soc_z[ndx]
+                                        ndx += 1
+    
+                                self.other["soc (cm^-1)"] = np.sqrt(
+                                    self.other["soc x"].real ** 2 + self.other["soc x"].imag ** 2 +
+                                    self.other["soc y"].real ** 2 + self.other["soc y"].imag ** 2 +
+                                    self.other["soc z"].real ** 2 + self.other["soc z"].imag ** 2
                                 )
+    
+                        self.other["uv_vis"] = ValenceExcitations(s, orca_version=orca_version, style="orca")
+    
+                    if "INPUT FILE" in line:
+                        input_file = ""
+                        try:
+                            coord_match = re.compile("\*\s*(xyz|int|gzmat)\s+-?\d+\s+(\d+)", re.IGNORECASE)
+                            while "****END OF INPUT****" not in line:
+                                input_file += line
                                 line = f.readline()
                                 n += 1
-                            if ele:
-                                self.other["basis_set_by_ele"][ele] = primitives
-                            else:
-                                for name in names:
-                                    self.other["basis_set_by_ele"][name] = primitives
-                        line = f.readline()
-                        n += 1
-
-                elif "Basis Dimension" in line:
-                    self.other["n_basis"] = int(line.split()[-1])
-
-                elif "Point group" in line:
-                    self.other["molecular_point_group"] = line.split()[-1]
-
-                elif "Point Group:" in line and "Symmetry Number:" in line:
-                    self.other["molecular_point_group"] = line.split()[2].strip(",")
-                    self.other["rotational_symmetry_number"] = int(line.split()[-1])
-
-                elif "Symmetry Number:" in line:
-                    self.other["rotational_symmetry_number"] = int(
-                        line.split()[-1]
-                    )
-
-                elif "Point Group:" in line:
-                    self.other["molecular_point_group"] = line.split()[-1]
-
-                elif "EXCITED STATES" in line or re.search("STEOM.* RESULTS", line) or line.startswith("APPROXIMATE EOM LHS"):
-                    s = ""
-                    done = False
-                    while not done:
-                        s += line
+                                if "mult" in line.lower():
+                                    self.other["multiplicity"] = int(float(line.split()[-1]))
+                                if coord_match.search(line):
+                                    self.other["multiplicity"] = int(coord_match.search(line).group(2))
+    
+                        except ValueError:
+                            pass
+    
+                    elif line.startswith("MOLECULAR ORBITALS"):
+                        # read molecular orbitals
+                        self.skip_lines(f, 1)
                         n += 1
                         line = f.readline()
-                        if (
-                            "ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR" in line or
-                            re.search("TDM done", line) or
-                            "TIMINGS" in line or
-                            line == ""
-                        ):
-                            done = True
-                        if "SOC stabilization of the ground state" in line:
-                            self.other["SOC GS stabilization energy"] = float(line[39:48]) / UNIT.HARTREE_TO_WAVENUMBER
-                        if "CALCULATED SOCME BETWEEN" in line:
-                            # SOC in cm^-1
-                            self.skip_lines(f, 4)
-                            n += 5
-                            line = f.readline()
-                            soc_x = []
-                            soc_y = []
-                            soc_z = []
-                            while line.strip():
-                                re_z = float(line[23:30])
-                                im_z = float(line[32:40])
-                                soc_z.append(complex(re_z, im_z))
-                                re_x = float(line[47:54])
-                                im_x = float(line[56:64])
-                                soc_x.append(complex(re_x, im_x))
-                                re_y = float(line[71:78])
-                                im_y = float(line[80:88])
-                                soc_y.append(complex(re_y, im_y))
-                                line = f.readline()
-                                n += 1
-                            # determine number of roots
-                            roots = int(np.sqrt(1 + 4 * len(soc_x)) - 1)
-                            # +1 for ground state
-                            n_gs = int(roots / 2 + 1)
-                            n_flipped = int(roots / 2)
-                            socme_dim = n_gs + n_flipped
-                            self.other["soc x"] = np.zeros((socme_dim, socme_dim), dtype=complex)
-                            self.other["soc y"] = np.zeros((socme_dim, socme_dim), dtype=complex)
-                            self.other["soc z"] = np.zeros((socme_dim, socme_dim), dtype=complex)
-                            ndx = 0
-                            for i in range(0, n_flipped):
-                                for j in range(0, n_gs):
-                                    self.other["soc x"][n_gs + i, j] = soc_x[ndx]
-                                    self.other["soc x"][j, n_gs + i] = soc_x[ndx]
-                                    self.other["soc y"][n_gs + i, j] = soc_y[ndx]
-                                    self.other["soc y"][j, n_gs + i] = soc_y[ndx]
-                                    self.other["soc z"][n_gs + i, j] = soc_z[ndx]
-                                    self.other["soc z"][j, n_gs + i] = soc_z[ndx]
-                                    ndx += 1
-
-                            self.other["soc (cm^-1)"] = np.sqrt(
-                                self.other["soc x"].real ** 2 + self.other["soc x"].imag ** 2 +
-                                self.other["soc y"].real ** 2 + self.other["soc y"].imag ** 2 +
-                                self.other["soc z"].real ** 2 + self.other["soc z"].imag ** 2
-                            )
-
-                    self.other["uv_vis"] = ValenceExcitations(s, orca_version=orca_version, style="orca")
-
-                if "INPUT FILE" in line:
-                    try:
-                        coord_match = re.compile("\*\s*(xyz|int|gzmat)\s+-?\d+\s+(\d+)", re.IGNORECASE)
-                        while "****END OF INPUT****" not in line:
-                            line = f.readline()
-                            n += 1
-                            if "mult" in line.lower():
-                                self.other["multiplicity"] = int(float(line.split()[-1]))
-                            if coord_match.search(line):
-                                self.other["multiplicity"] = int(coord_match.search(line).group(2))
-
-                    except ValueError:
-                        pass
-
-                elif line.startswith("MOLECULAR ORBITALS"):
-                    # read molecular orbitals
-                    self.skip_lines(f, 1)
-                    n += 1
-                    line = f.readline()
-                    at_info = re.compile(
-                        "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
-                    )
-                    args = [
-                        ("alpha_coefficients", "beta_coefficients"),
-                        ("alpha_nrgs", "beta_nrgs"),
-                        ("alpha_occupancies", "beta_occupancies"),
-                    ]
-
-                    for coeff_name, nrg_name, occ_name in zip(*args):
-                        if not line.strip():
-                            break
-                        self.other[coeff_name] = []
-                        self.other[nrg_name] = []
-                        self.other[occ_name] = []
-                        self.other["shell_to_atom"] = []
-                        mo_coefficients = []
-                        orbit_nrgs = []
-                        occupancy = []
-                        while line.strip() != "":
-                            at_match = at_info.match(line)
-                            if at_match:
-                                ndx = int(at_match.group(1))
-                                self.other["shell_to_atom"].append(ndx)
-                                coeffs = []
-                                # there might not always be a space between the coefficients
-                                # so we can't just split(), but they are formatted(-ish)
-                                for coeff in re.findall("-?\d+\.\d\d\d\d\d\d", line[16:]):
-                                    coeffs.append(float(coeff))
-                                for coeff, mo in zip(coeffs, mo_coefficients):
-                                    mo.append(coeff)
-                            elif "--" not in line:
-                                orbit_nrgs = occupancy
-                                occupancy = [float(x) for x in line.split()]
-                            elif "--" in line:
-                                self.other[nrg_name].extend(orbit_nrgs)
-                                self.other[occ_name].extend(occupancy)
-                                if mo_coefficients:
-                                    self.other[coeff_name].extend(
-                                        mo_coefficients
-                                    )
-                                    if not all(
-                                        len(coeff) == len(mo_coefficients[0])
-                                        for coeff in mo_coefficients
-                                    ):
-                                        self.LOG.warning(
-                                            "orbital coefficients may not "
-                                            "have been parsed correctly"
+                        at_info = re.compile(
+                            "\s*(\d+)\S+\s+\d+(?:s|p[xyz]|d(?:z2|xz|yz|x2y2|xy)|[fghi][\+\-]?\d+)"
+                        )
+                        args = [
+                            ("alpha_coefficients", "beta_coefficients"),
+                            ("alpha_nrgs", "beta_nrgs"),
+                            ("alpha_occupancies", "beta_occupancies"),
+                        ]
+    
+                        for coeff_name, nrg_name, occ_name in zip(*args):
+                            if not line.strip():
+                                break
+                            self.other[coeff_name] = []
+                            self.other[nrg_name] = []
+                            self.other[occ_name] = []
+                            self.other["shell_to_atom"] = []
+                            mo_coefficients = []
+                            orbit_nrgs = []
+                            occupancy = []
+                            while line.strip() != "":
+                                at_match = at_info.match(line)
+                                if at_match:
+                                    ndx = int(at_match.group(1))
+                                    self.other["shell_to_atom"].append(ndx)
+                                    coeffs = []
+                                    # there might not always be a space between the coefficients
+                                    # so we can't just split(), but they are formatted(-ish)
+                                    for coeff in re.findall("-?\d+\.\d\d\d\d\d\d", line[16:]):
+                                        coeffs.append(float(coeff))
+                                    for coeff, mo in zip(coeffs, mo_coefficients):
+                                        mo.append(coeff)
+                                elif "--" not in line:
+                                    orbit_nrgs = occupancy
+                                    occupancy = [float(x) for x in line.split()]
+                                elif "--" in line:
+                                    self.other[nrg_name].extend(orbit_nrgs)
+                                    self.other[occ_name].extend(occupancy)
+                                    if mo_coefficients:
+                                        self.other[coeff_name].extend(
+                                            mo_coefficients
                                         )
-                                mo_coefficients = [[] for x in orbit_nrgs]
-                                orbit_nrgs = []
-                            line = f.readline()
-                            n += 1
-                        self.other[coeff_name].extend(mo_coefficients)
-                        line = f.readline()
-                        # line = f.readline()
-
-                elif line.startswith("N(Alpha)  "):
-                    self.other["n_alpha"] = int(
-                        np.rint(float(line.split()[2]))
-                    )
-
-                elif opt_cycle.search(line):
-                    self.other["opt_steps"] = int(opt_cycle.search(line).group(1))
-
-                elif line.startswith("N(Beta)  "):
-                    self.other["n_beta"] = int(np.rint(float(line.split()[2])))
-
-                elif line.startswith("OVERLAP MATRIX"):
-                    self.skip_lines(f, 1)
-                    n += 1
-                    n_blocks = int(np.ceil(self.other["n_basis"] / 6))
-                    ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
-
-                    for i in range(0, n_blocks):
-                        line = f.readline()
-                        n += 1
-                        start = 6 * i
-                        stop = min(6 * (i + 1), self.other["n_basis"])
-                        for j in range(0, self.other["n_basis"]):
-                            line = f.readline()
-                            n += 1
-                            data = [float(x) for x in line.split()[1:]]
-                            ao_overlap[j, start:stop] = data
-
-                    self.other["ao_overlap"] = ao_overlap
-
-                elif ORCA_NORM_FINISH in line:
-                    self.other["finished"] = True
-
-                # TODO E_ZPVE
-                if "error" not in self.other or not self["error"]:
-                    for err in ERROR_ORCA:
-                        if err in line:
-                            self.other["error"] = ERROR_ORCA[err]
-                            self.other["error_msg"] = line.strip()
-                            break
-                    else:
-                        self.other["error"] = False
-                        if "!!!!!!!!" in line:
-                            line = f.readline()
-                            n += 1
-                            self.other["error"] = line.strip()
-                            line = f.readline()
-                            n += 1
-                            self.other["error_msg"] = ""
-                            found_error = False
-                            while "!!!!!!!" not in line:
-                                for err in ERROR_ORCA:
-                                    if err in line:
-                                        self.other["error"] = ERROR_ORCA[err]
-                                self.other["error_msg"] += line.strip() + "\n"
+                                        if not all(
+                                            len(coeff) == len(mo_coefficients[0])
+                                            for coeff in mo_coefficients
+                                        ):
+                                            self.LOG.warning(
+                                                "orbital coefficients may not "
+                                                "have been parsed correctly"
+                                            )
+                                    mo_coefficients = [[] for x in orbit_nrgs]
+                                    orbit_nrgs = []
                                 line = f.readline()
                                 n += 1
-                            if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
-                                del self.other["error"]
-                                del self.other["error_msg"]
+                            self.other[coeff_name].extend(mo_coefficients)
+                            line = f.readline()
+                            # line = f.readline()
+    
+                    elif line.startswith("N(Alpha)  "):
+                        self.other["n_alpha"] = int(
+                            np.rint(float(line.split()[2]))
+                        )
+    
+                    elif opt_cycle.search(line):
+                        self.other["opt_steps"] = int(opt_cycle.search(line).group(1))
+    
+                    elif line.startswith("N(Beta)  "):
+                        self.other["n_beta"] = int(np.rint(float(line.split()[2])))
+    
+                    elif line.startswith("OVERLAP MATRIX"):
+                        self.skip_lines(f, 1)
+                        n += 1
+                        n_blocks = int(np.ceil(self.other["n_basis"] / 6))
+                        ao_overlap = np.zeros((self.other["n_basis"], self.other["n_basis"]))
+    
+                        for i in range(0, n_blocks):
+                            line = f.readline()
+                            n += 1
+                            start = 6 * i
+                            stop = min(6 * (i + 1), self.other["n_basis"])
+                            for j in range(0, self.other["n_basis"]):
+                                line = f.readline()
+                                n += 1
+                                data = [float(x) for x in line.split()[1:]]
+                                ao_overlap[j, start:stop] = data
+    
+                        self.other["ao_overlap"] = ao_overlap
+    
+                    elif ORCA_NORM_FINISH in line:
+                        self.other["finished"] = True
+    
+                    # TODO E_ZPVE
+                    if "error" not in self.other or not self["error"]:
+                        for err in ERROR_ORCA:
+                            if err in line:
+                                self.other["error"] = ERROR_ORCA[err]
+                                self.other["error_msg"] = line.strip()
+                                break
+                        else:
+                            self.other["error"] = False
+                            if "!!!!!!!!" in line:
+                                line = f.readline()
+                                n += 1
+                                self.other["error"] = line.strip()
+                                line = f.readline()
+                                n += 1
+                                self.other["error_msg"] = ""
+                                found_error = False
+                                while "!!!!!!!" not in line:
+                                    for err in ERROR_ORCA:
+                                        if err in line:
+                                            self.other["error"] = ERROR_ORCA[err]
+                                    self.other["error_msg"] += line.strip() + "\n"
+                                    line = f.readline()
+                                    n += 1
+                                if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
+                                    del self.other["error"]
+                                    del self.other["error_msg"]
+    
+                    line = f.readline()
+                    n += 1
 
-                line = f.readline()
-                n += 1
+            except Exception as e:
+                if not log:
+                    log = self.LOG
+                log.warning("an error occured while reading the ORCA output file")
+                log.warning("last line read: %s" % line)
+                log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
+                try:
+                    log.warning(input_file)
+                except NameError:
+                    pass
+                log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
+                raise e
+
 
         if not just_geom:
             if "finished" not in self.other:
@@ -2987,7 +3060,17 @@ class FileReader:
                 "alpha_coefficients" in self.other
                 and "basis_set_by_ele" in self.other
             ):
-                self.other["orbitals"] = Orbitals(self)
+                try:
+                    self.other["orbitals"] = Orbitals(self)
+                except Exception as e:
+                    if not log:
+                        log = self.LOG
+                    log.warning("error while trying to create Orbitals object for ORCA output")
+                    try:
+                        log.warning(input_file)
+                    except NameError:
+                        pass
+                    raise e
 
         if get_all:
             self.all_geom += [{
@@ -2998,7 +3081,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_qchem_out(self, f, get_all=False, just_geom=True):
+    def read_qchem_out(self, f, get_all=False, just_geom=True, log=None):
         """read qchem output file"""
         def get_atoms(f, n):
             """parse atom info"""
@@ -3028,224 +3111,261 @@ class FileReader:
         line = f.readline()
         n = 1
         while line != "":
-            if (
-                "Psi4: An Open-Source Ab Initio Electronic Structure Package"
-                in line
-            ):
-                self.file_type = "dat"
-                return self.read_psi4_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if "* O   R   C   A *" in line:
-                self.file_type = "out"
-                return self.read_orca_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-
-            if (
-                "A Quantum Leap Into The Future Of Chemistry"
-                in line
-            ):
-                self.file_type = "qout"
-                return self.read_qchem_out(
-                    f, get_all=get_all, just_geom=just_geom
-                )
-
-            if "Standard Nuclear Orientation (Angstroms)" in line:
-                if get_all and len(self.atoms) > 0:
-                    if self.all_geom is None:
-                        self.all_geom = []
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-
-                self.atoms, n = get_atoms(f, n)
-
-            if just_geom:
-                line = f.readline()
-                n += 1
-                continue
-            else:
-                if "energy in the final basis set" in line:
-                    self.other["energy"] = float(line.split()[-1])
-                    if "SCF" in line:
-                        self.other["scf_energy"] = self.other["energy"]
-
-                if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
-                    info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
-                    kind = info.group(1)
-                    if len(kind.split()) <= 2:
-                        val = float(info.group(2))
-                        if "correlation" not in kind and len(kind.split()) <= 2:
-                            self.other["E(%s)" % kind.split()[0]] = val
-                            self.other["energy"] = val
-                        else:
-                            self.other["E(corr)(%s)" % kind.split()[0]] = val
-
-                if "Total energy:" in line:
-                    self.other["energy"] = float(line.split()[-2])
-
-                #MPn energy is printed as EMPn(SDQ)
-                if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
-                    self.other["energy"] = float(line.split()[-1])
-                    self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
-
-                if "Molecular Point Group" in line:
-                    self.other["full_point_group"] = line.split()[3]
-
-                if "Largest Abelian Subgroup" in line:
-                    self.other["abelian_subgroup"] = line.split()[3]
-
-                if "Ground-State Mulliken Net Atomic Charges" in line:
-                    charges = []
-                    self.skip_lines(f, 3)
-                    n += 2
-                    line = f.readline()
-                    while "--" not in line:
-                        charge = float(line.split()[-1])
-                        charges.append(charge)
-                        line = f.readline()
-                        n += 1
-
-                    self.other["Mulliken Charges"] = charges
-
-                if "Cnvgd?" in line:
-                    grad = {}
-                    line = f.readline()
-                    while line and re.search("\w", line):
-                        if re.search("Energy\schange", line):
-                            add_grad(grad, "Delta E", line)
-                        elif re.search("Displacement", line):
-                            add_grad(grad, "Disp", line)
-                        elif re.search("Gradient", line):
-                            add_grad(grad, "Max Disp", line)
-
-                        line = f.readline()
-                        n += 1
-
-                    self.other["gradient"] = grad
-
-                if "VIBRATIONAL ANALYSIS" in line:
-                    freq_str = ""
-                    self.skip_lines(f, 10)
-                    n += 9
-                    line = f.readline()
-                    while "STANDARD THERMODYNAMIC QUANTITIES" not in line:
-                        n += 1
-                        freq_str += line
-                        line = f.readline()
-                    self.other["frequency"] = Frequency(
-                        freq_str, style="qchem", atoms=self.atoms,
+            try:
+                if (
+                    "Psi4: An Open-Source Ab Initio Electronic Structure Package"
+                    in line
+                ):
+                    self.file_type = "dat"
+                    return self.read_psi4_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-                    self.other["temperature"] = float(line.split()[4])
-
-                if "Rotational Symmetry Number is" in line:
-                    self.other["rotational_symmetry_number"] = int(line.split()[-1])
-
-                if "Molecular Mass:" in line:
-                    self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
-
-                if "$molecule" in line.lower():
-                    line = f.readline()
-                    while "$end" not in line.lower() and line:
-                        if re.search("\d+\s+\d+", line):
-                            match = re.search("^\s*(\d+)\s+(\d+)\s*$", line)
-                            self.other["charge"] = int(match.group(1))
-                            self.other["multiplicity"] = int(match.group(2))
-                            break
-                        line = f.readline()
-
-                if "Principal axes and moments of inertia" in line:
-                    self.skip_lines(f, 1)
-                    line = f.readline()
-                    rot_consts = np.array([
-                        float(x) for x in line.split()[2:]
-                    ])
-                    rot_consts *= UNIT.AMU_TO_KG
-                    rot_consts *= UNIT.A0_TO_BOHR ** 2
-                    rot_consts *= 1e-20
-                    rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
-
-                    self.other["rotational_temperature"] = rot_consts
-
-                if line.startswith("Mult"):
-                    self.other["multiplicity"] = int(line.split()[1])
-
-                # TD-DFT excitations
-                if re.search("TDDFT.* Excitation Energies", line):
-                    excite_s = ""
-                    self.skip_lines(f, 2)
-                    line = f.readline()
-                    n += 3
-                    while "---" not in line and line:
-                        excite_s += line
-                        line = f.readline()
-                        n += 1
-
-                    self.other["uv_vis"] = ValenceExcitations(
-                        excite_s, style="qchem",
+    
+                if "* O   R   C   A *" in line:
+                    self.file_type = "out"
+                    return self.read_orca_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-
-                # ADC excitations
-                if re.search("Excited State Summary", line):
-                    excite_s = ""
-                    self.skip_lines(f, 2)
-                    line = f.readline()
-                    n += 3
-                    while "===" not in line and line:
-                        excite_s += line
-                        line = f.readline()
-                        n += 1
-
-                    self.other["uv_vis"] = ValenceExcitations(
-                        excite_s, style="qchem",
+    
+    
+                if (
+                    "A Quantum Leap Into The Future Of Chemistry"
+                    in line
+                ):
+                    self.file_type = "qout"
+                    return self.read_qchem_out(
+                        f, get_all=get_all, just_geom=just_geom
                     )
-
-                # EOM excitations
-                if re.search("Start computing the transition properties", line):
-                    excite_s = ""
+    
+                if "Standard Nuclear Orientation (Angstroms)" in line:
+                    if get_all and len(self.atoms) > 0:
+                        if self.all_geom is None:
+                            self.all_geom = []
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+    
+                    self.atoms, n = get_atoms(f, n)
+    
+                if just_geom:
                     line = f.readline()
                     n += 1
-                    while "All requested transition properties have been computed" not in line and line:
-                        excite_s += line
+                    continue
+                else:
+                    if "energy in the final basis set" in line:
+                        self.other["energy"] = float(line.split()[-1])
+                        if "SCF" in line:
+                            self.other["scf_energy"] = self.other["energy"]
+    
+                    if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
+                        info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
+                        kind = info.group(1)
+                        if len(kind.split()) <= 2:
+                            val = float(info.group(2))
+                            if "correlation" not in kind and len(kind.split()) <= 2:
+                                self.other["E(%s)" % kind.split()[0]] = val
+                                self.other["energy"] = val
+                            else:
+                                self.other["E(corr)(%s)" % kind.split()[0]] = val
+    
+                    if "Total energy:" in line:
+                        self.other["energy"] = float(line.split()[-2])
+    
+                    #MPn energy is printed as EMPn(SDQ)
+                    if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
+                        self.other["energy"] = float(line.split()[-1])
+                        self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
+    
+                    if "Molecular Point Group" in line:
+                        self.other["full_point_group"] = line.split()[3]
+    
+                    if "Largest Abelian Subgroup" in line:
+                        self.other["abelian_subgroup"] = line.split()[3]
+    
+                    if "Ground-State Mulliken Net Atomic Charges" in line:
+                        charges = []
+                        self.skip_lines(f, 3)
+                        n += 2
                         line = f.readline()
-                        n += 1
-
-                    self.other["uv_vis"] = ValenceExcitations(
-                        excite_s, style="qchem",
-                    )
-
-                if line.startswith(" Gradient of SCF Energy"):
-                    # why on earth do they print the gradient like this
-                    gradient = np.zeros((len(self.atoms), 3))
-                    n_blocks = int(np.ceil(len(self.atoms) / 6))
-                    # printed in groups of up to six atoms
-                    # there are 3 rows in each block, one for each of X, Y, and Z
-                    # component of the gradient
-                    # each column is for one of the (up to) six atoms
-                    for i in range(0, n_blocks):
-                        self.skip_lines(f, 1)
-                        n += 1
-                        # start and stop are atom index range for this block
-                        start = 6 * i
-                        stop = min(6 * (i + 1) , len(self.atoms))
-                        for j in range(0, 3):
+                        while "--" not in line:
+                            charge = float(line.split()[-1])
+                            charges.append(charge)
                             line = f.readline()
                             n += 1
-                            dx = [float(x) for x in line.split()[1:]]
-                            for k, l in enumerate(range(start, stop)):
-                                gradient[l, j] = dx[k]
+    
+                        self.other["Mulliken Charges"] = charges
+    
+                    if "Cnvgd?" in line:
+                        grad = {}
+                        line = f.readline()
+                        while line and re.search("\w", line):
+                            if re.search("Energy\schange", line):
+                                add_grad(grad, "Delta E", line)
+                            elif re.search("Displacement", line):
+                                add_grad(grad, "Disp", line)
+                            elif re.search("Gradient", line):
+                                add_grad(grad, "Max Disp", line)
+    
+                            line = f.readline()
+                            n += 1
+    
+                        self.other["gradient"] = grad
+    
+                    if "VIBRATIONAL ANALYSIS" in line:
+                        freq_str = ""
+                        self.skip_lines(f, 10)
+                        n += 9
+                        line = f.readline()
+                        while "STANDARD THERMODYNAMIC QUANTITIES" not in line:
+                            n += 1
+                            freq_str += line
+                            line = f.readline()
+                        try:
+                            self.other["frequency"] = Frequency(
+                                freq_str, style="qchem", atoms=self.atoms,
+                            )
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing Q-Chem frequency data")
+                            log.warning("data read:\n%s" % freq_str)
+                            raise e
+                        self.other["temperature"] = float(line.split()[4])
+    
+                    if "Rotational Symmetry Number is" in line:
+                        self.other["rotational_symmetry_number"] = int(line.split()[-1])
+    
+                    if "Molecular Mass:" in line:
+                        self.other["mass"] = float(line.split()[-2]) * UNIT.AMU_TO_KG
+    
+                    if "$molecule" in line.lower():
+                        line = f.readline()
+                        while "$end" not in line.lower() and line:
+                            if re.search("\d+\s+\d+", line):
+                                match = re.search("^\s*(\d+)\s+(\d+)\s*$", line)
+                                self.other["charge"] = int(match.group(1))
+                                self.other["multiplicity"] = int(match.group(2))
+                                break
+                            line = f.readline()
+    
+                    if "Principal axes and moments of inertia" in line:
+                        self.skip_lines(f, 1)
+                        line = f.readline()
+                        rot_consts = np.array([
+                            float(x) for x in line.split()[2:]
+                        ])
+                        rot_consts *= UNIT.AMU_TO_KG
+                        rot_consts *= UNIT.A0_TO_BOHR ** 2
+                        rot_consts *= 1e-20
+                        rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
+    
+                        self.other["rotational_temperature"] = rot_consts
+    
+                    if line.startswith("Mult"):
+                        self.other["multiplicity"] = int(line.split()[1])
+    
+                    # TD-DFT excitations
+                    if re.search("TDDFT.* Excitation Energies", line):
+                        excite_s = ""
+                        self.skip_lines(f, 2)
+                        line = f.readline()
+                        n += 3
+                        while "---" not in line and line:
+                            excite_s += line
+                            line = f.readline()
+                            n += 1
+    
+                        try:
+                            self.other["uv_vis"] = ValenceExcitations(
+                                excite_s, style="qchem",
+                            )
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing Q-Chem TD-DFT data")
+                            log.warning("data read:\n%s" % excite_s)
+                            raise e
+    
+                    # ADC excitations
+                    if re.search("Excited State Summary", line):
+                        excite_s = ""
+                        self.skip_lines(f, 2)
+                        line = f.readline()
+                        n += 3
+                        while "===" not in line and line:
+                            excite_s += line
+                            line = f.readline()
+                            n += 1
+                        
+                        try:
+                            self.other["uv_vis"] = ValenceExcitations(
+                                excite_s, style="qchem",
+                            )
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing Q-Chem ADC data")
+                            log.warning("data read:\n%s" % excite_s)
+                            raise e
+                            
+                    # EOM excitations
+                    if re.search("Start computing the transition properties", line):
+                        excite_s = ""
+                        line = f.readline()
+                        n += 1
+                        while "All requested transition properties have been computed" not in line and line:
+                            excite_s += line
+                            line = f.readline()
+                            n += 1
+    
+                        try:
+                            self.other["uv_vis"] = ValenceExcitations(
+                                excite_s, style="qchem",
+                            )
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing Q-Chem EOM data")
+                            log.warning("data read:\n%s" % excite_s)
+                            raise e
 
-                    self.other["forces"] = -gradient
-
-                if "Thank you very much for using Q-Chem" in line:
-                    self.other["finished"] = True
-
-                line = f.readline()
-                n += 1
+                    if line.startswith(" Gradient of SCF Energy"):
+                        # why on earth do they print the gradient like this
+                        gradient = np.zeros((len(self.atoms), 3))
+                        n_blocks = int(np.ceil(len(self.atoms) / 6))
+                        # printed in groups of up to six atoms
+                        # there are 3 rows in each block, one for each of X, Y, and Z
+                        # component of the gradient
+                        # each column is for one of the (up to) six atoms
+                        for i in range(0, n_blocks):
+                            self.skip_lines(f, 1)
+                            n += 1
+                            # start and stop are atom index range for this block
+                            start = 6 * i
+                            stop = min(6 * (i + 1) , len(self.atoms))
+                            for j in range(0, 3):
+                                line = f.readline()
+                                n += 1
+                                dx = [float(x) for x in line.split()[1:]]
+                                for k, l in enumerate(range(start, stop)):
+                                    gradient[l, j] = dx[k]
+    
+                        self.other["forces"] = -gradient
+    
+                    if "Thank you very much for using Q-Chem" in line:
+                        self.other["finished"] = True
+    
+                    line = f.readline()
+                    n += 1
+                    
+            except Exception as e:
+                if not log:
+                    log = self.LOG
+                log.warning("error while parsing Q-Chem output")
+                log.warning("last line read: %s" % line)
+                log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
+                raise e
 
         if not just_geom and "finished" not in self.other:
             self.other["finished"] = False
@@ -3259,7 +3379,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False):
+    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, logger=None):
         """read gaussian output file"""
         isotope = re.compile(r" Atom\s+(\d+) has atomic number")
         # orientation = re.compile(r"(Standard|Input) orientation:\s*$")
@@ -3758,521 +3878,559 @@ class FileReader:
         oniom = False
         has_params = False
         while line != "":
-            if line.strip().startswith("AtFile"):
-                parameters = line.split()[1]
-                has_params = True
-            # route
-            # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
-            # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
-            # pmodes,noraman,temperature=313.15)
-            if line.strip().startswith("#") and route is None:
-                route = ""
-                while "------" not in line:
-                    if len(line.rstrip()) > 1:
-                        route += line[1:].splitlines()[0]
-                    n += 1
-                    line = f.readline()
-                oniom = "oniom" in route.lower()
-            # archive entry
-            elif line.strip().startswith("1\\1\\"):
-                found_archive = True
-                self.other["archive"] = line.strip()
-            elif found_archive and line.strip().endswith("@"):
-                self.other["archive"] += line.strip()
-                found_archive = False
-            elif found_archive:
-                self.other["archive"] += line.strip()
-                line = f.readline()
-                continue
-
-            # input atom specs and charge/mult
-            if not oniom and "Symbolic Z-matrix:" in line:
-                self.atoms, n = get_input(f, n)
-
-            #Pseudopotential info
-            elif "Pseudopotential Parameters" in line:
-                self.other["ECP"] = []
-                self.skip_lines(f, 4)
-                n += 5
-                line = f.readline()
-                while "=====" not in line:
-                    line = line.split()
-                    if line[0].isdigit() and line[1].isdigit():
-                        ele = line[1]
+            try:
+                if line.strip().startswith("AtFile"):
+                    parameters = line.split()[1]
+                    has_params = True
+                # route
+                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
+                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
+                # pmodes,noraman,temperature=313.15)
+                if line.strip().startswith("#") and route is None:
+                    route = ""
+                    while "------" not in line:
+                        if len(line.rstrip()) > 1:
+                            route += line[1:].splitlines()[0]
                         n += 1
-                        line = f.readline().split()
-                        if line[0] != "No":
-                            self.other["ECP"].append(ELEMENTS[int(ele)])
-                    n += 1
+                        line = f.readline()
+                    oniom = "oniom" in route.lower()
+                # archive entry
+                elif line.strip().startswith("1\\1\\"):
+                    found_archive = True
+                    self.other["archive"] = line.strip()
+                elif found_archive and line.strip().endswith("@"):
+                    self.other["archive"] += line.strip()
+                    found_archive = False
+                elif found_archive:
+                    self.other["archive"] += line.strip()
                     line = f.readline()
-
-            # geometry
-            elif not oniom and (
-                "Input orientation" in line or
-                "Standard orientation" in line
-            ):
-                if "Input" in line:
-                    input_count += 1
-                elif "Standard" in line:
-                    standard_count += 1
-                if input_count >= 2 and input_count >= standard_count and not only_read_standard:
-                    only_read_input = True
-                elif standard_count >= 1 and standard_count >= input_count and not only_read_input:
-                    only_read_standard = True
-                
-                record_coords = (
-                    "Input" in line and only_read_input
-                ) or (
-                    "Standard" in line and only_read_standard
-                ) or not any((only_read_input, only_read_standard))
-                if "scan" in constraints:
-                    record_coords = False
-                    if not scan_read_all:
-                        # only want to only record converged geometries for scans
-                        if "gradient" in self.other:
-                            if all(converged["converged"] for converged in self.other["gradient"].values()):
-                                record_coords = True
-                    elif scan_read_all:
-                        record_coords = True
-
-                if get_all and self.atoms and record_coords:
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-                    # delete gradient so we don't double up on standard and input orientation
+                    continue
+    
+                # input atom specs and charge/mult
+                if not oniom and "Symbolic Z-matrix:" in line:
+                    self.atoms, n = get_input(f, n)
+    
+                #Pseudopotential info
+                elif "Pseudopotential Parameters" in line:
+                    self.other["ECP"] = []
+                    self.skip_lines(f, 4)
+                    n += 5
+                    line = f.readline()
+                    while "=====" not in line:
+                        line = line.split()
+                        if line[0].isdigit() and line[1].isdigit():
+                            ele = line[1]
+                            n += 1
+                            line = f.readline().split()
+                            if line[0] != "No":
+                                self.other["ECP"].append(ELEMENTS[int(ele)])
+                        n += 1
+                        line = f.readline()
+    
+                # geometry
+                elif not oniom and (
+                    "Input orientation" in line or
+                    "Standard orientation" in line
+                ):
+                    if "Input" in line:
+                        input_count += 1
+                    elif "Standard" in line:
+                        standard_count += 1
+                    if input_count >= 2 and input_count >= standard_count and not only_read_standard:
+                        only_read_input = True
+                    elif standard_count >= 1 and standard_count >= input_count and not only_read_input:
+                        only_read_standard = True
+                    
+                    record_coords = (
+                        "Input" in line and only_read_input
+                    ) or (
+                        "Standard" in line and only_read_standard
+                    ) or not any((only_read_input, only_read_standard))
+                    if "scan" in constraints:
+                        record_coords = False
+                        if not scan_read_all:
+                            # only want to only record converged geometries for scans
+                            if "gradient" in self.other:
+                                if all(converged["converged"] for converged in self.other["gradient"].values()):
+                                    record_coords = True
+                        elif scan_read_all:
+                            record_coords = True
+    
+                    if get_all and self.atoms and record_coords:
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+                        # delete gradient so we don't double up on standard and input orientation
+                        try:
+                            del self.other["gradient"]
+                        except KeyError:
+                            pass
+                    if record_coords:
+                        self.atoms, n = get_atoms(f, n)
+                    self.other["opt_steps"] += 1
+    
+                elif oniom and (
+                    "Input orientation" in line or
+                    "Standard orientation" in line
+                ):
+                    if get_all and len(self.atoms) > 0:
+                        self.all_geom += [{
+                            "atoms": deepcopy(self.atoms),
+                            "data": deepcopy(self.other),
+                        }]
+                    self.atoms, n = get_oniom_atoms(f, n)
+                    self.other["opt_steps"] += 1
+    
+                #oniom atom types and input charges
+                elif oniom and "Symbolic Z-matrix" in line:
+                    self.atoms, n = get_oniom_info(f, n)
+    
+                elif "The following ModRedundant input section has been read:" in line:
+                    constraints, n = get_modredundant(f, n)
+    
+                elif just_geom:
+                    line = f.readline()
+                    n += 1
+                    continue
+                    # z-matrix parameters
+                # elif "!   Optimized Parameters   !" in line:
+                elif "!   Optimized Parameters   !" in line:
+                    self.other["params"], n = get_params(f, n)
+    
+                # status
+                elif NORM_FINISH in line:
+                    self.other["finished"] = True
+    
+                # read energies from different methods
+                elif "SCF Done" in line:
+                    tmp = [word.strip() for word in line.split()]
+                    idx = tmp.index("=")
+                    self.other["energy"] = float(tmp[idx + 1])
+                    self.other["scf_energy"] = float(tmp[idx + 1])
+    
+                elif line.startswith(" Energy= "):
+                    self.other["energy"] = float(line.split()[1])
+    
+                elif "ONIOM: extrapolated energy" in line:
+                    self.other["ONIOM energy"] = float(line.split()[-1])
+                    self.other["energy"] = self.other["ONIOM energy"]
+    
+                # CC energy
+                elif line.startswith(" CCSD(T)= "):
+                    self.other["energy"] = float(line.split()[-1].replace("D", "E"))
+                    self.other["E(CCSD(T))"] = self.other["energy"]
+    
+                # basis set details
+                elif line.startswith(" NBasis") and "NFC" in line:
+                    n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
+                    self.other["n_basis"] = n_basis
+                    n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
+                    self.other["n_frozen"] = n_frozen
+    
+                elif line.startswith(" NROrb"):
+                    n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
+                    self.other["n_occupied_alpha"] = n_occupied_alpha
+                    n_occupied_beta = int(re.search(" NOB=\s*(\d+)", line).group(1))
+                    self.other["n_occupied_beta"] = n_occupied_beta
+                    n_virtual_alpha = int(re.search(" NVA=\s*(\d+)", line).group(1))
+                    self.other["n_virtual_alpha"] = n_virtual_alpha
+                    n_virtual_beta = int(re.search(" NVB=\s*(\d+)", line).group(1))
+                    self.other["n_virtual_beta"] = n_virtual_beta
+    
+                # Frequencies 
+                elif "Harmonic frequencies" in line:
+                    if route is not None and "hpmodes" in route.lower():
+                        self.other["hpmodes"] = True
+                    freq_str = line
+                    line = f.readline()
+                    while line.strip():
+                        n += 1
+                        freq_str += line
+                        line = f.readline()
+                    if "hpmodes" not in self.other:
+                        self.other["hpmodes"] = False
                     try:
-                        del self.other["gradient"]
-                    except KeyError:
-                        pass
-                if record_coords:
-                    self.atoms, n = get_atoms(f, n)
-                self.other["opt_steps"] += 1
-
-            elif oniom and (
-                "Input orientation" in line or
-                "Standard orientation" in line
-            ):
-                 if get_all and len(self.atoms) > 0:
-                    self.all_geom += [{
-                        "atoms": deepcopy(self.atoms),
-                        "data": deepcopy(self.other),
-                    }]
-                 self.atoms, n = get_oniom_atoms(f, n)
-                 self.other["opt_steps"] += 1
-
-            #oniom atom types and input charges
-            elif oniom and "Symbolic Z-matrix" in line:
-                self.atoms, n = get_oniom_info(f, n)
-
-            elif "The following ModRedundant input section has been read:" in line:
-                constraints, n = get_modredundant(f, n)
-
-            elif just_geom:
-                line = f.readline()
-                n += 1
-                continue
-                # z-matrix parameters
-            # elif "!   Optimized Parameters   !" in line:
-            elif "!   Optimized Parameters   !" in line:
-                self.other["params"], n = get_params(f, n)
-
-            # status
-            elif NORM_FINISH in line:
-                self.other["finished"] = True
-
-            # read energies from different methods
-            elif "SCF Done" in line:
-                tmp = [word.strip() for word in line.split()]
-                idx = tmp.index("=")
-                self.other["energy"] = float(tmp[idx + 1])
-                self.other["scf_energy"] = float(tmp[idx + 1])
-
-            elif line.startswith(" Energy= "):
-                self.other["energy"] = float(line.split()[1])
-
-            elif "ONIOM: extrapolated energy" in line:
-                self.other["ONIOM energy"] = float(line.split()[-1])
-                self.other["energy"] = self.other["ONIOM energy"]
-
-            # CC energy
-            elif line.startswith(" CCSD(T)= "):
-                self.other["energy"] = float(line.split()[-1].replace("D", "E"))
-                self.other["E(CCSD(T))"] = self.other["energy"]
-
-            # basis set details
-            elif line.startswith(" NBasis") and "NFC" in line:
-                n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
-                self.other["n_basis"] = n_basis
-                n_frozen = int(re.search(" NFC=\s*(\d+)", line).group(1))
-                self.other["n_frozen"] = n_frozen
-
-            elif line.startswith(" NROrb"):
-                n_occupied_alpha = int(re.search(" NOA=\s*(\d+)", line).group(1))
-                self.other["n_occupied_alpha"] = n_occupied_alpha
-                n_occupied_beta = int(re.search(" NOB=\s*(\d+)", line).group(1))
-                self.other["n_occupied_beta"] = n_occupied_beta
-                n_virtual_alpha = int(re.search(" NVA=\s*(\d+)", line).group(1))
-                self.other["n_virtual_alpha"] = n_virtual_alpha
-                n_virtual_beta = int(re.search(" NVB=\s*(\d+)", line).group(1))
-                self.other["n_virtual_beta"] = n_virtual_beta
-
-            # Frequencies 
-            elif "Harmonic frequencies" in line:
-                if route is not None and "hpmodes" in route.lower():
-                    self.other["hpmodes"] = True
-                freq_str = line
-                line = f.readline()
-                while line.strip():
-                    n += 1
-                    freq_str += line
-                    line = f.readline()
-                if "hpmodes" not in self.other:
-                    self.other["hpmodes"] = False
-                self.other["frequency"] = Frequency(
-                    freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
-                )
-
-            elif "Anharmonic Infrared Spectroscopy" in line:
-                self.skip_lines(f, 5)
-                n += 5
-                anharm_str = ""
-                combinations_read = False
-                combinations = False
-                line = f.readline()
-                while not combinations_read:
-                    n += 1
-                    anharm_str += line
-                    if "Combination Bands" in line:
-                        combinations = True
-                    line = f.readline()
-                    if combinations and line == "\n":
-                        combinations_read = True
-
-                self.other["frequency"].parse_gaussian_lines(
-                    anharm_str.splitlines(), harmonic=False,
-                )
-
-            # X matrix for anharmonic
-            elif "Total Anharmonic X Matrix" in line:
-                self.skip_lines(f, 1)
-                n += 1
-                n_freq = len(self.other["frequency"].data)
-                n_sections = int(np.ceil(n_freq / 5))
-                x_matrix = np.zeros((n_freq, n_freq))
-                for section in range(0, n_sections):
-                    header = f.readline()
-                    n += 1
-                    for j in range(5 * section, n_freq):
-                        line = f.readline()
-                        n += 1
-                        ll = 5 * section
-                        ul = 5 * section + min(j - ll + 1, 5)
-                        x_matrix[j, ll:ul] = [
-                            float(x.replace("D", "e"))
-                            for x in line.split()[1:]
-                        ]
-                x_matrix += np.tril(x_matrix, k=-1).T
-                self.other["X_matrix"] = x_matrix
-
-            elif "Total X0" in line:
-                self.other["X0"] = float(line.split()[5])
-
-            # TD-DFT output
-            elif line.strip().startswith("Ground to excited state"):
-                uv_vis = ""
-                highest_state = 0
-                done = False
-                read_states = False
-                while not done:
-                    n += 1
-                    uv_vis += line
-                    if not read_states and line.strip() and line.split()[0].isdigit():
-                        state = int(line.split()[0])
-                        if state > highest_state:
-                            highest_state = state
-                    if line.strip().startswith("Ground to excited state transition velocity"):
-                        read_states = True
-                    if re.search("Excited State\s*%i:" % highest_state, line):
-                        done = True
-                    if line.strip().startswith("Total Energy, E"):
-                        nrg = re.search(
-                            r"Total Energy, E\((\S+)\)\s*=\s*(-?\d+\.\d+)", line
+                        self.other["frequency"] = Frequency(
+                            freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                         )
-                        self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
-                        self.other["energy"] = float(nrg.group(2))
-
+                    except Exception as e:
+                        log.warning("an error occured while parsing Gaussian frequency data")
+                        log.warning("frequency data read:\n%s" % freq_str)
+                        raise e
+    
+                elif "Anharmonic Infrared Spectroscopy" in line:
+                    self.skip_lines(f, 5)
+                    n += 5
+                    anharm_str = ""
+                    combinations_read = False
+                    combinations = False
                     line = f.readline()
-                self.other["uv_vis"] = ValenceExcitations(
-                    uv_vis, style="gaussian"
-                )
-
-            elif "S**2 before annihilation" in line:
-                self.other["S^2 before"] = float(line.split()[3].strip(","))
-                self.other["S^2 annihilated"] = float(line.split()[-1])
-
-            # Thermo
-            # elif temperature.match(line):
-            elif line.startswith(" Temperature"):
-                self.other["temperature"] = float(
-                    float_num.search(line).group(0)
-                )
-                line = f.readline()
-                while line and not line.startswith(" Molecular mass:"):
-                    if isotope.match(line):
-                        ndx = int(isotope.match(line).group(1)) - 1
-                        self.atoms[ndx]._mass = float(line.split()[-1])
-                    line = f.readline()
-                
-                self.other["mass"] = float(float_num.search(line).group(0))
-                self.other["mass"] *= UNIT.AMU_TO_KG
-
-            elif "Rotational constants (GHZ):" in line:
-                rot = float_num.findall(line)
-                rot = [
-                    float(r) * PHYSICAL.PLANCK * (10 ** 9) / PHYSICAL.KB
-                    for r in rot
-                ]
-                self.other["rotational_temperature"] = rot
-
-            # rotational constants from anharmonic frequency jobs
-            elif "Rotational Constants (in MHz)" in line:
-                self.skip_lines(f, 2)
-                n += 2
-                equilibrium_rotational_temperature = np.zeros(3)
-                ground_rotational_temperature = np.zeros(3)
-                centr_rotational_temperature = np.zeros(3)
-                for i in range(0, 3):
-                    line = f.readline()
-                    n += 1
-                    info = line.split()
-                    Be = float(info[1])
-                    B00 = float(info[3])
-                    B0 = float(info[5])
-                    equilibrium_rotational_temperature[i] = Be
-                    ground_rotational_temperature[i] = B00
-                    centr_rotational_temperature[i] = B0
-                equilibrium_rotational_temperature *= (
-                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                )
-                ground_rotational_temperature *= (
-                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                )
-                centr_rotational_temperature *= (
-                    PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
-                )
-                self.other[
-                    "equilibrium_rotational_temperature"
-                ] = equilibrium_rotational_temperature
-                self.other[
-                    "ground_rotational_temperature"
-                ] = ground_rotational_temperature
-                self.other[
-                    "centr_rotational_temperature"
-                ] = centr_rotational_temperature
-
-            # NMR
-            elif "Magnetic shielding tensor" in line:
-                nmr = ""
-                while line.strip():
-                    line = f.readline()
-                    nmr += line
-                    n += 1
-                self.other["nmr"] = NMR(nmr, style="gaussian", n_atoms=len(self.atoms))
-
-            elif "Sum of electronic and zero-point Energies=" in line:
-                self.other["E_ZPVE"] = float(float_num.search(line).group(0))
-            elif "Sum of electronic and thermal Enthalpies=" in line:
-                self.other["enthalpy"] = float(float_num.search(line).group(0))
-            elif "Sum of electronic and thermal Free Energies=" in line:
-                self.other["free_energy"] = float(
-                    float_num.search(line).group(0)
-                )
-            elif "Zero-point correction=" in line:
-                self.other["ZPVE"] = float(float_num.search(line).group(0))
-            elif "Rotational symmetry number" in line:
-                self.other["rotational_symmetry_number"] = int(
-                    re.search("\d+", line).group(0)
-                )
-
-            # Gradient
-            elif "Threshold  Converged?" in line:
-                line = f.readline()
-                n += 1
-                grad = {}
-
-                def add_grad(line, name, grad):
-                    line = line.split()
-                    grad[name] = {
-                        "value": line[2],
-                        "threshold": line[3],
-                        "converged": True if line[4] == "YES" else False,
-                    }
-                    return grad
-
-                while line != "":
-                    if "Predicted change in Energy" in line:
-                        break
-                    if re.search("Maximum\s+Force", line) is not None:
-                        grad = add_grad(line, "Max Force", grad)
-                    if re.search("RMS\s+Force", line) is not None:
-                        grad = add_grad(line, "RMS Force", grad)
-                    if re.search("Maximum\s+Displacement", line) is not None:
-                        grad = add_grad(line, "Max Disp", grad)
-                    if re.search("RMS\s+Displacement", line) is not None:
-                        grad = add_grad(line, "RMS Disp", grad)
-                    line = f.readline()
-                    n += 1
-                self.other["gradient"] = grad
-
-            # electronic properties
-            elif "Electrostatic Properties (Atomic Units)" in line:
-                self.skip_lines(f, 5)
-                n += 5
-                self.other["electric_potential"] = []
-                self.other["electric_field"] = []
-                line = f.readline()
-                while "--" not in line:
-                    info = line.split()
-                    self.other["electric_potential"].append(float(info[2]))
-                    self.other["electric_field"].append([float(x) for x in info[3:]])
-                    line = f.readline()
-                    n += 1
-                self.other["electric_potential"] = np.array(self.other["electric_potential"])
-                self.other["electric_field"] = np.array(self.other["electric_field"])
-
-            # optical features
-            elif "[Alpha]" in line:
-                alpha_match = re.search("\[Alpha\].*\(\s*(.*\s?.*)\)\s*=\s*(-?\d+\.\d+)", line)
-                self.other["optical_rotation_(%s)" % alpha_match.group(1)] = \
-                float(alpha_match.group(2))
-
-            # symmetry
-            elif "Full point group" in line:
-                self.other["full_point_group"] = line.split()[-3]
-
-            elif "Largest Abelian subgroup" in line:
-                self.other["abelian_subgroup"] = line.split()[-3]
-
-            elif "Largest concise Abelian subgroup" in line:
-                self.other["concise_abelian_subgroup"] = line.split()[-3]
-
-            # forces
-            elif "Forces (Hartrees/Bohr)" in line:
-                try:
-                    gradient = np.zeros((len(self.atoms), 3))
-                    self.skip_lines(f, 2)
-                    n += 2
-                    for i in range(0, len(self.atoms)):
+                    while not combinations_read:
                         n += 1
+                        anharm_str += line
+                        if "Combination Bands" in line:
+                            combinations = True
                         line = f.readline()
-                        info = line.split()
-                        gradient[i] = np.array([float(x) for x in info[2:]])
-
-                    self.other["forces"] = gradient
-
-                except Exception as e:
-                    self.LOG.warning("error parsing forces:\n %s" % e)
-
-            # nbo stuff
-            elif "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
-                self.read_nbo(f)
-
-            # atomic charges
-            elif "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
-                self.skip_lines(f, 1)
-                n += 1
-                cm5_charges = []
-                hirshfeld_charges = []
-                for i in range(0, len(self.atoms)):
-                    line = f.readline()
-                    n += 1
-                    data = line.split()
-                    hirshfeld = float(data[2])
-                    cm5 = float(data[7])
-                    hirshfeld_charges.append(hirshfeld)
-                    cm5_charges.append(cm5)
-                self.other["Hirshfeld Charges"] = hirshfeld_charges
-                self.other["CM5 Charges"] = cm5_charges
-
-            elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
-                charge_match = re.search("(\S+) charges.*:", line)
-                if charge_match:
+                        if combinations and line == "\n":
+                            combinations_read = True
+                    
+                    try:
+                        self.other["frequency"].parse_gaussian_lines(
+                            anharm_str.splitlines(), harmonic=False,
+                        )
+                    except Exception as e:
+                        if not log:
+                            log = self.LOG
+                        log.warning("an error occured while parsing Gaussian frequency data")
+                        log.warning("frequency data read:\n%s" % anharm_str)
+                        raise e
+    
+                # X matrix for anharmonic
+                elif "Total Anharmonic X Matrix" in line:
                     self.skip_lines(f, 1)
                     n += 1
-                    charges = []
+                    n_freq = len(self.other["frequency"].data)
+                    n_sections = int(np.ceil(n_freq / 5))
+                    x_matrix = np.zeros((n_freq, n_freq))
+                    for section in range(0, n_sections):
+                        header = f.readline()
+                        n += 1
+                        for j in range(5 * section, n_freq):
+                            line = f.readline()
+                            n += 1
+                            ll = 5 * section
+                            ul = 5 * section + min(j - ll + 1, 5)
+                            x_matrix[j, ll:ul] = [
+                                float(x.replace("D", "e"))
+                                for x in line.split()[1:]
+                            ]
+                    x_matrix += np.tril(x_matrix, k=-1).T
+                    self.other["X_matrix"] = x_matrix
+    
+                elif "Total X0" in line:
+                    self.other["X0"] = float(line.split()[5])
+    
+                # TD-DFT output
+                elif line.strip().startswith("Ground to excited state"):
+                    uv_vis = ""
+                    highest_state = 0
+                    done = False
+                    read_states = False
+                    while not done:
+                        n += 1
+                        uv_vis += line
+                        if not read_states and line.strip() and line.split()[0].isdigit():
+                            state = int(line.split()[0])
+                            if state > highest_state:
+                                highest_state = state
+                        if line.strip().startswith("Ground to excited state transition velocity"):
+                            read_states = True
+                        if re.search("Excited State\s*%i:" % highest_state, line):
+                            done = True
+                        if line.strip().startswith("Total Energy, E"):
+                            nrg = re.search(
+                                r"Total Energy, E\((\S+)\)\s*=\s*(-?\d+\.\d+)", line
+                            )
+                            self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
+                            self.other["energy"] = float(nrg.group(2))
+    
+                        line = f.readline()
+                    try:
+                        self.other["uv_vis"] = ValenceExcitations(
+                            uv_vis, style="gaussian"
+                        )
+                    except Exception as e:
+                        if not log:
+                            log = self.LOG
+                        log.warning("error occured while parsing Gaussian UV/vis data")
+                        log.warning("UV/vis data read:\n%s" % uv_vis)
+                        raise e
+    
+                elif "S**2 before annihilation" in line:
+                    self.other["S^2 before"] = float(line.split()[3].strip(","))
+                    self.other["S^2 annihilated"] = float(line.split()[-1])
+    
+                # Thermo
+                # elif temperature.match(line):
+                elif line.startswith(" Temperature"):
+                    self.other["temperature"] = float(
+                        float_num.search(line).group(0)
+                    )
+                    line = f.readline()
+                    while line and not line.startswith(" Molecular mass:"):
+                        if isotope.match(line):
+                            ndx = int(isotope.match(line).group(1)) - 1
+                            self.atoms[ndx]._mass = float(line.split()[-1])
+                        line = f.readline()
+                    
+                    self.other["mass"] = float(float_num.search(line).group(0))
+                    self.other["mass"] *= UNIT.AMU_TO_KG
+    
+                elif "Rotational constants (GHZ):" in line:
+                    rot = float_num.findall(line)
+                    rot = [
+                        float(r) * PHYSICAL.PLANCK * (10 ** 9) / PHYSICAL.KB
+                        for r in rot
+                    ]
+                    self.other["rotational_temperature"] = rot
+    
+                # rotational constants from anharmonic frequency jobs
+                elif "Rotational Constants (in MHz)" in line:
+                    self.skip_lines(f, 2)
+                    n += 2
+                    equilibrium_rotational_temperature = np.zeros(3)
+                    ground_rotational_temperature = np.zeros(3)
+                    centr_rotational_temperature = np.zeros(3)
+                    for i in range(0, 3):
+                        line = f.readline()
+                        n += 1
+                        info = line.split()
+                        Be = float(info[1])
+                        B00 = float(info[3])
+                        B0 = float(info[5])
+                        equilibrium_rotational_temperature[i] = Be
+                        ground_rotational_temperature[i] = B00
+                        centr_rotational_temperature[i] = B0
+                    equilibrium_rotational_temperature *= (
+                        PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                    )
+                    ground_rotational_temperature *= (
+                        PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                    )
+                    centr_rotational_temperature *= (
+                        PHYSICAL.PLANCK * 1e6 / PHYSICAL.KB
+                    )
+                    self.other[
+                        "equilibrium_rotational_temperature"
+                    ] = equilibrium_rotational_temperature
+                    self.other[
+                        "ground_rotational_temperature"
+                    ] = ground_rotational_temperature
+                    self.other[
+                        "centr_rotational_temperature"
+                    ] = centr_rotational_temperature
+    
+                # NMR
+                elif "Magnetic shielding tensor" in line:
+                    nmr = ""
+                    while line.strip():
+                        line = f.readline()
+                        nmr += line
+                        n += 1
+                    try:
+                        self.other["nmr"] = NMR(nmr, style="gaussian", n_atoms=len(self.atoms))
+                    except Exception as e:
+                        if not log:
+                            log = self.LOG
+                        log.warning("error occured while parsing Gaussian NMR data")
+                        log.warning("NMR data read:\n%s" % nmr)
+                        raise e
+    
+                elif "Sum of electronic and zero-point Energies=" in line:
+                    self.other["E_ZPVE"] = float(float_num.search(line).group(0))
+                elif "Sum of electronic and thermal Enthalpies=" in line:
+                    self.other["enthalpy"] = float(float_num.search(line).group(0))
+                elif "Sum of electronic and thermal Free Energies=" in line:
+                    self.other["free_energy"] = float(
+                        float_num.search(line).group(0)
+                    )
+                elif "Zero-point correction=" in line:
+                    self.other["ZPVE"] = float(float_num.search(line).group(0))
+                elif "Rotational symmetry number" in line:
+                    self.other["rotational_symmetry_number"] = int(
+                        re.search("\d+", line).group(0)
+                    )
+    
+                # Gradient
+                elif "Threshold  Converged?" in line:
+                    line = f.readline()
+                    n += 1
+                    grad = {}
+    
+                    def add_grad(line, name, grad):
+                        line = line.split()
+                        grad[name] = {
+                            "value": line[2],
+                            "threshold": line[3],
+                            "converged": True if line[4] == "YES" else False,
+                        }
+                        return grad
+    
+                    while line != "":
+                        if "Predicted change in Energy" in line:
+                            break
+                        if re.search("Maximum\s+Force", line) is not None:
+                            grad = add_grad(line, "Max Force", grad)
+                        if re.search("RMS\s+Force", line) is not None:
+                            grad = add_grad(line, "RMS Force", grad)
+                        if re.search("Maximum\s+Displacement", line) is not None:
+                            grad = add_grad(line, "Max Disp", grad)
+                        if re.search("RMS\s+Displacement", line) is not None:
+                            grad = add_grad(line, "RMS Disp", grad)
+                        line = f.readline()
+                        n += 1
+                    self.other["gradient"] = grad
+    
+                # electronic properties
+                elif "Electrostatic Properties (Atomic Units)" in line:
+                    self.skip_lines(f, 5)
+                    n += 5
+                    self.other["electric_potential"] = []
+                    self.other["electric_field"] = []
+                    line = f.readline()
+                    while "--" not in line:
+                        info = line.split()
+                        self.other["electric_potential"].append(float(info[2]))
+                        self.other["electric_field"].append([float(x) for x in info[3:]])
+                        line = f.readline()
+                        n += 1
+                    self.other["electric_potential"] = np.array(self.other["electric_potential"])
+                    self.other["electric_field"] = np.array(self.other["electric_field"])
+    
+                # optical features
+                elif "[Alpha]" in line:
+                    alpha_match = re.search("\[Alpha\].*\(\s*(.*\s?.*)\)\s*=\s*(-?\d+\.\d+)", line)
+                    self.other["optical_rotation_(%s)" % alpha_match.group(1)] = \
+                    float(alpha_match.group(2))
+    
+                # symmetry
+                elif "Full point group" in line:
+                    self.other["full_point_group"] = line.split()[-3]
+    
+                elif "Largest Abelian subgroup" in line:
+                    self.other["abelian_subgroup"] = line.split()[-3]
+    
+                elif "Largest concise Abelian subgroup" in line:
+                    self.other["concise_abelian_subgroup"] = line.split()[-3]
+    
+                # forces
+                elif "Forces (Hartrees/Bohr)" in line:
+                    try:
+                        gradient = np.zeros((len(self.atoms), 3))
+                        self.skip_lines(f, 2)
+                        n += 2
+                        for i in range(0, len(self.atoms)):
+                            n += 1
+                            line = f.readline()
+                            info = line.split()
+                            gradient[i] = np.array([float(x) for x in info[2:]])
+    
+                        self.other["forces"] = gradient
+    
+                    except Exception as e:
+                        self.LOG.warning("error parsing forces:\n %s" % e)
+    
+                # nbo stuff
+                elif "N A T U R A L   A T O M I C   O R B I T A L   A N D" in line:
+                    self.read_nbo(f)
+    
+                # atomic charges
+                elif "Hirshfeld charges, spin densities, dipoles, and CM5 charges" in line:
+                    self.skip_lines(f, 1)
+                    n += 1
+                    cm5_charges = []
+                    hirshfeld_charges = []
                     for i in range(0, len(self.atoms)):
                         line = f.readline()
                         n += 1
-                        charges.append(float(line.split()[2]))
-                        self.atoms[i].charge = float(line.split()[2])
-                    self.other[charge_match.group(1) + " Charges"] = charges
-
-            elif "Dipole moment (field-independent basis, Debye)" in line:
-                n += 1
-                line = f.readline()
-                info = line.split()
-                self.other["dipole moment"] = [float(info[x]) for x in [1, 3, 5]]
-
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # BE CAREFUL ABOUT WHAT'S AFTER THIS
-            # WE PUT A REGEX FOR FLOATING POINT NUMBERS HERE FOR
-            # PERFORMANCE REASONS
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-            elif "." in line and (
-                ".0" in line or
-                ".1" in line or
-                ".2" in line or
-                ".3" in line or
-                ".4" in line or
-                ".5" in line or
-                ".6" in line or
-                ".7" in line or
-                ".8" in line or
-                ".9" in line
-            ):
-            # elif re.search("\d+\.\d+", line):
-                nrg_match = most_energies.search(line)
-                mp_match = mp_energies.search(line)
-                # will also match the SCF line (hence the else here)
-                # the match in the SCF line could be confusing b/c
-                # the SCF line could be
-                # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
-                # and later on, there will be a line...
-                #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
-                # this will give:
-                # * E(RB2PLYPD3) = -76.2887108570
-                # * E(B2PLYPD3) = -76.353361915801
-                # very similar names for very different energies...
-                # most energies
-                if nrg_match:
-                    nrg = float(nrg_match.group(2).replace("D", "E"))
-                    if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
-                        self.other["energy"] = nrg
-                    self.other[nrg_match.group(1)] = nrg
-                # MP energies
-                elif mp_match:
-                    self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
-                    self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
-
-            # capture errors
-            # only keep first error, want to fix one at a time
-            elif "error" not in self.other:
-                for err in ERROR:
-                    if isinstance(err, str):
-                        if err in line:
+                        data = line.split()
+                        hirshfeld = float(data[2])
+                        cm5 = float(data[7])
+                        hirshfeld_charges.append(hirshfeld)
+                        cm5_charges.append(cm5)
+                    self.other["Hirshfeld Charges"] = hirshfeld_charges
+                    self.other["CM5 Charges"] = cm5_charges
+    
+                elif any(("Mulliken" in line, "Hirshfeld" in line, "ESP" in line, "APT" in line)) and "hydrogens" not in line:
+                    charge_match = re.search("(\S+) charges.*:", line)
+                    if charge_match:
+                        self.skip_lines(f, 1)
+                        n += 1
+                        charges = []
+                        for i in range(0, len(self.atoms)):
+                            line = f.readline()
+                            n += 1
+                            charges.append(float(line.split()[2]))
+                            self.atoms[i].charge = float(line.split()[2])
+                        self.other[charge_match.group(1) + " Charges"] = charges
+    
+                elif "Dipole moment (field-independent basis, Debye)" in line:
+                    n += 1
+                    line = f.readline()
+                    info = line.split()
+                    self.other["dipole moment"] = [float(info[x]) for x in [1, 3, 5]]
+    
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # BE CAREFUL ABOUT WHAT'S AFTER THIS
+                # WE PUT A REGEX FOR FLOATING POINT NUMBERS HERE FOR
+                # PERFORMANCE REASONS
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+                elif "." in line and (
+                    ".0" in line or
+                    ".1" in line or
+                    ".2" in line or
+                    ".3" in line or
+                    ".4" in line or
+                    ".5" in line or
+                    ".6" in line or
+                    ".7" in line or
+                    ".8" in line or
+                    ".9" in line
+                ):
+                # elif re.search("\d+\.\d+", line):
+                    nrg_match = most_energies.search(line)
+                    mp_match = mp_energies.search(line)
+                    # will also match the SCF line (hence the else here)
+                    # the match in the SCF line could be confusing b/c
+                    # the SCF line could be
+                    # SCF Done:  E(RB2PLYPD3) =  -76.2887108570     A.U. after   10 cycles
+                    # and later on, there will be a line...
+                    #  E2(B2PLYPD3) =    -0.6465105880D-01 E(B2PLYPD3) =    -0.76353361915801D+02
+                    # this will give:
+                    # * E(RB2PLYPD3) = -76.2887108570
+                    # * E(B2PLYPD3) = -76.353361915801
+                    # very similar names for very different energies...
+                    # most energies
+                    if nrg_match:
+                        nrg = float(nrg_match.group(2).replace("D", "E"))
+                        if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
+                            self.other["energy"] = nrg
+                        self.other[nrg_match.group(1)] = nrg
+                    # MP energies
+                    elif mp_match:
+                        self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                        self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
+    
+                # capture errors
+                # only keep first error, want to fix one at a time
+                elif "error" not in self.other:
+                    for err in ERROR:
+                        if isinstance(err, str):
+                            if err in line:
+                                self.other["error"] = ERROR[err]
+                                self.other["error_msg"] = line.strip()
+                                break
+    
+                        elif err.search(line):
                             self.other["error"] = ERROR[err]
                             self.other["error_msg"] = line.strip()
                             break
-
-                    elif err.search(line):
-                        self.other["error"] = ERROR[err]
-                        self.other["error_msg"] = line.strip()
-                        break
-
-            line = f.readline()
-            n += 1
+    
+                line = f.readline()
+                n += 1
+            except Exception as e:
+                if not logger:
+                    log = self.LOG
+                log.warning("an error occured while reading the Gaussian output file")
+                log.warning("last line read: %s" % line)
+                try:
+                    log.warning("route:\n%s" % route)
+                except NameError:
+                    pass
+                log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
+                raise e
 
         if (
             get_all and
