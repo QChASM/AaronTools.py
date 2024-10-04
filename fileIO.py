@@ -3776,12 +3776,14 @@ class FileReader:
             # archive entry
             elif line.strip().startswith("1\\1\\"):
                 found_archive = True
-                line = "@" + line.strip()[4:]
+                self.other["archive"] = line.strip()
             elif found_archive and line.strip().endswith("@"):
-                self.other["archive"] = self.other["archive"][:-2] + "\\\\"
+                self.other["archive"] += line.strip()
                 found_archive = False
             elif found_archive:
                 self.other["archive"] += line.strip()
+                line = f.readline()
+                continue
 
             # input atom specs and charge/mult
             if not oniom and "Symbolic Z-matrix:" in line:

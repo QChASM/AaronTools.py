@@ -2301,7 +2301,8 @@ class Geometry:
     ):
         """
         calculates the RMSD between two geometries
-        Returns: rmsd (float)
+        
+        :returns: rmsd in Angstroms (float)
 
         :param Geometry ref: the geometry to compare to
         :param bool align: if True (default), align self to other;
