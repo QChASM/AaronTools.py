@@ -510,13 +510,8 @@ class Component(Geometry):
         elif method.lower() == "exact":
             CITATION = "doi:10.1002/jcc.23217"
         self.LOG.citation(CITATION)
-
-        key = self.find("key")
-
+        
         center = self.find_exact(center)[0]
-
-        L_axis = self.COM(key) - center.coords
-        L_axis /= np.linalg.norm(L_axis)
 
         if isinstance(radii, dict):
             radii_dict = radii
@@ -529,6 +524,11 @@ class Component(Geometry):
         cones = []
 
         if method.lower() == "tolman":
+            key = self.find("key")
+            
+            L_axis = self.COM(key) - center.coords
+            L_axis /= np.linalg.norm(L_axis)
+
             total_angle = 0
             all_cones = {"substituents": [], "bridges": []}
             bridges = dict()

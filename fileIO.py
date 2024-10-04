@@ -3768,7 +3768,8 @@ class FileReader:
             if line.strip().startswith("#") and route is None:
                 route = ""
                 while "------" not in line:
-                    route += line[1:].splitlines()[0]
+                    if len(line.rstrip()) > 1:
+                        route += line[1:].splitlines()[0]
                     n += 1
                     line = f.readline()
                 oniom = "oniom" in route.lower()
