@@ -3380,7 +3380,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, logger=None):
+    def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
         """read gaussian output file"""
         isotope = re.compile(r" Atom\s+(\d+) has atomic number")
         # orientation = re.compile(r"(Standard|Input) orientation:\s*$")
