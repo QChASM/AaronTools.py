@@ -1474,6 +1474,7 @@ class FileReader:
         conf_name=None,
         nbo_name=None,
         max_length=10000000,
+        log=None,
     ):
         """
         :param str|tuple fname: either a string specifying the file name of the file to read
@@ -1543,7 +1544,7 @@ class FileReader:
 
         if self.content is not None:
             if self.file_type == "log":
-                self.read_log(f, get_all, just_geom, scan_read_all)
+                self.read_log(f, get_all, just_geom, scan_read_all, log=None)
             elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
                 self.read_sd(f)
             elif self.file_type == "xyz":
@@ -1553,9 +1554,9 @@ class FileReader:
             elif any(self.file_type == ext for ext in ["com", "gjf"]):
                 self.read_com(f)
             elif self.file_type == "out":
-                self.read_orca_out(f, get_all, just_geom)
+                self.read_orca_out(f, get_all, just_geom, log=None)
             elif self.file_type == "dat":
-                self.read_psi4_out(f, get_all, just_geom)
+                self.read_psi4_out(f, get_all, just_geom, log=None)
             elif self.file_type == "fchk":
                 self.read_fchk(f, just_geom, max_length=max_length)
             elif self.file_type == "pdb":
@@ -1575,7 +1576,7 @@ class FileReader:
             elif self.file_type == "31":
                 self.read_nbo_31(f, nbo_name=nbo_name)
             elif self.file_type == "qout":
-                self.read_qchem_out(f, get_all, just_geom)
+                self.read_qchem_out(f, get_all, just_geom, log=None)
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -1619,7 +1620,7 @@ class FileReader:
     def read_file(
         self, get_all=False, just_geom=True, scan_read_all=False,
         freq_name=None, conf_name=None, nbo_name=None, oniom=False,
-        max_length=10000000,
+        max_length=10000000, log=None,
     ):
         """
         Reads geometry information from fname.
@@ -1649,7 +1650,7 @@ class FileReader:
         if self.file_type == "xyz":
             self.read_xyz(f, get_all, oniom)
         elif self.file_type == "log":
-            self.read_log(f, get_all, just_geom, scan_read_all)
+            self.read_log(f, get_all, just_geom, scan_read_all, log=log)
         elif any(self.file_type == ext for ext in ["com", "gjf"]):
             self.read_com(f)
         elif any(self.file_type == ext for ext in ["sd", "sdf", "mol"]):
@@ -1657,9 +1658,9 @@ class FileReader:
         elif self.file_type == "mol2":
             self.read_mol2(f)
         elif self.file_type == "out":
-            self.read_orca_out(f, get_all, just_geom)
+            self.read_orca_out(f, get_all, just_geom, log=log)
         elif self.file_type == "dat":
-            self.read_psi4_out(f, get_all, just_geom)
+            self.read_psi4_out(f, get_all, just_geom, log=log)
         elif self.file_type == "fchk":
             self.read_fchk(f, just_geom, max_length=max_length)
         elif self.file_type == "pdb":
@@ -1679,7 +1680,7 @@ class FileReader:
         elif self.file_type == "31":
             self.read_nbo_31(f, nbo_name=nbo_name)
         elif self.file_type == "qout":
-            self.read_qchem_out(f, get_all, just_geom)
+            self.read_qchem_out(f, get_all, just_geom, log=log)
 
         f.close()
         return
