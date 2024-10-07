@@ -3911,6 +3911,17 @@ class FileReader:
                 if not oniom and "Symbolic Z-matrix:" in line:
                     self.atoms, n = get_input(f, n)
     
+                if "Structure from the checkpoint file" in line:
+                    done = False
+                    while not done:
+                        if "Charge =" in line:
+                            charge = int(line.split()[2])
+                            mult = int(line.split()[5])
+                            self.other["charge"] = charge
+                            self.other["multiplicity"] = mult
+                            done = True
+                        line = f.readline()
+   
                 #Pseudopotential info
                 elif "Pseudopotential Parameters" in line:
                     self.other["ECP"] = []
