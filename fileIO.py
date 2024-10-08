@@ -4433,7 +4433,7 @@ class FileReader:
                 line = f.readline()
                 n += 1
             except Exception as e:
-                if not logger:
+                if not log:
                     log = self.LOG
                 log.warning("an error occured while reading the Gaussian output file")
                 log.warning("last line read: %s" % line)
