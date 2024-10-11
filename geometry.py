@@ -136,9 +136,10 @@ class Geometry:
     @staticmethod
     def iupac2smiles(name):
         """
-        convert IUPAC name to smiles using the OPSIN web API
+        convert IUPAC name to SMILES using the OPSIN web API
         
         :param str name: IUPAC name of a molecule
+        :return: SMILES name of a molecule
         """
         if DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
             raise PermissionError(
@@ -165,12 +166,14 @@ class Geometry:
     @classmethod
     def from_string(cls, name, form="smiles", strict_use_rdkit=False):
         """
-        get Geometry from string
+        Converts a string input into a Geometry object
         
         :param str name: either an IUPAC name or a SMILES for a molecule
         :param str form: * "smiles" -  structure from cactvs API/RDKit
             * "iupac" - iupac to smiles from opsin API, then the same as form=smiles
-        :param bool strict_use_rdkit: force use of RDKit and never use cactvs 
+        :param bool strict_use_rdkit: force use of RDKit and never use cactvs
+        :return: Geometry object that matches the input name
+        :rtype: Geometry
         """
 
         # CC and HOH are special-cased because they are used in
@@ -298,7 +301,7 @@ class Geometry:
         shape,
         c2_symmetric=None,
         minimize=False,
-        session=None,
+        session=None,  # This parameter is unused in the method; possibly should be removed?
     ):
         """
         get all unique coordination complexes
@@ -311,7 +314,7 @@ class Geometry:
                        if this list is as long as the ligands list, the nth item corresponds
                        to the nth ligand
                        otherwise, the nth item indicate the symmetry of the nth bidentate ligand
-        :param bool minimize: passed to cls.map_ligand when adding ligands
+        :param bool minimize: passed to cls.map_ligand when adding ligands 
 
         :return: a list of cls containing all unique coordination complexes and the
             general formula of the complexes
@@ -565,7 +568,8 @@ class Geometry:
         Generate diastereomers of Geometry
 
         :param Geometry geometry: chiral structure
-        :return: list of all diastereomers for detected chiral centers
+        :param bool minimize: performs minimize_sub_torsion on each diastereomer
+        :return: list of all diastereomer_countastereomers for detected chiral centers
         :rtype: list(Geometry)
         """
         from AaronTools.finders import ChiralCenters, Bridgehead, NotAny, SpiroCenters
@@ -647,6 +651,16 @@ class Geometry:
 
     @classmethod
     def get_solvent(cls, solvent):
+        """
+        Converts the name of a solvent into a Geometry representation
+        based on solvents within AaronTools libraries
+        Note: list_solvents provides a str array of solvents within the libraries
+
+        :param str solvent: name of the solvent to be converted
+        :return: converted solvent
+        :rtype: Geometry
+        :raises LookupError: when input solvent is not present in libraries
+        """
         BUILTIN = os.path.join(AARONTOOLS, "Solvents")
         AARON_LIBS = os.path.join(AARONLIB, "Solvents")
         for lib in [AARON_LIBS, BUILTIN]:
@@ -664,6 +678,13 @@ class Geometry:
 
     @staticmethod
     def list_solvents(include_ext=False):
+        """
+        Retrieves a list of solvents stored in AaronTools
+
+        :param bool include_ext: Includes file extensions (.xyz) on
+            each solvent when true.
+        :return: string array with the names of all solvents in the libraries
+        """
         names = []
         solvents = []
         BUILTIN = os.path.join(AARONTOOLS, "Solvents")
@@ -736,7 +757,7 @@ class Geometry:
 
     def coordinates(self, atoms=None):
         """
-        :param list(Atom) atoms:
+        :param list(Atom) atoms: atoms to be searched
         :return: N x 3 coordinate matrix for requested atoms
             (defaults to all atoms)
         :rtype: np.ndarray
@@ -749,6 +770,8 @@ class Geometry:
     def __str__(self):
         xyz = self.write(outfile=False)
         return xyz
+        # Duplicate method; __repr__ is the same code
+        # Remove?
 
     def __repr__(self):
         """string representation"""
@@ -788,6 +811,9 @@ class Geometry:
         return rmsd < COORD_THRESHOLD
 
     def __add__(self, other):
+        """
+        adds other or other's atoms to self
+        """
         if isinstance(other, Atom):
             other = [other]
         elif not isinstance(other, list):
@@ -796,6 +822,9 @@ class Geometry:
         return self
 
     def __sub__(self, other):
+        """
+        subtracts other or other's atoms from self
+        """
         if isinstance(other, Atom):
             other = [other]
         elif not isinstance(other, list):
@@ -808,16 +837,25 @@ class Geometry:
         return self
 
     def __iter__(self):
+        """
+        resets the iterator of self
+        """
         self._iter_idx = -1
         return self
 
     def __next__(self):
+        """
+        iterates to the next atom of self
+        """
         if self._iter_idx + 1 < len(self.atoms):
             self._iter_idx += 1
             return self.atoms[self._iter_idx]
         raise StopIteration
 
     def __len__(self):
+        """
+        returns the number of atoms in self
+        """
         return len(self.atoms)
 
     def __setattr__(self, attr, val):
@@ -863,6 +901,12 @@ class Geometry:
         return hash(tuple(t))
 
     def tag(self, tag, targets=None):
+        """
+        Adds a tag to atoms within a Geometry object
+
+        :param str tag: tag to be added to the targets
+        :param list(Atom) targets: atoms to be given the tag, defaults to all atoms
+        """
         if targets is None:
             targets = self.atoms
         else:
@@ -971,9 +1015,10 @@ class Geometry:
         """
         creates a new copy of the geometry
         
-        parameters:
-        :param atoms list(Atom): atoms to copy defaults to all atoms
-        :param name str: defaults to NAME_copy
+        :param list(Atom) atoms: atoms to copy defaults to all atoms
+        :param str name: defaults to NAME_copy
+        :param str comment: comment to add to the copy, defaults to self's comment
+        :param bool copy_atoms: passed to _fix_connectivity, defaults to True
         """
         if name is None:
             name = self.name
@@ -1219,7 +1264,10 @@ class Geometry:
 
     def get_connectivity(self):
         """
-        list of connectivity for each atom
+        Iterates through each atom and finds its connected atoms
+
+        :return: list of all atoms' connectivities
+        :rtype: list(list(Atom))
         """
         rv = []
         for atom in self.atoms:
@@ -1235,6 +1283,8 @@ class Geometry:
             defaults to all atoms
         :param int max_order: max bond order to cut when
             defining fragments
+        :return: list of all fragments found
+        :rtype: list(list(Atom))
         """
         if targets:
             atoms = self.find(targets)
@@ -1273,8 +1323,10 @@ class Geometry:
     def get_graph(self):
         """
         returns a graph based on connectivity
-           graph consists of a list for each atom consisting of a list of connected atoms
-           For example, for H2O with O as atom 1, graph = [[1,2], [0], [0]]
+        graph consists of a list for each atom consisting of a list of connected atoms
+        For example, for H2O with O as atom 1, graph = [[1,2], [0], [0]]
+
+        :return: graph created by the method
         """
         ndx = {a: i for i, a in enumerate(self.atoms)}
         graph = [[ndx[b] for b in a.connected if b in ndx] for a in self.atoms]
@@ -1341,16 +1393,14 @@ class Geometry:
             else:
                 a.add_tag(tags[0])
 
-    def find(self, *args, debug=False):
+    def find(self, *args, debug=False): # Parameter debug is unused in method. Remove?
         """
         finds atom in geometry
 
         :param list|tuple|str|Finder args: tags, names, elements, or a Finder subclass
             args=(['this', 'that'], 'other') will find atoms for which
             ('this' || 'that') && 'other' == True
-        
-        Returns:
-        
+
         :return: list of matching atoms 
         :rtype: list(Atom)|list()
         
@@ -1484,6 +1534,13 @@ class Geometry:
     def find_exact(self, *args):
         """
         finds exactly the same number of atoms as arguments used.
+        
+        :param list|tuple|str|Finder args: tags, names, elements, or Finder subclass
+            consisting of those you want to check self for
+
+        :return: list of atoms found
+        :rtype: tuple(Atom)
+
         :raises LookupError: if wrong number of atoms found
         """
         rv = []
@@ -1633,6 +1690,8 @@ class Geometry:
         """
         returns a list of invariants for the specified targets
         see Atom.get_invariant for some more details
+
+        :param bool heavy_only: ignores hydrogens if true
         """
         targets = self.atoms
         if heavy_only:
@@ -1715,14 +1774,18 @@ class Geometry:
 
     def canonical_rank(
         self, heavy_only=False, break_ties=True, update=True, invariant=True
-    ):
+    ): # parameter 'update' seems to be unused. Remove?
         """
         determine canonical ranking for atoms
         
+        :param bool heavy_only: ignores hydrogens if true
+        :param bool break_ties: breaks ties based on angle around COM 
         :param bool invariant: if True, use invariant described in
             J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
             (DOI: 10.1021/ci00062a008)
             if False, use neighbor IDs
+
+        :return: list of rankings
 
         algorithm described in J. Chem. Inf. Model. 2015, 55, 10, 2111–2120
         (DOI: 10.1021/acs.jcim.5b00543)
@@ -1983,6 +2046,10 @@ class Geometry:
         """
         Depth-first reorder of atoms based on canonical ranking
         
+        :param Atom start: atom to start the reorder from, defaults to first atom
+        :param list(Atom) targets: atoms to be reordered, defaults to all atoms
+        :param bool heavy_only: ignores hydrogens if true
+
         :rtype: tuple(list(ordered_targets), list(non_targets))
         """
 
@@ -2220,7 +2287,7 @@ class Geometry:
 
     # geometry measurement
     def bond(self, a1, a2):
-        """takes two atoms and returns the bond vector"""
+        """takes two atoms and returns the bond vector (need to fix formatting)"""
         a1, a2 = self.find_exact(a1, a2)
         return a1.bond(a2)
 
@@ -2663,7 +2730,9 @@ class Geometry:
     def examine_constraints(self, thresh=None):
         """
         Determines if constrained atoms are too close/ too far apart
-        
+       
+        :param float thresh: threshold to define 'too close' or 'too far'
+
         :returns: (atom1, atom2, flag) where flag is 1 if atoms too close,
             -1 if atoms to far apart (so one can multiply a distance to change
             by the flag and it will adjust in the correct direction)
