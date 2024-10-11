@@ -975,7 +975,8 @@ thermochemistry from test_files/normal.log at 298.00 K:
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestCLS("test_grabThermo"))
+    suite.addTest(TestCLS("test_mirror"))
+    suite.addTest(TestCLS("test_mapLigand"))
     return suite
 
 

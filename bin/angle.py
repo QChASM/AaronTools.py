@@ -182,7 +182,7 @@ for f in glob_files(args.infile, parser=angle_parser):
             if isinstance(f, str): # apply substitutions if a file path was given as input
                 outfile = get_outfile(
                     args.outfile,
-                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in outfile),
                     INDIR=dirname(f),
                 )
             geom.write(append=args.append, outfile=outfile)
@@ -195,7 +195,7 @@ for f in glob_files(args.infile, parser=angle_parser):
             if isinstance(f, str): # apply substitutions if a file path was given as input
                 outfile = get_outfile(
                     args.outfile,
-                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+                    INFILE=get_filename(f, include_parent_dir="$INDIR" not in outfile),
                     INDIR=dirname(f),
                 )
             with open(outfile, "a" if args.append else "w") as f:

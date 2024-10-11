@@ -94,6 +94,15 @@ makeconf_parser.add_argument(
 )
 
 makeconf_parser.add_argument(
+    "-sf", "--skip-first",
+    action="store_true",
+    required=False,
+    default=False,
+    dest="skip_first",
+    help="do not print the first structure, as it will be similar to the input"
+)
+
+makeconf_parser.add_argument(
     "-o", "--output-destination",
     type=str,
     default=None,
@@ -172,9 +181,9 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
     for a, subname in zip(target_list, explicit_subnames):
         for atom in a:
             for bonded_atom in atom.connected:
-                frag = geom.get_fragment(atom, bonded_atom)
+                frag = geom.get_fragment(bonded_atom, stop=atom)
                 try:
-                    sub = Substituent(frag, end=bonded_atom)
+                    sub = Substituent(frag, end=atom)
                     if sub.name == subname:
                         substituents.append(sub)
 
@@ -268,6 +277,9 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
                 skipped += 1
                 continue
 
+        if args.skip_first and conf == 0:
+            continue
+
         outfile = args.outfile
         if outfile is None:
             s += print_geom.write(outfile=False)
@@ -280,7 +292,7 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
 
             outfile = get_outfile(
                 outfile,
-                INFILE=get_filename(infile, include_parent_dir="$INDIR" not in outfile),
+                INFILE=get_filename(infile, include_parent_dir=False),
                 INDIR=os.path.dirname(infile),
                 i=str(conf + 1),
                 changes=conf_string,

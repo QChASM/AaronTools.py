@@ -1773,8 +1773,8 @@ class Geometry:
         return invariants
 
     def canonical_rank(
-        self, heavy_only=False, break_ties=True, update=True, invariant=True
-    ): # parameter 'update' seems to be unused. Remove?
+        self, heavy_only=False, break_ties=True, update=False, invariant=True
+    ): 
         """
         determine canonical ranking for atoms
         
@@ -2021,6 +2021,10 @@ class Geometry:
                 self.LOG.warning(
                     "Max cycles reached in canonical sorting (tie-breaking)"
                 )
+
+        if update:
+            for a, r in zip(atoms, ranks):
+                a._rank = r
 
         return ranks
 
@@ -5871,7 +5875,10 @@ class Geometry:
 
         self.remove_clash()
         if minimize:
-            self.minimize()
+            targets = []
+            for lig in ligands:
+                targets.extend(lig.atoms)
+            self.minimize(targets=targets)
 
         self.refresh_ranks()
 
@@ -5982,28 +5989,33 @@ class Geometry:
             bad_subs = self.remove_clash(bad_subs)
         return bad_subs
 
-    def minimize(self):
+    def minimize(self, targets=None, increment=5):
         """
         Rotates substituents in each component to minimize LJ_energy.
         Different from Component.minimize_sub_torsion() in that it minimizes
         with respect to the entire catalyst instead of just the component
         """
-        targets = {}
+        substituents = {}
+        if targets is not None:
+            targets = self.find(targets)
+        
         for sub in self.get_substituents(for_confs=True):
-            if len(sub.atoms):
+            if len(sub.atoms) < 2:
+                continue
+            if targets and not any(a in targets for a in sub.atoms):
                 continue
             try:
-                targets[len(sub.atoms)] += [sub]
+                substituents[len(sub.atoms)] += [sub]
             except KeyError:
-                targets[len(sub.atoms)] = [sub]
+                substituents[len(sub.atoms)] = [sub]
 
         # minimize torsion for each substituent
         # smallest to largest
-        for k in sorted(targets.keys()):
-            for sub in targets[k]:
+        for k in sorted(substituents.keys()):
+            for sub in substituents[k]:
                 axis = sub.atoms[0].bond(sub.end)
                 center = sub.end
-                self.minimize_torsion(sub.atoms, axis, center)
+                self.minimize_torsion(sub.atoms, axis, center, increment=increment)
 
     def next_conformer(self, conf_spec, skip_spec={}):
         """

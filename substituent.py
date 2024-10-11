@@ -463,13 +463,26 @@ class Substituent(Geometry):
                     continue
 
                 if not ranked:
-                    self.refresh_ranks()
+                    start = None
+                    if self.end:
+                        for a in self.atoms:
+                            if self.end in a.connected:
+                                start = a
+                                a.connected -= self.end
+                                break
+                    self.canonical_rank(update=True, break_ties=False)
+                    if start:
+                        start.connected.add(self.end)
+                    sorted_atoms = [x for x in sorted(self.atoms, key=lambda a: a._rank)]
                     ranked = True
 
+                
                 ref_sub = Substituent(init_ref, detect=False)
                 ref_sub.name = name
                 ref_sub.refresh_connected()
-                ref_sub.refresh_ranks()
+                ref_sub.canonical_rank(update=True, break_ties=False)
+                
+                sorted_ref_atoms = [x for x in sorted(ref_sub.atoms, key=lambda a: a._rank)]
 
                 for a, b in zip(sorted(self.atoms), sorted(ref_sub.atoms)):
                     # want correct elements
