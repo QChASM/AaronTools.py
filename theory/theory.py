@@ -625,6 +625,7 @@ class Theory:
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        return_warnings=True,
         **kwargs,
     ):
         """
@@ -703,26 +704,56 @@ class Theory:
                 other_kw_dict[keyword] = kwargs[keyword]
 
         if style == "gaussian":
-            return self.get_gaussian_molecule(
-                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            out = self.get_gaussian_molecule(
+                conditional_kwargs=conditional_kwargs,
+                return_warnings=return_warnings,
+                **other_kw_dict
             )
 
         elif style == "psi4":
-            return self.get_psi4_molecule(
-                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            out = self.get_psi4_molecule(
+                conditional_kwargs=conditional_kwargs,
+                return_warnings=return_warnings,
+                **other_kw_dict
             )
 
         elif style == "sqm":
-            return self.get_sqm_molecule(
-                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            out = self.get_sqm_molecule(
+                conditional_kwargs=conditional_kwargs,
+                return_warnings=return_warnings,
+                **other_kw_dict
             )
 
         elif style == "qchem":
-            return self.get_qchem_molecule(
-                conditional_kwargs=conditional_kwargs, **other_kw_dict
+            out = self.get_qchem_molecule(
+                conditional_kwargs=conditional_kwargs,
+                return_warnings=return_warnings,
+                **other_kw_dict
             )
-
-        NotImplementedError("no get_molecule method for style: %s" % style)
+        
+        else:
+            NotImplementedError("no get_molecule method for style: %s" % style)
+        
+        if return_warnings:
+            s, warnings = out
+            q = self.charge
+            mult = self.multiplicity
+            if not isinstance(q, int):
+                return s, warnings
+            Z = 0
+            for atom in geom.atoms:
+                if not atom.is_dummy and not atom.is_ghost:
+                    try:
+                        Z += ELEMENTS.index(atom.element)
+                    except IndexError:
+                        warnings.append("unknown element number")
+                        return s, warnings
+            
+            if abs(Z - q) % 2 == mult % 2:
+                warnings.append("incompatible charge and multiplicity")
+            
+            return s, warnings
+        return out
 
     def make_footer(
         self,
@@ -1165,7 +1196,7 @@ class Theory:
             elif isinstance(self.multiplicity, int):
                 mult_list = list(str(self.multiplicity))
             if len(charge_list) > 1 and len(charge_list) != len(mult_list):
-                raise ValueError("Charge and multiplicty must match in length. see gaussian.com/oniom/")
+                raise ValueError("Charge and multiplicity must match in length. see gaussian.com/oniom/")
             elif len(charge_list) > 1 and len(charge_list) == len(mult_list):
                 for i in range(len(charge_list)):
                     out_str += "%i %i" % (int(charge_list[i]), int(mult_list[i]))
