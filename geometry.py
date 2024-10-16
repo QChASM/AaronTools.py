@@ -4160,11 +4160,11 @@ class Geometry:
         eye = np.identity(3)
         if isinstance(plane, str):
             if plane.lower() == "xy":
-                eye[0, 0] *= -1
+                eye[2, 2] *= -1
             if plane.lower() == "xz":
                 eye[1, 1] *= -1
             if plane.lower() == "yz":
-                eye[2, 2] *= -1
+                eye[0, 0] *= -1
 
         else:
             eye = utils.mirror_matrix(plane)
