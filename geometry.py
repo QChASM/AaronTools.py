@@ -37,11 +37,13 @@ if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
 class Geometry:
     """
     Attributes:
-        name
-        comment
-        atoms
-        other
-        _iter_idx
+
+        * name
+        * comment
+        * atoms
+        * other
+        * _iter_idx
+
     """
 
     # AaronTools.addlogger decorator will add logger to this class attribute
