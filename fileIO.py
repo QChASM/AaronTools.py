@@ -2266,13 +2266,14 @@ class FileReader:
         """read orca output file"""
 
         self.all_geom = []
-        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
+        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(-?\d*\.\d+)")
         opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
 
         is_scan_job = False
         step_converged = False
         masses = []
         orca_version = 0
+        nmr_data = None
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2614,7 +2615,14 @@ class FileReader:
                         self.skip_lines(f, 8)
                         n += 8
                         line = f.readline()
+                        start = 0
                         for mode in self.other["frequency"].data:
+                            if mode.frequency < 0:
+                                start += 1
+                            else:
+                                break
+                                
+                        for mode in self.other["frequency"].data[start:]:
                             # mode #, frequency, rotatory strength
                             _, _, rot = line.split()
                             mode.rotation = float(rot)
@@ -2631,6 +2639,26 @@ class FileReader:
                                 break
                             if "NMR shielding tensor and spin rotation calculation done" in line:
                                 break
+                        try:
+                            self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing ORCA NMR data")
+                            log.warning("NMR data read:\n" % "".join(nmr_data))
+                            log.warning("number of atoms: %i" % len(self.atoms))
+                            raise e
+    
+                    elif nmr_data and "NMR SPIN-SPIN COUPLING CONSTANTS" in line:
+                        while line:
+                            nmr_data.append(line)
+                            n += 1
+                            line = f.readline()
+                            if "NMR spin-spin coupling calculation done" in line:
+                                break
+                            if "Maximum memory used throughout the entire PROP-calculation" in line:
+                                break
+                            
                         try:
                             self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
                         except Exception as e:
@@ -3003,7 +3031,7 @@ class FileReader:
     
                     elif ORCA_NORM_FINISH in line:
                         self.other["finished"] = True
-    
+        
                     # TODO E_ZPVE
                     if "error" not in self.other or not self["error"]:
                         for err in ERROR_ORCA:
@@ -3031,6 +3059,9 @@ class FileReader:
                                 if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
                                     del self.other["error"]
                                     del self.other["error_msg"]
+                                
+                            if "ORCA finished by error termination" in line:
+                                self.other["error_msg"] = line
     
                     line = f.readline()
                     n += 1
@@ -3052,6 +3083,9 @@ class FileReader:
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
+            
+            if "error_msg" in self.other and "error" not in self.other:
+                self.other["error"] = True
 
             if masses:
                 for a, m in zip(self.atoms, masses):
