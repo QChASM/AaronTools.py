@@ -1098,7 +1098,7 @@ class FileWriter:
         # the '-' in front of the number of atoms indicates that this is
         # MO info so there's an extra data entry between the molecule
         # and the function values
-        bohr_com = com / UNIT.A0_TO_BOHR
+        bohr_com = com * UNIT.ANG_TO_BOHR
         if isinstance(mo, int):
             s += " -"
         else:
@@ -1115,7 +1115,7 @@ class FileWriter:
             zip([n_pts1, n_pts2, n_pts3], [v1, v2, v3]),
             key=lambda p: np.linalg.norm(p[1]),
         ):
-            bohr_v = v / UNIT.A0_TO_BOHR
+            bohr_v = v * UNIT.ANG_TO_BOHR
             s += " %5i %13.5f %13.5f %13.5f\n" % (
                 n, *bohr_v
             )
@@ -1129,9 +1129,9 @@ class FileWriter:
             s += " %5i %13.5f %13.5f %13.5f %13.5f\n" % (
                 ELEMENTS.index(atom.element),
                 ELEMENTS.index(atom.element),
-                atom.coords[0] / UNIT.A0_TO_BOHR,
-                atom.coords[1] / UNIT.A0_TO_BOHR,
-                atom.coords[2] / UNIT.A0_TO_BOHR,
+                atom.coords[0] * UNIT.ANG_TO_BOHR,
+                atom.coords[1] * UNIT.ANG_TO_BOHR,
+                atom.coords[2] * UNIT.ANG_TO_BOHR,
             )
 
         # extra section - only for MO data
@@ -1900,7 +1900,7 @@ class FileReader:
                     element = element.strip("Gh(").strip(")")
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
-                    coords *= UNIT.A0_TO_BOHR
+                    coords *= UNIT.BOHR_TO_ANG
                 atom_mass = float(atom_info[-1])
                 rv += [Atom(element=element, coords=coords, mass=atom_mass, name=str(i))]
                 mass += atom_mass
@@ -3291,7 +3291,7 @@ class FileReader:
                             float(x) for x in line.split()[2:]
                         ])
                         rot_consts *= UNIT.AMU_TO_KG
-                        rot_consts *= UNIT.A0_TO_BOHR ** 2
+                        rot_consts *= UNIT.BOHR_TO_ANG ** 2
                         rot_consts *= 1e-20
                         rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
     
@@ -5067,7 +5067,7 @@ class FileReader:
         for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
             atom = Atom(
                 element=ELEMENTS[atnum],
-                coords=UNIT.A0_TO_BOHR * coord,
+                coords=UNIT.BOHR_TO_ANG * coord,
                 name=str(n + 1),
             )
             self.atoms.append(atom)

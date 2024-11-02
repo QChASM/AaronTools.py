@@ -2811,8 +2811,18 @@ class UNIT:
     AMU_TO_KG = 1.660538921e-27
     HART_TO_KCAL = 627.5095
     HART_TO_JOULE = 4.3597441775e-18
+
+    # These two will be removed ASAP!
     A0_TO_METER = 5.291772109217e-11
     A0_TO_BOHR = 0.52917720859
+    #
+    # These now make sense and should be used
+    ANG_TO_METER = 1e-11
+    BOHR_TO_METER = 0.52917720859e-11
+    BOHR_TO_ANG = 0.52917720859
+    ANG_TO_BOHR = 1/BOHR_TO_ANG
+    #
+
     HARTREE_TO_WAVENUMBER = 219474.63
     HART_TO_EV = 27.2114
     JOULE_TO_EV = 6.241509074e18

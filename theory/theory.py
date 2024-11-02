@@ -2038,7 +2038,7 @@ class Theory:
                         s += "       "
                         if isinstance(val, float):
                             if use_bohr:
-                                s += "%9.5f," % (val / UNIT.A0_TO_BOHR)
+                                s += "%9.5f," % (val * UNIT.ANG_TO_BOHR)
                             else:
                                 s += "%9.5f," % val
                         else:
@@ -2088,7 +2088,7 @@ class Theory:
                         s += "     "
                         if isinstance(val, float):
                             if use_bohr:
-                                s += " %9.5f" % (val / UNIT.A0_TO_BOHR)
+                                s += " %9.5f" % (val * UNIT.ANG_TO_BOHR)
                             else:
                                 s += " %9.5f" % val
                         elif isinstance(val, str):
@@ -2104,7 +2104,7 @@ class Theory:
                     "variables"
                 ]:
                     if use_bohr and angstrom:
-                        val /= UNIT.A0_TO_BOHR
+                        val *= UNIT.ANG_TO_BOHR
                     s += "     %3s = %9.5f\n" % (name, val)
 
             s += "}\n"
@@ -2148,7 +2148,7 @@ class Theory:
                     "variables"
                 ]:
                     if use_bohr and angstrom:
-                        val /= UNIT.A0_TO_BOHR
+                        val *= UNIT.ANG_TO_BOHR
                     s += "     %3s = %9.5f\n" % (name, val)
 
             s += "}\n"
