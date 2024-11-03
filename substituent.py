@@ -9,11 +9,12 @@ from copy import deepcopy
 
 import numpy as np
 
-from AaronTools import addlogger, classproperty
+from AaronTools import addlogger
 from AaronTools.const import AARONTOOLS, BONDI_RADII, VDW_RADII
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
 from AaronTools.utils.utils import boltzmann_average
+from AaronTools.utils.decorators import classproperty
 
 
 @addlogger

@@ -255,10 +255,3 @@ def addlogger(cls):
     cls.LOG = ATLogger(name, level=level, override=override)
     return cls
 
-
-class classproperty:
-    def __init__(self, f):
-        self._f = f
-    
-    def __get__(self, obj, owner):
-        return self._f(owner)

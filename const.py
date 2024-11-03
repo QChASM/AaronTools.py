@@ -1,6 +1,8 @@
 """Holds constants"""
 import os
 
+from AaronTools.utils.decorators import classproperty
+
 HOME = os.path.expanduser("~")
 if "AARONLIB" in os.environ:
     AARONLIB = os.path.abspath(os.environ["AARONLIB"])
@@ -2813,12 +2815,24 @@ class UNIT:
     HART_TO_JOULE = 4.3597441775e-18
 
     # These two will be removed ASAP!
-    A0_TO_METER = 5.291772109217e-11
-    A0_TO_BOHR = 0.52917720859
+    @classproperty
+    def A0_TO_METER(cls):
+        from logging import getLogger
+        log = getLogger()
+        log.warning("UNIT.A0_TO_METER will be removed soon. Use UNIT.BOHR_TO_METER instead.")
+        return 5.291772109217e-11
+    
+    @classproperty
+    def A0_TO_BOHR(cls):
+        from logging import getLogger
+        log = getLogger()
+        log.warning("UNIT.A0_TO_BOHR will be removed soon. Use UNIT.BOHR_TO_ANG instead.")
+        return 0.52917720859
+
     #
     # These now make sense and should be used
-    ANG_TO_METER = 1e-11
-    BOHR_TO_METER = 0.52917720859e-11
+    ANG_TO_METER = 1e-10
+    BOHR_TO_METER = 0.52917720859e-10
     BOHR_TO_ANG = 0.52917720859
     ANG_TO_BOHR = 1/BOHR_TO_ANG
     #
