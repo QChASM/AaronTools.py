@@ -4460,6 +4460,7 @@ class FileReader:
 
         if not just_geom:
             if route is not None:
+                self.other["route"] = route
                 other_kwargs = {GAUSSIAN_ROUTE: {}}
                 route_spec = re.compile("(\w+)=?\((.*)\)")
                 if oniom == False:
@@ -4607,7 +4608,7 @@ class FileReader:
                             if match:
                                 options = match.group(2).split(",")
                             elif option_lower.startswith("freq="):
-                                options = "".join(option.split("=")[1:])
+                                options = ["".join(option.split("=")[1:])]
                             else:
                                 job_type.append(FrequencyJob())
                                 continue
