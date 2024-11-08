@@ -2639,6 +2639,9 @@ class FileReader:
                                 break
                             if "NMR shielding tensor and spin rotation calculation done" in line:
                                 break
+                            if "GIAO: Analytic para- and diamagnetic shielding integrals" in line:
+                                break
+                            
                         try:
                             self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
                         except Exception as e:
@@ -2658,7 +2661,7 @@ class FileReader:
                                 break
                             if "Maximum memory used throughout the entire PROP-calculation" in line:
                                 break
-                            
+
                         try:
                             self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
                         except Exception as e:
