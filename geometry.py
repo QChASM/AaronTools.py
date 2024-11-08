@@ -37,11 +37,13 @@ if not DEFAULT_CONFIG["DEFAULT"].getboolean("local_only"):
 class Geometry:
     """
     Attributes:
-        name
-        comment
-        atoms
-        other
-        _iter_idx
+
+        * name
+        * comment
+        * atoms
+        * other
+        * _iter_idx
+
     """
 
     # AaronTools.addlogger decorator will add logger to this class attribute
@@ -2166,6 +2168,13 @@ class Geometry:
             L1/
         
         will give two fragments, L1 and L2
+
+        :param Geometry self: Structure to be searched for fragments
+        :param list(Atom) targets: Returned fragments will include targets
+        :param list(Atom) avoid: Atoms to be ignored during search; center atom is avoided by default
+
+        :returns: List of fragments
+        :rtype: list(Geometry)
         """
 
         def add_tags(frag):
@@ -2256,7 +2265,12 @@ class Geometry:
 # -ordering within each monomer returned matches original
 # -monomer ordering matches the order within the dimer
     def get_monomers(self):
-        """returns a list of lists of atoms for each monomer of self in order"""
+        """
+        Searches a geometry for monomers
+        
+        :returns: A list of atoms for each monomer of self in order
+        :rtype: list(Atom)
+        """
 
         all_atoms = [a for a in self.atoms]
         ndx = {a: i for i, a in enumerate(self.atoms)}
@@ -2291,17 +2305,39 @@ class Geometry:
 
     # geometry measurement
     def bond(self, a1, a2):
-        """takes two atoms and returns the bond vector (need to fix formatting)"""
+        """
+        takes two atoms and returns the bond vector (need to fix formatting)
+        
+        :param Atom a1: First atom in bond
+        :param Atom a2: Second atom in bond
+        :returns: the vector of the two atoms' bond
+        """
+        
         a1, a2 = self.find_exact(a1, a2)
         return a1.bond(a2)
 
     def angle(self, a1, a2, a3=None):
-        """returns a1-a2-a3 angle"""
+        """
+        returns a1-a2-a3 angle
+        
+        :param Atom a1: First atom
+        :param Atom a2: Central atom
+        :param Atom a3: Last atom
+        :returns: the internal angle of the three atoms
+        """
         a1, a2, a3 = self.find_exact(a1, a2, a3)
         return a2.angle(a1, a3)
 
     def dihedral(self, a1, a2, a3, a4):
-        """measures dihedral angle of a1 and a4 with respect to a2-a3 bond"""
+        """
+        measures dihedral angle of a1 and a4 with respect to a2-a3 bond
+        
+        :param Atom a1: First atom 
+        :param Atom a2: Second atom
+        :param Atom a3: Third atom
+        :param Atom a4: Last atom
+        :returns: the angle between a1 and a4
+        """
         a1, a2, a3, a4 = self.find_exact(a1, a2, a3, a4)
 
         b12 = a1.bond(a2)
@@ -2319,10 +2355,13 @@ class Geometry:
     def COM(self, targets=None, heavy_only=False, mass_weight=True, charge_weight=False):
         """
         calculates center of mass of the target atoms
-        returns a vector from the origin to the center of mass
+        mass_weight and charge_weight cannot both be true
         
         :param targets: the atoms to use in calculation, defaults to all
         :param bool heavy_only: exclude hydrogens, defaults to False
+        :param bool mass_weight: bases calculations on mass, defaults to True
+        :param bool charge_weight: based calculations on charge, defaults to False
+        :returns: a vector from the origin to the center of mass
         """
         if mass_weight and charge_weight:
             raise RuntimeError("cannot use both charge_weight and mass_weight")
@@ -2372,8 +2411,6 @@ class Geometry:
     ):
         """
         calculates the RMSD between two geometries
-        
-        :returns: rmsd in Angstroms (float)
 
         :param Geometry ref: the geometry to compare to
         :param bool align: if True (default), align self to other;
@@ -2385,6 +2422,8 @@ class Geometry:
         :param bool debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
         :param list(float) weights: weights to apply to targets
         :param list(float) ref_weights: weights to apply to ref_targets
+        :returns: RMSD in Angstroms
+        :rtype: float
         """
 
         def _RMSD(ref, other):
@@ -2555,6 +2594,7 @@ class Geometry:
         """
         :returns: list of atoms within a distance or number of bonds of a
             reference point, line, plane, atom, or list of atoms
+        :rtype: list(Atom)
 
         :param list ref: the point (eg: [0, 0, 0]), line (eg: ['*', 0, 0]), plane
             (eg: ['*', '*', 0]), atom, or list of atoms
@@ -2842,6 +2882,7 @@ class Geometry:
             can also be a dict() with atom symbols as the keys and
             their respective radii as the values
         :param float scale: scale VDW radii by this
+        :param list(Atom) exclude: atoms to exclude from calculation
         :param str method: integration method (MC or lebedev)
         :param int rpoints: number of radial shells for Lebedev integration
         :param int apoints: number of angular points for Lebedev integration
@@ -2852,6 +2893,8 @@ class Geometry:
             will cause %Vbur to be returned as a tuple for different quadrants (I, II, III, IV)
         :param int n_threads: number of threads to use for MC integration
             using multiple threads doesn't benefit performance very much
+        :returns: the percent buried volume
+        :rtype: float
         """
         # NOTE - it would be nice to multiprocess the MC integration (or
         #        split up the shells for the Lebedev integration, but...
@@ -3158,9 +3201,13 @@ class Geometry:
         shape="circle",
     ):
         """
+        Creates a steric map based on a Geometry
+
         :param center: atom, list of atoms, or array specifiying the origin
         :param key_atoms: list of ligand key atoms. Atoms on these ligands will be in the steric map.
+        :param list(Atom) targets: atoms to be included in the map, defaults to all
         :param str|dict radii: "umn", "bondi", or dict() specifying the VDW radii to use
+        :param float radius: atomic radius to be considered in Angstroms, default 3.5
         :param np.ndarray oop_vector: None or array specifying the direction out of the plane of the steric map
             if None, oop_vector is determined using the average vector from the key
             atoms to the center atom
@@ -3173,23 +3220,23 @@ class Geometry:
 
         :returns: x, y, z, min_alt, max_alt
         
-        or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
+            or x, y, z, min_alt, max_alt, basis, atoms if return_basis is True
 
-        a contour plot can be created with this data - see stericMap.py command line script
+            a contour plot can be created with this data - see stericMap.py command line script
         
-        x - x coordinates for grid
+            x - x coordinates for grid
         
-        y - y coordinates for grid
+            y - y coordinates for grid
         
-        z - altitude levels; points where no atoms are will be -1000
+            z - altitude levels; points where no atoms are will be -1000
         
-        min_alt - minimum altitude (above -1000)
+            min_alt - minimum altitude (above -1000)
         
-        max_alt - maximum altitute
+            max_alt - maximum altitute
         
-        basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
+            basis - basis to e.g. reorient structure with np.dot(self.coords, basis)
         
-        atoms - list of atoms that are in the steric map
+            atoms - list of atoms that are in the steric map
         """
 
         # determine center if none was specified
@@ -3337,6 +3384,8 @@ class Geometry:
         max_error=None,
     ):
         """
+        Determines sterimol parameters of a Geometry.
+
         B1 is determined numerically; B2-B4 depend on B1
         
         B5 and L are analytical (unless L_func is not analytical)
@@ -3346,7 +3395,6 @@ class Geometry:
         selectivity. Pestic. Sci., 7: 379-390.
         (DOI: 10.1002/ps.2780070410)
 
-        :param bool return_vector: returns dict of tuple(vector start, vector end) instead
         :param str|dict|list radii:
             
             * "bondi" - Bondi vdW radii
@@ -3885,7 +3933,14 @@ class Geometry:
         return
 
     def get_all_connected(self, target):
-        """:returns: list of all elements on the target atom's monomer"""
+        """
+        Finds all elements of a monomer
+
+        :param Atom target: atom to be searched
+        
+        :returns: list of all elements on the target atom's monomer
+        :rtype: list(Atom)
+        """
 
         def _get_all_connected(geom, target, avoid):
             atoms = [target]
@@ -3909,6 +3964,7 @@ class Geometry:
 
     def get_fragment(self, start, stop=None, as_object=False, copy=False, biggest=False):
         """
+        Finds and returns a fragment of a Geometry object
 
         :param start: the atoms to start on
         :param stop: the atom(s) to avoid
@@ -3984,9 +4040,9 @@ class Geometry:
     def coord_shift(self, vector, targets=None):
         """
         shifts the coordinates of the target atoms by a vector
-        parameters:
+
         :param np.ndarray vector: the shift vector
-        :param targets: the target atoms to shift (default to all)
+        :param list(Atom) targets: the target atoms to shift (default to all)
         """
         if targets is None:
             targets = self.atoms
@@ -4077,6 +4133,10 @@ class Geometry:
         """
         rotates the all atoms on the 'start' side of the
         start-avoid bond about the bond vector by angle
+
+        :param Atom start: atom to start the rotation at
+        :param Atom avoid: atom to end the rotation at
+        :param float angle: angle to rotate the group by
         """
         start = self.find(start)[0]
         avoid = self.find(avoid)[0]
@@ -4155,16 +4215,18 @@ class Geometry:
     def mirror(self, plane="xy"):
         """
         mirror self across a plane
-        plane can be xy, xz, yz or an array for a vector orthogonal to a plane
+
+        :param str plane: plane to mirror the Geometry object across
+            can be xy, xz, yz, or an array for a vector orthogonal to a plane
         """
         eye = np.identity(3)
         if isinstance(plane, str):
             if plane.lower() == "xy":
-                eye[0, 0] *= -1
+                eye[2, 2] *= -1
             if plane.lower() == "xz":
                 eye[1, 1] *= -1
             if plane.lower() == "yz":
-                eye[2, 2] *= -1
+                eye[0, 0] *= -1
 
         else:
             eye = utils.mirror_matrix(plane)
@@ -4409,9 +4471,9 @@ class Geometry:
 
     def minimize_torsion(self, targets, axis, center, geom=None, increment=5):
         """
-        Rotate :targets: to minimize the LJ potential
+        Rotate targets to minimize the LJ potential
 
-        :param targets: the target atoms to rotate
+        :param list(Atom) targets: the target atoms to rotate
         :param np.ndarray axis: the axis by which to rotate
         :param np.ndarray|Atom center: where to center before rotation
         :param Geometry geom: calculate LJ potential between self and another geometry-like
@@ -4627,8 +4689,10 @@ class Geometry:
         Finds a substituent based on a given atom (matches start==sub.atoms[0])
 
         :param start: the first atom of the subsituent, where it connects to sub.end
-        :param for_confs: if true(default), only consider substituents that need to
+        :param for_confs: if true, only consider substituents that need to
             be rotated to generate conformers
+        :returns: substituent that matches the given criteria
+        :rtype: Substituent
         """
         start = self.find(start)[0]
         for sub in self.get_substituents(for_confs):
@@ -4653,6 +4717,8 @@ class Geometry:
 
         :param for_confs: if true (default), returns only substituents that need to
             be rotated to generate conformers
+        :returns: subsituents that match criteria
+        :rtype: list(Substituent)
         """
         rv = []
         if self.components is None:
@@ -5437,9 +5503,12 @@ class Geometry:
         """
         Maps new ligand according to key_map
 
-        :param ligand:    the name of a ligand in the ligand library
+        :param ligands:    the name of a ligand in the ligand library
         :param old_keys:  the key atoms of the old ligand to map to
         :param bool minimize: rotate groups slightly to reduce steric clashing
+        :param Atom center: center of the ligand, defaults to computed center
+        :returns: new mapped ligand
+        :rtype: Geometry
         """
 
         def get_rotation(old_axis, new_axis):
@@ -5887,6 +5956,10 @@ class Geometry:
     def remove_clash(self, sub_list=None):
         """
         rotates substituents slightly to reduce steric clashing
+
+        :param list(Atom) sub_list: list of atoms to rotate, defaults to all
+        :returns: substituents that could not be relieved
+        :rtype: list(Atom)
         """
         def get_clash(sub, scale):
             """
@@ -6069,6 +6142,7 @@ class Geometry:
             * True - return Geometry
             * False - return list(Atom)
 
+        :rtype: list(Atom)
         """
         frag=[]
         #self.sub_links()
@@ -6093,6 +6167,11 @@ class Geometry:
     def add_links(self, high_layer="", low_layer=""):
         """
         defines links between ONIOM layers
+
+        :param str high_layer: top-level ONIOM layer
+        :param str low_layer: bottom-level ONIOM layer
+        :returns: edited self
+        :rtype: Geometry
         """
         adjust=[]
         tmp=[]
@@ -6251,6 +6330,11 @@ class Geometry:
 
     def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
         """
+        Finds atoms within aromatic rings in a molecule
+
+        :param list(Atom) atoms: atoms to be included in the search
+        :param bool return_rings: returns full aromatic rings if true, default False
+        :param bool return_h: includes hydrogens in return if true, default False
         :returns:
         
             * List(Atom) of atoms in aromatic rings, including hydrogens if return_h is True
@@ -6389,6 +6473,14 @@ class Geometry:
         define an ONIOM layer based on reference information
         reference can be list(Atom), list(list(float)), list(float), or str representing a layer (H, M, L, !H, etc)
         if defining a 3 layer job, start at High layer (reaction center)
+
+        :param str layer: layer to be defined
+        :param reference: reference to use in definition
+        :param float distance: distance from atoms to be considered
+        :param bool bond_based: includes distance from bonds if true, default False
+        :param bool expand: determines whether the boundaries will be included, default True
+        :param bool force: unknown
+        :param bool res_based: determines whether residues are involved, default False
         """
 
         if not isinstance(self.atoms[0], OniomAtom):
@@ -6701,8 +6793,13 @@ class Geometry:
     def change_chirality(self, target):
         """
         change chirality of the target atom
-        target should be a chiral center that is not a bridgehead
-        of a fused ring, though spiro centers are allowed
+
+        :param Atom target: atom to be changed, should be a chiral
+            center that is not a bridgehead of a fused ring,
+            though spiro centers are allowed
+
+        :returns: changed chiral center
+        :rtype: list(Atom)
         """
         # find two fragments
         # rotate those about the vector that bisects the angle between them
@@ -6764,6 +6861,10 @@ class Geometry:
     def detect_solvent(self, solvent):
         """
         detects solvent based on either an input xyz, solvent in solvent library, or input SMILES
+
+        :param str solvent: solvent to be detected
+        :returns: solvent if able to be found
+        :rtype: list(Geometry)
         """
 
         AARON_LIBS = os.path.join(AARONLIB, "Solvents")
@@ -6863,6 +6964,8 @@ class Geometry:
         """
         update the atomic partial charges.
         accepts Tuple or List(charges), Dict{atom name: charge}
+
+        :param tuple(charges)|list(charges)|dict(charges) charges: new charges to update to
         """
         if not any((isinstance(charges, tuple), isinstance(charges, list), isinstance(charges, dict))):
             raise ValueError("charges must be in tuple, list, or dict")
@@ -6882,6 +6985,8 @@ class Geometry:
         """
         update the molecular mechanics atom types.
         accepts Tuple or List(atom types), Dict{atom name: atom type}
+
+        :param tuple(Atom)|list(Atom)|dict(Atom) atom_types: new atom types to update to
         """
         if not any((isinstance(atom_types, tuple), isinstance(atom_types, list), isinstance(atom_types, dict))):
             raise ValueError("atom types must be in tuple, list, or dict")

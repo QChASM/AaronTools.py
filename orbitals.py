@@ -88,7 +88,7 @@ class Orbitals:
             for ndx in filereader["Shell to atom map"]:
                 center_coords.append(filereader["atoms"][ndx - 1].coords)
             self.center_coords = np.array(center_coords)
-        self.shell_coords *= UNIT.A0_TO_BOHR
+        self.shell_coords *= UNIT.BOHR_TO_ANG
         self.contraction_coeff = filereader["Contraction coefficients"]
         try:
             self.sp_contraction_coeff = filereader["P(S=P) Contraction coefficients"]
@@ -1611,7 +1611,7 @@ class Orbitals:
                 or np.linalg.norm(coord - prev_center) > 1e-13
             ):
                 prev_center = coord
-                d_coord = (coords - coord) / UNIT.A0_TO_BOHR
+                d_coord = (coords - coord) * UNIT.ANG_TO_BOHR
                 if coords.ndim == 1:
                     r2 = np.dot(d_coord, d_coord)
                 else:

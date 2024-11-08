@@ -230,6 +230,10 @@ class FileWriter:
         :param bool append: for *.xyz, append geometry to the same file
         :param str|None|False outfile: output destination - default is
             [geometry name] + [extension] or [geometry name] + [step] + [extension]
+        :param str kwargs: allowed kwargs:
+            * oniom
+            * models
+            * theory
 
             if outfile is False, no output file will be written, but the contents will be returned
         :param Theory theory: for com, inp, and in files, an object with a get_header and get_footer method
@@ -354,7 +358,19 @@ class FileWriter:
     @classmethod
     def write_xyz(cls, geom, append, outfile=None, comment=None, **kwargs):
         """
-        write xyz file
+        write xyz file (file with coordinate system of input geometry)
+
+        :param Geometry geom: molecule(s) to be written to the output
+        :param bool append: whether the output should be appended to a file (True) or overwrite (False)
+        :param str outfile: filename to append/write output to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.xyz if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing/appending.
+        
+        :param str comment: comment to be added to the output
+            Default/None: comment is the same as the geom object's comment
+
+        :returns: xyz file contents if outfile=False, otherwise no return value
+        :rtype: str
         """
         mode = "a" if append else "w"
         fmt = "{:3s} {: 10.5f} {: 10.5f} {: 10.5f}\n"
@@ -384,6 +400,12 @@ class FileWriter:
     def write_multi_xyz(cls, geom, append, outfile=None, **kwargs):
         """
         write multiple oniom xyz files from geometry with multiple poses such as a pdb derived geometry
+
+        :param Geometry geom: molecule(s) to be written to the outputs
+        :param bool append: whether the output should be appended to a file (True) or overwrite (False)
+        :param str outfile: filename to append/write output to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.xyz if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing/appending.
 
         kwargs["models"] can be string "all", string of model number e.g. "2", string of model range e.g. "1-5",
             or list of model numbers including ranges e.g. ["1", "3-5", "10"]
@@ -443,6 +465,12 @@ class FileWriter:
     def write_oniom_xyz(cls, geom, append, outfile=None, **kwargs):
         """
         write xyz files with additional columns for atomtype, charge, and link atom info
+        
+        :param Geometry geom: molecule(s) to be written to the outputs
+        :param bool append: whether the output should be appended to a file (True) or overwrite (False)
+        :param str outfile: filename to append/write output to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.xyz if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing/appending.
 
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
         kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L"
@@ -539,7 +567,14 @@ class FileWriter:
     def write_mol(
         cls, geom, outfile=None, **kwargs
     ):
-        """write V2000 mol file"""
+        """
+        write V2000 mol file
+        
+        :param Geometry geom: molecule(s) to be written
+        :param str outfile: file to be written to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.mol if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing.
+        """
         from AaronTools.finders import ChiralCenters
         from AaronTools.const import ELECTRONEGATIVITY
 
@@ -1053,11 +1088,13 @@ class FileWriter:
         :param Geometry geom: structure
         :param Orbitals orbitals: orbital data
         :param str outfile: output destination
-        :param str|int mo: index of molecular orbital or "homo" for ground state
+        :param str|int kind: index of molecular orbital or "homo" for ground state
             highest occupied molecular orbital or "lumo" for first
             ground state unoccupied MO
             can also be an array of MO coefficients
 
+        :param bool alpha:
+        :param bool xyz:
         :param str|int ao: index of atomic orbital to print
         :param float padding: padding around geom's coordinates
         :param float spacing: targeted spacing between points
@@ -1068,6 +1105,8 @@ class FileWriter:
 
         :param float delta: see Orbitals.fukui_donor_value or fukui_acceptor_value
         """
+        # If anyone who is better at chemistry and/or coding can explain what the alpha/xyz parameters are,
+        # please add it to this method's docstring. Thanks! 
         if orbitals is None:
             raise RuntimeError(
                 "no Orbitals() instance given to FileWriter.write_cube"
@@ -1098,7 +1137,7 @@ class FileWriter:
         # the '-' in front of the number of atoms indicates that this is
         # MO info so there's an extra data entry between the molecule
         # and the function values
-        bohr_com = com / UNIT.A0_TO_BOHR
+        bohr_com = com * UNIT.ANG_TO_BOHR
         if isinstance(mo, int):
             s += " -"
         else:
@@ -1115,7 +1154,7 @@ class FileWriter:
             zip([n_pts1, n_pts2, n_pts3], [v1, v2, v3]),
             key=lambda p: np.linalg.norm(p[1]),
         ):
-            bohr_v = v / UNIT.A0_TO_BOHR
+            bohr_v = v * UNIT.ANG_TO_BOHR
             s += " %5i %13.5f %13.5f %13.5f\n" % (
                 n, *bohr_v
             )
@@ -1129,9 +1168,9 @@ class FileWriter:
             s += " %5i %13.5f %13.5f %13.5f %13.5f\n" % (
                 ELEMENTS.index(atom.element),
                 ELEMENTS.index(atom.element),
-                atom.coords[0] / UNIT.A0_TO_BOHR,
-                atom.coords[1] / UNIT.A0_TO_BOHR,
-                atom.coords[2] / UNIT.A0_TO_BOHR,
+                atom.coords[0] * UNIT.ANG_TO_BOHR,
+                atom.coords[1] * UNIT.ANG_TO_BOHR,
+                atom.coords[2] * UNIT.ANG_TO_BOHR,
             )
 
         # extra section - only for MO data
@@ -1185,6 +1224,17 @@ class FileWriter:
 
     @classmethod
     def write_pdb(cls, geom, append, outfile=None, qt=False):
+        """
+        write input files for pdb
+
+        :param Geometry geom: molecule to be written/appended
+        :param bool append: appends instead of overwrites if True
+        :param str outfile: file to be written to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.mol if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing.
+
+        :param bool qt: determines charge spacing to be used for writing; True is 2, False is 10
+        """
         if not isinstance(geom.atoms[0], OniomAtom):
             geom = geom.make_oniom()
         mode = "a" if append else "w"
@@ -1326,7 +1376,17 @@ class FileWriter:
         return_warnings=False,
         **kwargs,
     ):
-        """write input files for xtb"""
+        """
+        write input files for xtb
+        
+        :param Geometry geom: molecule to be written/appended
+        :param Theory theory: theory to be used for xtb
+        :param str outfile: file to be written to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.mol if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing.
+
+        :param bool return_warnings: whether or not warnings should be returned
+        """
         theory.geometry = geom
         if theory.job_type:
             for job in theory.job_type:
@@ -1379,7 +1439,17 @@ class FileWriter:
         return_warnings=False,
         **kwargs,
     ):
-        """write crest input files"""
+        """
+        write crest input files
+        
+        :param Geometry geom: molecule to be written/appended
+        :param Theory theory: theory to be used for crest
+        :param str outfile: file to be written to
+        | Default/None: output file is the name of the geometry object provided (e.g. benzene.mol if geom.name = 'benzene')
+        | False: method simply returns the contents of the output file instead of writing.
+
+        :param bool return_warnings: whether or not warnings should be returned
+        """
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
@@ -1434,6 +1504,8 @@ class FileWriter:
 
             and name as "test"
             will write run.sh and test.txt to dirname
+
+        :param str name: name of file to be written
         """
         for key, data in contents.items():
             if "." in key:
@@ -1628,11 +1700,17 @@ class FileReader:
         :param bool get_all: If false (default), only keep the last geom
             If true, self is last geom, but return list
             of all others encountered
+        :param bool just_geom: determines whether only geoms will be found/read; Default:True
+        :param bool scan_read_all:
+        :param str freq_name: name of frequency for xtb
+        :param str conf_name: name of conformer for crest
         :param str nbo_name: nbo output file containing coefficients to
             map AO's to orbitals
+        :param bool oniom: whether molecule is oniom
         :param int max_length: max. array size for arrays to store in FCHK
             files - anything larger will be the size
             the array would not be stored
+        :param str log: log for reading log files
         """
         if os.path.isfile(self.name):
             f = open(self.name, "r")
@@ -1691,7 +1769,13 @@ class FileReader:
         return
 
     def read_xyz(self, f, get_all=False, oniom=False):
-        """read xyz files"""
+        """
+        read xyz files
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+        :param bool oniom: whether or not contents are oniom
+        """
         self.all_geom = []
         # number of atoms
         f.readline()
@@ -1774,7 +1858,13 @@ class FileReader:
             ]
 
     def read_sd(self, f, get_all=False):
-        """read sdf file"""
+        """
+        read sdf file
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
+        """
         self.all_geom = []
         lines = f.readlines()
         progress = 0
@@ -1837,6 +1927,10 @@ class FileReader:
     def read_mol2(self, f, get_all=False):
         """
         read TRIPOS mol2
+
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
         """
         atoms = []
 
@@ -1880,7 +1974,13 @@ class FileReader:
             })
 
     def read_psi4_out(self, f, get_all=False, just_geom=True, log=None):
-        """read psi4 output file"""
+        """
+        read psi4 output file
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
+        """
         uv_vis = ""
         coord_unit_bohr = False
         def get_atoms(f, n, bohr):
@@ -1900,7 +2000,7 @@ class FileReader:
                     element = element.strip("Gh(").strip(")")
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
-                    coords *= UNIT.A0_TO_BOHR
+                    coords *= UNIT.BOHR_TO_ANG
                 atom_mass = float(atom_info[-1])
                 rv += [Atom(element=element, coords=coords, mass=atom_mass, name=str(i))]
                 mass += atom_mass
@@ -2263,16 +2363,23 @@ class FileReader:
             self.other["error"] = None
 
     def read_orca_out(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
-        """read orca output file"""
+        """
+        read orca output file
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
+        """
 
         self.all_geom = []
-        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(.*)$")
+        nrg_regex = re.compile("(?:[A-Za-z]+\s+)?E\((.*)\)\s*\.\.\.\s*(-?\d*\.\d+)")
         opt_cycle = re.compile("GEOMETRY OPTIMIZATION CYCLE\s*(\d+)")
 
         is_scan_job = False
         step_converged = False
         masses = []
         orca_version = 0
+        nmr_data = None
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2614,7 +2721,14 @@ class FileReader:
                         self.skip_lines(f, 8)
                         n += 8
                         line = f.readline()
+                        start = 0
                         for mode in self.other["frequency"].data:
+                            if mode.frequency < 0:
+                                start += 1
+                            else:
+                                break
+                                
+                        for mode in self.other["frequency"].data[start:]:
                             # mode #, frequency, rotatory strength
                             _, _, rot = line.split()
                             mode.rotation = float(rot)
@@ -2631,6 +2745,26 @@ class FileReader:
                                 break
                             if "NMR shielding tensor and spin rotation calculation done" in line:
                                 break
+                        try:
+                            self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
+                        except Exception as e:
+                            if not log:
+                                log = self.LOG
+                            log.warning("error while parsing ORCA NMR data")
+                            log.warning("NMR data read:\n" % "".join(nmr_data))
+                            log.warning("number of atoms: %i" % len(self.atoms))
+                            raise e
+    
+                    elif nmr_data and "NMR SPIN-SPIN COUPLING CONSTANTS" in line:
+                        while line:
+                            nmr_data.append(line)
+                            n += 1
+                            line = f.readline()
+                            if "NMR spin-spin coupling calculation done" in line:
+                                break
+                            if "Maximum memory used throughout the entire PROP-calculation" in line:
+                                break
+                            
                         try:
                             self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
                         except Exception as e:
@@ -3003,7 +3137,7 @@ class FileReader:
     
                     elif ORCA_NORM_FINISH in line:
                         self.other["finished"] = True
-    
+        
                     # TODO E_ZPVE
                     if "error" not in self.other or not self["error"]:
                         for err in ERROR_ORCA:
@@ -3031,6 +3165,9 @@ class FileReader:
                                 if "REBUILDING A NEW SET OF INTERNALS" in self.other["error_msg"]:
                                     del self.other["error"]
                                     del self.other["error_msg"]
+                                
+                            if "ORCA finished by error termination" in line:
+                                self.other["error_msg"] = line
     
                     line = f.readline()
                     n += 1
@@ -3052,6 +3189,9 @@ class FileReader:
         if not just_geom:
             if "finished" not in self.other:
                 self.other["finished"] = False
+            
+            if "error_msg" in self.other and "error" not in self.other:
+                self.other["error"] = True
 
             if masses:
                 for a, m in zip(self.atoms, masses):
@@ -3083,7 +3223,13 @@ class FileReader:
             self.other["error"] = None
 
     def read_qchem_out(self, f, get_all=False, just_geom=True, log=None):
-        """read qchem output file"""
+        """
+        read qchem output file
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
+        """
         def get_atoms(f, n):
             """parse atom info"""
             rv = []
@@ -3257,7 +3403,7 @@ class FileReader:
                             float(x) for x in line.split()[2:]
                         ])
                         rot_consts *= UNIT.AMU_TO_KG
-                        rot_consts *= UNIT.A0_TO_BOHR ** 2
+                        rot_consts *= UNIT.BOHR_TO_ANG ** 2
                         rot_consts *= 1e-20
                         rot_consts = PHYSICAL.PLANCK ** 2 / (8 * np.pi ** 2 * rot_consts * PHYSICAL.KB)
     
@@ -3381,7 +3527,13 @@ class FileReader:
             self.other["error"] = None
 
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
-        """read gaussian output file"""
+        """
+        read gaussian output file
+        
+        :param str f: file to be read
+        :param bool get_all: retrieves all geoms in file instead of just one
+
+        """
         isotope = re.compile(r" Atom\s+(\d+) has atomic number")
         # orientation = re.compile(r"(Standard|Input) orientation:\s*$")
         # zmat = re.compile(r"Symbolic Z-matrix")
@@ -4728,7 +4880,11 @@ class FileReader:
         return
 
     def read_com(self, f):
-        """read gaussian input file"""
+        """
+        read gaussian input file
+        
+        :param str f: file to be read
+        """
         found_atoms = False
         found_constraint = False
         atoms = []
@@ -4892,7 +5048,12 @@ class FileReader:
         return
 
     def read_fchk(self, f, just_geom=True, max_length=10000000):
-        """read formatted checkpoint file"""
+        """
+        read formatted checkpoint file
+        
+        :param str f: file to be read
+
+        """
         def parse_to_list(
             i, lines, length, data_type, debug=False, max_length=max_length,
         ):
@@ -5034,7 +5195,7 @@ class FileReader:
         for n, (atnum, coord) in enumerate(zip(atom_numbers, coords)):
             atom = Atom(
                 element=ELEMENTS[atnum],
-                coords=UNIT.A0_TO_BOHR * coord,
+                coords=UNIT.BOHR_TO_ANG * coord,
                 name=str(n + 1),
             )
             self.atoms.append(atom)
@@ -5063,6 +5224,9 @@ class FileReader:
     def read_pdb(self, f, qt=False):
         """
         read pdb or pdbqt file
+
+        :param str f: file to be read
+        :param bool qt:
         """
         line = f.readline()
         n = 1
@@ -5125,7 +5289,11 @@ class FileReader:
         return
 
     def read_mmcif(self, f):
-        """read mmcif"""
+        """
+        read mmcif
+        
+        :param str f: file to be read
+        """
         line = f.readline()
         n = 1
         nloops=0
@@ -5233,6 +5401,8 @@ class FileReader:
     def read_nbo(self, f):
         """
         read nbo data
+
+        :param str f: file to be read
         """
         line = f.readline()
         while line:
@@ -5307,7 +5477,10 @@ class FileReader:
 
     def read_crest(self, f, conf_name=None):
         """
-        conf_name = False to skip conformer loading (doesn't get written until crest job is done)
+        Reads crest files
+
+        :param str f: file to be read
+        :param str conf_name: False to skip conformer loading (doesn't get written until crest job is done)
         """
         if conf_name is None:
             conf_name = os.path.join(
@@ -5363,7 +5536,12 @@ class FileReader:
             self.other["conformers"] = self.other["conformers"][1:]
 
     def read_xtb(self, f, freq_name=None):
-        """read xtb output"""
+        """
+        read xtb output
+        
+        :param str f: file to be read
+        :param str freq_name: name of frequency to be used for xtb
+        """
         line = True
         self.other["finished"] = False
         self.other["error"] = None
@@ -5413,7 +5591,11 @@ class FileReader:
                 self.other["frequency"] = Frequency(f_freq.read())
 
     def read_sqm(self, f):
-        """read sqm output"""
+        """
+        read sqm output
+        
+        :param str f: file to be read
+        """
         lines = f.readlines()
 
         self.other["finished"] = False
@@ -5465,7 +5647,12 @@ class FileReader:
             self.other["error_msg"] = line
 
     def read_nbo_47(self, f, nbo_name=None):
-        """read nbo .47 file"""
+        """
+        read nbo .47 file
+        
+        :param str f: file to be read
+        :param str nbo_name: Name of the file containing the NBO orbital coefficients in the AO basis. Only used when reading .47 files.
+        """
         lines = f.readlines()
         bohr = False
         i = 0
@@ -5616,7 +5803,12 @@ class FileReader:
         self.other["orbitals"] = Orbitals(self)
 
     def read_nbo_31(self, f, nbo_name=None):
-        """read nbo .31 file"""
+        """
+        read nbo .31 file
+        
+        :param str f: file to be read
+        :param str nbo_name: Name of the file containing the NBO orbital coefficients in the AO basis. Only used when reading .47 files.
+        """
         lines = f.readlines()
         comment = lines[0].strip()
         info = lines[3].split()

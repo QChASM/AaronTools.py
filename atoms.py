@@ -41,7 +41,7 @@ class BondOrder:
             )
         ) as f:
             BondOrder.bonds = json.load(f)
-
+    
     @classmethod
     def key(cls, a1, a2):
         if isinstance(a1, Atom):
@@ -401,6 +401,7 @@ class Atom:
         
         used to optimize connected checks when distances can be quickly precalculated,
         like with scipy.spatial.distance_matrix
+        :param Atom other: atom to measure the distance between
         """
         if tolerance is None:
             tolerance = 0.3
