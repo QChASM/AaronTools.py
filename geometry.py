@@ -16,7 +16,7 @@ import AaronTools.utils.utils as utils
 from AaronTools import addlogger
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
-from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII
+from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII, RADII
 from AaronTools.fileIO import FileReader, FileWriter, read_types
 from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom 
 from AaronTools.utils.prime_numbers import Primes
@@ -1012,6 +1012,92 @@ class Geometry:
         psi4.activate(mol)
         return mol 
 
+
+    # quick and dirty code to display HoukMol style figures in Matplotlib
+    # bond ends could be handled more elegently, but this looks fine for most molecules
+
+    def plot(self, ax, fig, fp=40, ascale=0.5, bwidth=0.15):
+        """
+        displays HoukMol style molecule in Matplotlib
+
+        :param matplotlib.pyplot.Axis ax: Matplotlib Axis object
+        :param matplotlib.pyplot.Figure fig: Matplotlib Figure object:w
+        :param float fp: z-value (Angstroms) for focal point for adding perspective (Default: 40)
+        :param float ascale: scaling factor for covalent radii (default: 0.5)
+        :param float bwidth: scaling factor for bond radii (default: 0.15)
+        """
+
+        try:
+            import matplotlib.patches as patches
+        except:
+            self.LOG.error("Must install matplot lib")
+            return None
+
+        def intersect(atom1, atom2, fp):
+            # returns intersection of line from atom1 to edge of scaled sphere for atom2
+            # from https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+        
+            c = atom2.coords             # center of sphere
+            r = RADII[atom2.element]*0.5*(fp + atom2.coords[2])/fp # radius of sphere, adjusted for perspective
+            o = atom1.coords             # starting point for line
+            u = atom1.bond(atom2)        # vector along line
+            unorm = u/np.sqrt(np.linalg.norm(u)) # normalized vector
+        
+            dot = np.dot(unorm, o - c)
+            delta = dot**2 - (np.linalg.norm(o - c)**2 - r**2)
+        
+            if delta <= 0:
+                # catch cases where there is no intersection for some reason
+                return c
+            else:
+                d = dot + np.sqrt(delta)
+                return o - d*u*1.0 # adjust endpoints slightly to account for rounded capstyle
+
+
+
+        def draw_bond(x1, y1, x2, y2, z, fp, scale, ax, bwidth=0.15):
+            """
+            Draw HoukMol style bond as black line with rounded ends from (x1, y1) to (x2, y2)
+            width of bond is controlled by width and scaled to z-value for perspective
+            """
+        
+            w=(bwidth*scale) * (fp + z)/fp
+            ax.plot([x1, x2], [y1, y2], lw=w, color='black', solid_capstyle='round', zorder=z)
+
+        
+        # if xlim not set manually then I can't determine the overall size of the plot until
+        # after the molecule is drawn, but I need overall size to determine scale for bond
+        # widths
+
+        if ax.get_xaxis()._get_autoscale_on():
+            self.LOG.warning("You will probalby need to set xlim manually for correct bond widths.")
+
+        # get scale and size of plot set linewidths in terms of pts (1/72 inch per pt)
+        xmin, xmax = ax.get_xlim()
+        dx = xmax - xmin
+        ymin, ymax = ax.get_ylim()
+        dy = ymax - ymin
+        fw, fh = fig.get_size_inches()
+        bbox = ax.get_position()
+        ax_width = fw*bbox.width
+        scale = 72*ax_width/dx
+        
+        # sort atoms by z-value
+        sorted_atoms = [atom for atom in sorted(self.atoms, key=lambda a: a.coords[2])]
+
+        for atom in sorted_atoms:
+            # note that I draw each bond twice to get both ends correct
+            # this avoids having to do the logic of figuring out the order of
+            # drawing bonds to a given atom--each atom obscures bonds originating
+            # from that atom, but this is corrected when the bond is drawn
+            # from the connected atom. Any way I've tried to fix this looks wrong
+            # for planar molecules, which are the only ones I actually care about.
+        
+            for connected in atom.connected:
+                endpoint = intersect(atom, connected, fp)
+                draw_bond(atom.coords[0], atom.coords[1], endpoint[0], endpoint[1], atom.coords[2], fp, scale, ax, bwidth)
+
+            atom.draw_atom(ax, fp, ascale=ascale, linewidth=0.01*scale)
 
     def copy(self, atoms=None, name=None, comment=None, copy_atoms=True):
         """
