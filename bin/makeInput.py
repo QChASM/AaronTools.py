@@ -685,7 +685,7 @@ for f in glob_files(args.infile, parser=theory_parser):
 
             if args.angles is not None:
                 constraints["angles"] = []
-                for angle in args.angle:
+                for angle in args.angles:
                     angle_atoms = geom.find(angle)
                     if len(angle_atoms) != 3:
                         raise RuntimeError(

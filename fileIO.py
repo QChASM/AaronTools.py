@@ -3960,6 +3960,7 @@ class FileReader:
                 atom_match = re.search("X\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
                 bond_match = re.search("B\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
                 angle_match = re.search("A\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
+                linear_angle_match = re.search("L\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line)
                 torsion_match = re.search(
                     "D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([FS])(\s+(\d+)\s+(-?\d+\.\d*))?", line
                 )
@@ -3999,6 +4000,23 @@ class FileReader:
                         if "scan" not in rv:
                             rv["scan"] = []
                         rv["scan"].append(",".join([angle_match.group(1), angle_match.group(2), angle_match.group(3), angle_match.group(6), angle_match.group(7)]))
+                elif linear_angle_match:
+                    if "linear_angles" not in rv:
+                        rv["linear_angles"] = []
+                    rv["linear_angles"].append(
+                        ",".join(
+                            [
+                                linear_angle_match.group(1),
+                                linear_angle_match.group(2),
+                                linear_angle_match.group(3),
+                                linear_angle_match.group(4),
+                            ]
+                        )
+                    )
+                    if linear_angle_match.group(5) == "S":
+                        if "scan" not in rv:
+                            rv["scan"] = []
+                        rv["scan"].append(",".join([linear_angle_match.group(1), linear_angle_match.group(2), linear_angle_match.group(3), linear_angle_match.group(4), linear_angle_match.group(7), linear_angle_match.group(8)]))
                 elif torsion_match:
                     if "torsions" not in rv:
                         rv["torsions"] = []

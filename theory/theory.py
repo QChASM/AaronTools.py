@@ -1118,6 +1118,7 @@ class Theory:
         # add other route options
         # only one option can be specfied
         # e.g. for {'Integral':['grid=X', 'grid=Y']}, only grid=X will be used
+        other_kw_dict.setdefault(GAUSSIAN_ROUTE, dict())
         for option in other_kw_dict[GAUSSIAN_ROUTE].keys():
             known_opts = []
             out_str += option

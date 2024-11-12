@@ -353,6 +353,7 @@ class OptimizationJob(JobType):
                     "atoms",
                     "bonds",
                     "angles",
+                    "linear_angles",
                     "torsions",
                 ]:
                     raise NotImplementedError(
@@ -543,9 +544,50 @@ class OptimizationJob(JobType):
                     ndx3 -= dummies[ndx3]
                     ndx3 += 1
                     if not use_zmat:
-                        out[GAUSSIAN_CONSTRAINTS].append(
-                            "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
+                        angle = atom2.angle(atom1, atom3)
+                        # TODO: figure out proper tolerance for linear angles
+                        if abs(angle - np.pi) < 5e-2 or abs(angle) < 5e-2:
+                            out[GAUSSIAN_CONSTRAINTS].append(
+                                "L %2i %2i %2i F" % (ndx1, ndx2, ndx3)
+                            )
+                        else:
+                            out[GAUSSIAN_CONSTRAINTS].append(
+                                "A %2i %2i %2i F" % (ndx1, ndx2, ndx3)
+                            )
+                    else:
+                        raise NotImplementedError(
+                            "cannot apply angle constraints when using Cartesian Z-Matrix, which"
+                            + " is necessitated by x, y, or z constraints"
                         )
+
+            if "linear_angles" in self.constraints:
+                for constraint in self.constraints["linear_angles"]:
+                    atoms = self.geometry.find(constraint)
+                    ndx1 = self.geometry.atoms.index(atoms[0])
+                    ndx1 -= dummies[ndx1]
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atoms[1])
+                    ndx2 -= dummies[ndx2]
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atoms[2])
+                    ndx3 -= dummies[ndx3]
+                    ndx3 += 1
+                    ndx4 = None
+                    if len(atoms) == 4:
+                        ndx4 = self.geometry.atoms.index(atoms[3])
+                        ndx4 -= dummies[ndx3]
+                        ndx4 += 1
+
+                    if not use_zmat:
+                        if ndx4 is None:
+                            out[GAUSSIAN_CONSTRAINTS].append(
+                                "L %2i %2i %2i F" % (ndx1, ndx2, ndx3)
+                            )
+                        else:
+                            out[GAUSSIAN_CONSTRAINTS].append(
+                                "L %2i %2i %2i %2i F" % (ndx1, ndx2, ndx3, ndx4)
+                            )
+
                     else:
                         raise NotImplementedError(
                             "cannot apply angle constraints when using Cartesian Z-Matrix, which"
