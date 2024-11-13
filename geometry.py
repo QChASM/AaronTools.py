@@ -1065,12 +1065,11 @@ class Geometry:
             ax.plot([x1, x2], [y1, y2], lw=w, color='black', solid_capstyle='round', zorder=z)
 
         
-        # if xlim not set manually then I can't determine the overall size of the plot until
-        # after the molecule is drawn, but I need overall size to determine scale for bond
-        # widths
-
-        if ax.get_xaxis()._get_autoscale_on():
-            self.LOG.warning("You will probalby need to set xlim manually for correct bond widths.")
+        # if xlim not set manually (or by first plotting some data) then I can't determine
+        # the overall size of the plot until after the molecule is drawn, but I need overall size 
+        # to determine scale for bond widths to plot the molecule...
+        if ax.get_xaxis()._get_autoscale_on() and np.allclose(ax.get_xlim(), np.array((0, 1))):
+            self.LOG.warning("You will probably need to set xlim manually or plot data first to get reasonable bond widths.")
 
         # get scale and size of plot set linewidths in terms of pts (1/72 inch per pt)
         xmin, xmax = ax.get_xlim()
