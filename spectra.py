@@ -289,22 +289,26 @@ class Signals:
                 if xmin < 0:
                     xmin *= 1.1
                 else:
-                    xmin *= 0.9
+                    xmin = 0
                 x_values = np.linspace(
                     xmin,
                     xmax,
                     num=1000,
                 ).tolist()
             
-                for freq in signal_centers:
+                prev_pt = None
+                for x in signal_centers:
+                    if prev_pt is not None and abs(x - prev_pt) < fwhm / 10:
+                        continue
+                    prev_pt = x
                     x_values.extend(
                         np.linspace(
-                            freq - (10 * fwhm),
-                            freq + (10 * fwhm),
+                            x - (10 * fwhm),
+                            x + (10 * fwhm),
                             num=250,
                         ).tolist()
                     )
-                    x_values.append(freq)
+                    x_values.append(x)
 
                 if not point_spacing:
                     x_values = np.array(list(set(x_values)))

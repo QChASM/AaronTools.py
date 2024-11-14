@@ -2796,6 +2796,27 @@ COMMONLY_ODD_ISOTOPES = (
     "Au",
 )
 
+# Rasmol colors from jmol up to Cl
+COLORS={
+        "H":"#FFFFFF",
+        "He": "#FFC0CB",
+        "Li": "#B22222",
+        "Be": "#FF1493",
+        "B": "#00FF00",
+        "C": "#C8C8C8",
+        "N": "#8F8FFF",
+        "O": "#F00000",
+        "F": "#DAA520",
+        "Ne": "#FF1493",
+        "Na": "#0000FF",
+        "Mg": "#228B22",
+        "Al": "#808090",
+        "Si": "#DAA520",
+        "P": "#FFA500",
+        "S": "#FFC832",
+        "Cl": "00FF00"
+}
+
 class PHYSICAL:
     # Physical constants
     BOLTZMANN = 0.001987204  # kcal/mol

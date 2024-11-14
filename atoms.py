@@ -16,6 +16,7 @@ from AaronTools.const import (
     SATURATION,
     TMETAL,
     VDW_RADII,
+    COLORS,
 )
 
 warn_LJ = set([])
@@ -1248,3 +1249,40 @@ class Atom:
                 best_shape = shape
 
         return best_shape, best_score
+
+
+    def draw_atom(self, ax, fp = 40, ascale = 0.5, linewidth=0.1):
+        """
+        Draw HoukMol style atom and add to Matplotlib axis ax
+
+        :param matplotlib.pyplot.Axis ax: Matplotlib axis object
+        :param float fp: z-value for focal point to add simple perspective (Default: 40)
+        :param float ascale: scaling factor for covalent radii (Default: 0.5)
+        :param float linewidth: linewidth (in points) for atom details (default: 0.1)
+        """
+
+        try:
+            import matplotlib.patches as patches
+        except:
+            ls.LOG.error("Must install matplot lib")
+            return None
+
+        x, y, z = self.coords
+        r = RADII[self.element]*ascale*(fp + z)/fp
+        color=COLORS[self.element]
+
+        # draw circle and two ellipses for atom plus two circles for specular highlight
+        circle = patches.Circle((x, y), r, facecolor=color, edgecolor='black', lw=linewidth, zorder=z)
+        acc = patches.Circle((x+r/6, y+r/4), 0.2*r, alpha=0.7, facecolor='white', edgecolor="None", zorder=z)
+        acc2 = patches.Circle((x+r/6, y+r/4), 0.3*r, alpha=0.3, facecolor='white', edgecolor="None", zorder=z)
+        arc1 = patches.Arc((x, y), r, 2*r, theta1=270, theta2=90, edgecolor='black', lw=linewidth, zorder=z)
+        arc2 = patches.Arc((x, y), 2*r, r, theta1=180, theta2=360, edgecolor='black', lw=linewidth, zorder=z)
+
+        # add atom componets to axis
+        ax.add_patch(circle)
+        ax.add_patch(acc)
+        ax.add_patch(acc2)
+        ax.add_patch(arc1)
+        ax.add_patch(arc2)
+
+
