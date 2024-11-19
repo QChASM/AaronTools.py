@@ -1299,9 +1299,8 @@ class Geometry:
                     "Substitutions/Mappings requested, but not performed"
                 )
         if targets is not None:
-            try:
-                targets = self.find(targets)
-            except LookupError:
+            targets = self.find(targets)
+            if not targets:
                 targets = self.atoms
         else:
             targets = self.atoms
@@ -1598,13 +1597,13 @@ class Geometry:
                 rv += [_find(a)]
 
         # error if no atoms found (no error if AND filters out all found atoms)
-        if len(rv) == 1:
-            if len(rv[0]) == 0:
-                raise LookupError(
-                    "Could not find atom: %s on\n%s\n%s"
-                    % ("; ".join([str(x) for x in args]), self.name, str(self))
-                )
-            return rv[0]
+        # if len(rv) == 1:
+        #     if len(rv[0]) == 0:
+        #         raise LookupError(
+        #             "Could not find atom: %s on\n%s\n%s"
+        #             % ("; ".join([str(x) for x in args]), self.name, str(self))
+        #         )
+        #     return rv[0]
 
         # exclude atoms not fulfilling AND requirement
         tmp = []
@@ -1633,10 +1632,7 @@ class Geometry:
         err = "Wrong number of atoms found: "
         is_err = False
         for arg in args:
-            try:
-                a = self.find(arg)
-            except LookupError:
-                a = []
+            a = self.find(arg)
 
             if len(a) != 1:
                 is_err = True
@@ -3037,10 +3033,10 @@ class Geometry:
             center_coords = self.COM(center)
 
         else:
-            try:
-                center = self.find(center)
-                center_coords = self.COM(center)
-            except LookupError:
+            center_atoms = self.find(center)
+            if center_atoms:
+                center_coords = self.COM(center_atoms)
+            else:
                 # assume an array was given
                 center_coords = center
 
@@ -3375,10 +3371,10 @@ class Geometry:
             center_coords = self.COM(center)
 
         else:
-            try:
-                center = self.find(center)
-                center_coords = self.COM(center)
-            except LookupError:
+            center_atoms = self.find(center)
+            if center_atoms:
+                center_coords = self.COM(center_atoms)
+            else:
                 # assume an array was given
                 center_coords = center
 
@@ -4616,14 +4612,14 @@ class Geometry:
         if geom is None or geom is self:
             from AaronTools.finders import NotAny
 
-            try:
-                geom = Geometry(
-                    self.find(NotAny(targets)),
-                    refresh_connected=False,
-                    refresh_ranks=False,
-                )
-            except LookupError:
+            atoms = self.find(NotAny(targets))
+            if not atoms:
                 return
+            geom = Geometry(
+                atoms,
+                refresh_connected=False,
+                refresh_ranks=False,
+            )
 
         E_min = None
         angle_min = None

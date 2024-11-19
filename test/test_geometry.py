@@ -214,8 +214,8 @@ class TestGeometry(TestWithTimer):
                 b += [i]
         self.assertSequenceEqual(a, b)
 
-        # raise error when atom not found
-        self.assertRaises(LookupError, geom.find, "definitely not in here")
+        e = geom.find("definitely not in here")
+        self.assertEqual(e, [])
 
     def test_refresh_connected(self):
         # refresh_connected should be run upon creation

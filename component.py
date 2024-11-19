@@ -107,9 +107,8 @@ class Component(Geometry):
             self.key_atoms = self.find(key_atoms)
             # print("found key atoms:", self.key_atoms)
         else:
-            try:
-                self.key_atoms = self.find("key")
-            except LookupError:
+            self.key_atoms = self.find("key")
+            if not self.key_atoms:
                 if "key_atoms" in self.other:
                     self.key_atoms = [
                         self.atoms[i] for i in self.other["key_atoms"]
@@ -350,15 +349,9 @@ class Component(Geometry):
         if to_center is not None:
             to_center = self.find(to_center)
         else:
-            try:
-                to_center = self.find("key")
-            except LookupError:
-                to_center = []
-            try:
-                center = self.find("center")
-                to_center += list(c.connected for c in center)
-            except LookupError:
-                center = []
+            to_center = self.find("key")
+            center = self.find("center")
+            to_center += list(c.connected for c in center)
 
         new_tags = {}  # hold atom tag options until assignment determined
         subs_found = {}  # for testing which sub assignment is best
@@ -549,9 +542,8 @@ class Component(Geometry):
             for key_atom in key:
                 L_axis = key_atom.coords - center.coords
                 L_axis /= np.linalg.norm(L_axis)
-                try:
-                    bonded_atoms = self.find(BondedTo(key_atom))
-                except LookupError:
+                bonded_atoms = self.find(BondedTo(key_atom))
+                if not bonded_atoms:
                     continue
                 for bonded_atom in bonded_atoms:
                     frag = self.get_fragment(bonded_atom, key_atom)
