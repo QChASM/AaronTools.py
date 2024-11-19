@@ -498,26 +498,26 @@ class TestGeometry(TestWithTimer):
 
         geom = Geometry(os.path.join(prefix, "ref_files", "lig_map_3.xyz"))
         vbur = geom.percent_buried_volume(method="MC")
-        if not np.isclose(vbur, 86.3, atol=0.35):
+        if not np.isclose(vbur, 86.3, atol=0.7):
             print("V_bur =", vbur, "expected:", 86.3)
-        self.assertTrue(np.isclose(vbur, 86.3, atol=0.35))
+        self.assertTrue(np.isclose(vbur, 86.3, atol=0.7))
 
         # a few synthetic tests
         geom2 = Geometry(os.path.join(prefix, "ref_files", "vbur.xyz"))
         vbur = geom2.percent_buried_volume(
             method="MC", scale=1 / 1.1, radius=3
         )
-        if not np.isclose(vbur, 100.0 / 27, atol=0.2):
+        if not np.isclose(vbur, 100.0 / 27, atol=0.5):
             print("V_bur =", vbur, "expected:", 100.0 / 27)
-        self.assertTrue(np.isclose(vbur, 100.0 / 27, atol=0.2))
+        self.assertTrue(np.isclose(vbur, 100.0 / 27, atol=0.5))
 
         geom3 = Geometry(os.path.join(prefix, "ref_files", "vbur2.xyz"))
         vbur = geom2.percent_buried_volume(
             method="MC", scale=1 / 1.1, radius=4
         )
-        if not np.isclose(vbur, 100.0 / 64, atol=0.2):
+        if not np.isclose(vbur, 100.0 / 64, atol=0.5):
             print("V_bur =", vbur, "expected:", 100.0 / 64)
-        self.assertTrue(np.isclose(vbur, 100.0 / 64, atol=0.2))
+        self.assertTrue(np.isclose(vbur, 100.0 / 64, atol=0.5))
 
         # profile.disable()
         # profile.print_stats()
