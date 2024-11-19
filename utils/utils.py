@@ -71,14 +71,22 @@ def proj(v_vec, u_vec):
 
 def quat_matrix(pt1, pt2):
     """build quaternion matrix from pt1 and pt2"""
-    pt1 = np.array(pt1, dtype=np.longdouble)
-    pt2 = np.array(pt2, dtype=np.longdouble)
+    pt1 = np.array(pt1, dtype=np.longdouble, ndmin=2)
+    pt2 = np.array(pt2, dtype=np.longdouble, ndmin=2)
     for pt in [pt1, pt2]:
-        if len(pt.shape) != 1 or pt.shape[0] != 3:
+        if pt.shape[1] != 3:
             raise ValueError("Arguments should be 3-element vectors")
+    if pt1.shape[0] != pt2.shape[0]:
+        raise ValueError("Arguments must be the same length")
 
-    xm, ym, zm = tuple(pt1 - pt2)
-    xp, yp, zp = tuple(pt1 + pt2)
+    minus = pt1 - pt2
+    plus = pt1 + pt2
+    xm = minus[:, 0]
+    ym = minus[:, 1]
+    zm = minus[:, 2]
+    xp = plus[:, 0]
+    yp = plus[:, 1]
+    zp = plus[:, 2]
 
     matrix = np.array(
         [
@@ -108,7 +116,7 @@ def quat_matrix(pt1, pt2):
             ],
         ]
     )
-    return matrix.astype(np.double)
+    return np.sum(matrix.astype(np.double), axis=2)
 
 
 def uptri2sym(vec, n=None, col_based=False):

@@ -60,12 +60,8 @@ class OniomAtom(Atom):
         element = str(element).strip().capitalize()
         if element == "" and atom == None:
             self.element = element
-            self._radii = None
-            self._connectivity = None
         elif element in ELEMENTS:
             self.element = element
-            self._set_radii()
-            self._set_connectivity()
         elif element == "" and atom != None:
             pass
         else:

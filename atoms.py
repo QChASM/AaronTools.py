@@ -21,6 +21,8 @@ from AaronTools.const import (
 
 warn_LJ = set([])
 
+copying_times = {}
+
 
 class BondOrder:
     bonds = {}
@@ -53,7 +55,7 @@ class BondOrder:
         return " ".join(sorted([a1, a2]))
 
     @classmethod
-    def get(cls, a1, a2):
+    def get(cls, a1, a2, dist=None):
         """determines bond order between two atoms based on bond length"""
         try:
             bonds = cls.bonds[cls.key(a1, a2)]
@@ -63,7 +65,8 @@ class BondOrder:
             else:
                 BondOrder.warn_atoms.add((a1.element, a2.element))
                 return 1
-        dist = a1.dist(a2)
+        if dist is None:
+            dist = a1.dist(a2)
         closest = 0, None  # (bond order, length diff)
         for order, length in bonds.items():
             diff = abs(length - dist)
@@ -96,7 +99,80 @@ class Atom:
 
     _bo = BondOrder()
 
+    _do_not_copy = {
+        "_hashed",
+        "constraint",
+        "connected",
+        "element",
+        "_connectivity",
+        "_saturation",
+        "_vdw",
+        "_radii",
+        "_mass",
+        "element",
+        "coords",
+        "name",
+        "tags",
+        "charge",
+        "mass",
+    }
+
     def __init__(
+        self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
+    ):
+        """
+        :param str element: element symbol
+        :param np.ndarray coords: position
+        :param bool flag: whether atom is frozen
+        :param str name: atom name
+        :param list tags: misc. data
+        :param float charge: partial charge of atom
+        :param float mass: mass of atom
+        """
+        
+        super().__setattr__("_hashed", False)
+        if coords is None:
+            coords = []
+        # for BqO to have a ghost atom with oxygen basis functions
+        ele = str(element).strip()
+        element = ele.capitalize()
+        if "-" in ele:
+            element = "-".join(e.capitalize() for e in ele.split("-"))
+        if element.isdigit():
+            element = ELEMENTS[int(element)]
+        
+        if element == "":
+            self._radii = None
+            self._connectivity = None
+        elif element not in ELEMENTS and not element.endswith("Bq"):
+            raise ValueError("Unknown element detected: %s" % element)
+
+        if tags is None:
+            tags = set()
+        elif hasattr(tags, "__iter__") and not isinstance(tags, str):
+            tags = set(tags)
+        else:
+            tags = set([tags])
+
+        if charge is not None:
+            charge = float(charge)
+        
+        self.__dict__.update({
+            "element": element,
+            "coords": np.array(coords, dtype=float),
+            "_mass": mass,
+            "name": str(name).strip(),
+            "flag": bool(flag),
+            "tags": tags,
+            "charge": charge,
+            "connected": set(),
+            "constraint": set(),
+            "_rank": None,
+        })
+        if self.element:
+            self.reset()
+
+    def b__init__(
         self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
     ):
         """
@@ -145,8 +221,8 @@ class Atom:
         if charge:
             self.charge = float(charge)
 
-        self.connected = set([])
-        self.constraint = set([])
+        self.connected = set()
+        self.constraint = set()
         self._rank = None
 
     # utilities
@@ -181,7 +257,6 @@ class Atom:
         if self._rank is None or other._rank is None:
             # if the ranks are the same, we have little reason to
             # believe the invariants will differ
-            # print("getting invariants during <", self._rank, other._rank)
             a = self.get_invariant()
             b = other.get_invariant()
             if a != b:
@@ -220,70 +295,61 @@ class Atom:
         s += " ({:d})".format(self._rank) if self._rank is not None else ""
         return s
 
-    def _set_radii(self):
+    @property
+    def _radii(self):
         """Sets atomic radii"""
+        if self.is_ghost or self.is_dummy:
+            return 0
         try:
-            self._radii = float(RADII[self.element])
+            return float(RADII[self.element])
         except KeyError:
             self.LOG.warning("Radii not found for element: %s" % self.element)
-            self._radii = 1.5
-        return
+            return 1.5
 
     def __setattr__(self, attr, val):
-        if (
-            not self._hashed
-            or (attr == "_hashed" and val)
-            or (attr != "element" and attr != "coords")
-        ):
-            super().__setattr__(attr, val)
-        else:
+        if self._hashed and attr in {"element", "coords"}:
             raise RuntimeError(
                 "Atom %s's Geometry has been hashed and can no longer be changed\n"
                 % self.name
                 + "setattr was called to set %s to %s" % (attr, val)
             )
+        self.__dict__[attr] = val
 
-    def _set_vdw(self):
+    @property
+    def _vdw(self):
         """Sets atomic radii"""
+        if self.is_ghost or self.is_dummy:
+            return 0
         try:
-            self._vdw = float(VDW_RADII[self.element])
+            return float(VDW_RADII[self.element])
         except KeyError:
             self.LOG.warning(
                 "VDW Radii not found for element: %s" % self.element
             )
-            self._vdw = 0
-        return
+            return 0
 
-    def _set_connectivity(self):
-        """
-        Sets theoretical maximum connectivity.
-        
-        If # connections > self._connectivity, then atom is hyper-valent
-        """
+    @property
+    def _connectivity(self):
+        if self.is_ghost or self.is_dummy:
+            return 1000
         try:
-            self._connectivity = int(CONNECTIVITY[self.element])
+            return int(CONNECTIVITY[self.element])
         except KeyError:
-            pass
-            # self.LOG.warning(
-            #     "Connectivity not found for element: " + self.element
-            # )
-        return
+            return None
 
-    def _set_saturation(self):
+    @property
+    def _saturation(self):
         """
         Sets theoretical maximum connectivity without the atom having a formal charge.
         
         If # connections > self._saturation, then atom is hyper-valent or has a non-zero formal charge
         """
+        if self.is_ghost or self.is_dummy:
+            return 0
         try:
-            self._saturation = int(SATURATION[self.element])
+            return int(SATURATION[self.element])
         except KeyError:
-            pass
-            # if self.element not in TMETAL:
-            #     self.LOG.warning(
-            #         "Saturation not found for element: " + self.element
-            #     )
-        return
+            return
 
     @property
     def is_dummy(self):
@@ -294,16 +360,7 @@ class Atom:
         return re.match("([A-Z][a-z]?-Bq|Bq)", self.element) is not None
 
     def reset(self):
-        if self.is_dummy or self.is_ghost:
-            self._vdw = 0
-            self._connectivity = 1000
-            self._saturation = 0
-            self._radii = 0
-        else:
-            self._set_radii()
-            self._set_vdw()
-            self._set_connectivity()
-            self._set_saturation()
+        pass
 
     def add_tag(self, *args):
         for a in args:
@@ -367,23 +424,27 @@ class Atom:
         return s
 
     def copy(self):
-        rv = Atom()
+        rv = Atom(element=self.element, coords=self.coords.copy(), name=self.name, tags=self.tags.copy(), charge=self.charge, mass=self.mass)
+        # from time import perf_counter
         for key, val in self.__dict__.items():
-            if key == "connected":
+            if key in Atom._do_not_copy:
                 continue
-            if key == "constraint":
-                continue
-            if key == "_hashed":
-                continue
+            # copying_times.setdefault(key, 0)
+            # start = perf_counter()
             try:
                 rv.__dict__[key] = val.copy()
+                # stop = perf_counter()
+                # copying_times[key] += (stop - start)
             except AttributeError:
                 rv.__dict__[key] = val
+                # stop = perf_counter()
+                # copying_times[key] += (stop - start)
                 # ignore chimerax objects so seqcrow doesn't print a
                 # warning when a geometry is copied
-                if "chimerax" in val.__class__.__module__:
+                mod = val.__class__.__module__
+                if "chimerax" in mod:
                     continue
-                if val.__class__.__module__ != "builtins":
+                if mod != "builtins":
                     self.LOG.warning(
                         "No copy method for {}: in-place changes may occur".format(
                             type(val)
@@ -407,11 +468,13 @@ class Atom:
         if tolerance is None:
             tolerance = 0.3
 
-        if self._radii is None:
-            self._set_radii()
-        if other._radii is None:
-            other._set_radii()
-        cutoff = self._radii + other._radii + tolerance
+        rad1 = self._radii
+        rad2 = other._radii
+        if rad1 is None:
+            rad1 = 1.5
+        if rad2 is None:
+            rad2 = 1.5
+        cutoff = rad1 + rad2 + tolerance
         return dist_to_other < cutoff
 
     def add_bond_to(self, other):
@@ -1264,6 +1327,7 @@ class Atom:
         try:
             import matplotlib.patches as patches
         except:
+            # should this be self.LOG?
             ls.LOG.error("Must install matplot lib")
             return None
 

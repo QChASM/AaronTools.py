@@ -93,9 +93,7 @@ def validate(test, ref, thresh=None, heavy_only=False, sort=True, debug=False):
         print("after alignment")
         print(ref.write("ref", outfile=False))
         print(test.write("test", outfile=False))
-
-    if debug:
-        print("RMSD:", rmsd[2], "\tTHRESH:", thresh)
+        print("RMSD:", rmsd[2], "\tTHRESH:", thresh, flush=True)
         rmsd[0].write("ref")
         rmsd[1].write("test")
         rmsd = rmsd[2]

@@ -408,6 +408,8 @@ class CompOutput:
             Ev = np.dot(weights, rrho_Ev) + np.sum(1 - weights) * T / 2
             # for f, h, w in zip(freqs, weights * rrho_Ev + (1 - weights) * 0.5 * T, weights):
             #     print(f, h, w)
+        else:
+            raise TypeError("unknown enthalpy type: %s" % enthalpy_method)
 
         Ev *= PHYSICAL.GAS_CONSTANT
         Sv *= PHYSICAL.GAS_CONSTANT

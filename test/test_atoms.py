@@ -156,7 +156,7 @@ class TestAtoms(TestWithTimer):
         atom = Atom()
         atom.element = "NotAnElement"
         with self.assertLogs(logger=Atom.LOG, level="WARNING"):
-            atom._set_radii()
+            atom._radii
 
     def test_set_connectivity(self):
         atom = Atom("H", [0, 0, 0])

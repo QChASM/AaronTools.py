@@ -11,6 +11,8 @@ from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.utils.utils import get_filename, glob_files
 
+from AaronTools.atoms import copying_times
+
 unique_parser = argparse.ArgumentParser(
     description="determine which structures are unique",
     formatter_class=argparse.RawTextHelpFormatter
@@ -94,12 +96,13 @@ for f in glob_files(args.infile, parser=unique_parser):
             if len(sys.argv) >= 1:
                 infile = FileReader(("from stdin", "xyz", f), just_geom=False)
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_ranks=True, refresh_connected=True)
     geom.other = infile.other
 
     if args.mirror:
         geom_mirrored = geom.copy()
         geom_mirrored.update_geometry(np.dot(geom.coords, mirror_mat))
+        geom_mirrored.refresh_ranks()
 
     n_atoms = len(geom.atoms)
 
@@ -124,14 +127,14 @@ for f in glob_files(args.infile, parser=unique_parser):
                 ) 
                 if d_nrg > args.energy_filter:
                     continue
-            rmsd = geom.RMSD(struc, sort=True)
+            rmsd = geom.RMSD(struc, sort=True, refresh_ranks=False)
             if rmsd < args.tol:
                 dup = True
                 group.append((geom, rmsd, False))
                 break
 
             if args.mirror:
-                rmsd2 = geom_mirrored.RMSD(struc, sort=True)
+                rmsd2 = geom_mirrored.RMSD(struc, sort=True, refresh_ranks=False)
                 if rmsd2 < args.tol:
                     dup = True
                     group.append(geom, rmsd2, True)
@@ -212,4 +215,3 @@ for n_atoms in structures:
 s += "there were %i input structures\n" % total
 s += "in total, there are %i unique structures\n" % unique
 print(s)
-

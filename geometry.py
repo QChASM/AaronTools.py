@@ -22,6 +22,7 @@ from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadi
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
 
+
 COORD_THRESHOLD = 0.2
 CACTUS_HOST = "https://cactus.nci.nih.gov"
 OPSIN_HOST = "https://opsin.ch.cam.ac.uk"
@@ -723,9 +724,7 @@ class Geometry:
             atoms = self.atoms
         else:
             atoms = self.find(atoms)
-        rv = np.zeros((len(atoms), 3), dtype=float)
-        for i, a in enumerate(atoms):
-            rv[i] = a.coords[:]
+        rv = np.array([a.coords for a in atoms], dtype=float)
         return rv
 
     @property
@@ -1698,25 +1697,21 @@ class Geometry:
             targets = self.find(targets)
         
         # reset the connectivity and make sure each atom has a covalent radius
+        radii_list = []
         for a in targets:
-            if a._radii is None:
-                a._set_radii()
             if targets is not self.atoms:
                 for b in a.connected:
                     b.connected.discard(a)
             a.connected = set([])
+            radii_list.append(a._radii)
 
         coords = self.coordinates(targets)
 
         # get a distance matrix and a matrix with the max distance
         # each atom can be from another atom and still be connected to it
         D = distance.squareform(distance.pdist(coords, "sqeuclidean"))
-        n_atoms = len(targets)
-        max_connected_dist = np.zeros((n_atoms, n_atoms))
-        for i, atom1 in enumerate(targets):
-            for j, atom2 in enumerate(targets[:i]):
-                max_connected_dist[i, j] = (atom1._radii + atom2._radii + threshold) ** 2
-        # max_connected_dist = max_connected_dist ** 2
+        max_connected_dist = np.add.outer(radii_list, radii_list) + threshold
+        max_connected_dist = max_connected_dist ** 2
         
         # wherever distance < max connected distance, that pair
         # of atoms is connected
@@ -1724,7 +1719,7 @@ class Geometry:
         # the upper triangle is all zeros
         # np.tril basically discards the upper triangle, and
         # nonzero gives the indices of all True values
-        connected = np.tril(D < max_connected_dist).nonzero()
+        connected = np.tril(D < max_connected_dist, k=-1).nonzero()
         for (ndx1, ndx2) in zip(*connected):
             targets[ndx1].add_bond_to(targets[ndx2])
 
@@ -1778,13 +1773,21 @@ class Geometry:
         returns a list of invariants for the specified targets
         see Atom.get_invariant for some more details
 
+        :param list(Atom) heavy_only: atoms to get invariants for
         :param bool heavy_only: ignores hydrogens if true
         """
         targets = self.atoms
+
         if heavy_only:
             targets = [a for a in targets if a.element != "H"]
 
         indices = {a: i for i, a in enumerate(targets)}
+        useful_atoms = set(targets)
+        for a in targets:
+            useful_atoms.update(a.connected)
+        useful_atoms = list(useful_atoms)
+        n_useful = len(useful_atoms)
+        useful_indices = {a: i for i, a in enumerate(useful_atoms)}
         target_set = set(targets)
 
         coords = self.coordinates(targets)
@@ -1796,25 +1799,18 @@ class Geometry:
             returns a bond order (float) or 1 if we don't have
             bond info for these atoms' elements
             """
-            try:
-                bonds = atom1._bo.bonds[atom1._bo.key(atom1, atom2)]
-                closest = 0, None
-                for order, length in bonds.items():
-                    diff = abs(length - dist)
-                    if closest[1] is None or diff < closest[1]:
-                        closest = order, diff
-                return float(closest[0])
-            except KeyError:
-                return 1
+            return atom1._bo.get(atom1, atom2, dist=dist)
 
         atom_numbers = [ELEMENTS.index(a.element) for a in targets]
         hydrogen_bonds = np.zeros(len(targets))
         bo_sums = np.zeros(len(targets))
         heavy_bonds = np.zeros(len(targets))
+        dists = distance.pdist(self.coordinates(useful_atoms))
         for i, atom1 in enumerate(targets):
             if not atom1.connected:
                 continue
-            dists = np.linalg.norm(np.array([atom1.coords - atom2.coords for atom2 in atom1.connected]), axis=1)
+            if atom1.element != "H":
+                n = useful_indices[atom1]
             for k, atom2 in enumerate(atom1.connected):
                 if atom2 in target_set:
                     j = indices[atom2]
@@ -1831,8 +1827,14 @@ class Geometry:
                 elif j is not None:
                     heavy_bonds[j] += 1
 
-                if atom1.element != "H" or atom2.element != "H":
-                    bond_order = get_bo(atom1, atom2, dists[k])
+                bond_order = 1
+                if atom1.element != "H" and atom2.element != "H":
+                    m = useful_indices[atom2]
+                    min_ndx, max_ndx = n, m
+                    if n > m:
+                        min_ndx, max_ndx = m, n
+                    ndx = n_useful * min_ndx + max_ndx - ((min_ndx + 2) * (min_ndx + 1)) // 2
+                    bond_order = get_bo(atom1, atom2, dists[ndx])
                 
                 if atom2.element != "H":
                     bo_sums[i] += bond_order
@@ -1858,7 +1860,7 @@ class Geometry:
             )
 
         return invariants
-
+    
     def canonical_rank(
         self, heavy_only=False, break_ties=True, update=False, invariant=True
     ): 
@@ -1917,15 +1919,16 @@ class Geometry:
                             if ranks[j] >= i:
                                 ranks[j] -= 1
 
-            partitions = {}
+            partitions = {r: {} for r in ranks}
             for i, a in enumerate(atoms):
                 key = primes[ranks[i]]
                 for b in a.connected.intersection(atoms_set):
                     # print(indices[b], ranks[indices[b]])
                     key *= primes[ranks[indices[b]]]
-                partitions.setdefault(ranks[i], {})
-                partitions[ranks[i]].setdefault(key, [])
-                partitions[ranks[i]][key] += [i]
+                try:
+                    partitions[ranks[i]][key] += [i]
+                except KeyError:
+                    partitions[ranks[i]][key] = [i]
             return update_ranks(ranks, partitions)
 
         def update_ranks(ranks, partitions):
@@ -1948,11 +1951,18 @@ class Geometry:
 
             def get_angle(vi, vj, norm):
                 dot = np.dot(vi, vj)
-                cross = np.cross(vi, vj)
+                # numpy cross products are slower apparently 
+                cross = np.array([
+                    [vi[1] * vj[2] - vi[2] * vj[1]],
+                    [vi[2] * vj[0] - vi[0] * vj[2]],
+                    [vi[0] * vj[1] - vi[1] * vj[0]],
+                ])
                 det = np.dot(norm, cross)
                 rv = np.arctan2(det, dot)
-                return round(rv, 1)
+                return round(rv[0], 1)
 
+            
+            # this code isn't used?
             def get_start(connected, center, norm):
                 # if we can, use the COM of tied atoms as reference 0-deg
                 start = self.COM(targets=[atoms[c] for c in connected])
@@ -1963,13 +1973,13 @@ class Geometry:
                 # use that as start
                 start_min = None, None
                 start_max = None, None
-                for c in connected:
+                for i, c in enumerate(connected):
                     dist = np.linalg.norm(atoms[c].coords - center)
                     if start_min[0] is None or dist < start_min[1]:
                         start_min = [c], dist
                     elif dist == start_min[1]:
                         start_min = start_min[0] + [c], dist
-                    if start_max[0] is None or dist < start_max[1]:
+                    if start_max[0] is None or d < start_max[1]:
                         start_max = [c], dist
                     elif dist == start_max[1]:
                         start_max = start_max[0] + [c], dist
@@ -1993,16 +2003,15 @@ class Geometry:
                 # if all else fails, just use the first atom I guess...
                 return atoms[connected[0]].coords - center
 
-            partitions = {}
+            partitions = {r: {} for r in ranks}
             for i, rank in enumerate(ranks):
-                partitions.setdefault(rank, {})
-                partitions[rank].setdefault(rank, [])
-                partitions[rank][rank] += [i]
+                try:
+                    partitions[rank][rank] += [i]
+                except KeyError:
+                    partitions[rank][rank] = [i]
 
             new_partitions = partitions.copy()
 
-            # norm = self.get_principle_axes()
-            # norm = norm[1][:, 0] - center
             for rank, rank_dict in partitions.items():
                 idx_list = rank_dict[rank]
                 if len(idx_list) == 1:
@@ -2016,24 +2025,31 @@ class Geometry:
                         connected = a.connected & b.connected
                         if len(connected) == 1:
                             k = connected.pop()
-                            if k in atoms:
+                            try:
                                 k = indices[k]
-                            else:
-                                continue
-                            groups.setdefault(k, set([i]))
-                            groups[k] |= set([j])
+                                groups.setdefault(k, set([i]))
+                                groups[k] |= set([j])
+                            except KeyError:
+                                pass
                 # atoms in each group sorted in counter clockwise order
                 # around axis centered at shared atom and orthogonal to COM
                 for shared_idx, connected in groups.items():
                     connected = sorted(connected)
                     start = atoms[shared_idx].coords - center
-                    norm = np.cross(start, center)
+                    # numpy cross products are slower apparently 
+                    norm = np.array([
+                        start[1] * center[2] - start[2] * center[1],
+                        start[2] * center[0] - start[0] * center[2],
+                        start[0] * center[1] - start[1] * center[0]
+                    ])
                     angles = {}
                     for c in connected:
                         this = atoms[c].coords - center
                         angle = get_angle(start, this, norm)
-                        angles.setdefault(angle, [])
-                        angles[angle] += [c]
+                        try:
+                            angles[angle] += [c]
+                        except KeyError:
+                            angles[angle] = [c]
                     if len(angles) == 1 and atoms[shared_idx].connected - set(
                         [atoms[c] for c in connected]
                     ):
@@ -2042,19 +2058,32 @@ class Geometry:
                             - set([atoms[c] for c in connected])
                         )
                         start = atoms[shared_idx].coords - tmp_center
-                        norm = np.cross(start, tmp_center)
+                        norm = np.array([
+                            start[1] * tmp_center[2] - start[2] * tmp_center[1],
+                            start[2] * tmp_center[0] - start[0] * tmp_center[2],
+                            start[0] * tmp_center[1] - start[1] * tmp_center[0]
+                        ])
+                        # norm = np.cross(start, tmp_center)
                         angles = {}
                         for c in connected:
                             this = atoms[c].coords - tmp_center
                             angle = get_angle(start, this, norm)
-                            angles.setdefault(angle, [])
-                            angles[angle] += [c]
+                            try:
+                                angles[angle] += [c]
+                            except KeyError:
+                                angles[angle] = [c]
                     for i, angle in enumerate(sorted(angles.keys())):
-                        new_partitions[rank].setdefault(rank + i, [])
-                        new_partitions[rank][rank + i] += angles[angle]
+                        try:
+                            new_partitions[rank][rank + i] += angles[angle]
+                        except KeyError:
+                            new_partitions[rank][rank + i] = angles[angle]
                         for idx in angles[angle]:
-                            if idx in new_partitions[rank][rank]:
+                            # if idx in new_partitions[rank][rank]:
+                                # new_partitions[rank][rank].remove(idx)
+                            try:
                                 new_partitions[rank][rank].remove(idx)
+                            except ValueError:
+                                continue
             return update_ranks(ranks, new_partitions)
 
         # rank all atoms the same initially
@@ -2074,9 +2103,9 @@ class Geometry:
             invariants = self.get_invariants(heavy_only=heavy_only)
         else:
             invariants = [a.get_neighbor_id() for a in atoms]
-        for i, (a, id) in enumerate(zip(atoms, invariants)):
-            partitions.setdefault(id, [])
-            partitions[id] += [i]
+        partitions = {atom_id: [] for atom_id in invariants}
+        for i, atom_id in enumerate(invariants):
+            partitions[atom_id].append(i)
         new_rank = 0
         for key in sorted(partitions.keys()):
             idx_list = partitions[key]
@@ -2150,14 +2179,23 @@ class Geometry:
             targets = self.find(targets)
         if heavy_only:
             targets = [t for t in targets if t.element != "H"]
-        non_targets = [a for a in self.atoms if a not in targets]
+        non_targets = [a for a in self.atoms if a not in set(targets)]
+
+        if targets is self.atoms:
+            ranks = [a._rank for a in targets]
+            if not all(r is not None for r in ranks):
+                ranks = self.canonical_rank()
+            sorted_atoms = [a for _, a in sorted(zip(ranks, self.atoms), key = lambda x: x[0])]
+        elif not start:
+            sorted_atoms = sorted(targets)
 
         # get starting atom
         if not start:
-            order = [sorted(targets)[0]]
+            order = [sorted_atoms[0]]
         else:
             order = sorted(self.find(start))
         start = sorted(order)
+        visited = set(start)
         stack = []
         for s in start:
             stack += sorted(s.connected)
@@ -2166,9 +2204,10 @@ class Geometry:
             this = stack.pop()
             if heavy_only and this.element == "H":
                 continue
-            if this in order:
+            if this in visited:
                 continue
             order += [this]
+            visited.add(this)
             connected = set(this.connected & atoms_left)
             atoms_left -= connected
             stack += sorted(connected)
@@ -2488,6 +2527,7 @@ class Geometry:
         align=False,
         heavy_only=False,
         sort=True,
+        refresh_ranks=True,
         targets=None,
         ref_targets=None,
         debug=False,
@@ -2504,6 +2544,7 @@ class Geometry:
         :param targets: the atoms in `self` to use in calculation
         :param ref_targets:  the atoms in the reference geometry to use
         :param bool sort: canonical sorting of atoms before comparing
+        :param bool sort: refresh atom ranks before doing canonical sorting
         :param bool debug: returns RMSD and Geometry([ref_targets]), Geometry([targets])
         :param list(float) weights: weights to apply to targets
         :param list(float) ref_weights: weights to apply to ref_targets
@@ -2520,13 +2561,11 @@ class Geometry:
                 vector (np.array(float)) the rotation axis
             """
             matrix = np.zeros((4, 4), dtype=np.float64)
-            for i, a in enumerate(ref):
-                pt1 = a.coords
-                try:
-                    pt2 = other[i].coords
-                except IndexError:
-                    break
-                matrix += utils.quat_matrix(pt2, pt1)
+            # not sure why we don't throw an error if the ref
+            # and targets aren't the same amount
+            if len(other) < len(ref):
+                ref = ref[:len(other)]
+            matrix = utils.quat_matrix(other, ref)
 
             eigenval, eigenvec = np.linalg.eigh(matrix)
             val = eigenval[0]
@@ -2543,13 +2582,7 @@ class Geometry:
             # top of each other and gives overly large rmsd/rotation
             # I think this is a numpy precision problem, may want to
             # try scipy.linalg to see if that helps?
-            tmp = sum(
-                [
-                    np.linalg.norm(a.coords - b.coords) ** 2
-                    for a, b in zip(ref, other)
-                ]
-            )
-            tmp = np.sqrt(tmp / len(ref))
+            tmp = np.sqrt(np.sum((ref - other) ** 2) / len(ref))
             if tmp < rmsd:
                 rmsd = tmp
                 vec = np.array([0, 0, 0])
@@ -2573,8 +2606,14 @@ class Geometry:
             targets = [a for a in targets if a.element != "H"]
             ref_targets = [a for a in ref_targets if a.element != "H"]
 
-        this = Geometry([t.copy() for t in targets], refresh_ranks=sort)
-        ref = Geometry([r.copy() for r in ref_targets], refresh_ranks=sort)
+        # using _fix_connectivity is generally slightly faster b/c we don't need
+        # to redetermine connectivity
+        # however, some methods like map_ligand don't alter the bonds at all
+        # therefore, we will redetermine the connectivity for these copied atoms
+        # this = Geometry(self._fix_connectivity(targets), refresh_ranks=sort and refresh_ranks, refresh_connected=False)
+        # ref = Geometry(ref._fix_connectivity(ref_targets), refresh_ranks=sort and refresh_ranks, refresh_connected=False)
+        this = Geometry([t.copy() for t in targets], refresh_ranks=sort and refresh_ranks, refresh_connected=sort)
+        ref = Geometry([r.copy() for r in ref_targets], refresh_ranks=sort and refresh_ranks, refresh_connected=sort)
         if weights is not None:
             for w, a in zip(weights, this.atoms):
                 a.coords *= w
@@ -2591,15 +2630,16 @@ class Geometry:
         ref.coord_shift(-ref_com)
 
         # try current ordering
-        min_rmsd = _RMSD(ref.atoms, this.atoms)
+        min_rmsd = _RMSD(ref.coords, this.coords)
         # try canonical ordering
         if sort:
             this.atoms = this.reorder()[0]
             ref.atoms = ref.reorder()[0]
             this_ranks = [a._rank for a in this.atoms]
             ref_ranks = [a._rank for a in ref.atoms]
-            if any(this_ranks.count(r) > 1 for r in this_ranks) or any(
-                ref_ranks.count(r) > 1 for r in ref_ranks
+            if (
+                len(this_ranks) != len(set(this_ranks)) or
+                len(ref_ranks) != len(set(ref_ranks))
             ):
                 # if there are atoms with the same rank, align both ref and this
                 # to their principle axes and use the distance between the atoms
@@ -2646,12 +2686,15 @@ class Geometry:
                 # use the original order
                 # otherwise, use the order determined by distances
                 if len(ref_atoms) == len(this_atoms) and ref_atoms:
-                    res = _RMSD(ref_atoms, this_atoms)
+                    res = _RMSD(
+                        np.array([a.coords for a in ref_atoms]),
+                        np.array([a.coords for a in this_atoms])
+                    )
                 else:
-                    res = _RMSD(ref.atoms, this.atoms)
+                    res = _RMSD(ref.coords, this.coords)
 
             else:
-                res = _RMSD(ref.atoms, this.atoms)
+                res = _RMSD(ref.coords, this.coords)
 
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
@@ -4118,7 +4161,6 @@ class Geometry:
         if add_H:
             for a in start:
                 a.element = "H"
-                a._set_radii()
                 self.change_distance(a, a.connected - set(frag), fix=2)
         return rv
 
