@@ -45,6 +45,14 @@ unique_parser.add_argument(
 )
 
 unique_parser.add_argument(
+    "-n", "--non-hydrogen",
+    action="store_true",
+    default=False,
+    dest="heavy_only",
+    help="ignore hydrogens in RMSD calculation",
+)
+
+unique_parser.add_argument(
     "-e", "--energy-filter",
     metavar="KCAL/MOL",
     nargs="?",
@@ -127,17 +135,18 @@ for f in glob_files(args.infile, parser=unique_parser):
                 ) 
                 if d_nrg > args.energy_filter:
                     continue
-            rmsd = geom.RMSD(struc, sort=True, refresh_ranks=False)
+            rmsd = geom.RMSD(struc, sort=True, refresh_ranks=False, heavy_only=args.heavy_only)
             if rmsd < args.tol:
                 dup = True
                 group.append((geom, rmsd, False))
                 break
 
             if args.mirror:
-                rmsd2 = geom_mirrored.RMSD(struc, sort=True, refresh_ranks=False)
+                rmsd2 = geom_mirrored.RMSD(struc, sort=True, refresh_ranks=False, heavy_only=args.heavy_only)
                 if rmsd2 < args.tol:
                     dup = True
-                    group.append(geom, rmsd2, True)
+                    group.append([geom, rmsd2, True])
+                    break
         if dup:
             break
 
