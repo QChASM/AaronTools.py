@@ -5958,7 +5958,10 @@ class FileReader:
         """
         Display py3Dmol animation of selected mode
         """
-
+        # Need to check if inside jupyter notebook, as in Geometry.display()
+        # also need to check if frequencies even exist in FileReader
+        
+        import py3Dmol
         freq_val, mode = self.write_mode(vibmode=vibmode)
         if mode:
             view = py3Dmol.view()
