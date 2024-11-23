@@ -424,6 +424,9 @@ class Atom:
         return s
 
     def copy(self):
+        """
+        creates and returns a copy of self
+        """
         rv = Atom(element=self.element, coords=self.coords.copy(), name=self.name, tags=self.tags.copy(), charge=self.charge, mass=self.mass)
         # from time import perf_counter
         for key, val in self.__dict__.items():
@@ -454,7 +457,14 @@ class Atom:
 
     # measurement
     def is_connected(self, other, tolerance=None):
-        """determines if distance between atoms is small enough to be bonded"""
+        """
+        determines if distance between atoms is small enough to be bonded
+        same as dist_is_connected but automatically calculates the distance between the atoms
+        
+        :param float tolerance: buffer for consideration of what is "small enough"; default is 0.3. Cutoff for what constitutes small enough is the sum of the atoms' radii and the tolerance value
+        :returns: True if distance is small enough to be bonded, False otherwise
+        :rtype: boolean
+        """
         return self.dist_is_connected(other, self.dist(other), tolerance)
 
     def dist_is_connected(self, other, dist_to_other, tolerance):
@@ -464,6 +474,11 @@ class Atom:
         used to optimize connected checks when distances can be quickly precalculated,
         like with scipy.spatial.distance_matrix
         :param Atom other: atom to measure the distance between
+        :param float tolerance: buffer for consideration of what is "small enough"; d
+efault is 0.3. Cutoff for what constitutes small enough is the sum of the atoms' radii and the tolerance value
+        :param float dist_to_other: distance between the atoms in Angstroms
+        :returns: True if distance is small enough to be bonded, False otherwise
+        :rtype: boolean
         """
         if tolerance is None:
             tolerance = 0.3
@@ -483,17 +498,32 @@ class Atom:
         other.connected.add(self)
 
     def bond(self, other):
-        """returns the vector self-->other"""
+        """
+        retrieves bond vectors
+
+        :returns: the vector self-->other
+        :rtype: np.array
+        """
         if isinstance(other, np.ndarray):
             return other - np.array(self.coords)
         return np.array(other.coords) - np.array(self.coords)
 
     def dist(self, other):
-        """returns the distance between self and other"""
+        """
+        retrieves distance between Atoms
+        
+        :returns: the distance between self and other
+        :rtype: float
+        """
         return np.linalg.norm(self.bond(other))
 
     def angle(self, a1, a3):
-        """returns the a1-self-a3 angle"""
+        """
+        determines angle between three Atoms
+
+        :returns: the a1-self-a3 angle
+        :rtype: float
+        """
         v1 = self.bond(a1)
         v2 = self.bond(a3)
         dot = np.dot(v1, v2)
@@ -507,7 +537,12 @@ class Atom:
 
     @property
     def mass(self):
-        """returns atomic mass"""
+        """
+        retrieves mass of an Atom
+
+        :returns: atomic mass
+        :rtype: float
+        """
         if self._mass is not None:
             return self._mass
         if self.element in MASS:
@@ -518,6 +553,11 @@ class Atom:
 
     @mass.setter
     def mass(self, value):
+        """
+        manually sets the mass of an atom; when retrieving mass values, there is a default value based on the element of the Atom, so this is only necessary if you want an instance of Atom of a differing mass to its typical value.
+
+        :param float value: mass in AMU to set the Atom to;
+        """
         self._mass = value
 
     def rij(self, other):
@@ -634,13 +674,13 @@ class Atom:
         elif shape_name == "square pyramidal":
             return cls.octahedral_shape()[0:6]
         elif shape_name == "pentagonal":
-            return cls.pentagonal_bipyraminal_shape()[0:6]
+            return cls.pentagonal_bipyramidal_shape()[0:6]
         elif shape_name == "hexagonal":
             return cls.hexagonal_bipyramidal_shape()[0:7]
         elif shape_name == "trigonal prismatic":
             return cls.trigonal_prismatic_shape()
         elif shape_name == "pentagonal pyramidal":
-            return cls.pentagonal_bipyraminal_shape()[0:7]
+            return cls.pentagonal_bipyramidal_shape()[0:7]
         elif shape_name == "octahedral":
             return cls.octahedral_shape()
         elif shape_name == "capped octahedral":
@@ -648,7 +688,7 @@ class Atom:
         elif shape_name == "hexagonal pyramidal":
             return cls.hexagonal_bipyramidal_shape()[0:8]
         elif shape_name == "pentagonal bipyramidal":
-            return cls.pentagonal_bipyraminal_shape()
+            return cls.pentagonal_bipyramidal_shape()
         elif shape_name == "capped trigonal prismatic":
             return cls.capped_trigonal_prismatic_shape()
         elif shape_name == "heptagonal":
@@ -747,6 +787,7 @@ class Atom:
 
     @classmethod
     def trigonal_prismatic_shape(cls):
+        """returns a list of 7 dummy atoms in a trigonal prismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([-0.6547, -0.3780, 0.6547])
         pos2 = np.array([-0.6547, -0.3780, -0.6547])
@@ -759,6 +800,7 @@ class Atom:
 
     @classmethod
     def capped_octahedral_shape(cls):
+        """returns a list of 8 dummy atoms in a capped ocrahedral shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, 0.0, 1.0])
         pos2 = np.array([0.9777, 0.0, 0.2101])
@@ -774,6 +816,7 @@ class Atom:
 
     @classmethod
     def capped_trigonal_prismatic_shape(cls):
+        """returns a list of 8 dummy atoms in a capped trigonal prismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, 0.0, 1.0])
         pos2 = np.array([0.6869, 0.6869, 0.2374])
@@ -788,7 +831,8 @@ class Atom:
         )
 
     @classmethod
-    def pentagonal_bipyraminal_shape(cls):
+    def pentagonal_bipyramidal_shape(cls):
+        """returns a list of 8 dummy atoms in a pentagonal bipyramidal shape"""
         center = np.zeros(3)
         pos1 = np.array([1.0, 0.0, 0.0])
         pos2 = np.array([0.3090, 0.9511, 0.0])
@@ -804,6 +848,7 @@ class Atom:
 
     @classmethod
     def biaugmented_trigonal_prismatic_shape(cls):
+        """returns a list of 9 dummy atoms in a biaugmented trigonal prismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([-0.6547, -0.3780, 0.6547])
         pos2 = np.array([-0.6547, -0.3780, -0.6547])
@@ -820,6 +865,7 @@ class Atom:
 
     @classmethod
     def cubic_shape(cls):
+        """returns a list of 9 dummy atoms in a cubic shape"""
         center = np.zeros(3)
         pos1 = np.array([0.5775, 0.5774, 0.5774])
         pos2 = np.array([0.5775, 0.5774, -0.5774])
@@ -836,6 +882,7 @@ class Atom:
 
     @classmethod
     def elongated_trigonal_bipyramidal_shape(cls):
+        """returns a list of 9 dummy atoms in an elongated trigonal bipyramidal shape"""
         center = np.zeros(3)
         pos1 = np.array([0.6547, 0.0, 0.7559])
         pos2 = np.array([-0.6547, 0.0, 0.7559])
@@ -852,6 +899,7 @@ class Atom:
 
     @classmethod
     def hexagonal_bipyramidal_shape(cls):
+        """returns a list of 9 dummy atoms in a hexagonal bipyramidal shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, -1.0, 0.0])
         pos2 = np.array([0.8660, -0.5, 0.0])
@@ -868,6 +916,7 @@ class Atom:
 
     @classmethod
     def square_antiprismatic_shape(cls):
+        """returns a list of 9 dummy atoms in a square antiprismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, 0.0, 1.0])
         pos2 = np.array([0.9653, 0.0, 0.2612])
@@ -884,6 +933,7 @@ class Atom:
 
     @classmethod
     def trigonal_dodecahedral_shape(cls):
+        """returns a list of 9 dummy atoms in a trigonal dodecahedral shape"""
         center = np.zeros(3)
         pos1 = np.array([-0.5997, 0.0, 0.8002])
         pos2 = np.array([0.0, -0.9364, 0.3509])
@@ -900,6 +950,7 @@ class Atom:
 
     @classmethod
     def heptagonal_bipyramidal_shape(cls):
+        """returns a list of 10 dummy atoms in a heptagonal bipyramidal shape"""
         center = np.zeros(3)
         pos1 = np.array([1.0, 0.0, 0.0])
         pos2 = np.array([0.6235, 0.7818, 0.0])
@@ -917,6 +968,7 @@ class Atom:
 
     @classmethod
     def capped_cube_shape(cls):
+        """returns a list of 10 dummy atoms in a capped cube shape"""
         center = np.zeros(3)
         pos1 = np.array([0.6418, 0.6418, 0.4196])
         pos2 = np.array([0.6418, -0.6418, 0.4196])
@@ -934,6 +986,7 @@ class Atom:
 
     @classmethod
     def capped_square_antiprismatic_shape(cls):
+        """returns a list of 10 dummy atoms in a capped square antiprismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([0.9322, 0.0, 0.3619])
         pos2 = np.array([-0.9322, 0.0, 0.3619])
@@ -951,6 +1004,7 @@ class Atom:
 
     @classmethod
     def enneagonal_shape(cls):
+        """returns a list of 10 dummy atoms in an enneagonal shape"""
         center = np.zeros(3)
         pos1 = np.array([1.0, 0.0, 0.0])
         pos2 = np.array([0.7660, 0.6428, 0.0])
@@ -968,6 +1022,7 @@ class Atom:
 
     @classmethod
     def hula_hoop_shape(cls):
+        """returns a list of 10 dummy atoms in a hula hoop shape"""
         center = np.zeros(3)
         pos1 = np.array([1.0, 0.0, 0.0])
         pos2 = np.array([0.5, 0.8660, 0.0])
@@ -985,6 +1040,7 @@ class Atom:
 
     @classmethod
     def triangular_cupola_shape(cls):
+        """ returns a list of 10 dummy atoms in a triangular cupola shape"""
         center = np.zeros(3)
         pos1 = np.array([1.0, 0.0, 0.0])
         pos2 = np.array([0.5, 0.8660, 0.0])
@@ -1002,6 +1058,7 @@ class Atom:
 
     @classmethod
     def tridiminished_icosahedral_shape(cls):
+        """returns a list of 10 dummy atoms in a tridiminished icosahedral shape"""
         center = np.zeros(3)
         pos1 = np.array([-0.2764, 0.8507, -0.4472])
         pos2 = np.array([-0.8944, 0.0, -0.4472])
@@ -1019,6 +1076,7 @@ class Atom:
 
     @classmethod
     def muffin_shape(cls):
+        """returns a list of 10 dummy atoms in a muffin shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, 0.9875, 0.1579])
         pos2 = np.array([0.9391, 0.3051, 0.1579])
@@ -1036,6 +1094,7 @@ class Atom:
 
     @classmethod
     def octagonal_pyramidal_shape(cls):
+        """returns a list of 10 dummy atoms in an octagonal pyramidal shape"""
         center = np.zeros(3)
         pos1 = np.array([0.7071, -0.7071, 0.0])
         pos2 = np.array([1.0, 0.0, 0.0])
@@ -1053,6 +1112,7 @@ class Atom:
 
     @classmethod
     def tricapped_trigonal_prismatic_shape(cls):
+        """returns a list of 10 dummy atoms in a tricapped trigonal prismatic shape"""
         center = np.zeros(3)
         pos1 = np.array([0.0, 0.0, 1.0])
         pos2 = np.array([-0.2357, 0.9129, 0.3333])
