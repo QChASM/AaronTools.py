@@ -172,59 +172,6 @@ class Atom:
         if self.element:
             self.reset()
 
-    def b__init__(
-        self, element="", coords=None, flag=False, name="", tags=None, charge=None, mass=None
-    ):
-        """
-        :param str element: element symbol
-        :param np.ndarray coords: position
-        :param bool flag: whether atom is frozen
-        :param str name: atom name
-        :param list tags: misc. data
-        :param float charge: partial charge of atom
-        :param float mass: mass of atom
-        """
-        
-        super().__setattr__("_hashed", False)
-        if coords is None:
-            coords = []
-        if tags is None:
-            tags = []
-        self._mass = mass
-        # for BqO to have a ghost atom with oxygen basis functions
-        ele = str(element).strip()
-        element = ele.capitalize()
-        if "-" in ele:
-            element = "-".join(e.capitalize() for e in ele.split("-"))
-        if element.isdigit():
-            element = ELEMENTS[int(element)]
-        if element == "":
-            self.element = element
-            self._radii = None
-            self._connectivity = None
-        elif element not in ELEMENTS and not element.endswith("Bq"):
-            raise ValueError("Unknown element detected: %s" % element)
-        else:
-            self.element = element
-            self.reset()
-
-        self.coords = np.array(coords, dtype=float)
-        self.flag = bool(flag)
-        self.name = str(name).strip()
-
-        if hasattr(tags, "__iter__") and not isinstance(tags, str):
-            self.tags = set(tags)
-        else:
-            self.tags = set([tags])
-
-        self.charge = charge
-        if charge:
-            self.charge = float(charge)
-
-        self.connected = set()
-        self.constraint = set()
-        self._rank = None
-
     # utilities
     def __float__(self):
         """
@@ -313,7 +260,7 @@ class Atom:
                 % self.name
                 + "setattr was called to set %s to %s" % (attr, val)
             )
-        self.__dict__[attr] = val
+        super().__setattr__(attr, val)
 
     @property
     def _vdw(self):

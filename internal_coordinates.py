@@ -128,19 +128,13 @@ class Angle(Coordinate):
         if not isinstance(other, Angle):
             return False
         
-        if all(
-            getattr(self, attr) == getattr(other, attr) for attr in [
-                "atom1", "atom2", "atom3",
-            ]
-        ):
+        if self.atom2 != other.atom2:
+            return False
+        
+        if self.atom1 == other.atom1 and self.atom3 == other.atom3:
             return True
-            
-        if all(
-            getattr(self, attr1) == getattr(other, attr2) for (attr1, attr2) in zip(
-                ["atom1", "atom2", "atom3"],
-                ["atom3", "atom2", "atom1"],
-            )
-        ):
+
+        if self.atom1 == other.atom3 and self.atom3 == other.atom1:
             return True
         
         return False
@@ -194,19 +188,13 @@ class LinearAngle(Coordinate):
         if not isinstance(other, LinearAngle):
             return False
         
-        if all(
-            getattr(self, attr) == getattr(other, attr) for attr in [
-                "atom1", "atom2", "atom3",
-            ]
-        ):
+        if self.atom2 != other.atom2:
+            return False
+        
+        if self.atom1 == other.atom1 and self.atom3 == other.atom3:
             return True
-            
-        if all(
-            getattr(self, attr1) == getattr(other, attr2) for (attr1, attr2) in zip(
-                ["atom1", "atom2", "atom3"],
-                ["atom3", "atom2", "atom1"],
-            )
-        ):
+
+        if self.atom1 == other.atom3 and self.atom3 == other.atom1:
             return True
         
         return False
@@ -378,29 +366,22 @@ class Torsion(Coordinate):
             
             return True
 
+        if (
+            self.atom1 != other.atom1 and self.atom2 != other.atom2
+        ) and (
+            self.atom1 != other.atom2 and self.atom2 != other.atom1
+        ):
+            return False
+
         for a1 in self.group1:
-            if (
-                self.group1.count(a1) != other.group1.count(a1)
-            ) or (
-                self.group1.count(a1) != other.group2.count(a1)
-            ):
+            if a1 not in other.group1 or a1 not in other.group2:
                 return False
 
         for a2 in self.group2:
-            if (
-                self.group2.count(a2) != other.group2.count(a2)
-            ) or (
-                self.group2.count(a2) != other.group1.count(a2)
-            ):
+            if a2 not in other.group2 or a2 not in other.group1:
                 return False
 
-        if self.atom1 == other.atom1 and self.atom2 == other.atom2:
-            return True
-
-        if self.atom1 == other.atom2 and self.atom2 == other.atom1:
-            return True
-        
-        return False
+        return True
 
     def value(self, coords):
         e_i1 = e_ij(coords[self.group1[0]], coords[self.atom1])
@@ -738,6 +719,8 @@ class InternalCoordinateSet:
                     #     print("not adding torsions - not enough bonds to either", atom1, atom2)
 
                     for atom3 in set(nonlinear_atoms_1).intersection(atom1.connected):
+                        if atom3 is atom2:
+                            continue
                         new_angle = Angle(ndx[atom3], ndx[atom1], ndx[atom2])
                         if not any(coord == new_angle for coord in self.coordinates["angles"]):
                             added_coords = True
@@ -763,6 +746,8 @@ class InternalCoordinateSet:
                                 # print("\t", atom2.name)
                     
                     for atom3 in set(nonlinear_atoms_2).intersection(atom2.connected):
+                        if atom3 is atom1:
+                            continue
                         new_angle = Angle(ndx[atom3], ndx[atom2], ndx[atom1])
                         if not any(coord == new_angle for coord in self.coordinates["angles"]):
                             added_coords = True
