@@ -141,10 +141,7 @@ class Atom:
         if element.isdigit():
             element = ELEMENTS[int(element)]
         
-        if element == "":
-            self._radii = None
-            self._connectivity = None
-        elif element not in ELEMENTS and not element.endswith("Bq"):
+        if element != "" and element not in ELEMENTS and not element.endswith("Bq"):
             raise ValueError("Unknown element detected: %s" % element)
 
         if tags is None:
