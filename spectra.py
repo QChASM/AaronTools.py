@@ -1582,7 +1582,7 @@ class ValenceExcitations(Signals):
             ):
                 i += 5
                 line = lines[i]
-                while line.strip():
+                while line.strip() and line.strip()[0].isdigit():
                     info = line.split()
                     if orca_version <= 5:
                         if info[3] == "spin":
@@ -1595,6 +1595,8 @@ class ValenceExcitations(Signals):
                         oscillator_str.append(float(info[6]))
                         dipole_moments_len.append([float(x) for x in info[7:10]])
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif (
                 "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
@@ -1604,7 +1606,7 @@ class ValenceExcitations(Signals):
             ):
                 i += 5
                 line = lines[i]
-                while line.strip():
+                while line.strip() and line.strip()[0].isdigit():
                     info = line.split()
                     if orca_version <= 5:
                         if info[3] == "spin":
@@ -1618,6 +1620,8 @@ class ValenceExcitations(Signals):
                         dipole_moments_vel.append([float(x) for x in info[7:10]])
 
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif (
                 line.endswith("CD SPECTRUM") and
@@ -1641,6 +1645,8 @@ class ValenceExcitations(Signals):
                         rotatory_str_len.append(float(info[6]))
                         magnetic_moments.append([float(x) for x in info[7:10]])
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif (
                 "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
@@ -1660,6 +1666,8 @@ class ValenceExcitations(Signals):
                         rotatory_str_vel.append(float(info[6]))
                         magnetic_velocities.append([float(x) for x in info[7:10]])
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
                 i += 5
@@ -1673,6 +1681,8 @@ class ValenceExcitations(Signals):
                         transient_oscillator_str.append(float(info[6]))
                         transient_nrg.append(float(info[3]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
                 i += 5
@@ -1684,6 +1694,8 @@ class ValenceExcitations(Signals):
                     else:
                         transient_oscillator_vel.append(float(info[6]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
             elif "TRANSIENT CD SPECTRUM" in line:
                 i += 5
@@ -1703,6 +1715,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     corr.append(float(info[-1]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
         
             elif line.startswith("Eigenvalues of the SOC matrix:"):
@@ -1712,6 +1726,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_nrgs.append(float(info[-1]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1721,6 +1737,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_oscillator_str.append(float(info[4]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1730,6 +1748,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_oscillator_str.append(float(info[6]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SPIN ORBIT CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
@@ -1739,6 +1759,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_oscillator_vel.append(float(info[4]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
@@ -1748,6 +1770,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_oscillator_vel.append(float(info[6]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SPIN ORBIT CORRECTED CD SPECTRUM" in line:
@@ -1757,6 +1781,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_rotatory_str_len.append(float(info[4]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SOC CORRECTED CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
@@ -1766,6 +1792,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_rotatory_str_len.append(float(info[6]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             elif "SOC CORRECTED CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
@@ -1775,6 +1803,8 @@ class ValenceExcitations(Signals):
                     info = line.split()
                     soc_rotatory_str_vel.append(float(info[6]))
                     i += 1
+                    if i == len(lines):
+                        break
                     line = lines[i]
 
             else:
