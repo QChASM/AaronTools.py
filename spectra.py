@@ -1567,7 +1567,7 @@ class ValenceExcitations(Signals):
                 info = re.search("IROOT=.+?(\d+\.\d+)\seV", line)
                 nrgs.append(float(info.group(1)))
                 i += 1
-            elif line.startswith("STATE"):
+            elif re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line):
                 info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line)
                 try:
                     nrgs.append(float(info.group(1)))
@@ -1828,6 +1828,9 @@ class ValenceExcitations(Signals):
 
         if not soc_rotatory_str_vel:
             soc_rotatory_str_vel = [None for x in oscillator_str]
+
+        if not dipole_moments_vel:
+            dipole_moments_vel = [None for x in oscillator_str]
 
         for (
             nrg,
