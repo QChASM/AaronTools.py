@@ -84,7 +84,8 @@ makeconf_parser.add_argument(
 
 makeconf_parser.add_argument(
     "-sc", "--skip-clash",
-    action="store_true",
+    nargs="?",
+    action="store",
     required=False,
     default=False,
     dest="skip_clash",
@@ -258,7 +259,7 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
             # somehow the atoms get out of order
             print_geom.atoms = sorted(print_geom.atoms, key=lambda a: float(a.name))
 
-        if args.skip_clash:
+        if args.skip_clash is not False:
             if bad_subs:
                 skipped += 1
                 continue
@@ -266,7 +267,14 @@ for infile in glob_files(args.infile, parser=makeconf_parser):
             clashing = False
             for j, a1 in enumerate(print_geom.atoms):
                 for a2 in print_geom.atoms[:j]:
-                    if a2 not in a1.connected and a1.is_connected(a2):
+                    if (
+                        a2 not in a1.connected and (
+                            a1.is_connected(a2) or (
+                                args.skip_clash is not None and
+                                a1.dist(a2) < float(args.skip_clash)
+                            )
+                        )
+                    ):
                         clashing = True
                         break
 
