@@ -782,7 +782,7 @@ class InternalCoordinateSet:
         """
         returns the B matrix (B_ij = dq_i/dx_j)
         """
-        B = np.zeros((self.n_dimensions, 3 * len(self.geometry.atoms)))
+        B = np.zeros((self.n_dimensions, 3 * len(coords)))
         i = 0
         for coord_type in self.coordinates:
             for coord in self.coordinates[coord_type]:
