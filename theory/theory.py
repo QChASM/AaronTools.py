@@ -1178,6 +1178,11 @@ class Theory:
                 out_str += "\n".join(
                     [x.rstrip() for x in other_kw_dict[GAUSSIAN_COMMENT]]
                 )
+                for x in other_kw_dict[GAUSSIAN_COMMENT]:
+                    for c in "@#!-_\\":
+                        if c in x:
+                            warnings.append("avoid using %s in the comment/title section of Gaussian input" % c)
+                        
             else:
                 out_str += "comment"
 

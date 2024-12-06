@@ -4926,7 +4926,11 @@ class FileReader:
                     ),
                     dtype=str
                 )
-                
+                # TODO: unusual route parsing
+                # from the gaussian manual: 
+                # * spaces, tabs, commands, and forward slashes are valid delimiters
+                # * multiple options can be enclosed in parentheses and separated by
+                #   any valid delimiter
                 route_words = route.split()
                 other["method"] = ""
                 is_oniom = False
@@ -4968,6 +4972,7 @@ class FileReader:
                         "(?:int||Integral)=\(grid[(=](\S+?)\)", route, re.IGNORECASE
                     ).group(1)
                 # comments can be multiple lines long
+                # TODO: comments can only be 5 lines long
                 # but there should be a blank line between the route and the comment
                 # and another between the comment and the charge+mult
                 blank_lines = 0
