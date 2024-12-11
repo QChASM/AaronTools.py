@@ -866,9 +866,10 @@ class InternalCoordinateSet:
     def apply_change(
         self, coords, dq,
         use_delocalized=True,
-        max_iterations=10,
+        max_iterations=100,
         convergence=1e-10,
-        debug=True,
+        step_limit=None,
+        debug=False,
     ):
         """
         change coords (Cartesian Nx3 array) by the specified 
@@ -876,11 +877,18 @@ class InternalCoordinateSet:
         use_delocalized: if True, step in delocalized internal coordinates
                          if False, step in redundant internal coordinates
         max_iterations: number of allowed cycles to try to meet the dq
+        step_limit: if any cartesian component of the step exceeds this amount,
+                    the step will be scaled down and the remaining difference
+                    will (hopefully) be handled on the next iteration
+                    Setting this option to e.g. 0.2 can improve stability for
+                    larger changes
         convergence: end cycles if differences between actual step and dq
                      is less than this amount
         """
         x0 = best_struc = np.reshape(coords, -1)
         ddq = np.zeros(len(dq))
+        target_q = self.adjust_phase(self.values(coords)) + dq
+        xq = dq.copy()
         smallest_dq = None
         for i in range(0, max_iterations):
             B = self.B_matrix(np.reshape(x0, coords.shape))
@@ -889,16 +897,16 @@ class InternalCoordinateSet:
                 w, v = np.linalg.eigh(G)
                 U = v[:, -(len(x0) - 6):]
                 Bd = np.matmul(U.T, B)
-                ds = np.dot(U.T, dq)
-                x1 = x0 + np.dot(np.linalg.pinv(Bd), ds)
+                ds = np.dot(U.T, xq)
+                dx = np.dot(np.linalg.pinv(Bd), ds)
             else:
                 B_pinv = np.linalg.pinv(B)
-                x1 = x0 + np.dot(B_pinv, dq)
+                dx = np.dot(B_pinv, xq)
+            if step_limit is not None and max(np.absolute(dx)) > step_limit:
+                dx = step_limit * dx / max(np.absolute(dx))
+            x1 = x0 + dx
 
-            ddq = dq - self.difference(
-                np.reshape(x0, coords.shape),
-                np.reshape(x1, coords.shape),
-            )
+            ddq = self.adjust_phase(dq - self.difference(coords, np.reshape(x1, coords.shape)))
 
             if use_delocalized:
                 dds = np.matmul(U.T, ddq)
@@ -907,15 +915,17 @@ class InternalCoordinateSet:
                 togo = np.linalg.norm(ddq)
             
             x0 = x1
-            dq = ddq
+            xq = ddq
     
             if smallest_dq is None or togo < smallest_dq:
                 best_struc = x1
                 smallest_dq = togo
-        
+            if debug:
+                print("q -> r step", i, "error =", togo)
+                print(xq)
+                print(dq)
+                print(self.difference(coords, np.reshape(x1, coords.shape)))
             if togo < convergence:
-                if debug:
-                    print("q -> r step", i, "error =", togo)
                 break
 
         if togo < convergence:

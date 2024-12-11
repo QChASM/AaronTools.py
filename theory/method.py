@@ -24,6 +24,7 @@ KNOWN_SEMI_EMPIRICAL = [
     "PM6-D",
     "AM1-DH+",
     "PM6-DH+",
+    "xTB",
 ]
 
 KNOWN_MM = ["AMBER","UFF","DREIDING","GAFF"]
@@ -198,6 +199,8 @@ class Method:
             return ({ORCA_ROUTE: ["PBE0-DH"]}, warnings)
         elif self.name.upper() == "PBEQIDH":
             return ({ORCA_ROUTE: ["PBE-QIDH"]}, warnings)
+        elif self.name.upper() == "GFN2-XTB":
+            return ({ORCA_ROUTE: ["XTB"]}, warnings)
 
         name = self.name.replace('ω', 'w')
         warning = self.sanity_check_method(name, "orca")

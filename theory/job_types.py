@@ -1577,6 +1577,7 @@ class ConformerSearchJob(JobType):
         self,
         constraints=None,
         geometry=None,
+        use_topology=True,
     ):
         """
         :param dict constraints:
@@ -1593,6 +1594,7 @@ class ConformerSearchJob(JobType):
         """
         self.constraints = constraints
         self.geometry = geometry
+        self.use_topology = use_topology
 
     def get_crest(self):
         out = dict()
@@ -1656,6 +1658,76 @@ class ConformerSearchJob(JobType):
             out[XTB_CONTROL_BLOCKS]["metadyn"] = ["  atoms: {}".format(relaxed)]
             # out[XTB_COMMAND_LINE] = {}
             # out[XTB_COMMAND_LINE]["cinp"] = ["{{ name }}.xc"]
+
+        if self.use_topology:
+            out.setdefault(XTB_COMMAND_LINE, {})
+            out[XTB_COMMAND_LINE]["noreftopo"] = []
+
+        return out, []
+
+    def get_orca(self):
+        """returns a dict with keys: ORCA_ROUTE, ORCA_BLOCKS"""
+        if self.use_topology:
+            out = {ORCA_ROUTE: ["GOAT"]}
+        else:
+            out = {ORCA_ROUTE: ["GOAT-EXPLORE"]}
+
+
+        if self.constraints is not None and any(
+            self.constraints[key] for key in self.constraints.keys()
+        ):
+            for key in self.constraints:
+                if key not in [
+                    "atoms",
+                    "bonds",
+                    "angles",
+                    "torsions",
+                ]:
+                    raise NotImplementedError(
+                        "%s constraints cannot be generated for ORCA" % key
+                    )
+            geom_constraints = "Constraints\n"
+            if "atoms" in self.constraints:
+                for constraint in self.constraints["atoms"]:
+                    atom1 = self.geometry.find(constraint)[0]
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    out_str = "        {C %2i C}\n" % (ndx1)
+                    geom_constraints += out_str
+
+            if "bonds" in self.constraints:
+                for constraint in self.constraints["bonds"]:
+                    atom1, atom2 = self.geometry.find(constraint)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    out_str = "        {B %2i %2i C}\n" % (ndx1, ndx2)
+                    geom_constraints += out_str
+    
+            if "angles" in self.constraints:
+                for constraint in self.constraints["angles"]:
+                    atom1, atom2, atom3 = self.geometry.find(constraint)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx3 = self.geometry.atoms.index(atom3)
+                    out_str = "        {A %2i %2i %2i C}\n" % (ndx1, ndx2, ndx3)
+                    geom_constraints += out_str
+
+            if "torsions" in self.constraints:
+                for constraint in self.constraints["torsions"]:
+                    atom1, atom2, atom3, atom4 = self.geometry.find(constraint)
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx3 = self.geometry.atoms.index(atom3)
+                    ndx4 = self.geometry.atoms.index(atom4)
+                    out_str = "        {D %2i %2i %2i %2i C}\n" % (
+                        ndx1,
+                        ndx2,
+                        ndx3,
+                        ndx4,
+                    )
+                    geom_constraints += out_str
+
+            geom_constraints += "    end"
+            out[ORCA_BLOCKS] = {"geom": [geom_constraints]}
 
         return out, []
 
