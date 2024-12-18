@@ -24,7 +24,7 @@ KNOWN_SEMI_EMPIRICAL = [
     "PM6-D",
     "AM1-DH+",
     "PM6-DH+",
-    "xTB",
+    "XTB",
 ]
 
 KNOWN_MM = ["AMBER","UFF","DREIDING","GAFF"]
