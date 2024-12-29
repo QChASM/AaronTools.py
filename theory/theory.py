@@ -1663,7 +1663,8 @@ class Theory:
                                 opt.split()[0].lower() == prev_opt for prev_opt in used_settings
                             ):
                                 continue
-                            used_settings.append(opt.split()[0].lower())
+                            if opt.split()[0].lower() != "scan":
+                                used_settings.append(opt.split()[0].lower())
                             out_str += "    %s\n" % opt
                         out_str += "end\n"
 
