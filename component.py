@@ -142,7 +142,14 @@ class Component(Geometry):
         denticity=None,
         include_ext=False,
     ):
-        """returns a list of ligand names in the library"""
+        """
+        returns a list of ligand names in the library
+
+        :param str name_regex: regex identifier/name for a library to search
+        :param list(Atom) coordinating_elements: if specified, only lists ligands with included coordinated elements
+        :param int denticity: if specified, lists ligands with included denticity
+        :param bool include_ext: includes extensions on each item if True
+        """
         names = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
             if not os.path.exists(lib):
@@ -198,7 +205,15 @@ class Component(Geometry):
         return names + sorted(cls.FROM_SUBSTITUENTS)
 
     def c2_symmetric(self, to_center=None, tolerance=0.1):
-        """determine if center-key atom axis is a C2 axis"""
+        """
+        determine if center-key atom axis is a C2 axis
+        
+        :param list(Atom) to_center: arg. for Geometry.COM(), atoms connected to center
+        :param float tolerance: buffer for consideration of axis symmetry
+
+        :returns: True if axis is C2, otherwise False
+        :rtype: boolean
+        """
         # determine ranks
         ranks = self.canonical_rank(
             update=False,
@@ -266,6 +281,16 @@ class Component(Geometry):
         return super().sterimol(L_axis, center, self.atoms, **kwargs)
 
     def copy(self, atoms=None, name=None, comment=None):
+        """
+        creates a new copy of the geometry
+
+        :param list(Atom) atoms: atoms to copy defaults to all atoms
+        :param str name: defaults to NAME_copy
+        :param str comment: comment to add to the copy, defaults to self's comment
+
+        :returns: copy of self
+        :rtype: Geometry
+        """
         rv = super().copy()
         return Component(rv)
 
@@ -293,6 +318,12 @@ class Component(Geometry):
         """
         find fragments connected by only one bond
         (both fragments contain no overlapping atoms)
+
+        :param list(Atom) targets: all fragments must include targets if specified
+        :param int max_order: maximum order/length for fragments
+
+        :returns: all fragments under specified conditions
+        :rtype: list(Geometry)
         """
         if targets:
             atoms = self.find(targets)
