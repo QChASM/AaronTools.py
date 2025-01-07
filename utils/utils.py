@@ -828,13 +828,11 @@ def glob_files(infiles, parser=None, escape_brackets=True):
     from glob import glob
     import sys
 
-    if isinstance(infiles, str):
-        infiles = [infiles]
-    else: # if stdin just retun original data
-        return infiles
-
     outfiles = []
     for f in infiles:
+        if not isinstance(f, str):
+            outfiles.append(f)
+            continue
         if escape_brackets:
             f_safe = "[[]".join([x.replace("]", "[]]") for x in f.split("[")])
         else:
