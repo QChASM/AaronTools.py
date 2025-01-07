@@ -629,7 +629,7 @@ class OptimizationJob(JobType):
             self.scans[key] for key in self.scans.keys()
         ):
             for key in self.scans:
-                if key not in [
+                if self.scans[key] and key not in [
                     "bonds",
                     "angles",
                     "torsions",
@@ -644,7 +644,6 @@ class OptimizationJob(JobType):
 
             if "bonds" in self.scans:
                 for constraint in self.scans["bonds"]:
-                    print(constraint)
                     steps, size = constraint[-2:]
                     atom1, atom2 = self.geometry.find(constraint[:-2])
                     ndx1 = self.geometry.atoms.index(atom1) 
@@ -809,7 +808,7 @@ class OptimizationJob(JobType):
             self.scans[key] for key in self.scans.keys()
         ):
             for key in self.scans:
-                if key not in [
+                if self.scans[key] and key not in [
                     "bonds",
                     "angles",
                     "torsions",
@@ -817,7 +816,7 @@ class OptimizationJob(JobType):
                     raise NotImplementedError(
                         "%s scans cannot be generated for ORCA" % key
                     )
-            geom_scans = ""
+            geom_scans = []
             if "bonds" in self.scans:
                 for scan in self.scans["bonds"]:
                     steps, size = scan[-2:]
@@ -826,10 +825,10 @@ class OptimizationJob(JobType):
                     ndx2 = self.geometry.atoms.index(atom2)
                     start = atom1.dist(atom2)
                     stop = start + size * (steps - 1)
-                    out_str = "Scan B %i %i [%s] end\n" % (
+                    out_str = "Scan B %i %i [%s] end" % (
                         ndx1, ndx2, " ".join("%.3f" % x for x in np.linspace(start, stop, steps))
                     )
-                    geom_scans += out_str
+                    geom_scans.append(out_str)
     
             if "angles" in self.scans:
                 for scan in self.scans["angles"]:
@@ -840,10 +839,10 @@ class OptimizationJob(JobType):
                     ndx3 = self.geometry.atoms.index(atom3)
                     start = np.rad2deg(atom2.angle(atom1, atom3))
                     stop = start + size * (steps - 1)
-                    out_str = "Scan A %i %i %i [%s] end\n" % (
+                    out_str = "Scan A %i %i %i [%s] end" % (
                         ndx1, ndx2, ndx3, " ".join("%.3f" % x for x in np.linspace(start, stop, steps))
                     )
-                    geom_scans += out_str
+                    geom_scans.append(out_str)
 
             if "torsions" in self.scans:
                 for scan in self.scans["torsions"]:
@@ -855,15 +854,15 @@ class OptimizationJob(JobType):
                     ndx4 = self.geometry.atoms.index(atom4)
                     start = np.rad2deg(self.geometry.dihedral(atom1, atom2, atom3, atom4))
                     stop = start + size * (steps - 1)
-                    out_str = "Scan D %i %i %i %i [%s] end\n" % (
+                    out_str = "Scan D %i %i %i %i [%s] end" % (
                         ndx1, ndx2, ndx3, ndx4, " ".join("%.3f" % x for x in np.linspace(start, stop, steps))
                     )
-                    geom_scans += out_str
+                    geom_scans.append(out_str)
             
-            geom_scans = geom_scans.rstrip()
+            print(geom_scans)
             out.setdefault(ORCA_BLOCKS, {})
             out[ORCA_BLOCKS].setdefault("geom", [])
-            out[ORCA_BLOCKS]["geom"].append(geom_scans)
+            out[ORCA_BLOCKS]["geom"].extend(geom_scans)
 
         return out, []
 
@@ -887,7 +886,7 @@ class OptimizationJob(JobType):
         freeze_str += 'freeze_list = """\n'
         add_freeze_list = False
 
-        if self.scans:
+        if self.scans and any(self.scans[key] for key in self.scans):
             raise NotImplementedError(
                 "coordinate scans have not been implemented for the Psi4 input builder"
             )
@@ -1255,7 +1254,6 @@ class OptimizationJob(JobType):
             if "y" in self.constraints and self.constraints["y"]:
                 y_atoms = self.geometry.find(self.constraints["y"])
 
-
             if "z" in self.constraints and self.constraints["z"]:
                 z_atoms = self.geometry.find(self.constraints["z"])
 
@@ -1347,7 +1345,71 @@ class OptimizationJob(JobType):
             if constraints:
                 constraints += "    ENDCONSTRAINT"
                 out[QCHEM_SETTINGS]["opt"].append(constraints)
-        
+
+        if self.scans is not None and any(
+            self.scans[key] for key in self.scans.keys()
+        ):
+            for key in self.scans:
+                if self.scans[key] and key not in [
+                    "bonds",
+                    "angles",
+                    "torsions",
+                ]:
+                    raise NotImplementedError(
+                        "%s scans cannot be generated for Gaussian" % key
+                    )
+            
+            out.setdefault(QCHEM_SETTINGS, {})
+            out[QCHEM_SETTINGS].setdefault("scans", [])
+
+            if "bonds" in self.scans:
+                for constraint in self.scans["bonds"]:
+                    steps, size = constraint[-2:]
+                    atom1, atom2 = self.geometry.find(constraint[:-2])
+                    ndx1 = self.geometry.atoms.index(atom1) 
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2) 
+                    ndx2 += 1
+                    current = atom1.dist(atom2)
+                    final = current + size * steps
+                    out[QCHEM_SETTINGS]["scans"].append(
+                        "stre %2i %2i %.4f %.4f %.4f" % (ndx1, ndx2, current, final, size)
+                    )
+
+            if "angles" in self.scans:
+                for constraint in self.scans["angles"]:
+                    steps, size = constraint[-2:]
+                    atom1, atom2, atom3 = self.geometry.find(constraint[:-2])
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3)
+                    ndx3 += 1
+                    current = np.rad2deg(atom2.angle(atom1, atom3))
+                    final = current + steps * size
+                    out[QCHEM_SETTINGS]["scans"].append(
+                        "bend %2i %2i %2i %.4f %.4f %.4f" % (ndx1, ndx2, ndx3, current, final, size)
+                    )
+
+            if "torsions" in self.scans:
+                for constraint in self.scans["torsions"]:
+                    steps, size = constraint[-2:]
+                    atom1, atom2, atom3, atom4 = self.geometry.find(constraint[:-2])
+                    ndx1 = self.geometry.atoms.index(atom1)
+                    ndx1 += 1
+                    ndx2 = self.geometry.atoms.index(atom2)
+                    ndx2 += 1
+                    ndx3 = self.geometry.atoms.index(atom3)
+                    ndx3 += 1
+                    ndx4 = self.geometry.atoms.index(atom4)
+                    ndx4 += 1
+                    current = np.rad2deg(self.geometry.dihedral(atom1, atom2, atom3, atom4))
+                    final = current + steps * size
+                    out[QCHEM_SETTINGS]["scans"].append(
+                        "tors %2i %2i %2i %2i %.4f %.4f %.4f" % (ndx1, ndx2, ndx3, ndx4, current, final, size)
+                    )
+
         return out, []
 
     @staticmethod

@@ -567,7 +567,7 @@ def trim_leaves(graph, _removed=None):
     return graph, set(_removed)
 
 
-def to_closing(string, brace):
+def to_closing(string, brace, allow_escapes=False):
     """
     returns the portion of string from the beginning to the closing
     paratheses or bracket denoted by brace
@@ -587,11 +587,17 @@ def to_closing(string, brace):
 
     out = ""
     count = 0
+    escaped = False
     for x in string:
-        if x == pair[0]:
+        if not escaped and x == pair[0]:
             count += 1
-        elif x == pair[1]:
+        elif not escaped and x == pair[1]:
             count -= 1
+
+        if allow_escapes and x == "\\":
+            escaped = True
+        else:
+            escaped = False
 
         out += x
         if count == 0:
