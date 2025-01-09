@@ -1596,10 +1596,10 @@ class FileReader:
                 oniom=oniom
             )
         elif isinstance(self.content, str):
-            if os.path.isfile(self.name):
-                f = open(self.name, "r", encoding="utf8")
-            elif len(self.content.splitlines()):
+            if len(self.content.splitlines()):
                 f = StringIO(self.content)
+            elif os.path.isfile(self.name):
+                f = open(self.name, "r", encoding="utf8")
             else:
                 fname = ".".join([self.name, self.file_type])
                 fname = os.path.expanduser(fname)
@@ -1712,18 +1712,17 @@ class FileReader:
             the array would not be stored
         :param str log: log for reading log files
         """
-        if os.path.isfile(self.name):
+        fname = ".".join([self.name, self.file_type])
+        fname = os.path.expanduser(fname)
+        if os.path.isfile(fname):
+            f = open(fname, "r")
+        elif os.path.isfile(self.name):
             f = open(self.name, "r")
         else:
-            fname = ".".join([self.name, self.file_type])
-            fname = os.path.expanduser(fname)
-            if os.path.isfile(fname):
-                f = open(fname, "r")
-            else:
-                raise FileNotFoundError(
-                    "Error while looking for %s: could not find %s or %s in %s"
-                    % (self.name, fname, self.name, os.getcwd())
-                )
+            raise FileNotFoundError(
+                "Error while looking for %s: could not find %s or %s in %s"
+                % (self.name, fname, self.name, os.getcwd())
+            )
 
         if self.file_type == "xyz":
             self.read_xyz(f, get_all, oniom)
