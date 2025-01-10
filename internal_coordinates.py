@@ -8,6 +8,14 @@ from scipy.spatial import distance_matrix
 from AaronTools.utils.utils import proj, perp_vector, unique_combinations
 
 
+def _xyzzy_cross(v1, v2):
+    """quick cross product of two 3-D vectors"""
+    out = np.zeros(3)
+    out[0] = v1[1] * v2[2] - v1[2] * v2[1]
+    out[1] = v1[2] * v2[0] - v1[0] * v2[2]
+    out[2] = v1[0] * v2[1] - v1[1] * v2[0]
+    return out
+
 
 def dist(coords_i, coords_j):
     return np.sqrt(sum((coords_i - coords_j)**2))
@@ -211,7 +219,7 @@ class LinearAngle(Coordinate):
         w = e_ij(coords[self.atom3], coords[self.atom2])
         return np.dot(v, w)
     
-        v2 = np.cross(v, coords[self.atom1] - coords[self.atom3])
+        v2 = _xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
 
         val1_a = Angle.angle(
@@ -235,7 +243,6 @@ class LinearAngle(Coordinate):
             coords[self.atom2],
             coords[self.atom2] + v2,
         )
-        print(val1_a, val1_b, val2_a, val2_b)
         return np.array([val1_a + val1_b, val2_a + val2_b])
 
     def s_vector(self, coords, w=None):
@@ -244,7 +251,7 @@ class LinearAngle(Coordinate):
         if v is None:
             v = perp_vector(e_ij(coords[self.atom1], coords[self.atom2]))
     
-        v2 = np.cross(v, coords[self.atom1] - coords[self.atom3])
+        v2 = _xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
         
         s[0, 3 * self.atom1 : 3 * self.atom1 + 3] = -v / dist(coords[self.atom1], coords[self.atom2])
@@ -256,9 +263,87 @@ class LinearAngle(Coordinate):
         s[1, 3 * self.atom3 : 3 * self.atom3 + 3] = -v2 / dist(coords[self.atom2], coords[self.atom3])
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom1 : 3 * self.atom1 + 3]
         s[1, 3 * self.atom2 : 3 * self.atom2 + 3] -= s[0, 3 * self.atom3 : 3 * self.atom3 + 3]
+
+        return s
+
+
+class LinearAngle4(Coordinate):
+    n_values = 1
+
+    def __init__(self, atom1, atom2, atom3, atom4):
+        self.atom1 = atom1
+        self.atom2 = atom2
+        self.atom3 = atom3
+        self.atom4 = atom4
+    
+    def __eq__(self, other):
+        if not isinstance(other, LinearAngle4):
+            return False
         
-        print(s)
+        if self.atom2 != other.atom2:
+            return False
         
+        if (
+            self.atom1 == other.atom1 and
+            self.atom3 == other.atom3
+        ):
+            return True
+
+        if (
+            self.atom1 == other.atom3 and
+            self.atom3 == other.atom1
+        ):
+            return True
+
+        return False
+
+    def __repr__(self):
+        return "linear angle %i-%i-%i (%i)" % (
+            self.atom1,
+            self.atom2,
+            self.atom3,
+            self.atom4
+        )
+
+    def value(self, coords):
+        return \
+            Angle.angle(
+                coords[self.atom1], coords[self.atom2], coords[self.atom4]
+            ) + Angle.angle(
+                coords[self.atom4], coords[self.atom2], coords[self.atom3]
+            )
+
+    @staticmethod
+    def angle(x1, x2, x3):
+        a2 = sum((x1 - x2)**2)
+        b2 = sum((x3 - x2)**2)
+        c2 = sum((x1 - x3)**2)
+        theta = np.arccos((c2 - a2 - b2) / (-2 * np.sqrt(a2 * b2)))
+        if np.isnan(theta):
+            return np.pi
+        return theta
+
+    def s_vector(self, coords):
+        a = dist(coords[self.atom1], coords[self.atom2])
+        b = dist(coords[self.atom4], coords[self.atom2])
+        s = np.zeros(3 * len(coords))
+        a_ijk = Angle.angle(coords[self.atom1], coords[self.atom2], coords[self.atom4])
+        e_21 = e_ij(coords[self.atom2], coords[self.atom1])
+        e_23 = e_ij(coords[self.atom2], coords[self.atom4])
+        s[3 * self.atom1 : 3 * self.atom1 + 3] = (np.cos(a_ijk) * e_21 - e_23) / (a * np.sin(a_ijk))
+        s[3 * self.atom4 : 3 * self.atom4 + 3] = (np.cos(a_ijk) * e_23 - e_21) / (b * np.sin(a_ijk))
+        s[3 * self.atom2 : 3 * self.atom2 + 3] = -s[3 * self.atom1 : 3 * self.atom1 + 3]
+        s[3 * self.atom2 : 3 * self.atom2 + 3] -= s[3 * self.atom4 : 3 * self.atom4 + 3]
+        
+        a = dist(coords[self.atom4], coords[self.atom2])
+        b = dist(coords[self.atom3], coords[self.atom2])
+        a_ijk = Angle.angle(coords[self.atom4], coords[self.atom2], coords[self.atom3])
+        e_21 = e_ij(coords[self.atom2], coords[self.atom4])
+        e_23 = e_ij(coords[self.atom2], coords[self.atom3])
+        s[3 * self.atom4 : 3 * self.atom4 + 3] += (np.cos(a_ijk) * e_21 - e_23) / (a * np.sin(a_ijk))
+        s[3 * self.atom3 : 3 * self.atom3 + 3] += (np.cos(a_ijk) * e_23 - e_21) / (b * np.sin(a_ijk))
+        s[3 * self.atom2 : 3 * self.atom2 + 3] += -s[3 * self.atom4 : 3 * self.atom4 + 3]
+        s[3 * self.atom2 : 3 * self.atom2 + 3] -= s[3 * self.atom3 : 3 * self.atom3 + 3]
         return s
 
 
@@ -274,7 +359,7 @@ class OutOfPlaneBend(Coordinate):
         e_23 = e_ij(coords[self.central_atom], coords[self.planar_atoms[1]])
         e_24 = e_ij(coords[self.central_atom], coords[self.planar_atoms[2]])
         e_12 = e_ij(coords[self.planar_atoms[0]], coords[self.central_atom])
-        v = np.cross(e_23, e_24)
+        v = _xyzzy_cross(e_23, e_24)
         v /= np.linalg.norm(v)
         pv = proj(e_12, v)
         n = np.linalg.norm(pv)
@@ -312,7 +397,7 @@ class OutOfPlaneBend(Coordinate):
         
         theta = self.value(coords)
         
-        v = np.cross(e_23, e_24) / np.sin(phi_i)
+        v = _xyzzy_cross(e_23, e_24) / np.sin(phi_i)
         
         s[3 * self.planar_atoms[0] : 3 * self.planar_atoms[0] + 3] = 1 / r_21
         s[3 * self.planar_atoms[0] : 3 * self.planar_atoms[0] + 3] *= v
@@ -388,9 +473,9 @@ class Torsion(Coordinate):
         e_12 = e_ij(coords[self.atom1], coords[self.atom2])
         e_2l = e_ij(coords[self.atom2], coords[self.group2[0]])
         
-        v1 = np.cross(e_i1, e_12)
-        v2 = np.cross(e_12, e_2l)
-        angle = np.cross(v1, v2)
+        v1 = _xyzzy_cross(e_i1, e_12)
+        v2 = _xyzzy_cross(e_12, e_2l)
+        angle = _xyzzy_cross(v1, v2)
 
         angle = np.dot(angle, e_12)
         angle = np.arctan2(
@@ -411,16 +496,16 @@ class Torsion(Coordinate):
             r_i1 = dist(coords[i], coords[self.atom1])
             
             s[3 * i : 3 * i + 3] = -1 / len(self.group1)
-            s[3 * i : 3 * i + 3] *= np.cross(e_i1, e_12) / r_i1
+            s[3 * i : 3 * i + 3] *= _xyzzy_cross(e_i1, e_12) / r_i1
             s[3 * i : 3 * i + 3] /= np.sin(a_i12) ** 2
             
             s[3 * self.atom1 : 3 * self.atom1 + 3] += (
                 (r_12 - r_i1 * np.cos(a_i12)) / (r_i1 * r_12 * np.sin(a_i12) ** 2)
-            ) * np.cross(e_i1, e_12) / len(self.group1)
+            ) * _xyzzy_cross(e_i1, e_12) / len(self.group1)
             
             s[3 * self.atom2 : 3 * self.atom2 + 3] += (
                 (np.cos(a_i12) / (r_12 * np.sin(a_i12) ** 2))
-            ) * np.cross(e_i1, e_12) / len(self.group1)
+            ) * _xyzzy_cross(e_i1, e_12) / len(self.group1)
         
         for l in self.group2:
             e_l2 = e_ij(coords[l], coords[self.atom2])
@@ -428,16 +513,16 @@ class Torsion(Coordinate):
             r_l2 = dist(coords[l], coords[self.atom2])
             
             s[3 * l : 3 * l + 3] = -1 / len(self.group2)
-            s[3 * l : 3 * l + 3] *= np.cross(e_l2, -e_12) / r_l2
+            s[3 * l : 3 * l + 3] *= _xyzzy_cross(e_l2, -e_12) / r_l2
             s[3 * l : 3 * l + 3] /= np.sin(a_l21) ** 2
             
             s[3 * self.atom2 : 3 * self.atom2 + 3] += (
                 (r_12 - r_l2 * np.cos(a_l21)) / (r_l2 * r_12 * np.sin(a_l21) ** 2)
-            ) * np.cross(e_l2, -e_12) / len(self.group2)
+            ) * _xyzzy_cross(e_l2, -e_12) / len(self.group2)
             
             s[3 * self.atom1 : 3 * self.atom1 + 3] += (
                 np.cos(a_l21) / (r_12 * np.sin(a_l21) ** 2)
-            ) * np.cross(e_l2, -e_12) / len(self.group2)
+            ) * _xyzzy_cross(e_l2, -e_12) / len(self.group2)
         
         return s
 
@@ -517,7 +602,7 @@ class InternalCoordinateSet:
                 continue
             for coord2 in self.coordinates["linear angles"]:
                 try:
-                    if coord1.atom2 != coord2.atom1:
+                    if coord1.atom2 != coord2.atom2:
                         continue
                 except AttributeError:
                     continue
@@ -526,6 +611,7 @@ class InternalCoordinateSet:
                 if coord1.atom3 == coord2.atom1 and coord1.atom1 == coord3.atom3:
                     remove_coords.append(i)
     
+        print("removing", len(remove_coords), "coordinates")
         for i in remove_coords[::-1]:
             self.coordinates["angles"].pop(i)
     
@@ -731,19 +817,38 @@ class InternalCoordinateSet:
                             # print("\t", atom2.name)
                     
                     for atom3 in set(linear_atoms_1).intersection(atom1.connected):
-                        new_linear_angle = [
-                            # CartesianCoordinate(ndx[atom1]),
-                            CartesianCoordinate(ndx[atom2]),
-                            # CartesianCoordinate(ndx[atom3])
-                        ]
-                        for xyz in new_linear_angle:
-                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
-                                added_coords = True
-                                self.coordinates["linear angles"].append(xyz)
-                                # print("new linear angle:")
-                                # print("\t", atom3.name)
-                                # print("\t", atom1.name)
-                                # print("\t", atom2.name)
+                        for atom in geometry.get_fragment(atom3, stop=atom1):
+                            if (
+                                atom is atom1 or
+                                atom is atom2 or
+                                atom is atom3
+                            ):
+                                continue
+                            angle = atom2.angle(atom1, atom)
+                            if angle > 0.1 and angle < 0.9 * np.pi:
+                                angle = Angle(ndx[atom1], ndx[atom2], ndx[atom])
+                                if not any(coord == angle for coord in self.coordinates["angles"]):
+                                    added_coords = True
+                                    self.coordinates["angles"].append(angle)
+                                    print("1 added linear angle half", angle)
+                                    break
+                                else:
+                                    break
+                        else:
+                            new_linear_angle = [
+                                CartesianCoordinate(ndx[atom1]),
+                                CartesianCoordinate(ndx[atom2]),
+                                CartesianCoordinate(ndx[atom3])
+                            ]
+                            for xyz in new_linear_angle:
+                                if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                    added_coords = True
+                                    self.coordinates["linear angles"].append(xyz)
+                                    print("added linear angle cartesian", xyz)
+                                    # print("new linear angle:")
+                                    # print("\t", atom3.name)
+                                    # print("\t", atom1.name)
+                                    # print("\t", atom2.name)
                     
                     for atom3 in set(nonlinear_atoms_2).intersection(atom2.connected):
                         if atom3 is atom1:
@@ -758,20 +863,39 @@ class InternalCoordinateSet:
                             # print("\t", atom1.name)
                     
                     for atom3 in set(linear_atoms_2).intersection(atom2.connected):
-                        new_linear_angle = [
-                            # CartesianCoordinate(ndx[atom1]),
-                            CartesianCoordinate(ndx[atom2]),
-                            # CartesianCoordinate(ndx[atom3])
-                        ]
-                        for xyz in new_linear_angle:
-                            if not any(coord == xyz for coord in self.coordinates["linear angles"]):
-                                added_coords = True
-                                self.coordinates["linear angles"].append(xyz)
-                                # print("new linear angle:")
-                                # print("\t", atom3.name)
-                                # print("\t", atom1.name)
-                                # print("\t", atom2.name)
-                    
+                        for atom in geometry.get_fragment(atom3, stop=atom2):
+                            if (
+                                atom is atom1 or
+                                atom is atom2 or
+                                atom is atom3
+                            ):
+                                continue
+                            angle = atom3.angle(atom1, atom)
+                            if angle > 0.1 and angle < 0.9 * np.pi:
+                                angle = Angle(ndx[atom1], ndx[atom3], ndx[atom])
+                                if not any(coord == angle for coord in self.coordinates["angles"]):
+                                    added_coords = True
+                                    self.coordinates["angles"].append(angle)
+                                    print("2 added linear angle half", angle)
+                                    break
+                                else:
+                                    break
+                        else:
+                            new_linear_angle = [
+                                CartesianCoordinate(ndx[atom1]),
+                                CartesianCoordinate(ndx[atom2]),
+                                CartesianCoordinate(ndx[atom3])
+                            ]
+                            for xyz in new_linear_angle:
+                                if not any(coord == xyz for coord in self.coordinates["linear angles"]):
+                                    added_coords = True
+                                    self.coordinates["linear angles"].append(xyz)
+                                    print("added linear angle cartesian", xyz)
+                                    # print("new linear angle:")
+                                    # print("\t", atom3.name)
+                                    # print("\t", atom1.name)
+                                    # print("\t", atom2.name)
+
         print("there are %i internal coordinates" % self.n_dimensions)
         print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
         # print(len(self.coordinates["torsions"]))

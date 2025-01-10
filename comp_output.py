@@ -273,6 +273,7 @@ class CompOutput:
         :param float pressure: pressure in atm
         :param float v0: float, cutoff/damping parameter for quasi G corrections
         :param str method: treatment of entropy\:
+            
             * RRHO  - no quasi treatment
             * QRRHO - Grimme's quasi-RRHO
               see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
