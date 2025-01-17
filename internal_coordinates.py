@@ -650,7 +650,7 @@ class InternalCoordinateSet:
             if oop_type != "none":
                 if len(atom1.connected) > 2:
                     vsepr, _ = atom1.get_vsepr()
-                    print(atom1, vsepr)
+                    # print(atom1, vsepr)
                     if vsepr and "planar" in vsepr:
                         for trio in combinations(atom1.connected, 3):
                             trio_ndx = [ndx[a] for a in trio]
@@ -829,10 +829,10 @@ class InternalCoordinateSet:
                                 atom3 is atom2
                             ):
                                 continue
-                            print(1, atom2, atom1, atom3)
+                            # print(1, atom2, atom1, atom3)
                             angle = atom1.angle(atom2, atom3)
                             if angle > 0.1 and angle < 0.9 * np.pi:
-                                print("angle is not linear", added_angles)
+                                # print("angle is not linear", added_angles)
                                 for angle in added_angles:
                                     if angle.atom2 != ndx[atom1]:
                                         continue
@@ -842,13 +842,14 @@ class InternalCoordinateSet:
                                     b_ij = e_ij(atom1.coords, atom2.coords)
                                     b_jk = e_ij(atom1.coords, atom3.coords)
                                     vb = _xyzzy_cross(b_ij, b_jk)
-                                    print(va, vb)
+                                    # print(va, vb)
                                     d = np.dot(va, vb)
                                     if abs(d) > 0.8 or abs(d) < 0.2:
-                                        print("angle in plane already added")
+                                        # print("angle in plane already added")
                                         break
                                     else:
-                                        print("angle is not in same plane as", angle, d)
+                                        # print("angle is not in same plane as", angle, d)
+                                        pass
 
                                 else:
                                     new_angle = Angle(ndx[atom2], ndx[atom1], ndx[atom3])
@@ -856,12 +857,14 @@ class InternalCoordinateSet:
                                         added_coords = True
                                         self.coordinates["linear angles"].append(new_angle)
                                         added_angles.append(new_angle)
-                                        print("1 added linear angle half", new_angle)
+                                        # print("1 added linear angle half", new_angle)
                                     else:
-                                        print("angle exists")
+                                        # print("angle exists")
+                                        pass
 
                             else:
-                                print("angle is linear", angle)
+                                # print("angle is linear", angle)
+                                pass
 
                     for atom3 in set(nonlinear_atoms_2).intersection(atom2.connected):
                         if atom3 is atom1:
@@ -885,7 +888,7 @@ class InternalCoordinateSet:
                                 atom3 is atom2
                             ):
                                 continue
-                            print(2, atom1, atom2, atom3)
+                            # print(2, atom1, atom2, atom3)
                             angle = atom2.angle(atom1, atom3)
                             if angle > 0.1 and angle < 0.9 * np.pi:
                                 for angle in added_angles:
@@ -898,24 +901,27 @@ class InternalCoordinateSet:
                                     b_jk = e_ij(atom2.coords, atom3.coords)
                                     vb = _xyzzy_cross(b_ij, b_jk)
                                     d = np.dot(va, vb)
-                                    print(va, vb)
+                                    # print(va, vb)
                                     if abs(d) > 0.8 or abs(d) < 0.2:
-                                        print("angle in plane already added")
+                                        # print("angle in plane already added")
                                         break
                                     else:
-                                        print("angle is not in same plane as", angle, d)
+                                        # print("angle is not in same plane as", angle, d)
+                                        pass
                                 else:
                                     new_angle = Angle(ndx[atom1], ndx[atom2], ndx[atom3])
                                     if not any(coord == new_angle for coord in self.coordinates["linear angles"]):
                                         added_coords = True
                                         self.coordinates["linear angles"].append(new_angle)
                                         added_angles.append(new_angle)
-                                        print("2 added linear angle half", new_angle)
+                                        # print("2 added linear angle half", new_angle)
                                     else:
-                                        print("angle exists")
+                                        # print("angle exists")
+                                        pass
 
                             else:
-                                print("angle is linear", angle)
+                                # print("angle is linear", angle)
+                                pass
 
         print("there are %i internal coordinates" % self.n_dimensions)
         print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
@@ -959,11 +965,11 @@ class InternalCoordinateSet:
                 dx[3 * i + j] = 0
                 for k, x in enumerate(diff):
                     if abs(x) > x_step / 2:
-                        print(k // 3, k - 3 * (k // 3), x)
+                        # print(k // 3, k - 3 * (k // 3), x)
                         bad_spots.add(k // 3)
         
         for k in bad_spots:
-            print("adding cartesian for", k)
+            # print("adding cartesian for", k)
             self.coordinates.setdefault("cartesian", [])
             self.coordinates["cartesian"].append(CartesianCoordinate(k))
     
