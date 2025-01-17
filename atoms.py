@@ -413,13 +413,11 @@ class Atom:
 
     def dist_is_connected(self, other, dist_to_other, tolerance):
         """
-        determines if distance between atoms is small enough to be bonded
-        
-        used to optimize connected checks when distances can be quickly precalculated,
+        determines if distance between atoms is small enough to be bonded. Used to optimize connected checks when distances can be quickly precalculated,
         like with scipy.spatial.distance_matrix
+
         :param Atom other: atom to measure the distance between
-        :param float tolerance: buffer for consideration of what is "small enough"; d
-efault is 0.3. Cutoff for what constitutes small enough is the sum of the atoms' radii and the tolerance value
+        :param float tolerance: buffer for consideration of what is "small enough"; default is 0.3. Cutoff for what constitutes small enough is the sum of the atoms' radii and the tolerance value
         :param float dist_to_other: distance between the atoms in Angstroms
         :returns: True if distance is small enough to be bonded, False otherwise
         :rtype: boolean

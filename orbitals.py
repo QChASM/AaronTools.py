@@ -1704,7 +1704,7 @@ class Orbitals:
         spin=False
     ):
         """
-        returns the eletron density
+        returns the electron density
         
         :param np.ndarray coords: coordinates to calculate e density at
         :param int n_jobs: number of concurrent threads to use in calculation
@@ -2167,8 +2167,10 @@ class Orbitals:
         
         * coords is an array of points in the cube
         
-        * n_list specifies where each point is along the axes
-        e.g. 5th point along v1, 4th point along v2, 0th point along v3
+        * n_list specifies where each point is along the axes 
+            e.g. 5th point along v1, 4th point along v2, 0th point along v3
+
+        for a list of parameters, see the returns field of get_cube_array
         """
         v_list = [v1, v2, v3]
         n_list = [n_pts1, n_pts2, n_pts3]
@@ -2441,7 +2443,7 @@ class Orbitals:
         values are normalized so they sum to 1
         
         :param Geometry geom: structure
-        :param args:passed to power_integral
+        :param args: passed to power_integral
         :param kwargs: passed to power_integral
         
         :returns: array for each atom's condensed Fukui donor values
@@ -2468,7 +2470,7 @@ class Orbitals:
         values are normalized so they sum to 1
         
         :param Geometry geom: structure
-        :param args:passed to power_integral
+        :param args: passed to power_integral
         :param kwargs: passed to power_integral
         
         :returns: array for each atom's condensed Fukui acceptor values

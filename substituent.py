@@ -380,7 +380,11 @@ class Substituent(Geometry):
 
     @classmethod
     def list(cls, include_ext=False):
-        """list substituents available from AaronTools or the user's library"""
+        """
+        list substituents available from AaronTools or the user's library
+
+        :param bool include_ext: includes file extensions when true
+        """
         names = []
         substituents = []
         for lib in [cls.AARON_LIBS, cls.BUILTIN]:
