@@ -5683,13 +5683,13 @@ class FileReader:
         i = 0
         while i < len(lines):
             line = lines[i]
-            if line.startswith(" $"):
+            if line.strip().startswith("$"):
                 section = line.split()[0]
                 if section.startswith("$COORD"):
                     i += 1
                     self.atoms = []
                     line = lines[i]
-                    while not line.startswith(" $END"):
+                    while not line.strip().startswith("$END"):
                         if re.search("\d+\s+\d+(?:\s+-?\d+\.\d+\s){3}", line):
                             info = line.split()
                             ndx = int(info[0])
@@ -5708,7 +5708,7 @@ class FileReader:
                     reading_labels = False
                     i += 1
                     line = lines[i]
-                    while not line.startswith(" $END"):
+                    while not line.strip().startswith("$END"):
                         if "CENTER" in line.upper():
                             self.other["shell_to_atom"] = [
                                 int(x) for x in line.split()[2:]
@@ -5746,7 +5746,7 @@ class FileReader:
                     }
                     i += 1
                     line = lines[i]
-                    while not line.startswith(" $END"):
+                    while not line.strip().startswith("$END"):
                         if any(line.strip().startswith(section) for section in int_sections):
                             section = line.split()[0]
                             self.other[int_sections[section]] = [
