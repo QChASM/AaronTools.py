@@ -11,6 +11,13 @@ from AaronTools.utils.utils import (
 
 
 class SymmetryElement:
+    """
+    Attributes:
+
+    * order
+    * translation
+    * operation
+    """
     def __init__(self, order, center):
         self.order = order
         self.operation = np.identity(3)
@@ -127,7 +134,18 @@ class Identity(SymmetryElement):
 
 
 class ProperRotation(SymmetryElement):
-    """proper rotation"""
+    """
+    proper rotation
+    
+    Attributes:
+
+    * order
+    * operation
+    * translation
+    * axis
+    * n
+    * exp
+    """
     def __init__(self, center, axis, n, exp=1):
         self.order = n
         self.operation = rotation_matrix(
@@ -169,7 +187,17 @@ class ProperRotation(SymmetryElement):
 
 
 class MirrorPlane(SymmetryElement):
-    """mirror plane"""
+    """
+    mirror plane
+    
+    Attributes:
+
+    * order
+    * translation
+    * axis
+    * operation
+    * label
+    """
     def __init__(self, center, axis, label=None):
         self.order = 2
         self.translation = center
@@ -195,7 +223,15 @@ class MirrorPlane(SymmetryElement):
 
 
 class InversionCenter(SymmetryElement):
-    """inversion center"""
+    """
+    inversion center
+    
+    Attributes:
+    
+    * order
+    * operation
+    * translation
+    """
     def __init__(self, center):
         self.order = 2
         self.operation = -np.identity(3)
@@ -217,7 +253,18 @@ class InversionCenter(SymmetryElement):
 
 
 class ImproperRotation(SymmetryElement):
-    """improper rotation"""
+    """
+    improper rotation
+    
+    Attributes:
+
+    * order
+    * operation
+    * axis
+    * translation
+    * n
+    * exp
+    """
     def __init__(self, center, axis, n, exp=1):
         self.order = n
         self.operation = np.matmul(
@@ -271,7 +318,18 @@ class ImproperRotation(SymmetryElement):
 
 @addlogger
 class PointGroup:
-    """determines point group and valid symmetry operations for a structure"""
+    """
+    determines point group and valid symmetry operations for a structure
+    
+    Attributes:
+
+    * geom
+    * tolerance
+    * max_rotation
+    * rotation_tolerance
+    * groups
+    * center
+    """
 
     LOG = None
 

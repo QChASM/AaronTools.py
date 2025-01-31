@@ -118,6 +118,7 @@ ERROR_ORCA = {
     "WARNING: Analytical Hessians are not yet implemented for meta-GGA functionals": "NUMFREQ",
     "ORCA finished with error return": "UNKNOWN",
     "UNRECOGNIZED OR DUPLICATED KEYWORD(S) IN SIMPLE INPUT LINE": "TYPO",
+    "Error (ORCA_GSTEP): Geometry optimization in internals failed and can not switch to Cartesian.": "INT_COORD",
 }
 
 # some exceptions are listed in https://psicode.org/psi4manual/master/_modules/psi4/driver/p4util/exceptions.html

@@ -37,10 +37,10 @@ class CompOutput:
     """
     Attributes:
         
-    * geometry    the last Geometry
-    * opts        list of Geometry for each optimization steps
-    * frequency   Frequency object
-    * archive     a string containing the archive entry
+    * geometry    - the last Geometry
+    * opts        - list of Geometry for each optimization steps
+    * frequency   - Frequency object
+    * archive     - a string containing the archive entry
     * energy, enthalpy, free_energy, grimme_g,
     * mass, temperature, rotational_temperature,
     * multiplicity, charge, rotational_symmetry_number
@@ -174,7 +174,7 @@ class CompOutput:
             take the electronic energy from order should correspond
             to thermo_cos if not given, the energies from thermo_cos
             are used
-        :param str weighting:type of energy to use for weighting
+        :param str weighting: type of energy to use for weighting
             can be:
             
                 * "NRG"
@@ -445,6 +445,9 @@ class CompOutput:
         see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
         Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
         18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
+        
+        :param float temperature: temperature; default is self.temperature
+        :param float v0: parameter for quasi-RRHO or quasi-harmonic entropy
         """
         Gcorr_qRRHO = self.calc_G_corr(
             temperature=temperature, v0=v0, method=self.QUASI_RRHO, **kwargs
@@ -452,7 +455,15 @@ class CompOutput:
         return Gcorr_qRRHO + self.energy
 
     def bond_change(self, atom1, atom2, threshold=0.25):
-        """"""
+        """
+        detects changes in bonds by comparing each structure along optimization (starting with opts[0])
+
+        :param Atom atom1: first atom
+        :param Atom atom2: second atom - bond being inspected is between atom1 and atom2
+        :param float threshold: threshold for a bond being considered "changed"; if the difference of the distances between the atoms is below the threshold then it is not considered changed.
+        :returns: index of the LATEST geometry where the bond is changed
+        :rtype: int
+        """
         ref = self.opts[0]
         d_ref = ref.atoms[atom1].dist(ref.atoms[atom2])
 

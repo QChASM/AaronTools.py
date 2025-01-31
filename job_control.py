@@ -22,13 +22,13 @@ class SubmitProcess:
     class for submitting jobs to the queue
     attributes:
 
-    * name:      name of job and input file minus the extension
-    * exe        type of input file (com, in, inp)
-    * directory  directory the input file is in
-    * walltime   allocated walltime in hours
-    * processors allocated processors
-    * memory     allocated memory in GB
-    * template   template job file
+    * name       - name of job and input file minus the extension
+    * exe        - type of input file (com, in, inp)
+    * directory  - directory the input file is in
+    * walltime   - allocated walltime in hours
+    * processors - allocated processors
+    * memory     - allocated memory in GB
+    * template   - template job file
     
     """
 
