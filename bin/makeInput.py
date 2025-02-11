@@ -565,7 +565,8 @@ for pos in [PSI4_BEFORE_GEOM, PSI4_AFTER_JOB, PSI4_BEFORE_JOB, GAUSSIAN_POST]:
         if pos not in kwargs:
             kwargs[pos] = []
 
-        kwargs[pos].extend([" ".join(word) for word in opt])
+        for words in opt:
+            kwargs[pos].append(words)
 
 if args.comments:
     kwargs["comments"] = [" ".join(comment) for comment in args.comments]
