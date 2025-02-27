@@ -1054,9 +1054,69 @@ class InternalCoordinateSet:
         for coord_type in self.coordinates:
             for coord in self.coordinates[coord_type]:
                 if isinstance(coord, Torsion):
-                    q[i] = np.arcsin(np.sin(q[i]))
+                    if q[i] > 2 * np.pi:
+                        q[i] -= (q[i] // (np.pi)) * np.pi
+                    elif q[i] < -np.pi:
+                        q[i] -= (q[i] // (np.pi)) * np.pi
                 i += coord.n_values
         return q
+
+    def apply_change_2(
+        self, coords, dq,
+        convergence=1e-10,
+        max_iterations=100,
+        step_limit=0.25,
+        debug=False,
+    ):
+        """
+        alternative method to change internal coordinates
+        This method aims to slowly approach the desired dq
+        rather than move immediately by dq
+        change coords (Cartesian Nx3 array) by the specified 
+        amount in internal coordinates (dq)
+        max_iterations: number of allowed cycles to try to meet the dq
+        step_limit: if any cartesian component of the step exceeds this amount,
+                    the step will be scaled down and the remaining difference
+                    will (hopefully) be handled on the next iteration
+                    Setting this option to e.g. 0.2 can improve stability for
+                    larger changes
+        convergence: end cycles if differences between actual step and dq
+                     is less than this amount
+        """
+        ndx = dq.nonzero()[0]
+        x0 = best_struc = np.reshape(coords, -1)
+        current_q = self.values(coords)
+        target_q = current_q + dq
+        prev_dx = np.zeros(len(x0))
+        dq = self.adjust_phase(target_q - current_q)
+        for i in range(0, max_iterations):
+            # for bigger changes, use harmonic
+            if any(abs(q) > 0.3 for q in dq):
+                force = 0.5 * dq * (dq ** 2)
+
+            # for smaller changes, use linear
+            else:
+                force = dq
+
+            B = self.B_matrix(np.reshape(x0, coords.shape))
+            B_pinv = np.linalg.pinv(B)
+            dx = np.dot(B_pinv, force)
+            while any(abs(x) > step_limit for x in dx):
+                dx /= 2
+
+            # basically steepest descent with momentum
+            x0 = x0 + 0.95 * dx + 0.05 * prev_dx
+            prev_dx = dx
+
+            current_q = self.values(np.reshape(x0, coords.shape))
+            dq = self.adjust_phase(target_q - current_q)
+
+            togo = np.linalg.norm(dq)
+            if togo < convergence:
+                break
+        
+        err = np.linalg.norm(dq)
+        return np.reshape(x0, coords.shape), err
 
     def apply_change(
         self, coords, dq,
@@ -1082,7 +1142,7 @@ class InternalCoordinateSet:
         """
         x0 = best_struc = np.reshape(coords, -1)
         ddq = np.zeros(len(dq))
-        target_q = self.adjust_phase(self.values(coords)) + dq
+        target_q = self.adjust_phase(self.values(coords) + dq)
         xq = dq.copy()
         smallest_dq = None
         for i in range(0, max_iterations):
@@ -1101,13 +1161,15 @@ class InternalCoordinateSet:
                 dx = step_limit * dx / max(np.absolute(dx))
             x1 = x0 + dx
 
-            ddq = self.adjust_phase(dq - self.difference(coords, np.reshape(x1, coords.shape)))
+            ddq = self.adjust_phase(
+                dq - self.difference(coords, np.reshape(x1, coords.shape))
+            )
 
             if use_delocalized:
                 dds = np.matmul(U.T, ddq)
-                togo = np.linalg.norm(dds)
-            else:
-                togo = np.linalg.norm(ddq)
+            #     togo = np.linalg.norm(dds)
+            # else:
+            togo = np.linalg.norm(ddq)
             
             x0 = x1
             xq = ddq
