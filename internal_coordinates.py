@@ -1065,7 +1065,7 @@ class InternalCoordinateSet:
         self, coords, dq,
         convergence=1e-10,
         max_iterations=100,
-        step_limit=0.25,
+        step_limit=0.35,
         debug=False,
     ):
         """
@@ -1089,6 +1089,11 @@ class InternalCoordinateSet:
         target_q = current_q + dq
         prev_dx = np.zeros(len(x0))
         dq = self.adjust_phase(target_q - current_q)
+        if debug:
+            with open("opt.xyz", "w") as f:
+                f.write("%i\n0.0\n" % len(coords))
+                for c in coords:
+                    f.write("C   %.3f   %.3f   %.3f\n" % tuple(c))
         for i in range(0, max_iterations):
             # for bigger changes, use harmonic
             if any(abs(q) > 0.3 for q in dq):
@@ -1105,13 +1110,22 @@ class InternalCoordinateSet:
                 dx /= 2
 
             # basically steepest descent with momentum
-            x0 = x0 + 0.95 * dx + 0.05 * prev_dx
+            x0 = x0 + 0.9 * dx + 0.1 * prev_dx
             prev_dx = dx
 
-            current_q = self.values(np.reshape(x0, coords.shape))
+            current_coords = np.reshape(x0, coords.shape)
+            if debug:
+                with open("opt.xyz", "a") as f:
+                    f.write("%i\n%i.0\n" % (len(current_coords), i + 1))
+                    for c in current_coords:
+                        f.write("C   %.3f   %.3f   %.3f\n" % tuple(c))
+
+            current_q = self.values(current_coords)
             dq = self.adjust_phase(target_q - current_q)
 
             togo = np.linalg.norm(dq)
+            if debug:
+                print("iter", i, "error", togo)
             if togo < convergence:
                 break
         
