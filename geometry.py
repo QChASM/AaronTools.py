@@ -2448,11 +2448,11 @@ class Geometry:
         stack = []
         for s in start:
             stack += sorted(s.connected)
-        atoms_left = set(targets) - set(order) - set(stack)
+        atoms_left = set(targets)
+        atoms_left -= set(order)
         while len(atoms_left) > 0:
             if not stack and atoms_left:
                 stack += [sorted(atoms_left)[0]]
-                atoms_left -= set(stack)
 
             this = stack.pop()
             if heavy_only and this.element == "H":
@@ -2462,7 +2462,10 @@ class Geometry:
             order += [this]
             visited.add(this)
             connected = set(this.connected & atoms_left)
-            atoms_left -= connected
+            try:
+                atoms_left.remove(this)
+            except KeyError:
+                pass
             stack += sorted(connected)
 
         return order, non_targets
