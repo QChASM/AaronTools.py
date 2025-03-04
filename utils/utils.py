@@ -585,6 +585,24 @@ def trim_leaves(graph, _removed=None):
     return graph, set(_removed)
 
 
+def prune_branches(graph):
+    """modifies graph in place to remove parts that
+    don't connect to other parts of the graph
+    graph is a list of lists defining the connectivity
+    i.e. only cycles are kept"""
+    # non-recursive version of trim_leaves that doesn't return what it removed
+    # graph of methane (atoms ordered as C H H H H) would be
+    # [[1, 2, 3, 4], [0], [0], [0], [0]]
+    trimmed_leaves = True
+    while trimmed_leaves:
+        trimmed_leaves = False
+        for i in range(0, len(graph)):
+            if len(graph[i]) == 1:
+                graph[graph[i][0]].remove(i)
+                graph[i] = []
+                trimmed_leaves = True
+
+
 def to_closing(string, brace, allow_escapes=False):
     """
     returns the portion of string from the beginning to the closing

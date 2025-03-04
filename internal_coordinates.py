@@ -923,8 +923,8 @@ class InternalCoordinateSet:
                                 # print("angle is linear", angle)
                                 pass
 
-        print("there are %i internal coordinates" % self.n_dimensions)
-        print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
+        # print("there are %i internal coordinates" % self.n_dimensions)
+        # print("there would be %i cartesian coordinates" % (3 * len(geometry.atoms)))
         # print(len(self.coordinates["torsions"]))
         # asdf
         return added_coords
