@@ -681,11 +681,20 @@ class Geometry:
 
     @classmethod
     def ring_conformers(cls, geometry, targets=None):
-        """returns a list of Geometry objects with varying ring conformations"""
+        """
+        returns a list of Geometry objects with varying ring conformations
+        :param Geometry geometry: structure to look for conformers of
+        :param Atom targets: atoms in rings to search for conformers of (default is all rings)
+        """
         import json
         
         from AaronTools.internal_coordinates import InternalCoordinateSet
         from AaronTools.utils.utils import shortest_path
+
+        # from cProfile import Profile
+        # 
+        # profile = Profile()
+        # profile.enable()
 
         normal_vseprs = {
             "linear 2": "linear",
@@ -832,8 +841,6 @@ class Geometry:
                 cls.LOG.warning("ring atoms and vseprs don't match!")
                 # continue
             
-            #TODO: try different versions of the VSEPRs
-            # like consider 'bent 2 tetrahedral' to be 'tetrahedral'
             for i in range(0, len(vseprs)):
                 vseprs = np.roll(vseprs, 1)
                 ring_torsions[-1] = np.roll(ring_torsions[-1], 1)
@@ -885,23 +892,35 @@ class Geometry:
         for combo in combos:
             i += 1
             
+            probably_useless = False
             #TODO: make finding the indices of a coordinate easier
             dq = np.zeros(ric.n_dimensions)
+            visited = set()
             for j, (ring, torsions) in enumerate(zip(rings, ring_torsions)):
                 for k, torsion in enumerate(torsions):
                     n = 0
                     for coord_type in ric.coordinates:
                         for coord in ric.coordinates[coord_type]:
                             if coord is torsion:
-                                dq[n : n + coord.n_values] = (
+                                if (
+                                    (torsion.atom1, torsion.atom2) in visited and
+                                    not np.isclose(dq[n] - np.deg2rad(combo[j][k]) + coord.value(coords), 0, atol=1e-4)
+                                ):
+                                    probably_useless = True
+
+                                dq[n : n + coord.n_values] = +(
                                     np.deg2rad(combo[j][k]) - coord.value(coords)
                                 )
-            
+                                visited.add((torsion.atom1, torsion.atom2))
+
                                 # print("changing", torsion, "by %.0f" % np.rad2deg(dq[n]))
                             n += coord.n_values
             
             # there will be at least one combination with basically no changes
             if np.linalg.norm(dq) < 1e-3:
+                continue
+            
+            if probably_useless:
                 continue
             
             # try setting the torsions
@@ -929,6 +948,9 @@ class Geometry:
 
             else:
                 unique_geoms.append(ref)
+        
+        # profile.disable()
+        # profile.print_stats()
         
         return unique_geoms
 

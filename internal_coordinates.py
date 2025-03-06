@@ -1,15 +1,18 @@
+import math
 from collections import deque
 from itertools import combinations
 from time import perf_counter
 
 import numpy as np
-from scipy.spatial import distance_matrix
+from scipy.spatial import distance_matrix, distance
+from scipy.linalg import pinv
 
 from AaronTools.utils.utils import proj, perp_vector, unique_combinations
 
 
 def _xyzzy_cross(v1, v2):
     """quick cross product of two 3-D vectors"""
+    # this tends to be faster than np.cross
     out = np.zeros(3)
     out[0] = v1[1] * v2[2] - v1[2] * v2[1]
     out[1] = v1[2] * v2[0] - v1[0] * v2[2]
@@ -18,23 +21,57 @@ def _xyzzy_cross(v1, v2):
 
 
 def dist(coords_i, coords_j):
+    """returns the distance from coords_i to coords_j"""
     return np.sqrt(sum((coords_i - coords_j)**2))
 
 
+def all_e_ij(coords, precomputed_dist=None):
+    """returns all pairwise unit vectors for coords (Nx3 array)"""
+    e_ij_mat = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+    if precomputed_dist is None:
+        dist = distance.squareform(distance.pdist(coords))
+    else:
+        dist = precomputed_dist
+    e_ij_mat = e_ij_mat / dist[:, :, np.newaxis]
+
+    return e_ij_mat
+
+
 def e_ij(coords_i, coords_j):
+    """returns unit vector from coords_i to coords_j"""
     v_ij = coords_j - coords_i
     r_ij = np.sqrt(sum(v_ij**2))
     return v_ij / r_ij
 
 
 class Coordinate:
+    """
+    base class for all other coordinates
     
+    Attributes:
+    
+        * n_values - how many values the coordinate has (most have 1)
+    """
     n_values = 1
 
-    def value(self, coords):
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        """
+        override this function to return the value(s) of your coordinate
+        given the cartesian coordinates
+        :param np.ndarray coords: Nx3 array of the molecule's cartesian coordinates
+        :param np.ndarray precomputed_dist: NxN array of pairwise distances between all atoms
+        :param np.ndarray precomputed_e_ij: NxNx3 array of pairwise unit vectors pointing from each atom to each other atom
+        """
         raise NotImplementedError
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        """
+        override this function to return the derivative of cartesian coordinates
+        with respect to your coordinate(s) given the cartesian coordinates
+        :param np.ndarray coords: Nx3 array of the molecule's cartesian coordinates
+        :param np.ndarray precomputed_dist: NxN array of pairwise distances between all atoms
+        :param np.ndarray precomputed_e_ij: NxNx3 array of pairwise unit vectors pointing from each atom to each other atom
+        """
         raise NotImplementedError
     
 
@@ -57,7 +94,7 @@ class CartesianCoordinate(Coordinate):
     def value(self, coords):
         return coords[self.atom]
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros((3, 3 * len(coords)))
         for i in range(0, 3):
             s[i, 3 * self.atom + i] = 1
@@ -84,12 +121,17 @@ class Bond(Coordinate):
     def __repr__(self):
         return "bond between atom %i and %i" % (self.atom1, self.atom2)
 
-    def value(self, coords):
-        return dist(coords[self.atom1], coords[self.atom2])
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_dist is None:
+            return dist(coords[self.atom1], coords[self.atom2])
+        return precomputed_dist[self.atom1, self.atom2]
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros(3 * len(coords))
-        e_12 = e_ij(coords[self.atom1], coords[self.atom2])
+        if precomputed_e_ij is not None:
+            e_12 = precomputed_e_ij[self.atom2, self.atom1]
+        else:
+            e_12 = e_ij(coords[self.atom1], coords[self.atom2])
         s[3 * self.atom1 : 3 * self.atom1 + 3] = -e_12
         s[3 * self.atom2 : 3 * self.atom2 + 3] = e_12
         return s
@@ -115,12 +157,17 @@ class InverseBond(Coordinate):
     def __repr__(self):
         return "inverse bond between atom %i and %i" % (self.atom1, self.atom2)
 
-    def value(self, coords):
-        return 1 / dist(coords[self.atom1], coords[self.atom2])
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_dist is None:
+            return 1 / dist(coords[self.atom1], coords[self.atom2])
+        return 1 / precomputed_dist[self.atom1, self.atom2]
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros(3 * len(coords))
-        e_12 = e_ij(coords[self.atom1], coords[self.atom2])
+        if precomputed_e_ij is not None:
+            e_12 = precomputed_e_ij[self.atom2, self.atom1]
+        else:
+            e_12 = e_ij(coords[self.atom1], coords[self.atom2])
         s[3 * self.atom1 : 3 * self.atom1 + 3] = -e_12
         s[3 * self.atom2 : 3 * self.atom2 + 3] = e_12
         return s * self.value(coords)
@@ -154,30 +201,71 @@ class Angle(Coordinate):
             self.atom3,
         )
 
-    def value(self, coords):
-        return Angle.angle(
-            coords[self.atom1], coords[self.atom2], coords[self.atom3]
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_dist is None:
+            return Angle.angle(
+                coords[self.atom1], coords[self.atom2], coords[self.atom3]
+            )
+        return Angle.angle_from_sq_distances(
+            precomputed_dist[self.atom1, self.atom2] ** 2,
+            precomputed_dist[self.atom3, self.atom2] ** 2,
+            precomputed_dist[self.atom1, self.atom3] ** 2
         )
 
     @staticmethod
     def angle(x1, x2, x3):
+        """
+        calculate the angle given three points
+        x2 is the middle point, and this calculates the angle between x2-x1 and x2-x3
+        """
         a2 = sum((x1 - x2)**2)
         b2 = sum((x3 - x2)**2)
         c2 = sum((x1 - x3)**2)
-        theta = np.arccos((c2 - a2 - b2) / (-2 * np.sqrt(a2 * b2)))
-        if np.isnan(theta):
-            return np.pi
+        return Angle.angle_from_sq_distances(a2, b2, c2)
+    
+    # this function is for a little bit extra speed when distances are
+    # already available
+    @staticmethod
+    def angle_from_sq_distances(a2, b2, c2):
+        """
+        calculate angle based on square distances
+        c2 is the squared side length opposite the vertex this function calculates the angle of
+        """
+        theta = math.acos((c2 - a2 - b2) / (-2 * math.sqrt(a2 * b2)))
+        # need to check nan in case there's numerical issues
+        if math.isnan(theta):
+            return math.pi
         return theta
 
-    def s_vector(self, coords):
-        a = dist(coords[self.atom1], coords[self.atom2])
-        b = dist(coords[self.atom3], coords[self.atom2])
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_dist is None:
+            a = dist(coords[self.atom1], coords[self.atom2])
+            b = dist(coords[self.atom3], coords[self.atom2])
+            a_ijk = self.value(
+                coords,
+                precomputed_dist=precomputed_dist,
+                precomputed_e_ij=precomputed_e_ij
+            )
+        else:
+            a = precomputed_dist[self.atom1, self.atom2]
+            b = precomputed_dist[self.atom3, self.atom2]
+            a_ijk = Angle.angle_from_sq_distances(
+                precomputed_dist[self.atom1, self.atom2] ** 2,
+                precomputed_dist[self.atom3, self.atom2] ** 2,
+                precomputed_dist[self.atom1, self.atom3] ** 2
+            )
         s = np.zeros(3 * len(coords))
-        a_ijk = self.value(coords)
-        e_21 = e_ij(coords[self.atom2], coords[self.atom1])
-        e_23 = e_ij(coords[self.atom2], coords[self.atom3])
-        s[3 * self.atom1 : 3 * self.atom1 + 3] = (np.cos(a_ijk) * e_21 - e_23) / (a * np.sin(a_ijk))
-        s[3 * self.atom3 : 3 * self.atom3 + 3] = (np.cos(a_ijk) * e_23 - e_21) / (b * np.sin(a_ijk))
+
+        sin_a_ijk = math.sin(a_ijk)
+        cos_a_ijk = math.cos(a_ijk)
+        if precomputed_e_ij is not None:
+            e_21 = precomputed_e_ij[self.atom1, self.atom2]
+            e_23 = precomputed_e_ij[self.atom3, self.atom2]
+        else:
+            e_21 = e_ij(coords[self.atom2], coords[self.atom1])
+            e_23 = e_ij(coords[self.atom2], coords[self.atom3])
+        s[3 * self.atom1 : 3 * self.atom1 + 3] = (cos_a_ijk * e_21 - e_23) / (a * sin_a_ijk)
+        s[3 * self.atom3 : 3 * self.atom3 + 3] = (cos_a_ijk * e_23 - e_21) / (b * sin_a_ijk)
         s[3 * self.atom2 : 3 * self.atom2 + 3] = -s[3 * self.atom1 : 3 * self.atom1 + 3]
         s[3 * self.atom2 : 3 * self.atom2 + 3] -= s[3 * self.atom3 : 3 * self.atom3 + 3]
         return s
@@ -214,7 +302,7 @@ class LinearAngle(Coordinate):
             self.atom3,
         )
 
-    def value(self, coords):
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         v = e_ij(coords[self.atom1], coords[self.atom2])
         w = e_ij(coords[self.atom3], coords[self.atom2])
         return np.dot(v, w)
@@ -245,7 +333,7 @@ class LinearAngle(Coordinate):
         )
         return np.array([val1_a + val1_b, val2_a + val2_b])
 
-    def s_vector(self, coords, w=None):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros((2, 3 * len(coords)))
 
         if v is None:
@@ -305,13 +393,24 @@ class LinearAngle4(Coordinate):
             self.atom4
         )
 
-    def value(self, coords):
-        return \
-            Angle.angle(
-                coords[self.atom1], coords[self.atom2], coords[self.atom4]
-            ) + Angle.angle(
-                coords[self.atom4], coords[self.atom2], coords[self.atom3]
-            )
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_dist is None:
+            return \
+                Angle.angle(
+                    coords[self.atom1], coords[self.atom2], coords[self.atom4]
+                ) + Angle.angle(
+                    coords[self.atom4], coords[self.atom2], coords[self.atom3]
+                )
+        
+        return Angle.angle_from_sq_distances(
+            precomputed_dist[self.atom1, self.atom2] ** 2,
+            precomputed_dist[self.atom4, self.atom2] ** 2,
+            precomputed_dist[self.atom1, self.atom4] ** 2
+        ) + Angle.angle_from_sq_distances(
+            precomputed_dist[self.atom4, self.atom2] ** 2,
+            precomputed_dist[self.atom3, self.atom2] ** 2,
+            precomputed_dist[self.atom4, self.atom3] ** 2
+        )
 
     @staticmethod
     def angle(x1, x2, x3):
@@ -323,7 +422,7 @@ class LinearAngle4(Coordinate):
             return np.pi
         return theta
 
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_e_ij=None):
         a = dist(coords[self.atom1], coords[self.atom2])
         b = dist(coords[self.atom4], coords[self.atom2])
         s = np.zeros(3 * len(coords))
@@ -355,7 +454,7 @@ class OutOfPlaneBend(Coordinate):
     def __repr__(self):
         return "atom %i angle out of %i-%i-%i plane" % (self.central_atom, *self.planar_atoms)
 
-    def value(self, coords):
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         e_23 = e_ij(coords[self.central_atom], coords[self.planar_atoms[1]])
         e_24 = e_ij(coords[self.central_atom], coords[self.planar_atoms[2]])
         e_12 = e_ij(coords[self.planar_atoms[0]], coords[self.central_atom])
@@ -368,12 +467,17 @@ class OutOfPlaneBend(Coordinate):
             return 0
         return np.pi / 2 - k
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros(3 * len(coords))
         
-        e_23 = e_ij(coords[self.central_atom], self.planar_atoms[1])
-        e_24 = e_ij(coords[self.central_atom], self.planar_atoms[2])
-        e_21 = e_ij(coords[self.central_atom], self.planar_atoms[0])
+        if precomputed_e_ij is None:
+            e_23 = precomputed_e_ij[coords[self.central_atom], self.planar_atoms[1]]
+            e_24 = precomputed_e_ij[coords[self.central_atom], self.planar_atoms[2]]
+            e_21 = precomputed_e_ij[coords[self.central_atom], self.planar_atoms[0]]
+        else:
+            e_23 = e_ij(coords[self.central_atom], self.planar_atoms[1])
+            e_24 = e_ij(coords[self.central_atom], self.planar_atoms[2])
+            e_21 = e_ij(coords[self.central_atom], self.planar_atoms[0])
         
         r_23 = dist(coords[self.central_atom], self.planar_atoms[1])
         r_24 = dist(coords[self.central_atom], self.planar_atoms[2])
@@ -468,61 +572,105 @@ class Torsion(Coordinate):
 
         return True
 
-    def value(self, coords):
-        e_i1 = e_ij(coords[self.group1[0]], coords[self.atom1])
-        e_12 = e_ij(coords[self.atom1], coords[self.atom2])
-        e_2l = e_ij(coords[self.atom2], coords[self.group2[0]])
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        if precomputed_e_ij is None:
+            e_i1 = e_ij(coords[self.group1[0]], coords[self.atom1])
+            e_12 = e_ij(coords[self.atom1], coords[self.atom2])
+            e_2l = e_ij(coords[self.atom2], coords[self.group2[0]])
+        else:
+            e_i1 = precomputed_e_ij[self.atom1, self.group1[0]]
+            e_12 = precomputed_e_ij[self.atom2, self.atom1]
+            e_2l = precomputed_e_ij[self.group2[0], self.atom2]
         
         v1 = _xyzzy_cross(e_i1, e_12)
         v2 = _xyzzy_cross(e_12, e_2l)
         angle = _xyzzy_cross(v1, v2)
 
         angle = np.dot(angle, e_12)
-        angle = np.arctan2(
+        angle = math.atan2(
             angle,
             np.dot(v1, v2),
         )
         
         return angle
     
-    def s_vector(self, coords):
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         s = np.zeros(3 * len(coords))
 
-        e_12 = e_ij(coords[self.atom1], coords[self.atom2])
-        r_12 = dist(coords[self.atom1], coords[self.atom2])
+        if precomputed_e_ij is not None:
+            e_12 = precomputed_e_ij[self.atom2, self.atom1]
+        else:
+            e_12 = e_ij(coords[self.atom1], coords[self.atom2])
+        
+        if precomputed_dist is None:
+            r_12 = dist(coords[self.atom1], coords[self.atom2])
+        else:
+            r_12 = precomputed_dist[self.atom1, self.atom2]
+        
         for i in self.group1:
-            e_i1 = e_ij(coords[i], coords[self.atom1])
-            a_i12 = Angle.angle(coords[i], coords[self.atom1], coords[self.atom2])
-            r_i1 = dist(coords[i], coords[self.atom1])
+            if precomputed_e_ij is not None:
+                e_i1 = precomputed_e_ij[self.atom1, i]
+            else:
+                e_i1 = e_ij(coords[i], coords[self.atom1])
+            if precomputed_dist is None:
+                a_i12 = Angle.angle(coords[i], coords[self.atom1], coords[self.atom2])
+                r_i1 = dist(coords[i], coords[self.atom1])
+            else:
+                a_i12 = Angle.angle_from_sq_distances(
+                    precomputed_dist[i, self.atom1] ** 2,
+                    precomputed_dist[self.atom2, self.atom1] ** 2,
+                    precomputed_dist[i, self.atom2] ** 2
+                )
+                r_i1 = precomputed_dist[i, self.atom1]
+            
+            sin_i12_squared = math.sin(a_i12) ** 2
+            cos_i12 = math.cos(a_i12)
+            e_i1_cross_12 = _xyzzy_cross(e_i1, e_12)
             
             s[3 * i : 3 * i + 3] = -1 / len(self.group1)
-            s[3 * i : 3 * i + 3] *= _xyzzy_cross(e_i1, e_12) / r_i1
-            s[3 * i : 3 * i + 3] /= np.sin(a_i12) ** 2
+            s[3 * i : 3 * i + 3] *= e_i1_cross_12 / r_i1
+            s[3 * i : 3 * i + 3] /= sin_i12_squared
             
             s[3 * self.atom1 : 3 * self.atom1 + 3] += (
-                (r_12 - r_i1 * np.cos(a_i12)) / (r_i1 * r_12 * np.sin(a_i12) ** 2)
-            ) * _xyzzy_cross(e_i1, e_12) / len(self.group1)
+                (r_12 - r_i1 * cos_i12) / (r_i1 * r_12 * sin_i12_squared)
+            ) * e_i1_cross_12 / len(self.group1)
             
             s[3 * self.atom2 : 3 * self.atom2 + 3] += (
-                (np.cos(a_i12) / (r_12 * np.sin(a_i12) ** 2))
-            ) * _xyzzy_cross(e_i1, e_12) / len(self.group1)
+                (cos_i12 / (r_12 * sin_i12_squared))
+            ) * e_i1_cross_12 / len(self.group1)
         
         for l in self.group2:
-            e_l2 = e_ij(coords[l], coords[self.atom2])
-            a_l21 = Angle.angle(coords[l], coords[self.atom2], coords[self.atom1])
-            r_l2 = dist(coords[l], coords[self.atom2])
+            if precomputed_e_ij is not None:
+                e_l2 = precomputed_e_ij[self.atom2, l]
+            else:
+                e_l2 = e_ij(coords[l], coords[self.atom2])
+            
+            if precomputed_dist is None:
+                a_l21 = Angle.angle(coords[l], coords[self.atom2], coords[self.atom1])
+                r_l2 = dist(coords[l], coords[self.atom2])
+            else:
+                a_l21 = Angle.angle_from_sq_distances(
+                    precomputed_dist[l, self.atom2] ** 2,
+                    precomputed_dist[self.atom1, self.atom2] ** 2,
+                    precomputed_dist[l, self.atom1] ** 2
+                )
+                r_l2 = precomputed_dist[l, self.atom2]
+            
+            sin_al21_squared = math.sin(a_l21) ** 2
+            cos_al21 = math.cos(a_l21)
+            e_l2_cross_12 = _xyzzy_cross(e_l2, -e_12)
             
             s[3 * l : 3 * l + 3] = -1 / len(self.group2)
-            s[3 * l : 3 * l + 3] *= _xyzzy_cross(e_l2, -e_12) / r_l2
-            s[3 * l : 3 * l + 3] /= np.sin(a_l21) ** 2
+            s[3 * l : 3 * l + 3] *= e_l2_cross_12 / r_l2
+            s[3 * l : 3 * l + 3] /= sin_al21_squared
             
             s[3 * self.atom2 : 3 * self.atom2 + 3] += (
-                (r_12 - r_l2 * np.cos(a_l21)) / (r_l2 * r_12 * np.sin(a_l21) ** 2)
-            ) * _xyzzy_cross(e_l2, -e_12) / len(self.group2)
+                (r_12 - r_l2 * cos_al21) / (r_l2 * r_12 * sin_al21_squared)
+            ) * e_l2_cross_12 / len(self.group2)
             
             s[3 * self.atom1 : 3 * self.atom1 + 3] += (
-                np.cos(a_l21) / (r_12 * np.sin(a_l21) ** 2)
-            ) * _xyzzy_cross(e_l2, -e_12) / len(self.group2)
+                cos_al21 / (r_12 * sin_al21_squared)
+            ) * e_l2_cross_12 / len(self.group2)
         
         return s
 
@@ -977,11 +1125,16 @@ class InternalCoordinateSet:
         """
         returns the B matrix (B_ij = dq_i/dx_j)
         """
+        d = distance.squareform(distance.pdist(coords))
+        e_ij_mat = all_e_ij(coords, precomputed_dist=d)
+
         B = np.zeros((self.n_dimensions, 3 * len(coords)))
         i = 0
         for coord_type in self.coordinates:
             for coord in self.coordinates[coord_type]:
-                B[i: i + coord.n_values] = coord.s_vector(coords)
+                B[i: i + coord.n_values] = coord.s_vector(
+                    coords, precomputed_dist=d, precomputed_e_ij=e_ij_mat
+                )
                 i += coord.n_values
         return B
     
@@ -990,11 +1143,16 @@ class InternalCoordinateSet:
         returns vector with the values of internal coordinates for the
         given Cartesian coordinates (coords)
         """
+        d = distance.squareform(distance.pdist(coords))
+        e_ij_mat = all_e_ij(coords, precomputed_dist=d)
+
         q = np.zeros(self.n_dimensions)
         i = 0
         for coord_type in self.coordinates:
             for coord in self.coordinates[coord_type]:
-                q[i: i + coord.n_values] = coord.value(coords)
+                q[i: i + coord.n_values] = coord.value(
+                    coords, precomputed_dist=d, precomputed_e_ij=e_ij_mat
+                )
                 i += coord.n_values
         return q
     
@@ -1066,6 +1224,7 @@ class InternalCoordinateSet:
         convergence=1e-10,
         max_iterations=100,
         step_limit=0.35,
+        use_delocalized=False,
         debug=False,
     ):
         """
@@ -1096,7 +1255,7 @@ class InternalCoordinateSet:
                     f.write("C   %.3f   %.3f   %.3f\n" % tuple(c))
         for i in range(0, max_iterations):
             # for bigger changes, use harmonic
-            if any(abs(q) > 0.3 for q in dq):
+            if max(np.abs(dq)) > 0.5:
                 force = 0.5 * dq * (dq ** 2)
 
             # for smaller changes, use linear
@@ -1104,10 +1263,20 @@ class InternalCoordinateSet:
                 force = dq
 
             B = self.B_matrix(np.reshape(x0, coords.shape))
-            B_pinv = np.linalg.pinv(B)
-            dx = np.dot(B_pinv, force)
-            while any(abs(x) > step_limit for x in dx):
-                dx /= 2
+            if use_delocalized:
+                G = np.matmul(B, B.T)
+                w, v = np.linalg.eigh(G)
+                U = v[:, -(len(x0) - 6):]
+                Bd = np.matmul(U.T, B)
+                ds = np.dot(U.T, force)
+                dx = np.dot(np.linalg.pinv(Bd), ds)
+            else:
+                B_pinv = np.linalg.pinv(B)
+                dx = np.dot(B_pinv, force)
+            # dx = np.dot(B_pinv, force)
+            max_step = max(np.abs(dx))
+            if max_step > step_limit:
+                dx *= step_limit / max_step
 
             # basically steepest descent with momentum
             x0 = x0 + 0.9 * dx + 0.1 * prev_dx
@@ -1129,8 +1298,7 @@ class InternalCoordinateSet:
             if togo < convergence:
                 break
         
-        err = np.linalg.norm(dq)
-        return np.reshape(x0, coords.shape), err
+        return np.reshape(x0, coords.shape), togo
 
     def apply_change(
         self, coords, dq,
