@@ -908,7 +908,7 @@ class Geometry:
                                 ):
                                     probably_useless = True
 
-                                dq[n : n + coord.n_values] = +(
+                                dq[n : n + coord.n_values] = (
                                     np.deg2rad(combo[j][k]) - coord.value(coords)
                                 )
                                 visited.add((torsion.atom1, torsion.atom2))
