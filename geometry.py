@@ -902,6 +902,14 @@ class Geometry:
                     for coord_type in ric.coordinates:
                         for coord in ric.coordinates[coord_type]:
                             if coord is torsion:
+                                # if there are fused rings, there will be at least one
+                                # pair of torsions with the same two middle atoms
+                                # if the conformer we're trying doesn't have the same
+                                # change in both of these torsions, it probably won't
+                                # produce a reasonable structure
+                                # so if we've seen a torsion with these middle atoms
+                                # before, but the targeted change in torsional angle
+                                # is different from before, we will skip
                                 if (
                                     (torsion.atom1, torsion.atom2) in visited and
                                     not np.isclose(dq[n] - np.deg2rad(combo[j][k]) + coord.value(coords), 0, atol=1e-4)

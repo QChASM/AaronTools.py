@@ -1191,18 +1191,18 @@ class OptimizationJob(JobType):
         if self.scans and self.scans.get("torsions", False):
             out.setdefault("constrain", [])
             out.setdefault("scan", [])
-            for dihedral in self.constraints["torsions"]:
+            for dihedral in self.scans["torsions"]:
                 a1, a2, a3, a4, steps, size = dihedral
                 dihedral = self.geometry.find([a1, a2, a3, a4])
                 start = np.rad2deg(self.geometry.dihedral(*dihedral))
-                stop = (steps - 1) * size
+                stop = start + (steps - 1) * size
                 out["constrain"].append(
                     "dihedral: {},{},{},{},auto".format(
                         *(self.geometry.atoms.index(c) + 1 for c in dihedral)
                     )
                 )
                 out["scan"].append(
-                    "%i: %.3f, %.3f, %2i".format(
+                    "%i: %.3f, %.3f, %2i" % (
                         len(out["constrain"]), start, stop, steps,
                     )
                 )
