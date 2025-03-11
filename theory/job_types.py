@@ -1173,7 +1173,7 @@ class OptimizationJob(JobType):
                 start = np.rad2deg(self.geometry.angle(*angle))
                 stop = start + (steps - 1) * size
                 out["scan"].append(
-                    "%i: %.3f, %.3f, %2i".format(
+                    "%i: %.3f, %.3f, %2i" % (
                         len(out["constrain"]), start, stop, steps,
                     )
                 )
