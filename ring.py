@@ -23,11 +23,11 @@ class Ring(Geometry):
 
     def __init__(self, frag, name=None, end=None):
         """
-        frag is either a file sub, a geometry, or an atom list
+        :param frag: can be either a file sub, a geometry, or an atom list
         
-        name is a name
+        :param str name: name of the object
         
-        end is a list of atoms that defines which part of the ring is not part of the fragment
+        :param list(Atom) end: defines which part of the ring is not part of the fragment
         """
 
         super().__init__()
@@ -148,7 +148,14 @@ class Ring(Geometry):
         return Ring(dup, end=dup.end)
 
     def find_end(self, path_length, start=[]):
-        """finds a path around self that is path_length long and starts with start"""
+        """
+        finds a path around self 
+        
+        :param int path_length: length of path in atoms to be traced
+        :param list(Atom) start: atom(s) to start on when tracing
+        :returns: atoms in path as well as distance along path
+        :rtype: appended as a comment on self
+        """
         def linearly_connected(atom_list):
             """returns true if every atom in atom_list is connected to another atom in
             the list without backtracking"""

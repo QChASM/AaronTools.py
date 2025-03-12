@@ -17,8 +17,8 @@ def range_list(number_list, sep=",", sort=True):
     Takes a list of numbers and puts them into a string containing ranges, eg:
     [1, 2, 3, 5, 6, 7, 9, 10] -> "1-3,5-7,9,10"
 
-    :sep: the separator to use between consecutive ranges
-    :sort: sort the list before parsing
+    :param str sep: the separator to use between consecutive ranges
+    :param bool sort: sort the list before parsing
     """
     if sort:
         number_list = sorted(number_list)
@@ -61,8 +61,11 @@ def proj(v_vec, u_vec):
     """
     projection of u_vec into v_vec
     
-    v_vec should be a np.array, and u_vec should have the
-    same shape as v_vec
+    :param nparray v_vec: 
+    :param nparray u_vec: should have the same shape as v_vec
+
+    :returns: projection
+    :rtype: nparray
     """
     numerator = np.dot(u_vec, v_vec)
     denominator = np.dot(v_vec, v_vec)
@@ -170,14 +173,17 @@ def uptri2sym(vec, n=None, col_based=False):
 def float_vec(word):
     """
     Turns strings into floating point vectors
+
     :param str word: a comma-delimited string of numbers
 
     if no comma or only one element:
-        returns just the floating point number
+    :returns: just the floating point number
+
     if elements in word are strings:
-        returns word unchanged
-    else:
-        returns a np.array() of floating point numbers
+    :returns: word unchanged
+
+    else
+    :returns: a np.array() of floating point numbers
     """
     val = word
     val = val.split(",")
@@ -207,6 +213,10 @@ def is_num(test):
 
 
 def add_dict(this, other, skip=None):
+    """
+    :param list skip: items to avoid adding
+    :returns: self
+    """
     if skip is None:
         skip = []
     for key, val in other.items():
@@ -220,6 +230,9 @@ def add_dict(this, other, skip=None):
 
 
 def resolve_concatenation(*args):
+    """
+    :rtype: list
+    """
     seq = [isinstance(a, collections.abc.MutableSequence) for a in args]
     if any(seq) and not all(seq):
         rv = []
@@ -246,6 +259,7 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
         if case_sensitive=False, the key in the output will be the lowercase
         of the d1 key and d2 key (only for combined items)
     
+    :param bool case_sensitive: considers letter case when True
     :param bool dict2_conditional: if True, don't add d2 keys unless they are also in d1
     """
     from copy import deepcopy
@@ -309,7 +323,10 @@ def combine_dicts(*args, case_sensitive=False, dict2_conditional=False):
 
 
 def subtract_dicts(*args, case_sensitive=False):
-    """removes items in d2 from d1 to return a new dictionary
+    """
+    removes items in d2 from d1 to return a new dictionary
+
+    :param bool case_sensitive: considers letter case when True
     """
     from copy import deepcopy
 
@@ -434,9 +451,10 @@ def integrate(fun, start, stop, num=101):
 
 def same_cycle(graph, a, b):
     """
-    Determines if Atom :a: and Atom :b: are in the same cycle in a undirected :graph:
+    Determines if Atom a and Atom b are in the same cycle in an undirected graph
 
-    Returns: True if cycle found containing a and b, False otherwise
+    :returns: True if cycle found containing a and b, False otherwise
+    :rtype: boolean
 
     :param list|Geometry graph: connectivity matrix or Geometry
     :param int|Atom a: index in connectivity matrix/Geometry or Atoms in Geometry
@@ -471,7 +489,7 @@ def same_cycle(graph, a, b):
 
 def shortest_path(graph, start, end):
     """
-    Find shortest path from :start: to :end: in :graph: using Dijkstra's algorithm
+    Find shortest path from start to end in graph using Dijkstra's algorithm
 
     :param list|Geometry graph: the connection matrix or Geometry
     :param int|Atom start: the first atom or node index
@@ -565,6 +583,24 @@ def trim_leaves(graph, _removed=None):
         graph, _removed = trim_leaves(graph, _removed)
 
     return graph, set(_removed)
+
+
+def prune_branches(graph):
+    """modifies graph in place to remove parts that
+    don't connect to other parts of the graph
+    graph is a list of lists defining the connectivity
+    i.e. only cycles are kept"""
+    # non-recursive version of trim_leaves that doesn't return what it removed
+    # graph of methane (atoms ordered as C H H H H) would be
+    # [[1, 2, 3, 4], [0], [0], [0], [0]]
+    trimmed_leaves = True
+    while trimmed_leaves:
+        trimmed_leaves = False
+        for i in range(0, len(graph)):
+            if len(graph[i]) == 1:
+                graph[graph[i][0]].remove(i)
+                graph[i] = []
+                trimmed_leaves = True
 
 
 def to_closing(string, brace, allow_escapes=False):

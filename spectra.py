@@ -55,6 +55,12 @@ class Signals:
     """
     parent class for storing data for different signals in the
     spectrum and plotting a simulated spectrum
+
+    Attributes: 
+
+    * data
+    * style
+    * lines
     """
     
     # label for x axis - should be set by child classes

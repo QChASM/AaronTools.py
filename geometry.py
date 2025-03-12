@@ -679,6 +679,289 @@ class Geometry:
 
         raise LookupError("solvent %s not found in library" % solvent)
 
+    @classmethod
+    def ring_conformers(cls, geometry, targets=None):
+        """
+        returns a list of Geometry objects with varying ring conformations
+        :param Geometry geometry: structure to look for conformers of
+        :param Atom targets: atoms in rings to search for conformers of (default is all rings)
+        """
+        import json
+        
+        from AaronTools.internal_coordinates import InternalCoordinateSet
+        from AaronTools.utils.utils import shortest_path
+
+        # from cProfile import Profile
+        # 
+        # profile = Profile()
+        # profile.enable()
+
+        normal_vseprs = {
+            "linear 2": "linear",
+            "bent 2 tetrahedral": "tetrahedral",
+            # TODO: have a way to distiguish whether the ring is
+            # in the axial-equitorial or equitorial-equitorial
+            "bent 2 planar": "trigonal bipyramidal",
+            "trigonal planar": "trigonal bipyramidal",
+            "bent 3 tetrahedral": "tetrahedral",
+            "t shaped": "octahedral",
+            "tetrahedral": "tetrahedral",
+            "sawhorse": "trigonal bipyramidal",
+            "seesaw": "octahedral",
+            "square planar": "octahedral",
+            "trigonal pyramidal": "trigonal bipyramidal",
+            "trigonal bipyramidal": "trigonal bipyramidal",
+            "square pyramidal": "octahedral",
+            "octahedral": "octahedral",
+        }
+
+        ring_types = dict()
+        for fname in [
+            os.path.join(AARONTOOLS, "ring_conformers.json"), 
+            os.path.join(AARONLIB, "ring_conformers.json"),
+        ]:
+            if not os.path.exists(fname):
+                continue
+            with open(fname, "r") as f:
+                these_types = json.load(f)
+            ring_types.update(these_types)
+
+        #XXX: remember to fix this when oop_type options mean anything
+        ric = InternalCoordinateSet(geometry, torsion_type="all", oop_type="yes")
+
+        if targets is None:
+            targets = geometry.atoms
+        else:
+            targets = geometry.find(targets)
+
+        # identify rings
+        rings = []
+        ring_atoms = set()
+        graph = []
+        ndx = {a: i for i, a in enumerate(geometry.atoms) if a in targets}
+        for a in geometry.atoms:
+            if a in targets:
+                graph.append([ndx[n] for n in a.connected if n in targets])
+            else:
+                graph.append([])
+        
+        utils.prune_branches(graph)
+        for a in range(0, len(graph)):
+            # skip atoms with no valid neighbors
+            if not graph[a]:
+                continue
+            
+            # skip atoms we've already found
+            if a in ring_atoms:
+                continue
+            
+            found_ring = False
+            # look for a path to each pair of neighbors
+            for a2 in graph[a]:
+                if found_ring and a2 in ring_atoms:
+                    continue
+                # copy the graph, but remove the node for this atom
+                graph[a].remove(a2)
+                path = shortest_path(graph, a, a2)
+                if path is not None:
+                    ring_atoms.update(path)
+                    rings.append(path)
+                    found_ring = True
+                    graph[a].append(a2)
+                else:
+                    # this pair of atoms is not in a ring
+                    # we will not need to revisit
+                    graph[a2].remove(a)
+            
+            # if this atom is not in a ring, we will not
+            # need to visit it again - remove it's connections
+            # from the graph
+            if not found_ring:
+                for a2 in graph[a]:
+                    graph[a2].remove(a)
+                graph[a] = []
+                utils.prune_branches(graph)
+        
+        # need to figure out reasonable torsion values
+        # depending on the type of ring it is
+        flexible_torsions = []
+        ring_torsions = []
+        torsion_options = []
+        for ring in rings:
+            vseprs = []
+            ring_torsions.append([])
+            for i in range(0, len(ring)):
+                atom1 = i
+                atom2 = i + 1
+                if atom2 >= len(ring):
+                    atom2 -= len(ring)
+                group1 = i - 1
+                if group1 < 0:
+                    group1 += len(ring)
+                group2 = atom2 + 1
+                if group2 >= len(ring):
+                    group2 -= len(ring)
+
+                for torsion in ric.coordinates["torsions"]:
+                    if (
+                        torsion.atom1 == ring[atom1] and
+                        torsion.atom2 == ring[atom2] and 
+                        torsion.group1[0] == ring[group1] and 
+                        torsion.group2[0] == ring[group2]
+                    ):
+                        vsepr, err = geometry.atoms[atom1].get_vsepr()
+                        try:
+                            vseprs.append(normal_vseprs[vsepr])
+                        except KeyError:
+                            vseprs.append(vsepr)
+                        
+                        flexible_torsions.append(torsion)
+                        ring_torsions[-1].append(torsion)
+            
+                    if (
+                        torsion.atom1 == ring[atom2] and
+                        torsion.atom2 == ring[atom1] and 
+                        torsion.group1[0] == ring[group2] and 
+                        torsion.group2[0] == ring[group1]
+                    ):
+                        vsepr, err = geometry.atoms[atom2].get_vsepr()
+                        try:
+                            vseprs.append(normal_vseprs[vsepr])
+                        except KeyError:
+                            vseprs.append(vsepr)
+                        
+                        flexible_torsions.append(torsion)
+                        ring_torsions[-1].append(torsion)
+            
+            # this could probably only happen if there's a linear angle
+            # in a ring
+            # torsions skip linear atoms
+            # e.g. allene will have H-C1-C3-H torsions
+            if len(vseprs) != len(ring):
+                cls.LOG.warning("ring atoms and vseprs don't match!")
+                # continue
+            
+            for i in range(0, len(vseprs)):
+                vseprs = np.roll(vseprs, 1)
+                ring_torsions[-1] = np.roll(ring_torsions[-1], 1)
+                ring_type = ", ".join(vseprs)
+                try:
+                    torsion_options.append(ring_types[str(len(ring))][ring_type])
+                    ring_torsions[-1] = ring_torsions[-1].tolist()
+                    break
+                except KeyError:
+                    continue
+            else:
+                cls.LOG.debug(
+                    "unknown ring type with %i atoms and %s VSEPR pattern" % (
+                        len(ring), ring_type
+                    )
+                )
+        
+        # need to remove torsions that connect to these
+        # rings, but that are not part of the ring
+        # otherwise the changes we try to make to the
+        # internal coordinates will suck, or we will
+        # have to figure out how to change these torsion
+        # in a way that corresponds to the changes we
+        # are making to the ring torsions
+        remove_torsions = []
+        for t in ric.coordinates["torsions"]:
+            if t in flexible_torsions:
+                continue
+            if (
+                t.group1[0] in ring_atoms or
+                t.atom1 in ring_atoms or
+                t.atom2 in ring_atoms or
+                t.group2[0] in ring_atoms
+            ):
+                remove_torsions.append(t)
+
+        ric.coordinates["torsions"] = [t for t in ric.coordinates["torsions"] if t not in remove_torsions]
+        
+        unique_geoms = [geometry.copy()]
+        if not torsion_options:
+            cls.LOG.debug("no ring conformers could be found")
+            return unique_geoms
+        
+        # try each 'reasonable' combination of torsions for every ring
+        coords = geometry.coords
+        current_q = ric.values(coords)
+        combos = itertools.product(*torsion_options)
+        i = 1
+        for combo in combos:
+            i += 1
+            
+            probably_useless = False
+            #TODO: make finding the indices of a coordinate easier
+            dq = np.zeros(ric.n_dimensions)
+            visited = set()
+            for j, (ring, torsions) in enumerate(zip(rings, ring_torsions)):
+                for k, torsion in enumerate(torsions):
+                    n = 0
+                    for coord_type in ric.coordinates:
+                        for coord in ric.coordinates[coord_type]:
+                            if coord is torsion:
+                                # if there are fused rings, there will be at least one
+                                # pair of torsions with the same two middle atoms
+                                # if the conformer we're trying doesn't have the same
+                                # change in both of these torsions, it probably won't
+                                # produce a reasonable structure
+                                # so if we've seen a torsion with these middle atoms
+                                # before, but the targeted change in torsional angle
+                                # is different from before, we will skip
+                                if (
+                                    (torsion.atom1, torsion.atom2) in visited and
+                                    not np.isclose(dq[n] - np.deg2rad(combo[j][k]) + coord.value(coords), 0, atol=1e-4)
+                                ):
+                                    probably_useless = True
+
+                                dq[n : n + coord.n_values] = (
+                                    np.deg2rad(combo[j][k]) - coord.value(coords)
+                                )
+                                visited.add((torsion.atom1, torsion.atom2))
+
+                                # print("changing", torsion, "by %.0f" % np.rad2deg(dq[n]))
+                            n += coord.n_values
+            
+            # there will be at least one combination with basically no changes
+            if np.linalg.norm(dq) < 1e-3:
+                continue
+            
+            if probably_useless:
+                continue
+            
+            # try setting the torsions
+            new_coords, err = ric.apply_change_2(coords, dq, convergence=1e-7)
+            if err > 1e-2:
+                cls.LOG.debug("significant deviation from expected torsions: %.2f" % err)
+                continue
+            
+            # do RMSD to make sure it's actually unique
+            #XXX: RMSD sucks at this in simple test cases - consider
+            # adding a variant RMSD function that checks all permutations
+            # of equivalent atoms or something
+            # mirroring can sometimes trick it
+            ref = geometry.copy()
+            ref.coords = new_coords
+            ref_mirror = ref.copy()
+            ref_mirror.mirror()
+            for geom in unique_geoms:
+                rmsd = geom.RMSD(ref, sort=True, align=True)
+                if rmsd < 1e-2:
+                    break
+                rmsd = geom.RMSD(ref_mirror, sort=True, align=True)
+                if rmsd < 1e-2:
+                    break
+
+            else:
+                unique_geoms.append(ref)
+        
+        # profile.disable()
+        # profile.print_stats()
+        
+        return unique_geoms
+
     @staticmethod
     def list_solvents(include_ext=False):
         """
@@ -2195,8 +2478,12 @@ class Geometry:
         stack = []
         for s in start:
             stack += sorted(s.connected)
-        atoms_left = set(targets) - set(order) - set(stack)
-        while len(stack) > 0:
+        atoms_left = set(targets)
+        atoms_left -= set(order)
+        while len(atoms_left) > 0:
+            if not stack and atoms_left:
+                stack += [sorted(atoms_left)[0]]
+
             this = stack.pop()
             if heavy_only and this.element == "H":
                 continue
@@ -2205,12 +2492,11 @@ class Geometry:
             order += [this]
             visited.add(this)
             connected = set(this.connected & atoms_left)
-            atoms_left -= connected
+            try:
+                atoms_left.remove(this)
+            except KeyError:
+                pass
             stack += sorted(connected)
-
-            if not stack and atoms_left:
-                stack += [sorted(atoms_left)[0]]
-                atoms_left -= set(stack)
 
         return order, non_targets
 

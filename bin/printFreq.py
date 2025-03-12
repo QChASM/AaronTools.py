@@ -12,7 +12,7 @@ def main(args=None):
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "filename", help="Completed QM output file with frequency info"
+        "filename", nargs="+", help="Completed QM output file with frequency info"
     )
     parser.add_argument(
         "--type",

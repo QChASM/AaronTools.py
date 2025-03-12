@@ -3,6 +3,7 @@
 import argparse
 from os.path import dirname
 import sys
+from warnings import warn
 
 from AaronTools.component import Component
 from AaronTools.fileIO import FileReader, read_types
@@ -169,8 +170,13 @@ for infile in glob_files(args.infile, parser=maplig_parser):
         lig_names = [l for l in "=".join(args.ligand.split("=")[1:]).split(",")]
         key_atoms = []
 
-    for lig_names in [get_matching_ligands(lig_name) for lig_name in lig_names]:
-        for lig_name in lig_names:
+    lig_lists = [get_matching_ligands(lig_name) for lig_name in lig_names]
+
+    for lig_list, names in zip(lig_lists, lig_names):
+        if not lig_list:
+            warn("no ligand matching %s" % names)
+            print("no ligand matching %s" % names)
+        for lig_name in lig_list:
             ligands = [Component(lig_name)]
             cat_copy = cat.copy()
             cat_copy.detect_components(center=args.center)
