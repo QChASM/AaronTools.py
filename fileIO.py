@@ -3182,7 +3182,8 @@ class FileReader:
                 log.warning("last line read: %s" % line)
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
                 try:
-                    log.warning(input_file)
+                    for input_line in input_file.splitlines():
+                        log.warning(input_line)
                 except NameError:
                     pass
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
