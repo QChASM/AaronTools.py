@@ -18,7 +18,7 @@ from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
 from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII, RADII
 from AaronTools.fileIO import FileReader, FileWriter, read_types
-from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom 
+from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom, WithinBondsOf
 from AaronTools.utils.prime_numbers import Primes
 from AaronTools.oniomatoms import OniomAtom
 
@@ -1224,7 +1224,7 @@ class Geometry:
 
         def is_notebook():
             try:
-                shell = get_ipython().__class__.__name__
+                shell = get_ipython().__class__.__name__ # TODO get_ipython undefined 
                 if shell == 'ZMQInteractiveShell':
                     return True   # Jupyter notebook or qtconsole
                 elif shell == 'TerminalInteractiveShell':
@@ -2260,7 +2260,7 @@ class Geometry:
                         start_min = [c], dist
                     elif dist == start_min[1]:
                         start_min = start_min[0] + [c], dist
-                    if start_max[0] is None or d < start_max[1]:
+                    if start_max[0] is None or d < start_max[1]: #TODO d is undefined
                         start_max = [c], dist
                     elif dist == start_max[1]:
                         start_max = start_max[0] + [c], dist
@@ -6726,7 +6726,7 @@ class Geometry:
 
     def oniom_layer(self, layer = "", low_layer="", as_object=False):
         """
-        returns atoms for the specified layer and adds link atoms
+        returns atoms for the specified layer and adds link atoms to satisfy valence
         
         :param str layer: ONIOM layer (H, M, L)
         :param str low_layer: label for low layer, defaults to L
@@ -6738,7 +6738,7 @@ class Geometry:
         :rtype: list(Atom)
         """
         frag=[]
-        #self.sub_links()
+        #self.sub_links() TODO figure out if this function cna be useful here
         if layer not in ['H', 'L', 'M']:
             raise ValueError("Error in layer request")
         if any((layer == "H", layer == "M")) and low_layer=="":
@@ -6759,13 +6759,14 @@ class Geometry:
 
     def add_links(self, high_layer="", low_layer=""):
         """
-        defines links between ONIOM layers
+        adds link atom hydrogens to molecular structure (useful when separating out a layer as a fragment)
 
-        :param str high_layer: top-level ONIOM layer
-        :param str low_layer: bottom-level ONIOM layer
-        :returns: edited self
+        :param str high_layer: higher ONIOM layer
+        :param str low_layer: lower ONIOM layer
+        :returns: edited Geometry with link atoms as part of molecular structure
         :rtype: Geometry
         """
+        # TODO determine what else should be added to self such as updated connectivity info
         adjust=[]
         tmp=[]
         for a in self.atoms:
@@ -6824,8 +6825,13 @@ class Geometry:
 #            print(pair[0].dist(pair[1]))
         return self
 
-    def sub_links(self):
-        # ?
+    def sub_link_hosts(self):
+        """remove link atom hosts from a molecular structure
+
+        :return: the Geometry with link atom hosts removed from the list of atoms in the structure
+        :rtype: Geometry
+        """
+        # TODO determine what else the function should remove from self such as connectivity info
         tmp = []
         for a in self.atoms:
             if a.link_info and "host" in a.link_info.keys():
@@ -6835,8 +6841,13 @@ class Geometry:
         self = self - tmp
         return self
 
-    def sub_hosts(self):
-        # ?
+    def sub_links(self):
+        """remove link atoms from a molecular structure
+
+        :return: the Geometry with link atoms removed from the list of atoms in the structure
+        :rtype: _type_
+        """
+        # TODO determine what else the function should remove from self such as connectivity info
         tmp = []
         for a in self.atoms:
             if a.link_info and "link" in a.link_info.keys():
@@ -6921,11 +6932,10 @@ class Geometry:
                     sub.rotate(reverse=True)
         return conf_spec, True
 
-    def get_aromatic_atoms(self, atoms, return_rings=False, return_h=False):
+    def get_aromatic_atoms(self, return_rings=False, return_h=False):
         """
         Finds atoms within aromatic rings in a molecule
 
-        :param list(Atom) atoms: atoms to be included in the search
         :param bool return_rings: returns full aromatic rings if true, default False
         :param bool return_h: includes hydrogens in return if true, default False
         :returns:
@@ -7067,13 +7077,14 @@ class Geometry:
         reference can be list(Atom), list(list(float)), list(float), or str representing a layer (H, M, L, !H, etc)
         if defining a 3 layer job, start at High layer (reaction center)
 
-        :param str layer: layer to be defined
-        :param reference: reference to use in definition
-        :param float distance: distance from atoms to be considered
-        :param bool bond_based: includes distance from bonds if true, default False
-        :param bool expand: determines whether the boundaries will be included, default True
-        :param bool force: unknown
-        :param bool res_based: determines whether residues are involved, default False
+        :param str layer: new ONIOM layer to be defined
+        :param reference: atom, atoms, or layer to be used as reference point(s) for beginning of layer definition
+        :type reference: Atom|list(Atom)|list(list(float(coords)))|list(float(coords))|str(layer)
+        :param float distance: distance from reference point to boundary of new layer
+        :param bool bond_based: will treat distance as number of bonds from reference if True, default False
+        :param bool expand: determines whether to expand layer or contract if new layer boundary cuts across pi or polar bond(s), default True
+        :param bool force: determines whether to force new layer boundary to cut across pi or polar bond(s), default False
+        :param bool res_based: new layer will include entire amino acid residue if new layer boundary cuts across intra-residue bonds if True, default False
         """
 
         if not isinstance(self.atoms[0], OniomAtom):
@@ -7453,7 +7464,7 @@ class Geometry:
 
     def detect_solvent(self, solvent):
         """
-        detects solvent based on either an input xyz, solvent in solvent library, or input SMILES
+        detects solvent based on either an input solvent xyz, solvent in solvent library, or input SMILES
 
         :param str solvent: solvent to be detected
         :returns: solvent if able to be found
@@ -7533,6 +7544,15 @@ class Geometry:
 
     @classmethod
     def from_pdb(cls, structure, name=""):
+        """Returns a list of Geometry objects from pdb files with multiple structural poses
+
+        :param structure: molecular structure information from a pdb file
+        :type structure: FileReader|str
+        :param name: name to be assigned to molecular structure, defaults to ""
+        :type name: str, optional
+        :return: Geometry objects for all poses of structure in pdb file
+        :rtype: list(Geometry)
+        """
         if isinstance(structure, FileReader):
             from_file = structure
         elif isinstance(structure, str):
@@ -7540,7 +7560,7 @@ class Geometry:
         if name == "":
             base_name = from_file.name
             if base_name =="":
-                base_name = self.name
+                base_name = cls.name
         else:
             base_name = name
         geom_list=[]
@@ -7549,7 +7569,7 @@ class Geometry:
             if "model" in key:
                 struct_list[base_name + "_" + key] = from_file.other[key]
         for struct_name, atoms in struct_list:
-            geom = cls(name=struct_name, structure=atoms,comment=self.comment)
+            geom = cls(name=struct_name, structure=atoms,comment=cls.comment)
             geom_list.append(geom)
         return geom_list
 
