@@ -2141,7 +2141,8 @@ class Geometry:
         return invariants
     
     def canonical_rank(
-        self, heavy_only=False, break_ties=True, update=False, invariant=True
+        self, heavy_only=False, break_ties=True, update=False, invariant=True,
+        initial_ranks=None,
     ): 
         """
         determine canonical ranking for atoms
@@ -2152,6 +2153,7 @@ class Geometry:
             J. Chem. Inf. Comput. Sci. 1989, 29, 2, 97–101
             (DOI: 10.1021/ci00062a008)
             if False, use neighbor IDs
+        :param list initial_ranks: list of initial ranks, one for each atom
 
         :return: list of rankings
 
@@ -2367,11 +2369,15 @@ class Geometry:
 
         # rank all atoms the same initially
         c = 0
-        for a in self.atoms:
+        if initial_ranks is None:
+            starting_ranks = [0 for a in self.atoms]
+        else:
+            starting_ranks = initial_ranks
+        for a, r in zip(self.atoms, starting_ranks):
             if heavy_only and a.element == "H":
                 continue
             atoms += [a]
-            ranks += [0]
+            ranks += [r]
             indices[a] = c
             c += 1
         atoms_set = set(atoms)
@@ -2385,12 +2391,13 @@ class Geometry:
         partitions = {atom_id: [] for atom_id in invariants}
         for i, atom_id in enumerate(invariants):
             partitions[atom_id].append(i)
-        new_rank = 0
-        for key in sorted(partitions.keys()):
-            idx_list = partitions[key]
-            for idx in idx_list:
-                ranks[idx] = new_rank
-            new_rank += len(idx_list)
+        if initial_ranks is None:
+            new_rank = 0
+            for key in sorted(partitions.keys()):
+                idx_list = partitions[key]
+                for idx in idx_list:
+                    ranks[idx] = new_rank
+                new_rank += len(idx_list)
 
         # re-rank using neighbors until no change
         for i in range(0, min(500, len(ranks))):
@@ -2980,6 +2987,183 @@ class Geometry:
 
             if res[0] < min_rmsd[0]:
                 min_rmsd = res
+
+        rmsd, vec = min_rmsd
+
+        # return rmsd
+        if not align:
+            if debug:
+                return this, ref, rmsd, vec
+            else:
+                return rmsd
+        # or update geometry and return rmsd
+        self.coord_shift(-com)
+        if np.linalg.norm(vec) > 0:
+            self.rotate(vec)
+        self.coord_shift(ref_com)
+        if debug:
+            this.rotate(vec)
+            return this, ref, rmsd, vec
+        else:
+            return rmsd
+
+    def RMSD_permute(
+        self,
+        ref,
+        align=False,
+        heavy_only=False,
+        targets=None,
+        ref_targets=None,
+        debug=False,
+        weights=None,
+        ref_weights=None,
+        stop_threshold=1e-3,
+    ):
+        """
+        calculate the RMSD between two structures by considering permutations
+        of equivalent atoms
+        
+        :param Geometry ref: structure to compare to
+        :param bool align: align self to ref
+        :param bool heavy_only: only use non-H atoms
+        :param list targets: atoms on self to use in RMSD calculation
+        :param list ref_targets: atoms on ref to use in RMSD calculation
+        :param list weights: list of weights for each atom for weighted RMSD calculation
+        :param list ref_weights: list of weights for each ref atom for weighted RMSD calculation
+        :param float stop_threshold: stop checking permutations if we find an RMSD < stop_threshold
+        :returns: RMSD in Angstroms
+        :rtype: float
+        """
+    
+        # _RMSD is copy-pasted from RMSD(), consider moving to utils?
+        def _RMSD(ref, other):
+            """
+            ref and other are lists of atoms
+            returns rmsd, angle, vector
+                rmsd (float)
+                angle (float) angle to rotate by
+                vector (np.array(float)) the rotation axis
+            """
+            matrix = np.zeros((4, 4), dtype=np.float64)
+            # not sure why we don't throw an error if the ref
+            # and targets aren't the same amount
+            if len(other) < len(ref):
+                ref = ref[:len(other)]
+            matrix = utils.quat_matrix(other, ref)
+
+            eigenval, eigenvec = np.linalg.eigh(matrix)
+            val = eigenval[0]
+            vec = eigenvec.T[0]
+
+            if val > 0:
+                # val is the SD
+                rmsd = np.sqrt(val / len(ref))
+            else:
+                # negative numbers that are basically zero, like -1e-16
+                rmsd = 0
+
+            # sometimes it freaks out if the coordinates are right on
+            # top of each other and gives overly large rmsd/rotation
+            # I think this is a numpy precision problem, may want to
+            # try scipy.linalg to see if that helps?
+            tmp = np.sqrt(np.sum((ref - other) ** 2) / len(ref))
+            if tmp < rmsd:
+                rmsd = tmp
+                vec = np.array([0, 0, 0])
+            return rmsd, vec
+
+        # get target atoms
+        tmp = targets
+        if targets is not None:
+            targets = self.find(targets)
+        else:
+            targets = self.atoms
+        if ref_targets is not None:
+            ref_targets = ref.find(ref_targets)
+        elif tmp is not None:
+            ref_targets = ref.find(tmp)
+        else:
+            ref_targets = ref.atoms
+
+        # screen out hydrogens if heavy_only requested
+        if heavy_only:
+            targets = [a for a in targets if a.element != "H"]
+            ref_targets = [a for a in ref_targets if a.element != "H"]
+
+        # using _fix_connectivity is generally slightly faster b/c we don't need
+        # to redetermine connectivity
+        # however, some methods like map_ligand don't alter the bonds at all
+        # therefore, we will redetermine the connectivity for these copied atoms
+        # this = Geometry(self._fix_connectivity(targets), refresh_ranks=sort and refresh_ranks, refresh_connected=False)
+        # ref = Geometry(ref._fix_connectivity(ref_targets), refresh_ranks=sort and refresh_ranks, refresh_connected=False)
+        this = Geometry([t.copy() for t in targets], refresh_ranks=False, refresh_connected=True)
+        ref = Geometry([r.copy() for r in ref_targets], refresh_ranks=False, refresh_connected=True)
+        if weights is not None:
+            for w, a in zip(weights, this.atoms):
+                a.coords *= w
+
+        if ref_weights is not None:
+            for w, a in zip(ref_weights, ref.atoms):
+                a.coords *= w
+
+        # align center of mass to origin
+        com = this.COM()
+        ref_com = ref.COM()
+
+        this.coord_shift(-com)
+        ref.coord_shift(-ref_com)
+
+        ndx = {a: i for i, a in enumerate(this.atoms)}
+        ref_ndx = {a: i for i, a in enumerate(ref.atoms)}
+        # determine which atoms are equivalent based on rank
+        this_ranks = this.canonical_rank(break_ties=False, update=False, heavy_only=heavy_only)
+        this_groups = {}
+        for a, r in zip(this.atoms, this_ranks):
+            this_groups.setdefault(r, [])
+            this_groups[r].append(a)
+        
+        ref_ranks = ref.canonical_rank(break_ties=False, update=False)
+        ref_groups = {}
+        for a, r in zip(ref.atoms, ref_ranks):
+            ref_groups.setdefault(r, [])
+            ref_groups[r].append(a)
+        
+        dupe_groups = sorted([k for k in this_groups.keys() if len(this_groups[k]) > 1], key=lambda x: len(this_groups[x]))
+        dupe_ref_groups = sorted([k for k in ref_groups.keys() if len(ref_groups[k]) > 1], key=lambda x: len(ref_groups[x]))
+
+        min_rmsd = _RMSD(ref.coords, this.coords)
+        # print(min_rmsd)
+        n = 0
+        ref.canonical_rank(update=True, initial_ranks=ref_ranks, break_ties=True)
+        # for atoms with the same rank, try different ranks
+        # if we find and rmsd < stop_threshold, stop trying
+        # XXX: we do need to check if ref has some equivalent atoms
+        # if ref does and this doesn't, we should be changing
+        # the ranks of ref and not this
+        # though this would only happen in cases where the connectivity is different
+        # so the ranks based on a molecular graph might not even work
+        # TODO: this only looks at one rank at a time
+        # make it look at multiple
+        # the code for that would be similar to makeConf
+        for rank in dupe_groups:
+            for atoms in itertools.permutations(this_groups[rank], len(this_groups[rank])):
+                test_this_ranks = [r for r in this_ranks]
+                for i, a in enumerate(atoms):
+                    test_this_ranks[ndx[a]] = test_this_ranks[ndx[a]] + i
+                this.canonical_rank(update=True, initial_ranks=test_this_ranks, break_ties=True)
+
+                this.atoms = this.reorder()[0]
+                ref.atoms = ref.reorder()[0]
+                res = _RMSD(ref.coords, this.coords)
+                n += 1
+        
+                if res[0] < min_rmsd[0]:
+                    min_rmsd = res
+                
+                if min_rmsd[0] < stop_threshold:
+                    break
+            if min_rmsd[0] < stop_threshold:
+                break
 
         rmsd, vec = min_rmsd
 
