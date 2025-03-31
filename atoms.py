@@ -1329,8 +1329,7 @@ class Atom:
         try:
             import matplotlib.patches as patches
         except:
-            # should this be self.LOG?
-            ls.LOG.error("Must install matplot lib")
+            self.LOG.error("Must install matplot lib")
             return None
 
         x, y, z = self.coords

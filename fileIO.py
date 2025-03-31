@@ -12,6 +12,7 @@ from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import AARONTOOLS
 from AaronTools.oniomatoms import OniomAtom
+from AaronTools.geometry import Geometry # TODO work around this dependence because it is kind of circular
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.orbitals import Orbitals
 from AaronTools.spectra import (
@@ -443,6 +444,7 @@ class FileWriter:
                 models = model_list
 
             for key in geom.other.keys():
+                # TODO change this so it makes FileWriter objects instead of Geometry objects
                 if key.startswith("model"):
                     if models == "all":
                         geom_list.append(Geometry(structure=geom.other[key], name=geom.name + "_" + key, refresh_connected=False, refresh_ranks = False))
@@ -545,7 +547,7 @@ class FileWriter:
                 elif atom.atomtype == "" and atom.charge == "" and not atom.link_info:
                     s += fmt2d.format(atom.element, *atom.coords, atom.layer)
             except ValueError:
-                self.LOG.warning("no layers designated for OniomAtom object(s)")
+                cls.LOG.warning("no layers designated for OniomAtom object(s)")
                 s += fmt3.format(atom.element, *atom.coords)
 
         s = s.rstrip()

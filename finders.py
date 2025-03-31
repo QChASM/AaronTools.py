@@ -5,6 +5,7 @@ from collections import deque
 
 import numpy as np
 from AaronTools import addlogger
+from AaronTools.oniomatoms import OniomAtom
 
 def get_class(name):
     """returns the finder class with the given name"""
@@ -40,7 +41,7 @@ class BondsFrom(Finder):
     def __repr__(self):
         return "atoms %i bonds from %s" % (self.number_of_bonds, self.central_atom)
 
-    def get_matching_atoms(self, atoms, geometry):
+    def get_matching_atoms(self, atoms, geometry): # TODO are atoms and geometry needed input?
         """returns List(Atom) that are a certain number of bonds away from the given atom"""
         matching_atoms = []
         stack = deque([self.central_atom])
