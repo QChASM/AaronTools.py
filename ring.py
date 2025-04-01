@@ -8,6 +8,7 @@ from glob import glob
 from AaronTools.const import AARONTOOLS
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.geometry import Geometry
+from AaronTools.utils.decorators import classproperty
 
 
 class Ring(Geometry):
@@ -89,8 +90,7 @@ class Ring(Geometry):
             else:
                 self.end = None
 
-    @classmethod
-    @property
+    @classproperty
     def AARON_LIBS(cls):
         from AaronTools.const import AARONLIB
         return os.path.join(AARONLIB, "Rings")
