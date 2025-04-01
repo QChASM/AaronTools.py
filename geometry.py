@@ -6857,7 +6857,7 @@ class Geometry:
         print(tmp)
         self = self - tmp
         return self
- 
+
     def fix_links(self):
         #connectivity = self.get_connectivity()
         #atoms = enumerate(self.atoms)

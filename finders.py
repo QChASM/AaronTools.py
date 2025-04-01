@@ -753,7 +753,7 @@ class OfType(Finder):
         elif self.atomtype in {'O', 'S2', 'P2'}:
             for atom in BondedElements('C').get_matching_atoms(atoms): matching_atoms.append(atom)
         elif self.atomtype in {'C', 'C2', 'Ca', 'Na', 'Nh', 'Ha', 'Hc','N'}:
-            aromatics, charge, fused = geometry.get_aromatic_atoms(atoms, return_rings=False)
+            aromatics, charge, fused = geometry.get_aromatic_atoms(return_rings=False)
             for shape in shapes.get(self.atomtype):
                 for atom in VSEPR(shape).get_matching_atoms(atoms):
                     if self.atomtype == 'Ca' and atom in aromatics and not is_carbonyl(atom): matching_atoms.append(atom)
@@ -804,7 +804,7 @@ class Aromatics(Finder):
         return "atoms that are in aromatic rings"
 
     def get_matching_atoms(self, atoms, geometry):
-        aromatics, charge, fused = geometry.get_aromatic_atoms(atoms,return_rings=False)
+        aromatics, charge, fused = geometry.get_aromatic_atoms(return_rings=False)
         return aromatics
 
 class ONIOMLayer(Finder):

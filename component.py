@@ -16,6 +16,7 @@ from AaronTools.fileIO import read_types
 from AaronTools.finders import BondedTo, CloserTo, NotAny
 from AaronTools.geometry import Geometry
 from AaronTools.substituent import Substituent
+from AaronTools.utils.decorators import classproperty
 from AaronTools.utils.utils import (
     perp_vector,
     lebedev_sphere,
@@ -128,8 +129,7 @@ class Component(Geometry):
                 return True
         return False
 
-    @classmethod
-    @property
+    @classproperty
     def AARON_LIBS(cls):
         from AaronTools.const import AARONLIB
         return os.path.join(AARONLIB, "Ligands")

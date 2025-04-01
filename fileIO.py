@@ -12,7 +12,6 @@ from AaronTools import addlogger
 from AaronTools.atoms import Atom
 from AaronTools.const import AARONTOOLS
 from AaronTools.oniomatoms import OniomAtom
-#from AaronTools.geometry import Geometry TODO work around this dependence because it is kind of circular
 from AaronTools.const import ELEMENTS, PHYSICAL, UNIT
 from AaronTools.orbitals import Orbitals
 from AaronTools.spectra import (
@@ -414,6 +413,7 @@ class FileWriter:
         kwargs["oniom"] can be string "all" or string "frag" which requires a specification of the fragment in another kwarg
         kwargs["layer"] can be defined if kwargs["oniom"] == "frag", can be "H", "M", or "L"
         """
+        from AaronTools.geometry import Geometry
         models = None
         geom_list = [geom]
         if "models" in kwargs.keys():
@@ -3184,7 +3184,8 @@ class FileReader:
                 log.warning("last line read: %s" % line)
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
                 try:
-                    log.warning(input_file)
+                    for input_line in input_file.splitlines():
+                        log.warning(input_line)
                 except NameError:
                     pass
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))

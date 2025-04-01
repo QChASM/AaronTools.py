@@ -933,7 +933,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
 
-        ref = """B1      B2      B3      B4      B5      L       file
+        ref = r"""B1      B2      B3      B4      B5      L       file
         3.98    5.34    5.63    6.28    6.31    9.65    test_files\catalysts\tm_single-lig.xyz
         
         """
@@ -958,7 +958,7 @@ thermochemistry from test_files/normal.log at 298.00 K:
         proc = Popen(args, stdout=PIPE, stderr=PIPE)
         out, err = proc.communicate()
         
-        ref = """B1      B2      B3      B4      B5      L       file
+        ref = r"""B1      B2      B3      B4      B5      L       file
         3.94    4.81    5.36    6.27    6.28    2.50    test_files\catalysts\tm_single-lig.xyz
         3.75    4.63    5.12    6.05    6.05    3.00    test_files\catalysts\tm_single-lig.xyz
         3.18    4.08    5.33    5.44    5.60    3.50    test_files\catalysts\tm_single-lig.xyz

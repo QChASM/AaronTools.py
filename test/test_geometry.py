@@ -893,7 +893,7 @@ class TestGeometry(TestWithTimer):
 
     def test_get_aromatic_atoms(self):
         mol = Geometry(TestGeometry.benzene)
-        out,out2,out3 = mol.get_aromatic_atoms(mol.atoms, return_rings=False,return_h=False)
+        out,out2,out3 = mol.get_aromatic_atoms(return_rings=False,return_h=False)
         self.assertTrue(all([atom in mol.find('C') for atom in out]))
 
     def test_define_layer(self):
