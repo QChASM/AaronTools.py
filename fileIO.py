@@ -2993,14 +2993,44 @@ class FileReader:
                                 soc_y = []
                                 soc_z = []
                                 while line.strip():
-                                    re_z = float(line[23:30])
-                                    im_z = float(line[32:40])
+                                    re_z = None
+                                    im_z = None
+                                    re_x = None
+                                    im_x = None
+                                    re_y = None
+                                    im_y = None
+                                    word = ""
+                                    reading = "nothing"
+                                    for letter in line:
+                                        if letter == "(":
+                                            reading = "real"
+                                            continue
+                                        elif letter == ",":
+                                            reading = "imaginary"
+                                            if re_z is None:
+                                                re_z = float(word)
+                                            elif re_x is None:
+                                                re_x = float(word)
+                                            elif re_y is None:
+                                                re_y = float(word)
+                                            word = ""
+                                            continue
+                                        elif letter == ")":
+                                            reading = "nothing"
+                                            if im_z is None:
+                                                im_z = float(word)
+                                            elif im_x is None:
+                                                im_x = float(word)
+                                            elif im_y is None:
+                                                im_y = float(word)
+                                            word = ""
+                                            continue                                                
+                                        
+                                        if reading != "nothing":
+                                            word += letter
+
                                     soc_z.append(complex(re_z, im_z))
-                                    re_x = float(line[47:54])
-                                    im_x = float(line[56:64])
                                     soc_x.append(complex(re_x, im_x))
-                                    re_y = float(line[71:78])
-                                    im_y = float(line[80:88])
                                     soc_y.append(complex(re_y, im_y))
                                     line = f.readline()
                                     n += 1

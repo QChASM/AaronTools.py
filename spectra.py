@@ -1752,7 +1752,10 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    soc_oscillator_str.append(float(info[6]))
+                    if orca_version <= 5:
+                        soc_oscillator_str.append(float(info[4]))
+                    else:
+                        soc_oscillator_str.append(float(info[6]))
                     i += 1
                     if i == len(lines):
                         break
@@ -1774,7 +1777,10 @@ class ValenceExcitations(Signals):
                 line = lines[i]
                 while line.strip():
                     info = line.split()
-                    soc_oscillator_vel.append(float(info[6]))
+                    if orca_version <= 5:
+                        soc_oscillator_vel.append(float(info[4]))
+                    else:
+                        soc_oscillator_vel.append(float(info[6]))
                     i += 1
                     if i == len(lines):
                         break
