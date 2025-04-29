@@ -4882,28 +4882,33 @@ class Geometry:
             angle -= a2.angle(a1, a3)
 
         # get target fragments
-        a1_frag = self.get_fragment(a1, a2)
-        a3_frag = self.get_fragment(a3, a2)
-
+        if as_group:
+            a1_frag = self.get_fragment(a1, a2)
+            a3_frag = self.get_fragment(a3, a2)
+        else:
+            a1_frag = [a1]
+            a3_frag = [a3]
+            
         # shift a2 to origin
-        self.coord_shift(-a2.coords, a1_frag)
-        self.coord_shift(-a2.coords, a3_frag)
+        # using center=a2 to be cleaner and consistent with change_dihedral
+        #self.coord_shift(-a2.coords, a1_frag)
+        #self.coord_shift(-a2.coords, a3_frag)
 
         # perform rotation
         if fix == 0:
             angle /= 2
-            self.rotate(w, -angle, a1_frag)
-            self.rotate(w, angle, a3_frag)
+            self.rotate(w, -angle, a1_frag, center=a2)
+            self.rotate(w, angle, a3_frag, center=a2)
         elif fix == 1:
-            self.rotate(w, angle, a3_frag)
+            self.rotate(w, angle, a3_frag, center=a2)
         elif fix == 3:
-            self.rotate(w, -angle, a1_frag)
+            self.rotate(w, -angle, a1_frag, center=a2)
         else:
             raise ValueError("fix must be 0, 1, 3 (supplied: {})".format(fix))
 
         # shift a2 back to original location
-        self.coord_shift(a2.coords, a1_frag)
-        self.coord_shift(a2.coords, a3_frag)
+        #self.coord_shift(a2.coords, a1_frag)
+        #self.coord_shift(a2.coords, a3_frag)
 
     def change_dihedral(self, *args, **kwargs):
         """
