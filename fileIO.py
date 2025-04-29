@@ -2747,8 +2747,8 @@ class FileReader:
                                 break
                             if "NMR shielding tensor and spin rotation calculation done" in line:
                                 break
-                            if "GIAO: Analytic para- and diamagnetic shielding integrals" in line:
-                                break
+                            # if "GIAO: Analytic para- and diamagnetic shielding integrals" in line:
+                            #     break
                             
                         try:
                             self.other["nmr"] = NMR("".join(nmr_data), style="orca", n_atoms=len(self.atoms))
@@ -2992,7 +2992,7 @@ class FileReader:
                                 soc_x = []
                                 soc_y = []
                                 soc_z = []
-                                while line.strip():
+                                while line.strip() and "----" not in line:
                                     re_z = None
                                     im_z = None
                                     re_x = None
@@ -3214,8 +3214,7 @@ class FileReader:
                 log.warning("last line read: %s" % line)
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))
                 try:
-                    for input_line in input_file.splitlines():
-                        log.warning(input_line)
+                    log.warning(input_file)
                 except NameError:
                     pass
                 log.warning("the following data has been read: %s" % ", ".join(self.other.keys()))

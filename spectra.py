@@ -1565,14 +1565,17 @@ class ValenceExcitations(Signals):
             if "SINGLETS" in line:
                 mult = "Singlet"
                 i += 1
+            
             elif "TRIPLETS" in line:
                 mult = "Triplet"
                 i += 1
+            
             elif re.search("IROOT=.+?(\d+\.\d+)\seV", line):
                 # could use walrus
                 info = re.search("IROOT=.+?(\d+\.\d+)\seV", line)
                 nrgs.append(float(info.group(1)))
                 i += 1
+            
             elif re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line):
                 info = re.search("STATE\s*\d+:\s*E=\s*\S+\s*au\s*(-?\d+\.\d+)", line)
                 try:
@@ -1581,10 +1584,12 @@ class ValenceExcitations(Signals):
                     raise RuntimeError("error while parsing ORCA UV/vis data: %s" % line)
                 multiplicity.append(mult)
                 i += 1
+            
             elif (
                 "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line and
                 "TRANSIENT" not in line and
-                "SOC" not in line and "SPIN ORBIT" not in line
+                "SOC" not in line and
+                "SPIN ORBIT" not in line
             ):
                 i += 5
                 line = lines[i]
@@ -1604,6 +1609,7 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif (
                 "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
                 "TRANSIENT" not in line and
@@ -1629,10 +1635,12 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif (
                 line.endswith("CD SPECTRUM") and
                 "TRANSIENT" not in line and
-                "SPIN ORBIT" not in line
+                "SPIN ORBIT" not in line and 
+                "SOC CORRECTED" not in line
             ) or (
                 line.strip() == "CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
             ):
@@ -1654,10 +1662,12 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif (
                 "CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line and
                 "TRANSIENT" not in line and
-                "SPIN ORBIT" not in line
+                "SPIN ORBIT" not in line and
+                "SOC CORRECTED" not in line
             ):
                 i += 5
                 line = lines[i]
@@ -1675,6 +1685,7 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
                 i += 5
                 line = lines[i]
@@ -1690,6 +1701,7 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif "TRANSIENT ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in line:
                 i += 5
                 line = lines[i]
@@ -1703,6 +1715,7 @@ class ValenceExcitations(Signals):
                     if i == len(lines):
                         break
                     line = lines[i]
+            
             elif "TRANSIENT CD SPECTRUM" in line:
                 i += 5
                 line = lines[i]
@@ -1714,6 +1727,7 @@ class ValenceExcitations(Signals):
                         transient_rot_str.append(float(info[6]))
                     i += 1
                     line = lines[i]
+            
             elif "CALCULATED SOLVENT SHIFTS" in line:
                 i += 8
                 line = lines[i]
@@ -1821,7 +1835,7 @@ class ValenceExcitations(Signals):
 
             else:
                 i += 1
-
+        
         if corr:
             for i in range(0, len(nrgs)):
                 nrgs[i] = corr[i]
@@ -1838,8 +1852,8 @@ class ValenceExcitations(Signals):
         if not magnetic_velocities:
             magnetic_velocities = [None for x in oscillator_str]
 
-        if not soc_rotatory_str_vel:
-            soc_rotatory_str_vel = [None for x in oscillator_str]
+        if not soc_rotatory_str_vel and soc_oscillator_str:
+            soc_rotatory_str_vel = [None for x in soc_oscillator_str]
 
         if not dipole_moments_vel:
             dipole_moments_vel = [None for x in oscillator_str]

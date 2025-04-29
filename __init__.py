@@ -92,10 +92,10 @@ class CustomFilter(logging.Filter):
         """
         if isinstance(record.msg, str):
             record.msg = re.sub(
-                "\n(\S)", lambda x: "\n  %s" % x.group(1), record.msg
+                r"\n(\S)", lambda x: "\n  %s" % x.group(1), record.msg
             )
         msg = ["\n  "]
-        for word in re.findall("\S+\s*", record.getMessage()):
+        for word in re.findall(r"\S+\s*", record.getMessage()):
             if len("".join(msg).split("\n")[-1]) + len(word) < 80:
                 msg.append(word)
             else:
