@@ -4226,6 +4226,13 @@ class FileReader:
                     self.other["energy"] = float(tmp[idx + 1])
                     self.other["scf_energy"] = float(tmp[idx + 1])
     
+                elif line.startswith(" Entering Link"):
+                    n_routes = 0
+                    while ("route %i" % n_routes) in self.other:
+                        n_routes += 1
+                    self.other["route %i" % n_routes] = route
+                    route = None
+    
                 elif line.startswith(" Energy= "):
                     self.other["energy"] = float(line.split()[1])
     
@@ -4334,9 +4341,13 @@ class FileReader:
                     highest_state = 0
                     done = False
                     read_states = False
+                    stability_test = False
                     while not done:
                         n += 1
                         uv_vis += line
+                        if "Eigenvectors of the stability matrix" in line:
+                            stability_test = True
+                            break
                         if not read_states and line.strip() and line.split()[0].isdigit():
                             state = int(line.split()[0])
                             if state > highest_state:
@@ -4353,6 +4364,8 @@ class FileReader:
                             self.other["energy"] = float(nrg.group(2))
     
                         line = f.readline()
+                    if stability_test:
+                        continue
                     try:
                         self.other["uv_vis"] = ValenceExcitations(
                             uv_vis, style="gaussian"
