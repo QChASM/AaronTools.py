@@ -19,7 +19,7 @@
         "tetrahedral, tetrahedral, tetrahedral, tetrahedral, tetrahedral, tetrahedral": {
             "common": [
 				[-60, 60, -60, 60, -60, 60],
-				[60, -60, 60, -60, 60, -60],
+				[60, -60, 60, -60, 60, -60]
 			],
 			"uncommon": [
 				[0, -60, 60, 0, -60, 60],

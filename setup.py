@@ -151,6 +151,7 @@ setup(
             "coordination_complex/README.txt", 
             "Rings/*",
             "calculated_bond_lengths.json",
+            "ring_conformers.json",
             "LICENSE",
             "config.ini",
         ],

@@ -680,7 +680,7 @@ class Geometry:
         raise LookupError("solvent %s not found in library" % solvent)
 
     @classmethod
-    def ring_conformers(cls, geometry, targets=None):
+    def ring_conformers(cls, geometry, targets=None, include_uncommon=False):
         """
         returns a list of Geometry objects with varying ring conformations
         :param Geometry geometry: structure to look for conformers of
@@ -781,12 +781,15 @@ class Geometry:
                     graph[a2].remove(a)
                 graph[a] = []
                 utils.prune_branches(graph)
-        
+
         # need to figure out reasonable torsion values
         # depending on the type of ring it is
         flexible_torsions = []
         ring_torsions = []
         torsion_options = []
+        kinds = ["common"]
+        if include_uncommon:
+            kinds.append("uncommon")
         for ring in rings:
             vseprs = []
             ring_torsions.append([])
@@ -817,7 +820,7 @@ class Geometry:
                         
                         flexible_torsions.append(torsion)
                         ring_torsions[-1].append(torsion)
-            
+                
                     if (
                         torsion.atom1 == ring[atom2] and
                         torsion.atom2 == ring[atom1] and 
@@ -846,7 +849,13 @@ class Geometry:
                 ring_torsions[-1] = np.roll(ring_torsions[-1], 1)
                 ring_type = ", ".join(vseprs)
                 try:
-                    torsion_options.append(ring_types[str(len(ring))][ring_type])
+                    angles = []
+                    if "common" in ring_types[str(len(ring))][ring_type]:
+                        angles.extend(ring_types[str(len(ring))][ring_type]["common"])
+                    if include_uncommon and "uncommon" in ring_types[str(len(ring))][ring_type]:
+                        angles.extend(ring_types[str(len(ring))][ring_type]["uncommon"])
+
+                    torsion_options.append(angles)
                     ring_torsions[-1] = ring_torsions[-1].tolist()
                     break
                 except KeyError:
@@ -912,7 +921,7 @@ class Geometry:
                                 # is different from before, we will skip
                                 if (
                                     (torsion.atom1, torsion.atom2) in visited and
-                                    not np.isclose(dq[n] - np.deg2rad(combo[j][k]) + coord.value(coords), 0, atol=1e-4)
+                                    not np.isclose(dq[n] - np.deg2rad(combo[j][k]) + coord.value(coords), 0, atol=1e-2)
                                 ):
                                     probably_useless = True
 
@@ -921,7 +930,7 @@ class Geometry:
                                 )
                                 visited.add((torsion.atom1, torsion.atom2))
 
-                                # print("changing", torsion, "by %.0f" % np.rad2deg(dq[n]))
+                                # print("changing", torsion, "by %.1f" % np.rad2deg(dq[n]))
                             n += coord.n_values
             
             # there will be at least one combination with basically no changes
@@ -933,7 +942,7 @@ class Geometry:
             
             # try setting the torsions
             new_coords, err = ric.apply_change_2(coords, dq, convergence=1e-7)
-            if err > 1e-2:
+            if err > 1e-3:
                 cls.LOG.debug("significant deviation from expected torsions: %.2f" % err)
                 continue
             
@@ -956,7 +965,7 @@ class Geometry:
 
             else:
                 unique_geoms.append(ref)
-        
+
         # profile.disable()
         # profile.print_stats()
         

@@ -55,6 +55,13 @@ ring_conf_parser.add_argument(
 )
 
 ring_conf_parser.add_argument(
+    "-u", "--uncommon",
+    action="store_true",
+    default=False,
+    help="include uncommon conformers (e.g. boat cyclohexanes)",
+)
+
+ring_conf_parser.add_argument(
     "-a", "--append",
     action="store_true",
     default=False,
@@ -76,7 +83,7 @@ for f in glob_files(args.infile, parser=ring_conf_parser):
             infile = FileReader(("from stdin", "xyz", f))
 
     geom = Geometry(infile)
-    conformers = Geometry.ring_conformers(geom, targets=args.targets)
+    conformers = Geometry.ring_conformers(geom, targets=args.targets, include_uncommon=args.uncommon)
 
     for i, conf in enumerate(conformers):
         if args.outfile:
