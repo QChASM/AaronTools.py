@@ -930,7 +930,7 @@ class Geometry:
                                 )
                                 visited.add((torsion.atom1, torsion.atom2))
 
-                                # print("changing", torsion, "by %.1f" % np.rad2deg(dq[n]))
+                                # print("changing %s by %.1f" % (str(torsion), np.rad2deg(dq[n])))
                             n += coord.n_values
             
             # there will be at least one combination with basically no changes
@@ -938,13 +938,16 @@ class Geometry:
                 continue
             
             if probably_useless:
+                # print("probably useless")
                 continue
             
             # try setting the torsions
             new_coords, err = ric.apply_change_2(coords, dq, convergence=1e-7)
             if err > 1e-3:
-                cls.LOG.debug("significant deviation from expected torsions: %.2f" % err)
+                # print("significant deviation from expected torsions: %.2f" % err)
                 continue
+            
+            # print("generated conformer")
             
             # do RMSD to make sure it's actually unique
             #XXX: RMSD sucks at this in simple test cases - consider
@@ -966,10 +969,25 @@ class Geometry:
             else:
                 unique_geoms.append(ref)
 
+        actually_unique = []
+        for i, geom1 in enumerate(unique_geoms):
+            geom1_mirror = geom1.copy()
+            geom1_mirror.mirror()
+            for j, geom2 in enumerate(unique_geoms[:i]):
+                rmsd = geom1.RMSD_permute(geom2)
+                if rmsd < 1e-2:
+                    break
+                rmsd = geom1_mirror.RMSD_permute(geom2)
+                if rmsd < 1e-2:
+                    break
+            else:
+                actually_unique.append(geom1)
+
         # profile.disable()
         # profile.print_stats()
         
-        return unique_geoms
+        print(len(actually_unique))
+        return actually_unique
 
     @staticmethod
     def list_solvents(include_ext=False):
@@ -3026,6 +3044,7 @@ class Geometry:
         debug=False,
         weights=None,
         ref_weights=None,
+        max_order="smallest",
         stop_threshold=1e-3,
     ):
         """
@@ -3039,6 +3058,7 @@ class Geometry:
         :param list ref_targets: atoms on ref to use in RMSD calculation
         :param list weights: list of weights for each atom for weighted RMSD calculation
         :param list ref_weights: list of weights for each ref atom for weighted RMSD calculation
+        :param int max_order: max size of groups of atoms to permute (default is the size of the smallest group)
         :param float stop_threshold: stop checking permutations if we find an RMSD < stop_threshold
         :returns: RMSD in Angstroms
         :rtype: float
@@ -3139,7 +3159,7 @@ class Geometry:
         
         dupe_groups = sorted([k for k in this_groups.keys() if len(this_groups[k]) > 1], key=lambda x: len(this_groups[x]))
         dupe_ref_groups = sorted([k for k in ref_groups.keys() if len(ref_groups[k]) > 1], key=lambda x: len(ref_groups[x]))
-
+        
         min_rmsd = _RMSD(ref.coords, this.coords)
         # print(min_rmsd)
         n = 0
@@ -3154,7 +3174,12 @@ class Geometry:
         # TODO: this only looks at one rank at a time
         # make it look at multiple
         # the code for that would be similar to makeConf
-        for rank in dupe_groups:
+        if max_order == "smallest":
+            max_order = min([len(group) for group in this_groups.values()])
+        for rank in sorted(dupe_groups, key=lambda x: len(this_groups[x])):
+            if len(this_groups[rank]) > max_order:
+                break
+            # print("checking rank", rank, "which has", len(this_groups[rank]), "members")
             for atoms in itertools.permutations(this_groups[rank], len(this_groups[rank])):
                 test_this_ranks = [r for r in this_ranks]
                 for i, a in enumerate(atoms):
@@ -3168,7 +3193,7 @@ class Geometry:
         
                 if res[0] < min_rmsd[0]:
                     min_rmsd = res
-                
+
                 if min_rmsd[0] < stop_threshold:
                     break
             if min_rmsd[0] < stop_threshold:
@@ -3283,19 +3308,24 @@ class Geometry:
                     rv.remove(r)
         return rv
 
-    def get_principle_axes(self, mass_weight=True, center=None):
+    def get_principle_axes(self, targets=None, mass_weight=True, center=None):
         """
         :param bool mass_weight: mass-weight axes (i.e. moments of inertia)
+        :param targets: atoms to include in the calculation (default: all atoms)
         :param np.ndarray center: center of rotation, defaults to Geometry.COM
         
         :returns: [principal moments], [principle axes]
         """
+        if targets is None:
+            targets = self.atoms
+        targets = self.find(targets)
+        
         if center is None:
-            COM = self.COM(mass_weight=mass_weight)
+            COM = self.COM(mass_weight=mass_weight, targets=targets)
         else:
             COM = center
         I_CM = np.zeros((3, 3))
-        for a in self:
+        for a in targets:
             if mass_weight:
                 mass = a.mass
             else:

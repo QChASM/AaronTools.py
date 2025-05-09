@@ -3,6 +3,7 @@
 import sys
 from os.path import dirname
 import argparse
+import logging
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
@@ -58,17 +59,29 @@ ring_conf_parser.add_argument(
     "-u", "--uncommon",
     action="store_true",
     default=False,
+    dest="uncommon",
     help="include uncommon conformers (e.g. boat cyclohexanes)",
+)
+
+ring_conf_parser.add_argument(
+    "-m", "--minimize",
+    action="store_true",
+    default=False,
+    dest="minimize",
+    help="rotate substituents to reduce steric clashing",
 )
 
 ring_conf_parser.add_argument(
     "-a", "--append",
     action="store_true",
     default=False,
+    dest="append",
     help="append structures to output file",
 )
 
 args = ring_conf_parser.parse_args()
+
+s = ""
 
 for f in glob_files(args.infile, parser=ring_conf_parser):
     if isinstance(f, str):
@@ -86,6 +99,9 @@ for f in glob_files(args.infile, parser=ring_conf_parser):
     conformers = Geometry.ring_conformers(geom, targets=args.targets, include_uncommon=args.uncommon)
 
     for i, conf in enumerate(conformers):
+        if args.minimize:
+            conf.detect_substituents()
+            conf.minimize_sub_torsion()
         if args.outfile:
             outfile = args.outfile
             if isinstance(f, str): # apply substitutions if a file path was given as input
@@ -97,8 +113,12 @@ for f in glob_files(args.infile, parser=ring_conf_parser):
                 )
             conf.write(
                 outfile=outfile,
-                append=args.append,
+                append=args.append or "$i" not in args.outfile,
             )
         else:
-            out = conf.write(outfile=False).rstrip()
-            print(out)
+            s = conf.write(outfile=False)
+            s += "\n"
+
+if args.outfile is None:
+    print(out)
+    
