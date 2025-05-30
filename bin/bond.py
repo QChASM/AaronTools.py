@@ -125,7 +125,7 @@ for f in glob_files(args.infile, parser=bond_parser):
         else:
             infile = FileReader(("from stdin", "xyz", f))
 
-    geom = Geometry(infile)
+    geom = Geometry(infile, refresh_connected=args.set_dist or args.change, refresh_ranks=False)
 
     #set bond to specified value
     for bond in args.set_dist:

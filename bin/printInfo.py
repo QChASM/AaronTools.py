@@ -54,6 +54,15 @@ info_parser.add_argument(
 )
 
 info_parser.add_argument(
+    "-e", "--scientific",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="scientific",
+    help="print floating point numbers in scientific notation",
+)
+
+info_parser.add_argument(
     "-i", "--info",
     type=str,
     default=[],
@@ -141,10 +150,16 @@ for f in glob_files(args.infile, parser=info_parser):
                     else:
                         s += "\t%-30s =\t%i\n" % (key, infile.other[key])
                 elif isinstance(infile.other[key], float):
-                    if args.csv:
-                        s += "\"%s\"%s%.8f\n" % (key, sep, infile.other[key])
+                    if args.scientific:
+                        if args.csv:
+                            s += "\"%s\"%s%.8e\n" % (key, sep, infile.other[key])
+                        else:
+                            s += "\t%-30s =\t%.8e\n" % (key, infile.other[key])
                     else:
-                        s += "\t%-30s =\t%.8f\n" % (key, infile.other[key])
+                        if args.csv:
+                            s += "\"%s\"%s%.8f\n" % (key, sep, infile.other[key])
+                        else:
+                            s += "\t%-30s =\t%.8f\n" % (key, infile.other[key])
                 elif isinstance(infile.other[key], list) or (
                     isinstance(infile.other[key], np.ndarray) and infile.other[key].ndim == 1
                 ):
@@ -161,7 +176,10 @@ for f in glob_files(args.infile, parser=info_parser):
                         s += "\"%s\"%s" % (key, sep)
                         vectorized = np.reshape(infile.other[key], (infile.other[key].size,))
                         if isinstance(vectorized[0], float):
-                            s += sep.join(["%11.8f" % x for x in vectorized])
+                            if args.scientific:
+                                s += sep.join(["%.8e" % x for x in vectorized])
+                            else:
+                                s += sep.join(["%11.8f" % x for x in vectorized])
                         else:
                             s += sep.join([str(x) for x in vectorized])
                         s += "\n"

@@ -498,6 +498,7 @@ class CompOutput:
 
         rv = {}
         lines = iter(self.archive.split("\\\\"))
+        read_hess = False
         for line in lines:
             line = line.strip()
             if not line:
@@ -540,14 +541,17 @@ class CompOutput:
                     key, val = word.split("=")
                     rv[key.lower()] = float_vec(val)
                 else:
-                    if "hessian" not in rv:
+                    if read_hess:
+                        read_hess = False
                         rv["hessian"] = uptri2sym(
                             float_vec(word),
-                            3 * len(rv["atoms"]),
+                            3 * len(self.geometry.atoms),
                             col_based=True,
                         )
-                    else:
-                        rv["gradient"] = float_vec(word)
+                    elif word.count(",") == (3 * len(self.geometry.atoms) - 1):
+                        rv["gradient"] = np.reshape(float_vec(word), (len(self.geometry.atoms), 3))
+                if "NImag" in word:
+                    read_hess = True
         return rv
 
     def follow(self, reverse=False, step=0.1):
