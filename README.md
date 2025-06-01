@@ -2,7 +2,7 @@
 <a href='https://aarontools.readthedocs.io/en/latest/?badge=latest'>
     <img src='https://readthedocs.org/projects/aarontools/badge/?version=latest' alt='Documentation Status' />
 </a>
-<a href="https://pypi.org/project/AaronTools/1.0/"><img src="https://img.shields.io/pypi/dm/aarontools.svg"></a>
+<a href="https://pypi.org/project/AaronTools/1.1/"><img src="https://img.shields.io/pypi/dm/aarontools.svg"></a>
 <a href="https://doi.org/10.1002/wcms.1510"><img src="https://img.shields.io/badge/DOI-10.1002/wcms.1510-blue"></a>
 
 # AaronTools.py
