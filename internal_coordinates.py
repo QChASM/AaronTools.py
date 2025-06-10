@@ -101,6 +101,81 @@ class CartesianCoordinate(Coordinate):
         return s
 
 
+class XCoordinate(Coordinate):
+
+    n_values = 1
+    
+    def __init__(self, atom):
+        self.atom = atom
+    
+    def __eq__(self, other):
+        if not isinstance(other, XCoordinate):
+            return False
+        
+        return self.atom == other.atom
+    
+    def __repr__(self):
+        return "X coordinate for atom %i" % self.atom
+
+    def value(self, coords):
+        return coords[self.atom][0]
+    
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        s = np.zeros((3, 3 * len(coords)))
+        s[0, 3 * self.atom] = 1
+        return s
+
+
+class YCoordinate(Coordinate):
+
+    n_values = 1
+    
+    def __init__(self, atom):
+        self.atom = atom
+    
+    def __eq__(self, other):
+        if not isinstance(other, YCoordinate):
+            return False
+        
+        return self.atom == other.atom
+    
+    def __repr__(self):
+        return "Y coordinate for atom %i" % self.atom
+
+    def value(self, coords):
+        return coords[self.atom][1]
+    
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        s = np.zeros((3, 3 * len(coords)))
+        s[1, 3 * self.atom + 1] = 1
+        return s
+
+
+class ZCoordinate(Coordinate):
+
+    n_values = 1
+    
+    def __init__(self, atom):
+        self.atom = atom
+    
+    def __eq__(self, other):
+        if not isinstance(other, ZCoordinate):
+            return False
+        
+        return self.atom == other.atom
+    
+    def __repr__(self):
+        return "Z coordinate for atom %i" % self.atom
+
+    def value(self, coords):
+        return coords[self.atom][2]
+    
+    def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
+        s = np.zeros((3, 3 * len(coords)))
+        s[2, 3 * self.atom + 2] = 1
+        return s
+
+
 class Bond(Coordinate):
     def __init__(self, atom1, atom2):
         self.atom1 = atom1
