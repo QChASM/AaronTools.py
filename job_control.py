@@ -216,8 +216,10 @@ class SubmitProcess:
         """
         submit job to the queue
         
-        :param bool|int wait: do not leave the function until any job in the directory
-            finishes (polled every 5 minutes or 'wait' seconds)
+        :param bool|int wait: do not leave the function until ALL jobs in the directory
+            finish (polled every 5 minutes if 'wait=True' or every 'wait' seconds if 'wait' is int)
+
+        :param bool quiet: print output from submission to queue
         
         :param dict opts: used to render template; keys are template variables (e.g. exec_memory)
             and values are the corresponding values
