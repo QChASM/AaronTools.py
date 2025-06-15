@@ -20,7 +20,8 @@ class JobControl:
 class SubmitProcess:
     """
     class for submitting jobs to the queue
-    attributes:
+    
+    Attributes:
 
     * name       - name of job and input file minus the extension
     * exe        - type of input file (com, in, inp)
