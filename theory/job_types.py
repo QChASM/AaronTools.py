@@ -1078,7 +1078,7 @@ class OptimizationJob(JobType):
 
             if "torsions" in self.constraints:
                 if self.constraints["torsions"] and self.geometry is not None:
-                    out_str += '("\n'
+                    out_str = '("\n'
                     for torsion in self.constraints["torsions"]:
                         atom1, atom2, atom3, atom4 = self.geometry.find(
                             torsion
