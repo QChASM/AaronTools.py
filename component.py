@@ -529,6 +529,7 @@ class Component(Geometry):
             * 'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
             * dict() with elements as keys and radii as values
         """
+        from AaronTools.utils.utils import xyzzy_cross
         if method.lower() == "tolman":
             CITATION = "doi:10.1021/ja00808a009"
         elif method.lower() == "exact":
@@ -752,10 +753,11 @@ class Component(Geometry):
             aij = None
             bij = None
             cij = None
+            ndx = {a: i for i, a in enumerate(self.atoms)}
             for i, atom1 in enumerate(atom_list):
-                ndx_i = self.atoms.index(atom1)
+                ndx_i = ndx[atom1]
                 for j, atom2 in enumerate(atom_list[:i]):
-                    ndx_j = self.atoms.index(atom2)
+                    ndx_j = ndx[atom2]
                     beta_ij = np.arccos(
                         np.dot(center.bond(atom1), center.bond(atom2))
                         / (atom1.dist(center) * atom2.dist(center))
@@ -776,10 +778,10 @@ class Component(Geometry):
                             0.5 * (beta_ij - beta[ndx_i] + beta[ndx_j])
                         ) / np.sin(beta_ij)
                         cij = 0
-                        norm = (
+                        max_a_norm = (
                             aij * mi
                             + bij * mj
-                            + cij * np.cross(mi, mj) / np.sin(bij)
+                            + cij * xyzzy_cross(mi, mj) / np.sin(bij)
                         )
 
             # r = 0.2 * np.tan(max_a)
@@ -792,9 +794,9 @@ class Component(Geometry):
             overshadowed_list = []
             rhs = max_a
             for atom in atom_list:
-                ndx_i = self.atoms.index(atom)
+                ndx_i = ndx[atom]
                 lhs = beta[ndx_i] + np.arccos(
-                    np.dot(center.bond(atom), norm) / center.dist(atom)
+                    np.dot(center.bond(atom), max_a_norm) / center.dist(atom)
                 )
                 # this should be >=, but there can be numerical issues
                 if rhs > lhs or np.isclose(rhs, lhs):
@@ -806,7 +808,7 @@ class Component(Geometry):
 
                 cones.append(
                     (
-                        center.coords + (scale * norm),
+                        center.coords + (scale * max_a_norm),
                         center.coords,
                         scale * abs(np.tan(max_a)),
                     )
@@ -827,9 +829,9 @@ class Component(Geometry):
                 for j, atom2 in enumerate(atom_list[:i]):
                     for k, atom3 in enumerate(atom_list[i + 1 :]):
                         c += 1
-                        ndx_i = self.atoms.index(atom1)
-                        ndx_j = self.atoms.index(atom2)
-                        ndx_k = self.atoms.index(atom3)
+                        ndx_i = ndx[atom1]
+                        ndx_j = ndx[atom2]
+                        ndx_k = ndx[atom3]
                         # print(atom1.name, atom2.name, atom3.name)
 
                         mi = center.bond(atom1)
@@ -839,7 +841,7 @@ class Component(Geometry):
                         mk = center.bond(atom3)
                         mk /= np.linalg.norm(center.dist(atom3))
 
-                        gamma_ijk = np.dot(mi, np.cross(mj, mk))
+                        gamma_ijk = np.dot(mi, xyzzy_cross(mj, mk))
 
                         # M = np.column_stack((mi, mj, mk))
 
@@ -847,9 +849,9 @@ class Component(Geometry):
 
                         N = np.column_stack(
                             (
-                                np.cross(mj, mk),
-                                np.cross(mk, mi),
-                                np.cross(mi, mj),
+                                xyzzy_cross(mj, mk),
+                                xyzzy_cross(mk, mi),
+                                xyzzy_cross(mi, mj),
                             )
                         )
 
@@ -908,6 +910,9 @@ class Component(Geometry):
                         alpha4 = (2 * np.pi - np.arccos(w_gt)) / 2
 
                         for alpha in [alpha1, alpha2, alpha3, alpha4]:
+                            if np.isnan(alpha):
+                                continue
+
                             if alpha < max_a:
                                 continue
 
@@ -929,8 +934,8 @@ class Component(Geometry):
                             norm = p / gamma_ijk
 
                             for atom in atom_list:
-                                ndx = self.atoms.index(atom)
-                                rhs = beta[ndx]
+                                ndx_i = self.atoms.index(atom)
+                                rhs = beta[ndx_i]
                                 d = np.dot(
                                     center.bond(atom), norm
                                 ) / center.dist(atom)
@@ -950,6 +955,9 @@ class Component(Geometry):
                                     #     )
                                     # )
 
+            if min_alpha is None:
+                min_alpha = max_a
+                # min_norm = max_a_norm
             scale = 5 * np.cos(min_alpha)
 
             cones.append(

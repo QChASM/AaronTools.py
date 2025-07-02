@@ -7,17 +7,7 @@ import numpy as np
 from scipy.spatial import distance_matrix, distance
 from scipy.linalg import pinv
 
-from AaronTools.utils.utils import proj, perp_vector, unique_combinations
-
-
-def _xyzzy_cross(v1, v2):
-    """quick cross product of two 3-D vectors"""
-    # this tends to be faster than np.cross
-    out = np.zeros(3)
-    out[0] = v1[1] * v2[2] - v1[2] * v2[1]
-    out[1] = v1[2] * v2[0] - v1[0] * v2[2]
-    out[2] = v1[0] * v2[1] - v1[1] * v2[0]
-    return out
+from AaronTools.utils.utils import proj, perp_vector, unique_combinations, xyzzy_cross
 
 
 def dist(coords_i, coords_j):
@@ -121,8 +111,8 @@ class XCoordinate(Coordinate):
         return coords[self.atom][0]
     
     def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
-        s = np.zeros((3, 3 * len(coords)))
-        s[0, 3 * self.atom] = 1
+        s = np.zeros(3 * len(coords))
+        s[3 * self.atom] = 1
         return s
 
 
@@ -146,8 +136,8 @@ class YCoordinate(Coordinate):
         return coords[self.atom][1]
     
     def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
-        s = np.zeros((3, 3 * len(coords)))
-        s[1, 3 * self.atom + 1] = 1
+        s = np.zeros(3 * len(coords))
+        s[3 * self.atom + 1] = 1
         return s
 
 
@@ -171,8 +161,8 @@ class ZCoordinate(Coordinate):
         return coords[self.atom][2]
     
     def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
-        s = np.zeros((3, 3 * len(coords)))
-        s[2, 3 * self.atom + 2] = 1
+        s = np.zeros(3 * len(coords))
+        s[3 * self.atom + 2] = 1
         return s
 
 
@@ -382,7 +372,7 @@ class LinearAngle(Coordinate):
         w = e_ij(coords[self.atom3], coords[self.atom2])
         return np.dot(v, w)
     
-        v2 = _xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
+        v2 = xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
 
         val1_a = Angle.angle(
@@ -414,7 +404,7 @@ class LinearAngle(Coordinate):
         if v is None:
             v = perp_vector(e_ij(coords[self.atom1], coords[self.atom2]))
     
-        v2 = _xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
+        v2 = xyzzy_cross(v, coords[self.atom1] - coords[self.atom3])
         v2 /= np.linalg.norm(v2)
         
         s[0, 3 * self.atom1 : 3 * self.atom1 + 3] = -v / dist(coords[self.atom1], coords[self.atom2])
@@ -533,7 +523,7 @@ class OutOfPlaneBend(Coordinate):
         e_23 = e_ij(coords[self.central_atom], coords[self.planar_atoms[1]])
         e_24 = e_ij(coords[self.central_atom], coords[self.planar_atoms[2]])
         e_12 = e_ij(coords[self.planar_atoms[0]], coords[self.central_atom])
-        v = _xyzzy_cross(e_23, e_24)
+        v = xyzzy_cross(e_23, e_24)
         v /= np.linalg.norm(v)
         pv = proj(e_12, v)
         n = np.linalg.norm(pv)
@@ -576,7 +566,7 @@ class OutOfPlaneBend(Coordinate):
         
         theta = self.value(coords)
         
-        v = _xyzzy_cross(e_23, e_24) / np.sin(phi_i)
+        v = xyzzy_cross(e_23, e_24) / np.sin(phi_i)
         
         s[3 * self.planar_atoms[0] : 3 * self.planar_atoms[0] + 3] = 1 / r_21
         s[3 * self.planar_atoms[0] : 3 * self.planar_atoms[0] + 3] *= v
@@ -657,9 +647,9 @@ class Torsion(Coordinate):
             e_12 = precomputed_e_ij[self.atom2, self.atom1]
             e_2l = precomputed_e_ij[self.group2[0], self.atom2]
         
-        v1 = _xyzzy_cross(e_i1, e_12)
-        v2 = _xyzzy_cross(e_12, e_2l)
-        angle = _xyzzy_cross(v1, v2)
+        v1 = xyzzy_cross(e_i1, e_12)
+        v2 = xyzzy_cross(e_12, e_2l)
+        angle = xyzzy_cross(v1, v2)
 
         angle = np.dot(angle, e_12)
         angle = math.atan2(
@@ -700,7 +690,7 @@ class Torsion(Coordinate):
             
             sin_i12_squared = math.sin(a_i12) ** 2
             cos_i12 = math.cos(a_i12)
-            e_i1_cross_12 = _xyzzy_cross(e_i1, e_12)
+            e_i1_cross_12 = xyzzy_cross(e_i1, e_12)
             
             s[3 * i : 3 * i + 3] = -1 / len(self.group1)
             s[3 * i : 3 * i + 3] *= e_i1_cross_12 / r_i1
@@ -733,7 +723,7 @@ class Torsion(Coordinate):
             
             sin_al21_squared = math.sin(a_l21) ** 2
             cos_al21 = math.cos(a_l21)
-            e_l2_cross_12 = _xyzzy_cross(e_l2, -e_12)
+            e_l2_cross_12 = xyzzy_cross(e_l2, -e_12)
             
             s[3 * l : 3 * l + 3] = -1 / len(self.group2)
             s[3 * l : 3 * l + 3] *= e_l2_cross_12 / r_l2
@@ -1061,10 +1051,10 @@ class InternalCoordinateSet:
                                         continue
                                     a_ij = e_ij(coords[angle.atom2, :], coords[angle.atom1, :])
                                     a_jk = e_ij(coords[angle.atom2, :], coords[angle.atom3, :])
-                                    va = _xyzzy_cross(a_ij, a_jk)
+                                    va = xyzzy_cross(a_ij, a_jk)
                                     b_ij = e_ij(atom1.coords, atom2.coords)
                                     b_jk = e_ij(atom1.coords, atom3.coords)
-                                    vb = _xyzzy_cross(b_ij, b_jk)
+                                    vb = xyzzy_cross(b_ij, b_jk)
                                     # print(va, vb)
                                     d = np.dot(va, vb)
                                     if abs(d) > 0.8 or abs(d) < 0.2:
@@ -1119,10 +1109,10 @@ class InternalCoordinateSet:
                                         continue
                                     a_ij = e_ij(coords[angle.atom2, :], coords[angle.atom1, :])
                                     a_jk = e_ij(coords[angle.atom2, :], coords[angle.atom3, :])
-                                    va = _xyzzy_cross(a_ij, a_jk)
+                                    va = xyzzy_cross(a_ij, a_jk)
                                     b_ij = e_ij(atom2.coords, atom1.coords)
                                     b_jk = e_ij(atom2.coords, atom3.coords)
-                                    vb = _xyzzy_cross(b_ij, b_jk)
+                                    vb = xyzzy_cross(b_ij, b_jk)
                                     d = np.dot(va, vb)
                                     # print(va, vb)
                                     if abs(d) > 0.8 or abs(d) < 0.2:
