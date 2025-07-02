@@ -2319,7 +2319,9 @@ class Theory:
                 if "$METHOD" in opt:
                     opt = opt.replace("$METHOD", "'%s'" % method)
 
-                out_str += opt
+                # values in other_kw_dict[PSI4_BEFORE_JOB] come in as list of lists,
+                # so just grabbing first one
+                out_str += opt[0]
                 out_str += "\n"
 
         # for each job, start with nrg = f('method'

@@ -148,15 +148,15 @@ class Basis:
 
                 if ele is AnyNonTransitionMetal or isinstance(ele, AnyNonTransitionMetal):
                     if not_any:
-                        ele_selection.append(AnyNonTransitionMetal())
-                    else:
                         ele_selection.append(AnyTransitionMetal())
-                
+                    else:
+                        ele_selection.append(AnyNonTransitionMetal())
+
                 elif ele is AnyTransitionMetal or isinstance(ele, AnyTransitionMetal):
                     if not_any:
-                        ele_selection.append(AnyTransitionMetal())
-                    else:
                         ele_selection.append(AnyNonTransitionMetal())
+                    else:
+                        ele_selection.append(AnyTransitionMetal())
                 
                 elif ele.lower() == "all":
                     if not_any:
