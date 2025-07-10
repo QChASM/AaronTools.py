@@ -4966,6 +4966,7 @@ class FileReader:
                 line = f.readline()
                 while line.strip():
                     route += line
+                    line = f.readline()
                 methods = np.loadtxt(os.path.join(
                         AARONTOOLS, "theory", "valid_methods", "gaussian.txt"
                     ),

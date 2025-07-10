@@ -785,11 +785,12 @@ class Frequency(Signals):
                     k *= PHYSICAL.SPEED_OF_LIGHT ** 2 * mu
                     k *= UNIT.AMU_TO_KG * 1e-2
                     mode.forcek = k
-        except (IndexError, AttributeError):
+        except (IndexError, AttributeError) as e:
             # some software can compute frequencies with a user-supplied
             # hessian, so it never prints the structure
             # ORCA can do this. It will print the input structure, but
             # we don't parse that
+            self.LOG.warning("issue calcing red mass", e)
             pass
     
     def parse_gaussian_lines(
