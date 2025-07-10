@@ -2,12 +2,14 @@ import concurrent.futures
 
 import numpy as np
 
-from scipy.spatial import distance_matrix
+from scipy.spatial.distance import pdist, cdist, squareform
 from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.const import ELEMENTS, UNIT, VDW_RADII, BONDI_RADII
 from AaronTools.utils.utils import lebedev_sphere, gauss_legendre_grid
+
+# import line_profiler
 
 
 @addlogger
@@ -1583,6 +1585,7 @@ class Orbitals:
         elif "alpha_occupancies" in filereader.keys():
             self.alpha_occupancies = [occ / 2 for occ in self.alpha_occupancies]
 
+    # @line_profiler.profile
     def _get_value(self, coords, arr):
         """returns value for the MO coefficients in arr"""
         ao = 0
@@ -1608,14 +1611,14 @@ class Orbitals:
             # differ from the previous
             if (
                 prev_center is None
-                or np.linalg.norm(coord - prev_center) > 1e-13
+                or np.linalg.norm(coord - prev_center) > 1e-12
             ):
                 prev_center = coord
                 d_coord = (coords - coord) * UNIT.ANG_TO_BOHR
                 if coords.ndim == 1:
                     r2 = np.dot(d_coord, d_coord)
                 else:
-                    r2 = np.sum(d_coord * d_coord, axis=1)
+                    r2 = np.sum(d_coord ** 2, axis=1)
             if coords.ndim == 1:
                 res = shell(
                     r2,
@@ -1633,6 +1636,60 @@ class Orbitals:
                     arr[ao : ao + n_func],
                 )
             val += res
+            ao += n_func
+        return val
+    
+    # @line_profiler.profile
+    def _get_value_multidim_array(self, coords, array):
+        """returns value for the MO coefficients in each row of array"""
+        prev_center = None
+        if coords.ndim == 1:
+            val = np.zeros(len(array))
+        else:
+            val = np.zeros((len(array), len(coords)))
+        
+        ao = 0
+        for coord, shell, n_func, shell_type in zip(
+            self.shell_coords,
+            self.basis_functions,
+            self.funcs_per_shell,
+            self.shell_types,
+        ):
+            for arr_ndx, arr in enumerate(array):
+                # don't calculate distances until we find an AO
+                # in this shell that has a non-zero MO coefficient
+                if not np.count_nonzero(arr[ao : ao + n_func]):
+                    continue
+                # print(shell_type, arr[ao : ao + n_func])
+                # don't recalculate distances unless this shell's coordinates
+                # differ from the previous
+                if (
+                    prev_center is None
+                    or np.linalg.norm(coord - prev_center) > 1e-12
+                ):
+                    prev_center = coord
+                    d_coord = (coords - coord) * UNIT.ANG_TO_BOHR
+                    if coords.ndim == 1:
+                        r2 = np.dot(d_coord, d_coord)
+                    else:
+                        r2 = np.sum(d_coord ** 2, axis=1)
+                if coords.ndim == 1:
+                    res = shell(
+                        r2,
+                        d_coord[0],
+                        d_coord[1],
+                        d_coord[2],
+                        arr[ao : ao + n_func],
+                    )
+                else:
+                    res = shell(
+                        r2,
+                        d_coord[:, 0],
+                        d_coord[:, 1],
+                        d_coord[:, 2],
+                        arr[ao : ao + n_func],
+                    )
+                val[arr_ndx] += res
             ao += n_func
         return val
 
@@ -1779,9 +1836,7 @@ class Orbitals:
             data = np.array([shells.result() for shells in out])
 
         else:
-            data = np.array([
-                self._get_value(coords, arr) for arr in arrays
-            ])
+            data = self._get_value_multidim_array(coords, arrays)
 
         # multiply values by orbital coefficients and square
         for i, occ in enumerate(alpha_occ):
@@ -1809,7 +1864,7 @@ class Orbitals:
     ):
         """
         returns the eletron density
-        same at self.density_value, but uses less memory at
+        same as self.density_value, but uses less memory at
         the cost of performance
         """
 
@@ -2309,7 +2364,7 @@ class Orbitals:
         
         # find points that are closest to this atom
         # than any other
-        dist_mat = distance_matrix(geom.coords, all_points)
+        dist_mat = cdist(geom.coords, all_points, metric="euclidean")
         atom_ndx = geom.atoms.index(atom)
         mask = np.argmin(dist_mat, axis=0) == atom_ndx
         
@@ -2406,7 +2461,7 @@ class Orbitals:
         for rvalue, rweight in zip(rgrid, rweights):
             agrid_r = agrid * rvalue
             agrid_r += target.coords
-            dist_mat = distance_matrix(geom.coords, agrid_r) ** 2
+            dist_mat = cdist(geom.coords, agrid_r, metric="sqeuclidean")
             dist_mat = np.transpose(dist_mat.T - radius_list)
             mask = np.argmin(dist_mat, axis=0) == atom_ndx
             # find points that are closest to this atom's vdw sphere
