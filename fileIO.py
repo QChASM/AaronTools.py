@@ -2382,6 +2382,8 @@ class FileReader:
         masses = []
         orca_version = 0
         nmr_data = None
+        _reading_layer = None
+        _has_layers = set()
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2441,6 +2443,14 @@ class FileReader:
                         f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                     )
     
+                if "SMALL SYSTEM" in line:
+                    _reading_layer = "small"
+                    _has_layers.add(_reading_layer)
+                
+                if "FULL SYSTEM" in line:
+                    _reading_layer = "full"
+                    _has_layers.add(_reading_layer)
+
                 if line.startswith("CARTESIAN COORDINATES (A.U.)") and not masses:
                     self.skip_lines(f, 2)
                     n += 2
@@ -2460,7 +2470,7 @@ class FileReader:
                             "atoms": deepcopy(self.atoms),
                             "data": deepcopy(self.other),
                         }]
-    
+
                     elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
                         if self.all_geom is None:
                             self.all_geom = []
@@ -2470,6 +2480,10 @@ class FileReader:
                         }]
     
                     self.atoms, n = get_atoms(f, n)
+                    if _reading_layer == "small":
+                        self.small_atoms = self.atoms
+                    elif _reading_layer == "full":
+                        self.full_atoms = self.atoms
                     step_converged = False
     
                 if just_geom:
@@ -2705,8 +2719,11 @@ class FileReader:
     
                         if all(hit.values()):
                             try:
+                                atoms = self.atoms
+                                if hasattr(self, "full_atoms"):
+                                    atoms = self.full_atoms
                                 self.other["frequency"] = Frequency(
-                                    freq_str, hpmodes=False, style="orca", atoms=self.atoms,
+                                    freq_str, hpmodes=False, style="orca", atoms=atoms,
                                 )
                             except Exception as e:
                                 if not log:
@@ -3247,6 +3264,9 @@ class FileReader:
                     except NameError:
                         pass
                     raise e
+
+        if "full" in _has_layers:
+            self.atoms = self.full_atoms
 
         if get_all:
             self.all_geom += [{
@@ -4966,6 +4986,7 @@ class FileReader:
                 line = f.readline()
                 while line.strip():
                     route += line
+                    line = f.readline()
                 methods = np.loadtxt(os.path.join(
                         AARONTOOLS, "theory", "valid_methods", "gaussian.txt"
                     ),
