@@ -13,3 +13,5 @@ test/ligand.xyz
 test/.coverage
 /test/htmlcov/
 .eggs
+ref.xyz
+test.xyz
