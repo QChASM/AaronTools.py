@@ -2654,28 +2654,33 @@ class FileReader:
                     elif line.startswith("CARTESIAN GRADIENT"):
                         try:
                             gradient = np.zeros((len(self.atoms), 3))
-                            if "NUMERICAL" in line:
-                                self.skip_lines(f, 1)
-                                n += 1
-                            else:
-                                self.skip_lines(f, 2)
-                                n += 2
-                            for i in range(0, len(self.atoms)):
+                            reading_grad = False
+                            i = 0
+                            while True:
                                 n += 1
                                 line = f.readline()
                                 # orca prints a warning before gradient if some
                                 # coordinates are constrained
                                 if line.startswith("WARNING:"):
                                     continue
+                                grad_match = re.search(":\s*-?\d+\.\d+", line)
+                                if grad_match and not reading_grad:
+                                    reading_grad = True
+                                if reading_grad and not grad_match:
+                                    break
+                                if not reading_grad:
+                                    continue
                                 info = line.split()
                                 gradient[i] = np.array([float(x) for x in info[3:]])
+                                i += 1
         
                             self.other["forces"] = -gradient
-                        except ValueError:
+                        except ValueError as e:
                             if log is None:
                                 log = self.LOG
                             log.warning("error while reading ORCA gradient")
                             log.warning("data read:\n%s" % repr(gradient))
+                            raise e
                             pass
     
                     elif line.startswith("VIBRATIONAL FREQUENCIES"):

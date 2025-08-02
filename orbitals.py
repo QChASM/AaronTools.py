@@ -1,4 +1,5 @@
 import concurrent.futures
+import os
 
 import numpy as np
 
@@ -8,6 +9,8 @@ from scipy.special import factorial2
 from AaronTools import addlogger
 from AaronTools.const import ELEMENTS, UNIT, VDW_RADII, BONDI_RADII
 from AaronTools.utils.utils import lebedev_sphere, gauss_legendre_grid, available_memory
+
+import sys
 
 
 @addlogger
@@ -1616,7 +1619,7 @@ class Orbitals:
                 if coords.ndim == 1:
                     r2 = np.dot(d_coord, d_coord)
                 else:
-                    r2 = np.sum(d_coord ** 2, axis=1)
+                    r2 = np.sum(np.square(d_coord), axis=1)
             if coords.ndim == 1:
                 res = shell(
                     r2,
@@ -1635,6 +1638,7 @@ class Orbitals:
                 )
             val += res
             ao += n_func
+
         return val
     
     # @line_profiler.profile
@@ -1698,10 +1702,12 @@ class Orbitals:
         :param int|np.ndarray mo: index of molecular orbital or an array of MO coefficients
         :param np.ndarray coords: array of points (N,3) or (3,)
         :param bool alpha: use alpha coefficients (default)
-        :param int n_jobs: number of parallel threads to use
+        :param int|None n_jobs: number of parallel threads to use
             this is on top of NumPy's multithreading, so
             if NumPy uses 8 threads and n_jobs=2, you can
             expect to see 16 threads in use
+            if n_jobs is None, determine an appropriate amount of threads
+            based on CPU count and available memory
         """
         # val is the running sum of MO values
         if alpha:
@@ -1716,7 +1722,7 @@ class Orbitals:
 
         # calculate AO values for each shell at each point
         # multiply by the MO coefficient and add to val
-        if n_jobs > 1:
+        if n_jobs is None or n_jobs > 1:
             # get all shells grouped by coordinates
             # this reduces the number of times we will need to
             # calculate the distance from all the coords to
@@ -1726,10 +1732,9 @@ class Orbitals:
             ndx = 0
             add_to = 0
             
-                
             for i, coord in enumerate(self.shell_coords):
                 for j, prev_coord in enumerate(prev_coords):
-                    if np.linalg.norm(coord - prev_coord) < 1e-13:
+                    if np.linalg.norm(coord - prev_coord) < 1e-8:
                         add_to = j
                         break
                 else:
@@ -1741,11 +1746,30 @@ class Orbitals:
                 ]
                 ndx += self.funcs_per_shell[i]
             
+
+            start = 0
+            first = 0
+            if n_jobs is None:
+                import tracemalloc
+                tracemalloc.start()
+                
+                first = self._get_value(coords, arrays[0])
+                peak = tracemalloc.get_traced_memory()[-1]
+                avail_mem = available_memory()
+
+                n_jobs = os.cpu_count()
+                max_threads = min(n_jobs, max(1, int(avail_mem / peak)))
+                n_jobs = max_threads
+            
+                tracemalloc.stop()
+            
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=n_jobs
             ) as executor:
-                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
-            return sum([shells.result() for shells in out])
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays[start:]]
+            
+
+            return sum([shells.result() for shells in out]) + first
         val = self._get_value(coords, coeff)
         return val
 
@@ -2177,6 +2201,7 @@ class Orbitals:
         padding=4,
         spacing=0.2,
         standard_axes=False,
+        array=None,
     ):
         """
         :returns: n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
@@ -2338,7 +2363,7 @@ class Orbitals:
         else:
             # hopefully float32
             num_size = 4
-        
+
         size = n_points
         if any(func_name == x for x in [
                 "density_value",
@@ -2351,7 +2376,26 @@ class Orbitals:
             if not low_mem:
                 size *= self.n_mos / max(n_jobs, n_atoms)
         elif func_name == "mo_value":
-            size *= num_size * (4 * n_jobs + max(n_atoms - n_jobs, 0))
+            min_kind = 2
+            for shell_type, n_func in zip(self.shell_types, self.funcs_per_shell):
+                mult = 2
+                if "p" in shell_type:
+                    mult = n_func + 5
+                if "d" in shell_type:
+                    mult = n_func + 5
+                if "f" in shell_type:
+                    mult = n_func + 5
+                if "g" in shell_type:
+                    mult = n_func + 5
+                if "h" in shell_type:
+                    mult = n_func + 5
+                if "i" in shell_type:
+                    mult = n_func + 5
+                
+                if mult > min_kind:
+                    min_kind = mult
+                    
+            size *= num_size * (9 + min_kind * min(n_jobs, n_atoms))
         elif any(func_name == x for x in [
                 "condensed_fukui_acceptor_values",
                 "condensed_fukui_donor_values",
