@@ -2201,7 +2201,6 @@ class Orbitals:
         padding=4,
         spacing=0.2,
         standard_axes=False,
-        array=None,
     ):
         """
         :returns: n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u
@@ -2214,7 +2213,7 @@ class Orbitals:
         * com is the center of the cube
         * u is a rotation matrix for the v1, v2, v3 axes relative to xyz
         
-        :param Geometry geom: used to define the cube
+        :param Geometry|np.ndarray geom: structure or coordinatres that will be inside the cube
         :param float padding: extra space around atoms in angstrom
         :param float spacing: distance between adjacent points in angstrom
         :param bool standard_axes: True to use x, y, and z axes
@@ -2222,17 +2221,23 @@ class Orbitals:
             the geom and have the smallest volume possible
         """
 
+        from AaronTools.geometry import Geometry
+        if isinstance(geom, Geometry):
+            geom = geom.coords
+            COM = geom.COM()
+        else:
+            COM = np.mean(geom, axis=0)
+
         def get_standard_axis():
             """returns info to set up a grid along the x, y, and z axes"""
-            geom_coords = geom.coords
 
             # get range of geom's coordinates
-            x_min = np.min(geom_coords[:, 0])
-            x_max = np.max(geom_coords[:, 0])
-            y_min = np.min(geom_coords[:, 1])
-            y_max = np.max(geom_coords[:, 1])
-            z_min = np.min(geom_coords[:, 2])
-            z_max = np.max(geom_coords[:, 2])
+            x_min = np.min(geom[:, 0])
+            x_max = np.max(geom[:, 0])
+            y_min = np.min(geom[:, 1])
+            y_max = np.max(geom[:, 1])
+            z_min = np.min(geom[:, 2])
+            z_max = np.max(geom[:, 2])
 
             # add padding, figure out vectors
             r1 = 2 * padding + x_max - x_min
@@ -2254,7 +2259,7 @@ class Orbitals:
         if standard_axes:
             n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u = get_standard_axis()
         else:
-            test_coords = geom.coords - geom.COM()
+            test_coords = geom - COM
             covar = np.dot(test_coords.T, test_coords)
             try:
                 # use SVD on the coordinate covariance matrix
@@ -2278,7 +2283,7 @@ class Orbitals:
                 com = np.array([xr_min, yr_min, zr_min]) - padding
                 # move the COM back to the xyz space of the original molecule
                 com = np.dot(u, com)
-                com += geom.COM()
+                com += COM
                 r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
                 r2 = 2 * padding + np.linalg.norm(yr_max - yr_min)
                 r3 = 2 * padding + np.linalg.norm(zr_max - zr_min)
@@ -2380,22 +2385,22 @@ class Orbitals:
             for shell_type, n_func in zip(self.shell_types, self.funcs_per_shell):
                 mult = 2
                 if "p" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 if "d" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 if "f" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 if "g" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 if "h" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 if "i" in shell_type:
-                    mult = n_func + 5
+                    mult = n_func + 3
                 
                 if mult > min_kind:
                     min_kind = mult
                     
-            size *= num_size * (9 + min_kind * min(n_jobs, n_atoms))
+            size *= num_size * ((9 + min_kind) * min(n_jobs, n_atoms))
         elif any(func_name == x for x in [
                 "condensed_fukui_acceptor_values",
                 "condensed_fukui_donor_values",

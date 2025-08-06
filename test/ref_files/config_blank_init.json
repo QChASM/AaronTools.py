@@ -1,4 +1,7 @@
 {
+  "AtomTypes" : {
+	"Dummies": "X"
+  },
   "DEFAULT": {
     "remote_dir": "/remote/path/%{$name}",
     "top_dir": "",

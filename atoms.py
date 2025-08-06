@@ -98,6 +98,8 @@ class Atom:
     LOG = None
 
     _bo = BondOrder()
+    
+    _config = None
 
     _do_not_copy = {
         "_hashed",
@@ -135,13 +137,17 @@ class Atom:
             coords = []
         # for BqO to have a ghost atom with oxygen basis functions
         ele = str(element).strip()
-        element = ele.capitalize()
         if "-" in ele:
             element = "-".join(e.capitalize() for e in ele.split("-"))
         if element.isdigit():
             element = ELEMENTS[int(element)]
         
-        if element != "" and element not in ELEMENTS and not element.endswith("Bq"):
+        if (
+            element != "" and
+            element not in ELEMENTS and
+            not element.endswith("Bq") and
+            not Atom.element_is_dummy(element)
+        ):
             raise ValueError("Unknown element detected: %s" % element)
 
         if tags is None:
@@ -297,7 +303,28 @@ class Atom:
 
     @property
     def is_dummy(self):
-        return re.match("X$", self.element) is not None
+        """
+        returns True if the element is a dummy, False otherwise
+        """
+        return self.element_is_dummy(self.element)
+    
+    @classmethod
+    def element_is_dummy(cls, element):
+        """
+        returns True if the element is a dummy, False otherwise
+        This checks the dummy option in the AtomTypes group in config files
+        """
+        if isinstance(element, Atom):
+            element = element.element
+        if not cls._config:
+            # this is not imported at the top to avoid a circular dependency
+            from AaronTools.config import Config
+            cls._config = Config()
+        
+        for dummy_type in cls._config["AtomTypes"]["dummy"].split():
+            if re.match("%s$" % dummy_type, element):
+                return True
+        return False
 
     @property
     def is_ghost(self):

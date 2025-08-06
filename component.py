@@ -624,9 +624,11 @@ class Component(Geometry):
                         # some ligands like DuPhos have rings on the phosphorous atom
                         # we only want ones that are closer to the the substituent end
                         frag = self.find(frag, CloserTo(bonded_atom, key_atom))
+                        if bonded_atom not in frag:
+                            frag.append(bonded_atom)
 
                         # Geometry(frag).write(outfile="frag%s.xyz" % bonded_atom.name)
-
+                        
                         for atom in frag:
                             beta = np.arcsin(
                                 radii_dict[atom.element] / atom.dist(center)
@@ -698,10 +700,12 @@ class Component(Geometry):
                             * np.linalg.norm(test_one_atom_axis)
                         )
                     )
+
                 lhs = max_beta
                 if lhs >= rhs:
                     # print(atom, "is overshadowed")
                     overshadowed_list.append(atom)
+                else:
                     break
 
             # all atoms are in the cone - we're done
