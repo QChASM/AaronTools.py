@@ -2,11 +2,12 @@
 
 import sys
 import argparse
+from os.path import dirname
 
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.finders import *
-from AaronTools.utils.utils import glob_files
+from AaronTools.utils.utils import glob_files, get_filename, get_outfile
 
 vsepr_choices = [
     "linear_1",
@@ -68,6 +69,29 @@ find_parser.add_argument(
 )
 
 find_parser.add_argument(
+    "-xyz",
+    "--xyz-format",
+    required=False,
+    dest="xyz",
+    default=False,
+    action="store_true",
+    help="print atoms in XYZ format"
+)
+
+find_parser.add_argument(
+    "-a",
+    "--append",
+    required=False,
+    dest="append",
+    default=False,
+    action="store_true",
+    help="append output data to file (default is to overwrite)"
+)
+
+finders = find_parser.add_argument_group(
+    "atom matching criteria"
+)
+finders.add_argument(
     "-e", "--element",
     type=str,
     action="append",
@@ -77,7 +101,7 @@ find_parser.add_argument(
     help="element symbol",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-n", "--index",
     type=str,
     action="append",
@@ -89,7 +113,7 @@ find_parser.add_argument(
     "ranges and individual indices may be comma-separated",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-bf", "--bonds-from",
     type=str,
     nargs=2,
@@ -101,7 +125,7 @@ find_parser.add_argument(
     help="find atoms BONDS (integer) bonds away from atom NDX",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-wb", "--within-bonds",
     type=str,
     nargs=2,
@@ -113,7 +137,7 @@ find_parser.add_argument(
     help="find atoms within BONDS (integer) bonds from atom NDX",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-bt", "--bonded-to",
     type=str,
     action="append",
@@ -124,7 +148,7 @@ find_parser.add_argument(
     help="find atoms bonded to atom NDX",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-pd", "--point-distance",
     type=float,
     nargs=4,
@@ -136,7 +160,7 @@ find_parser.add_argument(
     help="find atoms within R Angstroms of (X, Y, Z)",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-ad", "--atom-distance",
     type=str,
     nargs=2,
@@ -148,7 +172,7 @@ find_parser.add_argument(
     help="find atoms within R Angstroms of atom NDX",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-tm", "--transition-metal",
     action="store_true",
     default=False,
@@ -157,7 +181,7 @@ find_parser.add_argument(
     help="find any elements in the d-block, up to the Actinides",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-mg", "--main-group",
     action="store_true",
     default=False,
@@ -166,7 +190,16 @@ find_parser.add_argument(
     help="find any main group element (including H)",
 )
 
-find_parser.add_argument(
+finders.add_argument(
+    "-dum", "--dummy-atoms",
+    action="store_true",
+    default=False,
+    required=False,
+    dest="dummies",
+    help="find dummy atoms",
+)
+
+finders.add_argument(
     "-v", "--vsepr",
     type=str,
     action="append",
@@ -182,7 +215,7 @@ find_parser.add_argument(
     ).strip().strip(","),
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-nb", "--number-of-bonds",
     type=int,
     action="append",
@@ -192,7 +225,7 @@ find_parser.add_argument(
     help="find atoms with the specified number of bonds",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-ct", "--closer-to",
     nargs=2,
     metavar=("THIS_NDX", "THAN_NDX"),
@@ -202,7 +235,7 @@ find_parser.add_argument(
     help="atoms that are fewer bonds from THIS_NDX than THAN_NDX",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-c", "--chiral-center",
     action="store_true",
     default=False,
@@ -210,7 +243,7 @@ find_parser.add_argument(
     help="find chiral centers",
 )
 
-find_parser.add_argument(
+finders.add_argument(
     "-f", "--fragment",
     type=str,
     default=None,
@@ -259,6 +292,9 @@ if args.tmetal:
 if args.main_group:
     finders.append(AnyNonTransitionMetal())
 
+if args.dummies:
+    finders.append(DummyAtoms())
+
 for vsepr in args.vsepr:
     finders.append(VSEPR(vsepr.replace("_", " ")))
 
@@ -276,8 +312,6 @@ elif args.delim == "tab":
     delim = "\t"
 elif args.delim == "semicolon":
     delim = ";"
-
-s = ""
 
 for f in glob_files(args.infile, parser=find_parser):
     if isinstance(f, str):
@@ -323,7 +357,7 @@ for f in glob_files(args.infile, parser=find_parser):
             geom_finders.append(frag_atoms)
 
     if len(args.infile) > 1:
-        s += "%s\n" % str(s)
+        s = "%s\n" % infile.name
 
     try:
         if args.match_any:
@@ -334,18 +368,30 @@ for f in glob_files(args.infile, parser=find_parser):
         if args.invert:
             results = geom.find(NotAny(results))
 
-        s += delim.join(atom.name for atom in results)
-        s += "\n"
     except LookupError as e:
-        if args.invert:
-            s += delim.join(atom.name for atom in geom.atoms)
-            s += "\n"
+        results = e
+    
+    if isinstance(results, Exception):
+        print(f + ":", str(results))
+        continue
+
+    outfile=args.outfile
+    if args.outfile:
+        outfile = get_outfile(
+            args.outfile,
+            INFILE=get_filename(f, include_parent_dir="$INDIR" not in args.outfile),
+            INDIR=dirname(f),
+        )
+    if args.xyz:
+        geom = Geometry(results, refresh_ranks=False, refresh_connected=False, comment=f)
+        output = geom.write(outfile=outfile, append=args.append, comment=infile.name)
+        if not args.outfile:
+            print(output)
+
+    else:
+        s += delim.join([atom.name for atom in results])
+        if args.outfile:
+            with open(args.outfile, "a" if args.append else "w") as f:
+                f.write(s.strip())
         else:
-            s += "%s\n" % str(e)
-
-
-if not args.outfile:
-    print(s.strip())
-else:
-    with open(args.outfile, "a") as f:
-        f.write(s.strip())
+            print(s) 

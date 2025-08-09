@@ -581,6 +581,18 @@ class FlaggedAtoms(Finder):
         return [atom for atom in atoms if atom.flag]
 
 
+class DummyAtoms(Finder):
+    """
+    dummy atoms
+    """
+    # useful for finding constrained atoms
+    def __repr__(self):
+        return "dummy atoms"
+
+    def get_matching_atoms(self, atoms, geometry):
+        return [atom for atom in atoms if atom.is_dummy]
+
+
 class CloserTo(Finder):
     """
     atoms closer to atom1 than atom2 (based on bonds, not actual distance)
@@ -650,6 +662,7 @@ class IsElement(Finder):
     def get_matching_atoms(self, atoms, geometry=None):
         """returns List(Atom) of atoms of that element"""
         return [atom for atom in atoms if atom.element == self.element]
+
 
 class OfType(Finder):
     """
@@ -808,6 +821,7 @@ class OfType(Finder):
 
         return matching_atoms
 
+
 class Aromatics(Finder):
     """all atoms in aromatic rings"""
     def __init__(self):
@@ -819,6 +833,7 @@ class Aromatics(Finder):
     def get_matching_atoms(self, atoms, geometry):
         aromatics, charge, fused = geometry.get_aromatic_atoms(return_rings=False)
         return aromatics
+
 
 class ONIOMLayer(Finder):
     """all atoms in a given ONIOM layer or list of ONIOM layers"""
@@ -850,6 +865,7 @@ class ONIOMLayer(Finder):
                 except AttributeError:
                     pass #print("ONIOMlayer only accepts OniomAtom type atoms")
         return matching_atoms
+
 
 class AmideCarbon(Finder):
     """
@@ -1006,6 +1022,7 @@ class SpiroCenters(Finder):
                 matching_atoms.append(atom1)
 
         return matching_atoms
+
 
 class Residue(Finder):
     """all atoms in a given residue"""
