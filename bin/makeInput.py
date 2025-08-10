@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import sys
-from os.path import splitext, dirname
+from os.path import splitext, dirname, join
 import argparse
 
+from AaronTools.const import AARONLIB
+from AaronTools.config import Config
 from AaronTools.geometry import Geometry
 from AaronTools.fileIO import FileReader, read_types
 from AaronTools.theory import *
@@ -13,6 +15,14 @@ from AaronTools.utils.utils import (
     glob_files,
     get_outfile,
 )
+
+config = Config(quiet=True)
+
+default_proc = config.getint(
+    "Job", "processors", fallback=config.getint("Job", "procs", fallback=None)
+)
+default_mem = config.getint("Job", "memory", fallback=None)
+
 
 theory_parser = argparse.ArgumentParser(
     description="print Gaussian, ORCA, Psi4, SQM, or QChem input file",
@@ -86,18 +96,20 @@ theory_parser.add_argument(
     "-p", "--cores",
     type=int,
     dest="processors",
-    default=None,
+    default=default_proc,
     required=False,
-    help="number of cpu cores to use",
+    help="number of cpu cores to use\n" +
+    "default: %s (default can be set in %s) " % (str(default_proc), join(AARONLIB, "config.ini")),
 )
 
 theory_parser.add_argument(
     "-mem", "--memory",
     type=int,
     dest="memory",
-    default=None,
+    default=default_mem,
     required=False,
     help="total memory in GB\n" +
+    "default: %s (default can be set in %s)\n" % (str(default_mem), join(AARONLIB, "config.ini")) +
     "Note: ORCA and Gaussian only use this to limit the storage-intensive\n" +
     "      portions of the calculation (e.g. integrals, wavefunction info)",
 )
