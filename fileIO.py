@@ -3889,27 +3889,6 @@ class FileReader:
                 n += 1
             return rv, n
 
-        def get_oniom_atoms(f, n):
-            rv = self.atoms
-            self.skip_lines(f, 4)
-            line = f.readline()
-            n += 5
-            atnum = 0
-            while "--" not in line:
-                line = line.strip()
-                line = line.split()
-                for l in line:
-                    try:
-                        float(l)
-                    except ValueError:
-                        msg = "Error detected with log file on line {}"
-                        raise IOError(msg.format(n))
-                rv[atnum].coords = np.array(line[3:], dtype=float)
-                atnum += 1
-                line = f.readline()
-                n += 1
-            return rv, n
-
         def get_oniom_info(f, n):
             rv = []
             line = f.readline()
@@ -4111,7 +4090,7 @@ class FileReader:
                     self.atoms, n = get_input(f, n)
 
                 # geometry
-                elif not oniom and (
+                elif (
                     "Input orientation" in line or
                     "Standard orientation" in line
                 ):
@@ -4151,23 +4130,8 @@ class FileReader:
                             pass
                     if record_coords:
                         self.atoms, n = get_atoms(f, n)
+
                     self.other["opt_steps"] += 1
-    
-                elif oniom and (
-                    "Input orientation" in line or
-                    "Standard orientation" in line
-                ):
-                    if get_all and len(self.atoms) > 0:
-                        self.all_geom += [{
-                            "atoms": deepcopy(self.atoms),
-                            "data": deepcopy(self.other),
-                        }]
-                    self.atoms, n = get_oniom_atoms(f, n)
-                    self.other["opt_steps"] += 1
-    
-                #oniom atom types and input charges
-                elif oniom and "Symbolic Z-matrix" in line:
-                    self.atoms, n = get_oniom_info(f, n)
 
                 elif just_geom:
                     line = f.readline()
@@ -4185,6 +4149,23 @@ class FileReader:
                             self.other["multiplicity"] = mult
                             done = True
                         line = f.readline()
+
+                # route
+                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
+                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
+                # pmodes,noraman,temperature=313.15)
+                elif line.strip().startswith("#") and route is None:
+                    route = ""
+                    while "------" not in line:
+                        if len(line.rstrip()) > 1:
+                            route += line[1:].splitlines()[0]
+                        n += 1
+                        line = f.readline()
+                    oniom = "oniom" in route.lower()
+
+                #oniom atom types and input charges
+                elif oniom and "Symbolic Z-matrix" in line:
+                    self.atoms, n = get_oniom_info(f, n)
 
                 #Pseudopotential info
                 elif "Pseudopotential Parameters" in line:
@@ -4206,18 +4187,7 @@ class FileReader:
                 if line.strip().startswith("AtFile"):
                     parameters = line.split()[1]
                     has_params = True
-                # route
-                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
-                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
-                # pmodes,noraman,temperature=313.15)
-                if line.strip().startswith("#") and route is None:
-                    route = ""
-                    while "------" not in line:
-                        if len(line.rstrip()) > 1:
-                            route += line[1:].splitlines()[0]
-                        n += 1
-                        line = f.readline()
-                    oniom = "oniom" in route.lower()
+
                 # archive entry
                 elif line.strip().startswith("1\\1\\"):
                     found_archive = True
