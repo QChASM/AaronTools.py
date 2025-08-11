@@ -30,8 +30,6 @@ from AaronTools.utils.utils import (
     angle_between_vectors,
 )
 
-import line_profiler
-
 read_types = [
     "xyz",
     "log",
@@ -3588,7 +3586,6 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
-    # @line_profiler.profile
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
         """
         read gaussian output file
@@ -3611,7 +3608,6 @@ class FileReader:
         only_read_input = False
         only_read_standard = False
 
-        # @line_profiler.profile
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
