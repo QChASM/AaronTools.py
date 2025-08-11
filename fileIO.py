@@ -30,6 +30,8 @@ from AaronTools.utils.utils import (
     angle_between_vectors,
 )
 
+import line_profiler
+
 read_types = [
     "xyz",
     "log",
@@ -3586,6 +3588,7 @@ class FileReader:
         if "error" not in self.other:
             self.other["error"] = None
 
+    # @line_profiler.profile
     def read_log(self, f, get_all=False, just_geom=True, scan_read_all=False, log=None):
         """
         read gaussian output file
@@ -3608,6 +3611,7 @@ class FileReader:
         only_read_input = False
         only_read_standard = False
 
+        # @line_profiler.profile
         def get_atoms(f, n):
             rv = self.atoms
             self.skip_lines(f, 4)
@@ -3617,21 +3621,17 @@ class FileReader:
             while "--" not in line:
                 line = line.strip()
                 line = line.split()
-                for l in line:
-                    try:
-                        float(l)
-                    except ValueError:
-                        msg = "Error detected with log file on line {}"
-                        raise IOError(msg.format(n))
                 try:
-                    rv[atnum].coords = np.array(line[3:], dtype=float)
+                    rv[atnum].coords = np.array([float(x) for x in line[3:]])
                 except IndexError:
-                    pass
                     rv.append(Atom(
                         element=ELEMENTS[int(line[1])],
                         name=str(atnum + 1),
                     ))
-                    rv[atnum].coords = np.array(line[3:], dtype=float)
+                except ValueError:
+                    msg = "Error detected with log file on line {}"
+                    raise IOError(msg.format(n))
+ 
 
                 atnum += 1
                 line = f.readline()
@@ -4110,65 +4110,10 @@ class FileReader:
         has_params = False
         while line != "":
             try:
-                if line.strip().startswith("AtFile"):
-                    parameters = line.split()[1]
-                    has_params = True
-                # route
-                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
-                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
-                # pmodes,noraman,temperature=313.15)
-                if line.strip().startswith("#") and route is None:
-                    route = ""
-                    while "------" not in line:
-                        if len(line.rstrip()) > 1:
-                            route += line[1:].splitlines()[0]
-                        n += 1
-                        line = f.readline()
-                    oniom = "oniom" in route.lower()
-                # archive entry
-                elif line.strip().startswith("1\\1\\"):
-                    found_archive = True
-                    self.other["archive"] = line.strip()
-                elif found_archive and line.strip().endswith("@"):
-                    self.other["archive"] += line.strip()
-                    found_archive = False
-                elif found_archive:
-                    self.other["archive"] += line.strip()
-                    line = f.readline()
-                    continue
-    
                 # input atom specs and charge/mult
                 if not oniom and "Symbolic Z-matrix:" in line:
                     self.atoms, n = get_input(f, n)
-    
-                if "Structure from the checkpoint file" in line:
-                    done = False
-                    while not done:
-                        if "Charge =" in line:
-                            charge = int(line.split()[2])
-                            mult = int(line.split()[5])
-                            self.other["charge"] = charge
-                            self.other["multiplicity"] = mult
-                            done = True
-                        line = f.readline()
-   
-                #Pseudopotential info
-                elif "Pseudopotential Parameters" in line:
-                    self.other["ECP"] = []
-                    self.skip_lines(f, 4)
-                    n += 5
-                    line = f.readline()
-                    while "=====" not in line:
-                        line = line.split()
-                        if line[0].isdigit() and line[1].isdigit():
-                            ele = line[1]
-                            n += 1
-                            line = f.readline().split()
-                            if line[0] != "No":
-                                self.other["ECP"].append(ELEMENTS[int(ele)])
-                        n += 1
-                        line = f.readline()
-    
+
                 # geometry
                 elif not oniom and (
                     "Input orientation" in line or
@@ -4227,15 +4172,71 @@ class FileReader:
                 #oniom atom types and input charges
                 elif oniom and "Symbolic Z-matrix" in line:
                     self.atoms, n = get_oniom_info(f, n)
-    
-                elif "The following ModRedundant input section has been read:" in line:
-                    constraints, n = get_modredundant(f, n)
-    
+
                 elif just_geom:
                     line = f.readline()
                     n += 1
                     continue
                     # z-matrix parameters
+    
+                if "Structure from the checkpoint file" in line:
+                    done = False
+                    while not done:
+                        if "Charge =" in line:
+                            charge = int(line.split()[2])
+                            mult = int(line.split()[5])
+                            self.other["charge"] = charge
+                            self.other["multiplicity"] = mult
+                            done = True
+                        line = f.readline()
+
+                #Pseudopotential info
+                elif "Pseudopotential Parameters" in line:
+                    self.other["ECP"] = []
+                    self.skip_lines(f, 4)
+                    n += 5
+                    line = f.readline()
+                    while "=====" not in line:
+                        line = line.split()
+                        if line[0].isdigit() and line[1].isdigit():
+                            ele = line[1]
+                            n += 1
+                            line = f.readline().split()
+                            if line[0] != "No":
+                                self.other["ECP"].append(ELEMENTS[int(ele)])
+                        n += 1
+                        line = f.readline()
+    
+                if line.strip().startswith("AtFile"):
+                    parameters = line.split()[1]
+                    has_params = True
+                # route
+                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
+                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
+                # pmodes,noraman,temperature=313.15)
+                if line.strip().startswith("#") and route is None:
+                    route = ""
+                    while "------" not in line:
+                        if len(line.rstrip()) > 1:
+                            route += line[1:].splitlines()[0]
+                        n += 1
+                        line = f.readline()
+                    oniom = "oniom" in route.lower()
+                # archive entry
+                elif line.strip().startswith("1\\1\\"):
+                    found_archive = True
+                    self.other["archive"] = line.strip()
+                elif found_archive and line.strip().endswith("@"):
+                    self.other["archive"] += line.strip()
+                    found_archive = False
+                elif found_archive:
+                    self.other["archive"] += line.strip()
+                    line = f.readline()
+                    continue
+    
+                elif "The following ModRedundant input section has been read:" in line:
+                    constraints, n = get_modredundant(f, n)
+    
                 # elif "!   Optimized Parameters   !" in line:
                 elif "!   Optimized Parameters   !" in line:
                     self.other["params"], n = get_params(f, n)
