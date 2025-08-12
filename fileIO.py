@@ -3603,10 +3603,7 @@ class FileReader:
         mp_energies = re.compile(r"([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)")
         # temperature = re.compile(r"^ Temperature\s*\d+\.\d+")
        
-        input_count = 0
-        standard_count = 0
-        only_read_input = False
-        only_read_standard = False
+        orientations_read = dict()
 
         def get_atoms(f, n):
             rv = self.atoms
@@ -3740,26 +3737,30 @@ class FileReader:
                     if len(info) == 1:
                         continue
 
-                    bond_ndx = int(info[1])
+                    cartesian = info[1][0] in "-0."
                     # if the first thing is > 0, it defines a distance
                     # between this atom and the bond_ndx atom
                     # otherwise, it is cartesian coordinates
-                    if bond_ndx <= 0:
+                    if cartesian:
                         # if bond_ndx < 0:
                         #     rv[-1].flag = True
                         # if the number after the element is 0, then
                         # the input is cartesian coordinates
-                        coords = info[2:]
+                        start = 1
+                        if any([info[1] == x for x in ["0", "-1"]]):
+                            start = 2
+                        coords = info[start:start + 3]
                         for j, coord in enumerate(coords):
-                            try:
+                            coords[j] = coord
+                            if coord in variables:
                                 coords[j] = variables[coord]
-                            except KeyError:
-                                pass
+                            elif coord.lstrip("-") in variables:
+                                coords[j] = "-%s" % variables[coord.lstrip("-")]
                         coords = [float(coord) for coord in coords]
                         rv[-1].coords = np.array(coords)
                         continue
 
-                    bond_ndx -= 1
+                    bond_ndx = int(info[1]) - 1
                     rv[-1].coords += rv[bond_ndx].coords
                     bond_length = info[2]
                     sign = 1
@@ -3868,7 +3869,7 @@ class FileReader:
                 # print("")
                 # for a in rv:
                 #     print(a.element, *a.coords)
-
+                
                 return rv, n
 
             while len(line.split()) > 1:
@@ -4091,23 +4092,16 @@ class FileReader:
 
                 # geometry
                 elif (
-                    "Input orientation" in line or
-                    "Standard orientation" in line
+                    "orientation" in line or
+                    "orientation" in line
                 ):
-                    if "Input" in line:
-                        input_count += 1
-                    elif "Standard" in line:
-                        standard_count += 1
-                    if input_count >= 2 and input_count >= standard_count and not only_read_standard:
-                        only_read_input = True
-                    elif standard_count >= 1 and standard_count >= input_count and not only_read_input:
-                        only_read_standard = True
-                    
+                    kind = line.split()[0]
+                    orientations_read.setdefault(kind, 0)
+
                     record_coords = (
-                        "Input" in line and only_read_input
-                    ) or (
-                        "Standard" in line and only_read_standard
-                    ) or not any((only_read_input, only_read_standard))
+                        max(orientations_read.values()) == orientations_read[kind]
+                    )
+                    orientations_read[kind] += 1
                     if "scan" in constraints:
                         record_coords = False
                         if not scan_read_all:
