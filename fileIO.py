@@ -4942,6 +4942,7 @@ class FileReader:
         atoms = []
         other = {}
         line = f.readline()
+        is_oniom = False
         while line != "":
             # header
             if line.startswith("%"):
@@ -4965,7 +4966,6 @@ class FileReader:
                 #   any valid delimiter
                 route_words = route.split()
                 other["method"] = ""
-                is_oniom = False
                 for word in route_words:
                     for m in methods:
                         m = m.replace("(", "\(").replace(")", "\)").replace("+", "\+")
@@ -5008,6 +5008,7 @@ class FileReader:
                 # but there should be a blank line between the route and the comment
                 # and another between the comment and the charge+mult
                 blank_lines = 0
+                
                 other.setdefault("comment", "")
                 line = f.readline()
                 while line.strip():
