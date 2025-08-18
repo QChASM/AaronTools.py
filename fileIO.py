@@ -4179,6 +4179,9 @@ class FileReader:
                         n += 1
                         line = f.readline()
                     oniom = "oniom" in route.lower()
+                    
+                    comment = ""
+                    line = f.readline()
 
                 #oniom atom types and input charges
                 elif oniom and "Symbolic Z-matrix" in line:
@@ -5496,8 +5499,15 @@ class FileReader:
         :param str f: file to be read
         """
         line = f.readline()
+        reading_summary = False
         while line:
             if "Leave Link  607" in line:
+                break
+        
+            if "Natural Bond Orbitals (Summary)" in line:
+                reading_summary = True
+
+            if reading_summary and "-----" in line:
                 break
 
             if "NATURAL POPULATIONS:" in line:
