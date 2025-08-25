@@ -278,7 +278,7 @@ class Signals:
                 x_values = []
                 x = -point_spacing
                 stop = max(signal_centers)
-                stop += 5 * fwhm
+                stop += 10 * fwhm
                 while x < stop:
                     x += point_spacing
                     x_values.append(x)
@@ -311,7 +311,7 @@ class Signals:
                         np.linspace(
                             x - (10 * fwhm),
                             x + (10 * fwhm),
-                            num=250,
+                            num=100,
                         ).tolist()
                     )
                     x_values.append(x)
@@ -790,9 +790,9 @@ class Frequency(Signals):
             # hessian, so it never prints the structure
             # ORCA can do this. It will print the input structure, but
             # we don't parse that
-            self.LOG.warning("issue calcing red mass", e)
+            # self.LOG.warning("issue calcing red mass\n%s" % e)
             pass
-    
+
     def parse_gaussian_lines(
         self, lines, *args, hpmodes=None, harmonic=True, **kwargs
     ):
@@ -1242,6 +1242,14 @@ class Frequency(Signals):
             elif line.strip().startswith("----"):
                 read_displacement = True
                 modes = [[] for i in range(0, nmodes)]
+
+    @classmethod
+    def get_mixed_signals(cls, *args, data_attr="data", **kwargs):
+        new = super(Frequency, cls).get_mixed_signals(*args, data_attr=data_attr, **kwargs)
+        if data_attr == "anharm_data":
+            new.anharm_data = new.data
+        
+        return new
 
     def sort_frequencies(self):
         self.imaginary_frequencies = []

@@ -3620,6 +3620,7 @@ class FileReader:
                     rv.append(Atom(
                         element=ELEMENTS[int(line[1])],
                         name=str(atnum + 1),
+                        coords=np.array([float(x) for x in line[3:]]),
                     ))
                 except ValueError:
                     msg = "Error detected with log file on line {}"
@@ -4092,12 +4093,15 @@ class FileReader:
 
                 # geometry
                 elif (
-                    "orientation" in line or
-                    "orientation" in line
+                    "orientation" in line and
+                    (
+                        "Z-matrix" in line or
+                        "Standard" in line or
+                        "Input" in line
+                    )
                 ):
                     kind = line.split()[0]
                     orientations_read.setdefault(kind, 0)
-
                     record_coords = (
                         max(orientations_read.values()) == orientations_read[kind]
                     )
