@@ -2080,9 +2080,11 @@ class FileReader:
                 
                     if line.strip().startswith("Total Energy ="):
                         self.other["energy"] = float(line.split()[-1])
+                        self.other["energy_context"] = line
     
                     elif line.strip().startswith("Total E0"):
                         self.other["energy"] = float(line.split()[-2])
+                        self.other["energy_context"] = line
     
                     elif line.strip().startswith("Correction ZPE"):
                         self.other["ZPVE"] = float(line.split()[-4])
@@ -2278,13 +2280,15 @@ class FileReader:
                         self.other[item] = float(line.split()[-1])
                         # hopefully the highest level energy gets printed last
                         self.other["energy"] = self.other[item]
-    
+                        self.other["energy_context"] = line
+
                     elif "Total Energy" in line and "=" in line:
                         item = line.split("=")[0].strip().strip("*").strip()
                         self.other[item] = float(line.split()[-2])
                         # hopefully the highest level energy gets printed last
                         self.other["energy"] = self.other[item]
-    
+                        self.other["energy_context"] = line
+
                     elif "Correlation Energy" in line and "=" in line:
                         item = line.split("=")[0].strip().strip("*").strip()
                         if "DFT Exchange-Correlation" in item:
@@ -2506,11 +2510,14 @@ class FileReader:
                         # to the energy so we can't use line.split()[-1]
                         try:
                             self.other["energy"] = float(line.split()[4])
+                            self.other["energy_context"] = line
+
                         except ValueError:
                             kind = line.split()[4]
                             nrg = float(line.split()[5])
                             self.other["energy " + kind] = nrg
-    
+                            self.other["energy " + kind + "_context"] = line
+
                     if line.startswith("TOTAL SCF ENERGY"):
                         self.skip_lines(f, 2)
                         line = f.readline()
@@ -2583,6 +2590,7 @@ class FileReader:
                     elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
                         nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                         self.other["energy"] = float(nrg.group(2))
+                        self.other["energy_context"] = line
                         self.other[nrg.group(1)] = float(nrg.group(2))
     
                     elif "*    Relaxed Surface Scan    *" in line:
@@ -3362,6 +3370,7 @@ class FileReader:
                 else:
                     if "energy in the final basis set" in line:
                         self.other["energy"] = float(line.split()[-1])
+                        self.other["energy_context"] = line
                         if "SCF" in line:
                             self.other["scf_energy"] = self.other["energy"]
     
@@ -3373,16 +3382,21 @@ class FileReader:
                             if "correlation" not in kind and len(kind.split()) <= 2:
                                 self.other["E(%s)" % kind.split()[0]] = val
                                 self.other["energy"] = val
+                                self.other["energy_context"] = line
+
                             else:
                                 self.other["E(corr)(%s)" % kind.split()[0]] = val
     
                     if "Total energy:" in line:
                         self.other["energy"] = float(line.split()[-2])
-    
+                        self.other["energy_context"] = line
+
                     #MPn energy is printed as EMPn(SDQ)
                     if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
                         self.other["energy"] = float(line.split()[-1])
                         self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
+                        self.other["energy_context"] = line
+
     
                     if "Molecular Point Group" in line:
                         self.other["full_point_group"] = line.split()[3]
@@ -4089,7 +4103,12 @@ class FileReader:
             try:
                 # input atom specs and charge/mult
                 if not oniom and "Symbolic Z-matrix:" in line:
-                    self.atoms, n = get_input(f, n)
+                    try:
+                        self.atoms, n = get_input(f, n)
+                    except Exception as e:
+                        self.LOG.warning("failed to parse input data")
+                        if "route" in self.other:
+                            self.LOG.warning("route: ", self.other["route"])
 
                 # geometry
                 elif (
@@ -4214,6 +4233,7 @@ class FileReader:
                     tmp = [word.strip() for word in line.split()]
                     idx = tmp.index("=")
                     self.other["energy"] = float(tmp[idx + 1])
+                    self.other["energy_context"] = line
                     self.other["scf_energy"] = float(tmp[idx + 1])
     
                 elif line.startswith(" Entering Link"):
@@ -4225,16 +4245,19 @@ class FileReader:
     
                 elif line.startswith(" Energy= "):
                     self.other["energy"] = float(line.split()[1])
+                    self.other["energy_context"] = line
     
                 elif "ONIOM: extrapolated energy" in line:
                     self.other["ONIOM energy"] = float(line.split()[-1])
                     self.other["energy"] = self.other["ONIOM energy"]
-    
+                    self.other["energy_context"] = line
+
                 # CC energy
                 elif line.startswith(" CCSD(T)= "):
                     self.other["energy"] = float(line.split()[-1].replace("D", "E"))
                     self.other["E(CCSD(T))"] = self.other["energy"]
-    
+                    self.other["energy_context"] = line
+
                 # basis set details
                 elif line.startswith(" NBasis") and "NFC" in line:
                     n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
@@ -4352,7 +4375,8 @@ class FileReader:
                             )
                             self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
                             self.other["energy"] = float(nrg.group(2))
-    
+                            self.other["energy_context"] = line
+
                         line = f.readline()
                     if stability_test:
                         continue
@@ -4617,10 +4641,13 @@ class FileReader:
                         nrg = float(nrg_match.group(2).replace("D", "E"))
                         if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
                             self.other["energy"] = nrg
+                            self.other["energy_context"] = line
+
                         self.other[nrg_match.group(1)] = nrg
                     # MP energies
                     elif mp_match:
                         self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                        self.other["energy_context"] = line
                         self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
     
                 # capture errors
@@ -5228,6 +5255,7 @@ class FileReader:
                     atom_coords, i = parse_to_list(i, f, int(value), float)
                 elif data == "Total Energy":
                     other["energy"] = float(value)
+                    self.other["energy_context"] = line
                 elif not just_geom:
                     if real_match.group(2):
                         other[data], i = parse_to_list(
@@ -5572,6 +5600,7 @@ class FileReader:
                 )
             elif "E lowest" in line:
                 self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["energy_context"] = line
             elif "T /K" in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
             elif (
@@ -5639,6 +5668,7 @@ class FileReader:
                 self.other["energy"] = (
                     float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
                 )
+                self.other["energy_context"] = line
             if "zero point energy" in line:
                 self.other["ZPVE"] = (
                     float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
@@ -5700,6 +5730,7 @@ class FileReader:
                 self.other["energy"] = (
                     float(line.split()[4]) / UNIT.HART_TO_KCAL
                 )
+                self.other["energy_context"] = line
 
             i += 1
 

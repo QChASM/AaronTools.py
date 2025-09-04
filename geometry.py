@@ -408,18 +408,19 @@ class Geometry:
         # sorted by name count is insufficient when there's multiple monodentate ligands
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
+        comp_ndx = {x: i for i, x in enumerate(Component.list())}
 
         monodentate_names = sorted(
             monodentate_names,
             key=lambda x: 10000 * monodentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, mono_lig in enumerate(
             sorted(
                 set(monodentate_names),
                 key=lambda x: 10000 * monodentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
@@ -432,14 +433,14 @@ class Geometry:
         symm_bidentate_names = sorted(
             symm_bidentate_names,
             key=lambda x: 10000 * symm_bidentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, symbi_lig in enumerate(
             sorted(
                 set(symm_bidentate_names),
                 key=lambda x: 10000 * symm_bidentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
@@ -451,14 +452,14 @@ class Geometry:
         asymm_bidentate_names = sorted(
             asymm_bidentate_names,
             key=lambda x: 10000 * asymm_bidentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, asymbi_lig in enumerate(
             sorted(
                 set(asymm_bidentate_names),
                 key=lambda x: 10000 * asymm_bidentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
