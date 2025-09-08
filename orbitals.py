@@ -1,13 +1,16 @@
 import concurrent.futures
+import os
 
 import numpy as np
 
-from scipy.spatial import distance_matrix
+from scipy.spatial.distance import pdist, cdist, squareform
 from scipy.special import factorial2
 
 from AaronTools import addlogger
 from AaronTools.const import ELEMENTS, UNIT, VDW_RADII, BONDI_RADII
-from AaronTools.utils.utils import lebedev_sphere, gauss_legendre_grid
+from AaronTools.utils.utils import lebedev_sphere, gauss_legendre_grid, available_memory
+
+import sys
 
 
 @addlogger
@@ -1583,6 +1586,7 @@ class Orbitals:
         elif "alpha_occupancies" in filereader.keys():
             self.alpha_occupancies = [occ / 2 for occ in self.alpha_occupancies]
 
+    # @line_profiler.profile
     def _get_value(self, coords, arr):
         """returns value for the MO coefficients in arr"""
         ao = 0
@@ -1608,14 +1612,14 @@ class Orbitals:
             # differ from the previous
             if (
                 prev_center is None
-                or np.linalg.norm(coord - prev_center) > 1e-13
+                or np.linalg.norm(coord - prev_center) > 1e-12
             ):
                 prev_center = coord
                 d_coord = (coords - coord) * UNIT.ANG_TO_BOHR
                 if coords.ndim == 1:
                     r2 = np.dot(d_coord, d_coord)
                 else:
-                    r2 = np.sum(d_coord * d_coord, axis=1)
+                    r2 = np.sum(np.square(d_coord), axis=1)
             if coords.ndim == 1:
                 res = shell(
                     r2,
@@ -1634,6 +1638,61 @@ class Orbitals:
                 )
             val += res
             ao += n_func
+
+        return val
+    
+    # @line_profiler.profile
+    def _get_value_multidim_array(self, coords, array):
+        """returns value for the MO coefficients in each row of array"""
+        prev_center = None
+        if coords.ndim == 1:
+            val = np.zeros(len(array))
+        else:
+            val = np.zeros((len(array), len(coords)))
+        
+        ao = 0
+        for coord, shell, n_func, shell_type in zip(
+            self.shell_coords,
+            self.basis_functions,
+            self.funcs_per_shell,
+            self.shell_types,
+        ):
+            for arr_ndx, arr in enumerate(array):
+                # don't calculate distances until we find an AO
+                # in this shell that has a non-zero MO coefficient
+                if not np.count_nonzero(arr[ao : ao + n_func]):
+                    continue
+                # print(shell_type, arr[ao : ao + n_func])
+                # don't recalculate distances unless this shell's coordinates
+                # differ from the previous
+                if (
+                    prev_center is None
+                    or np.linalg.norm(coord - prev_center) > 1e-12
+                ):
+                    prev_center = coord
+                    d_coord = (coords - coord) * UNIT.ANG_TO_BOHR
+                    if coords.ndim == 1:
+                        r2 = np.dot(d_coord, d_coord)
+                    else:
+                        r2 = np.sum(d_coord ** 2, axis=1)
+                if coords.ndim == 1:
+                    res = shell(
+                        r2,
+                        d_coord[0],
+                        d_coord[1],
+                        d_coord[2],
+                        arr[ao : ao + n_func],
+                    )
+                else:
+                    res = shell(
+                        r2,
+                        d_coord[:, 0],
+                        d_coord[:, 1],
+                        d_coord[:, 2],
+                        arr[ao : ao + n_func],
+                    )
+                val[arr_ndx] += res
+            ao += n_func
         return val
 
     def mo_value(self, mo, coords, alpha=True, n_jobs=1):
@@ -1643,10 +1702,12 @@ class Orbitals:
         :param int|np.ndarray mo: index of molecular orbital or an array of MO coefficients
         :param np.ndarray coords: array of points (N,3) or (3,)
         :param bool alpha: use alpha coefficients (default)
-        :param int n_jobs: number of parallel threads to use
+        :param int|None n_jobs: number of parallel threads to use
             this is on top of NumPy's multithreading, so
             if NumPy uses 8 threads and n_jobs=2, you can
             expect to see 16 threads in use
+            if n_jobs is None, determine an appropriate amount of threads
+            based on CPU count and available memory
         """
         # val is the running sum of MO values
         if alpha:
@@ -1661,7 +1722,7 @@ class Orbitals:
 
         # calculate AO values for each shell at each point
         # multiply by the MO coefficient and add to val
-        if n_jobs > 1:
+        if n_jobs is None or n_jobs > 1:
             # get all shells grouped by coordinates
             # this reduces the number of times we will need to
             # calculate the distance from all the coords to
@@ -1671,10 +1732,9 @@ class Orbitals:
             ndx = 0
             add_to = 0
             
-                
             for i, coord in enumerate(self.shell_coords):
                 for j, prev_coord in enumerate(prev_coords):
-                    if np.linalg.norm(coord - prev_coord) < 1e-13:
+                    if np.linalg.norm(coord - prev_coord) < 1e-8:
                         add_to = j
                         break
                 else:
@@ -1686,11 +1746,30 @@ class Orbitals:
                 ]
                 ndx += self.funcs_per_shell[i]
             
+
+            start = 0
+            first = 0
+            if n_jobs is None:
+                import tracemalloc
+                tracemalloc.start()
+                
+                first = self._get_value(coords, arrays[0])
+                peak = tracemalloc.get_traced_memory()[-1]
+                avail_mem = available_memory()
+
+                n_jobs = os.cpu_count()
+                max_threads = min(n_jobs, max(1, int(avail_mem / peak)))
+                n_jobs = max_threads
+            
+                tracemalloc.stop()
+            
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=n_jobs
             ) as executor:
-                out = [executor.submit(self._get_value, coords, arr) for arr in arrays]
-            return sum([shells.result() for shells in out])
+                out = [executor.submit(self._get_value, coords, arr) for arr in arrays[start:]]
+            
+
+            return sum([shells.result() for shells in out]) + first
         val = self._get_value(coords, coeff)
         return val
 
@@ -1701,19 +1780,25 @@ class Orbitals:
         alpha_occ=None,
         beta_occ=None,
         low_mem=False,
-        spin=False
+        spin=False,
+        big_dot=False,
     ):
         """
         returns the electron density
         
         :param np.ndarray coords: coordinates to calculate e density at
-        :param int n_jobs: number of concurrent threads to use in calculation
+        :param int n_jobs: number of concurrent threads to use in orbital values
         :param np.ndarray|None alpha_occ: array of alpha occupancies
-            
+   
             if not specified, defaults to lowest self.n_alpha
             orbitals
         :param np.ndarray|None beta_occ: same at alpha_occ, but for beta electrons
         :param bool spin: plot spin density
+        :param bool|None big_dot: true to use multithreading when taking the inner product
+        
+            of orbital coefficients and orbital values. This uses more memory, and will
+            be ignored if low_mem is True. Set to None to decide based on available memory
+         
         """
 
         # set default occupancy
@@ -1779,21 +1864,66 @@ class Orbitals:
             data = np.array([shells.result() for shells in out])
 
         else:
-            data = np.array([
-                self._get_value(coords, arr) for arr in arrays
-            ])
+            data = self._get_value_multidim_array(coords, arrays)
 
+        # TODO: it can be a lot faster to do coeff @ data instead of only
+        # doing the dot product if occ != 0, but it takes a lot more memory
+        # to store coeff @ data - maybe make it optional?
+        # temp = np.matmul(self.alpha_coefficients[np.flatnonzero(alpha_occ), :], data)
         # multiply values by orbital coefficients and square
-        for i, occ in enumerate(alpha_occ):
-            if occ == 0:
-                continue
-            val += occ * np.dot(data.T, self.alpha_coefficients[i]) ** 2
+        # for i, occ in enumerate([a for a in alpha_occ if a != 0]):
+        def _sum_sq(occ, coeff):
+            t = np.dot(coeff, data)
+            return occ * t ** 2
+        
+        # determine whether to multithread occupanacy * (MO @ data) ^ 2 calculation
+        # set n_jobs to 1 if we shouldn't multithread
+        if big_dot is None and n_jobs > 1:
+            # how much extra memory we will probably use when multithreading depends on
+            # how many points we have and how many orbital occupancies are nonzero
+            this_mem = 8 * len(coords) * len(np.flatnonzero(alpha_occ))
+            avail = available_memory()
+            if this_mem > avail:
+                n_jobs = 1
+        elif not big_dot:
+            n_jobs = 1
+        
+        if n_jobs > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=n_jobs
+            ) as executor:
+                vals = [
+                    executor.submit(_sum_sq, occ, coeff) for occ, coeff in zip(alpha_occ, self.alpha_coefficients) if occ != 0
+                ]
+    
+            val = sum([v.result() for v in vals])
+        else:
+            val = sum(_sum_sq(occ, coeff) for occ, coeff in zip(alpha_occ, self.alpha_coefficients) if occ != 0)
+
+        
+        # for i, occ in enumerate(alpha_occ):
+        #     if occ == 0:
+        #         continue
+        #     val += occ * np.dot(self.alpha_coefficients[i], data) ** 2
+        #     # val += occ * temp[i] ** 2
 
         if self.beta_coefficients is not None:
-            for i, occ in enumerate(beta_occ):
-                if occ == 0:
-                    continue
-                val += occ * np.dot(data.T, self.beta_coefficients[i]) ** 2
+            # for i, occ in enumerate(beta_occ):
+            #     if occ == 0:
+            #         continue
+            # val += occ * np.dot(self.beta_coefficients[i], data) ** 2
+            
+            if n_jobs > 1:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=n_jobs
+                ) as executor:
+                    vals = [
+                        executor.submit(_sum_sq, occ, coeff) for occ, coeff in zip(beta_occ, self.beta_coefficients) if occ != 0
+                    ]
+                    
+                val += sum([v.result() for v in vals])
+            else:
+                val += sum(_sum_sq(occ, coeff) for occ, coeff in zip(beta_occ, self.beta_coefficients) if occ != 0)
         else:
             val *= 2
 
@@ -1809,7 +1939,7 @@ class Orbitals:
     ):
         """
         returns the eletron density
-        same at self.density_value, but uses less memory at
+        same as self.density_value, but uses less memory at
         the cost of performance
         """
 
@@ -1858,7 +1988,7 @@ class Orbitals:
 
         return val
 
-    def fukui_donor_value(self, coords, delta=0.1, **kwargs):
+    def fukui_donor_value(self, coords, delta=0.1, tol=1e-12, **kwargs):
         """
         orbital-weighted fukui donor function
         
@@ -1884,6 +2014,8 @@ class Orbitals:
                     -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
                 )
 
+            minus_e /= sum(minus_e)
+            minus_e[minus_e < tol] = 0
             minus_e /= sum(minus_e)
             minus_density = self.density_value(
                 coords, alpha_occ=minus_e, beta_occ=None, **kwargs
@@ -1918,7 +2050,7 @@ class Orbitals:
 
         return minus_density
     
-    def fukui_acceptor_value(self, coords, delta=0.1, **kwargs):
+    def fukui_acceptor_value(self, coords, delta=0.1, tol=1e-12, **kwargs):
         """
         orbital-weighted fukui acceptor function
         
@@ -1951,6 +2083,8 @@ class Orbitals:
                     -((chem_pot - self.alpha_nrgs[i]) / delta) ** 2
                 )
 
+            plus_e /= sum(plus_e)
+            plus_e[plus_e < tol] = 0
             plus_e /= sum(plus_e)
             plus_density = self.density_value(
                 coords, alpha_occ=plus_e, beta_occ=beta_occ, **kwargs
@@ -2079,7 +2213,7 @@ class Orbitals:
         * com is the center of the cube
         * u is a rotation matrix for the v1, v2, v3 axes relative to xyz
         
-        :param Geometry geom: used to define the cube
+        :param Geometry|np.ndarray geom: structure or coordinatres that will be inside the cube
         :param float padding: extra space around atoms in angstrom
         :param float spacing: distance between adjacent points in angstrom
         :param bool standard_axes: True to use x, y, and z axes
@@ -2087,17 +2221,23 @@ class Orbitals:
             the geom and have the smallest volume possible
         """
 
+        from AaronTools.geometry import Geometry
+        if isinstance(geom, Geometry):
+            geom = geom.coords
+            COM = geom.COM()
+        else:
+            COM = np.mean(geom, axis=0)
+
         def get_standard_axis():
             """returns info to set up a grid along the x, y, and z axes"""
-            geom_coords = geom.coords
 
             # get range of geom's coordinates
-            x_min = np.min(geom_coords[:, 0])
-            x_max = np.max(geom_coords[:, 0])
-            y_min = np.min(geom_coords[:, 1])
-            y_max = np.max(geom_coords[:, 1])
-            z_min = np.min(geom_coords[:, 2])
-            z_max = np.max(geom_coords[:, 2])
+            x_min = np.min(geom[:, 0])
+            x_max = np.max(geom[:, 0])
+            y_min = np.min(geom[:, 1])
+            y_max = np.max(geom[:, 1])
+            z_min = np.min(geom[:, 2])
+            z_max = np.max(geom[:, 2])
 
             # add padding, figure out vectors
             r1 = 2 * padding + x_max - x_min
@@ -2119,7 +2259,7 @@ class Orbitals:
         if standard_axes:
             n_pts1, n_pts2, n_pts3, v1, v2, v3, com, u = get_standard_axis()
         else:
-            test_coords = geom.coords - geom.COM()
+            test_coords = geom - COM
             covar = np.dot(test_coords.T, test_coords)
             try:
                 # use SVD on the coordinate covariance matrix
@@ -2143,7 +2283,7 @@ class Orbitals:
                 com = np.array([xr_min, yr_min, zr_min]) - padding
                 # move the COM back to the xyz space of the original molecule
                 com = np.dot(u, com)
-                com += geom.COM()
+                com += COM
                 r1 = 2 * padding + np.linalg.norm(xr_max - xr_min)
                 r2 = 2 * padding + np.linalg.norm(yr_max - yr_min)
                 r3 = 2 * padding + np.linalg.norm(zr_max - zr_min)
@@ -2228,7 +2368,7 @@ class Orbitals:
         else:
             # hopefully float32
             num_size = 4
-        
+
         size = n_points
         if any(func_name == x for x in [
                 "density_value",
@@ -2237,11 +2377,30 @@ class Orbitals:
                 "fukui_dual_value",
             ]
         ):
-            size *= num_size * 4 * max(n_jobs, n_atoms)
+            size *= num_size * 2 * max(n_jobs, n_atoms)
             if not low_mem:
-                size *= self.n_mos / (2 * max(n_jobs, n_atoms))
+                size *= self.n_mos / max(n_jobs, n_atoms)
         elif func_name == "mo_value":
-            size *= num_size * (4 * n_jobs + max(n_atoms - n_jobs, 0))
+            min_kind = 2
+            for shell_type, n_func in zip(self.shell_types, self.funcs_per_shell):
+                mult = 2
+                if "p" in shell_type:
+                    mult = n_func + 3
+                if "d" in shell_type:
+                    mult = n_func + 3
+                if "f" in shell_type:
+                    mult = n_func + 3
+                if "g" in shell_type:
+                    mult = n_func + 3
+                if "h" in shell_type:
+                    mult = n_func + 3
+                if "i" in shell_type:
+                    mult = n_func + 3
+                
+                if mult > min_kind:
+                    min_kind = mult
+                    
+            size *= num_size * ((9 + min_kind) * min(n_jobs, n_atoms))
         elif any(func_name == x for x in [
                 "condensed_fukui_acceptor_values",
                 "condensed_fukui_donor_values",
@@ -2309,7 +2468,7 @@ class Orbitals:
         
         # find points that are closest to this atom
         # than any other
-        dist_mat = distance_matrix(geom.coords, all_points)
+        dist_mat = cdist(geom.coords, all_points, metric="euclidean")
         atom_ndx = geom.atoms.index(atom)
         mask = np.argmin(dist_mat, axis=0) == atom_ndx
         
@@ -2335,7 +2494,7 @@ class Orbitals:
         **kwargs,
     ):
         """
-        integrates func in the power cell of the specified target
+        integrates func in the power cell of the specified targets
         
         power diagrams are a form of weighted Voronoi diagrams
         that form cells based on the smallest d^2 - r^2
@@ -2352,14 +2511,22 @@ class Orbitals:
         :param int rpoints: radial points used for Gauss-Legendre integral
         :param int apoints: angular points for Lebedev integral
         :param function func: function to evaluate
+        :param float|function|None rmax: max radius around each target in the numerical integration. Default is 3 times the atom's radius
         :param kwargs: passed to func
-        """
         
+        :returns: np.array with each value corresponding to each input target
+        """
+
+        # TODO: switch to np.zeros((n_ang * n_rad, 3))
+        # this eliminates appending
+        # build a list of points and weights around the atom
+        targets = geom.find(target)
+        power_points = np.empty((0, 3))
+        power_weights = [np.empty(0) for t in targets]
+
+
         if func is None:
             func = self.density_value
-        
-        target = geom.find(target)[0]
-        target_ndx = geom.atoms.index(target)
 
         radius_list = []
         radii_dict = None
@@ -2382,53 +2549,59 @@ class Orbitals:
 
         radius_list = np.array(radius_list)
 
-        if rmax is None:
-            rmax = 5 * radius_list[target_ndx]
-
         radius_list = radius_list ** 2
 
-        rgrid, rweights = gauss_legendre_grid(
-            start=0, stop=rmax, num=rpoints
-        )
-        # grab Lebedev grid for unit sphere at origin
-        agrid, aweights = lebedev_sphere(
-            radius=1, center=np.zeros(3), num=apoints
-        )
+        out = [0 for t in targets]
+        for i, t in enumerate(targets):
+            target_ndx = geom.atoms.index(t)
 
-        # TODO: switch to np.zeros((n_ang * n_rad, 3))
-        # this eliminates appending
-        # build a list of points and weights around the atom
-        power_points = np.empty((0, 3))
-        power_weights = np.empty(0)
-        
-        atom_ndx = geom.atoms.index(target)
-        found_pts = False
-        for rvalue, rweight in zip(rgrid, rweights):
-            agrid_r = agrid * rvalue
-            agrid_r += target.coords
-            dist_mat = distance_matrix(geom.coords, agrid_r) ** 2
-            dist_mat = np.transpose(dist_mat.T - radius_list)
-            mask = np.argmin(dist_mat, axis=0) == atom_ndx
-            # find points that are closest to this atom's vdw sphere
-            # than any other
-            if any(mask):
-                power_points = np.append(power_points, agrid_r[mask], axis=0)
-                power_weights = np.append(power_weights, rweight * aweights[mask])
-                found_pts = True
-            elif found_pts:
-                break
+            this_rmax = rmax
+            if rmax is None:
+                this_rmax = 3 * radius_list[target_ndx]
+            elif callable(rmax):
+                this_rmax = rmax(t)
 
-        # with open("test_%s.bild" % target.name, "w") as f:
-        #     s = ""
-        #     for p in power_points:
-        #         s += ".sphere %.4f %.4f %.4f 0.05\n" % tuple(p)
-        #     f.write(s)
-        
-        # evaluate function
-        vals = func(power_points, *args, **kwargs)
+            rgrid, rweights = gauss_legendre_grid(
+                start=0, stop=this_rmax, num=rpoints
+            )
+            # grab Lebedev grid for unit sphere at origin
+            agrid, aweights = lebedev_sphere(
+                radius=1, center=np.zeros(3), num=apoints
+            )
+    
+            found_pts = False
+            for rvalue, rweight in zip(rgrid, rweights):
+                agrid_r = agrid * rvalue
+                agrid_r += t.coords
+                dist_mat = cdist(geom.coords, agrid_r, metric="sqeuclidean")
+                dist_mat = np.transpose(dist_mat.T - radius_list)
+                mask = np.argmin(dist_mat, axis=0) == target_ndx
+                # find points that are closest to this atom's vdw sphere
+                # than any other
+                if any(mask):
+                    power_points = np.append(power_points, agrid_r[mask], axis=0)
+                    power_weights[i] = np.append(power_weights[i], rweight * aweights[mask])
+                    found_pts = True
+                elif found_pts:
+                    break
+    
+            # with open("test_%s.bild" % target.name, "w") as f:
+            #     s = ""
+            #     for p in power_points:
+            #         s += ".sphere %.4f %.4f %.4f 0.05\n" % tuple(p)
+            #     f.write(s)
+            
+            # evaluate function
         
         # multiply values by weights, add them up, and return the sum
-        return np.dot(vals, power_weights)
+        vals = func(power_points, *args, **kwargs)
+        start = 0
+        for i, t in enumerate(targets):
+            stop = start + len(power_weights[i])
+            out[i] = np.dot(vals[start:stop], power_weights[i])
+            start = stop
+        
+        return out
 
     def condensed_fukui_donor_values(
         self,
@@ -2448,11 +2621,11 @@ class Orbitals:
         
         :returns: array for each atom's condensed Fukui donor values
         """
-        out = np.zeros(len(geom.atoms))
-        for i, atom in enumerate(geom.atoms):
-            out[i] = self.power_integral(
-                atom, geom, *args, func=self.fukui_donor_value, **kwargs,
-            )
+        out = self.power_integral(geom.atoms, geom, *args, func=self.fukui_donor_value, **kwargs)
+        # for i, atom in enumerate(geom.atoms):
+        #     out[i] = self.power_integral(
+        #         atom, geom, *args, func=self.fukui_donor_value, **kwargs,
+        #     )
         
         out /= sum(out)
         return out
@@ -2475,11 +2648,13 @@ class Orbitals:
         
         :returns: array for each atom's condensed Fukui acceptor values
         """
-        out = np.zeros(len(geom.atoms))
-        for i, atom in enumerate(geom.atoms):
-            out[i] = self.power_integral(
-                atom, geom, *args, func=self.fukui_acceptor_value, **kwargs,
-            )
+        out = self.power_integral(geom.atoms, geom, *args, func=self.fukui_acceptor_value, **kwargs)
+
+        # out = np.zeros(len(geom.atoms))
+        # for i, atom in enumerate(geom.atoms):
+        #     out[i] = self.power_integral(
+        #         atom, geom, *args, func=self.fukui_acceptor_value, **kwargs,
+        #     )
         
         out /= sum(out)
         return out

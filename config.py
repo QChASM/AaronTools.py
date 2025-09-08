@@ -131,7 +131,7 @@ class Config(configparser.ConfigParser):
     def __init__(
         self, 
         infile=None, 
-        quiet=False, 
+        quiet=True, 
         skip_user_default=False, 
         interpolation=configparser.ExtendedInterpolation(), 
         **kwargs

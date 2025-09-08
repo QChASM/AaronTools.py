@@ -581,6 +581,18 @@ class FlaggedAtoms(Finder):
         return [atom for atom in atoms if atom.flag]
 
 
+class DummyAtoms(Finder):
+    """
+    dummy atoms
+    """
+    # useful for finding constrained atoms
+    def __repr__(self):
+        return "dummy atoms"
+
+    def get_matching_atoms(self, atoms, geometry):
+        return [atom for atom in atoms if atom.is_dummy]
+
+
 class CloserTo(Finder):
     """
     atoms closer to atom1 than atom2 (based on bonds, not actual distance)
@@ -596,32 +608,45 @@ class CloserTo(Finder):
         return "atoms closer to %s than %s" % (self.atom1, self.atom2)
 
     def get_matching_atoms(self, atoms, geometry):
-        matching_atoms = []
-        for atom in atoms:
-            if atom is self.atom1 and atom is not self.atom2:
-                matching_atoms.append(atom)
-                continue
+        matching_atoms = set([])
+        wrong_atoms = set([])
 
-            try:
-                d1 = len(geometry.shortest_path(self.atom1, atom))
-            except LookupError:
-                d1 = False
+        # stackJ is everything that is N bonds away from atomJ
+        # but stack1 excludes things that are closer to atom2
+        # once we run out of stackJ, everything that's left
+        # is close to atom2
+        stack1 = deque([self.atom1])
+        stack2 = deque([self.atom2])
+        visited1 = set([self.atom1])
+        visited2 = set([self.atom2])
+        while len(stack1) > 0:
+            group1_atoms = set()
+            # go through each atom in stack1 and add in things it's
+            # bonded to but that we haven't visited yet
+            for a in stack1:
+                group1_atoms.update((a.connected - visited1))
+            
+            group1_atoms.discard(visited1)
+            visited1.update(group1_atoms)
 
-            try:
-                d2 = len(geometry.shortest_path(self.atom2, atom))
-            except LookupError:
-                d2 = False
+            group2_atoms = set()
+            for a in stack2:
+                group2_atoms.update((a.connected - visited2))
 
-            if d1 is not False and d2 is not False and d1 <= d2:
-                if self.include_ties:
-                    matching_atoms.append(atom)
-                elif d1 < d2:
-                    matching_atoms.append(atom)
+            group2_atoms.discard(visited2)
+            visited2.update(group2_atoms)
 
-            elif d1 is not False and d2 is False:
-                matching_atoms.append(atom)
+            # next stack is whatever we just visited
+            stack1 = group1_atoms
+            stack2 = group2_atoms
 
-        return matching_atoms
+            # matching atoms are ones from stack1 that haven't been visited in stack2 yet
+            matching_atoms.update((group1_atoms - visited2))
+            if self.include_ties:
+                # unless we are including ties
+                matching_atoms.update(group1_atoms & group2_atoms)    
+
+        return list(matching_atoms)
 
 
 class IsElement(Finder):
@@ -637,6 +662,7 @@ class IsElement(Finder):
     def get_matching_atoms(self, atoms, geometry=None):
         """returns List(Atom) of atoms of that element"""
         return [atom for atom in atoms if atom.element == self.element]
+
 
 class OfType(Finder):
     """
@@ -795,6 +821,7 @@ class OfType(Finder):
 
         return matching_atoms
 
+
 class Aromatics(Finder):
     """all atoms in aromatic rings"""
     def __init__(self):
@@ -806,6 +833,7 @@ class Aromatics(Finder):
     def get_matching_atoms(self, atoms, geometry):
         aromatics, charge, fused = geometry.get_aromatic_atoms(return_rings=False)
         return aromatics
+
 
 class ONIOMLayer(Finder):
     """all atoms in a given ONIOM layer or list of ONIOM layers"""
@@ -837,6 +865,7 @@ class ONIOMLayer(Finder):
                 except AttributeError:
                     pass #print("ONIOMlayer only accepts OniomAtom type atoms")
         return matching_atoms
+
 
 class AmideCarbon(Finder):
     """
@@ -993,6 +1022,7 @@ class SpiroCenters(Finder):
                 matching_atoms.append(atom1)
 
         return matching_atoms
+
 
 class Residue(Finder):
     """all atoms in a given residue"""

@@ -408,18 +408,19 @@ class Geometry:
         # sorted by name count is insufficient when there's multiple monodentate ligands
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
+        comp_ndx = {x: i for i, x in enumerate(Component.list())}
 
         monodentate_names = sorted(
             monodentate_names,
             key=lambda x: 10000 * monodentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, mono_lig in enumerate(
             sorted(
                 set(monodentate_names),
                 key=lambda x: 10000 * monodentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
@@ -432,14 +433,14 @@ class Geometry:
         symm_bidentate_names = sorted(
             symm_bidentate_names,
             key=lambda x: 10000 * symm_bidentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, symbi_lig in enumerate(
             sorted(
                 set(symm_bidentate_names),
                 key=lambda x: 10000 * symm_bidentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
@@ -451,14 +452,14 @@ class Geometry:
         asymm_bidentate_names = sorted(
             asymm_bidentate_names,
             key=lambda x: 10000 * asymm_bidentate_names.count(x)
-            + Component.list().index(x),
+            + comp_ndx[x],
             reverse=True,
         )
         for i, asymbi_lig in enumerate(
             sorted(
                 set(asymm_bidentate_names),
                 key=lambda x: 10000 * asymm_bidentate_names.count(x)
-                + Component.list().index(x),
+                + comp_ndx[x],
                 reverse=True,
             )
         ):
@@ -492,6 +493,7 @@ class Geometry:
                 ]
 
                 start = 0
+                minimizable = []
                 for lig in monodentate_names:
                     key = mapping[start]
                     start += 1
@@ -510,6 +512,8 @@ class Geometry:
                     for key in comp.key_atoms:
                         geom_copy.atoms[0].connected.add(key)
                         key.connected.add(geom_copy.atoms[0])
+                    
+                    minimizable.append(comp)
 
                 for lig in symm_bidentate_names:
                     keys = mapping[start : start + 2]
@@ -555,6 +559,21 @@ class Geometry:
                         geom_copy.atoms[0].connected.add(key)
                         key.connected.add(geom_copy.atoms[0])
 
+
+                # due to the way the atoms are ordered in the csv files,
+                # monodentate ligands are first
+                # this means we minimized them before any other ligands were added
+                # and should do it again once everything is attached to the center
+                if minimize:
+                    for i in range(0, 3):
+                        for comp in minimizable:
+                            geom_copy.minimize_torsion(
+                                comp.atoms,
+                                geom_copy.atoms[0].bond(comp.key_atoms[0]),
+                                geom_copy.atoms[0],
+                                increment=20,
+                            )
+                    
                 geom_copy.name = "%s-%i_%s_%s" % (
                     this_name,
                     i + 1,

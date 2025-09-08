@@ -24,6 +24,8 @@ class TestFileIO(TestWithTimer):
     oniom_com = os.path.join(prefix, "test_files", "pd_complex_2.com")
     oniom_xyz = os.path.join(prefix, "test_files", "pd_complex_2.xyz")
     pdb = os.path.join(prefix, "test_files", "input.pdb")
+    zmat2 = os.path.join(prefix, "test_files", "zmat2.log")
+    zmat3 = os.path.join(prefix, "test_files", "zmat3.log")
 
     def xyz_matrix(self, fname):
         rv = []
@@ -38,7 +40,11 @@ class TestFileIO(TestWithTimer):
         return rv
 
     def validate_atoms(self, ref, test, skip=[]):
-        for r, t in zip(ref.atoms, test.atoms):
+        if isinstance(ref, FileReader):
+            ref = ref.atoms
+        if isinstance(test, FileReader):
+            test = test.atoms
+        for r, t in zip(ref, test):
             if r.element != t.element:
                 return False
             if np.linalg.norm(r.coords - t.coords) > 10 ** -5:
@@ -142,6 +148,26 @@ class TestFileIO(TestWithTimer):
         ref = FileReader(os.path.join(prefix, "ref_files", "file_io_died.xyz"))
         test = FileReader(os.path.join(prefix, "test_files", "died.log"))
         self.assertTrue(self.validate_atoms(ref, test, skip=["link", "atomtype", "charge", "layer"]))
+        
+        ref = FileReader(os.path.join(prefix, "ref_files", "zmat_ref.xyz"))
+        test = FileReader(os.path.join(prefix, "test_files", "zmat1.log"))
+        self.assertTrue(self.validate_atoms(ref, test, skip=["link", "atomtype", "charge", "layer"]))
+        
+        # z-matrix things
+        ref = FileReader(os.path.join(prefix, "ref_files", "zmat_ref.xyz"))
+        input_ref = FileReader(os.path.join(prefix, "ref_files", "zmat_ref_init.xyz"))
+        
+        test = FileReader(os.path.join(prefix, "test_files", "zmat1.log"), get_all=True)
+        self.assertTrue(self.validate_atoms(ref, test, skip=["link", "atomtype", "charge", "layer"]))        
+        self.assertTrue(self.validate_atoms(input_ref, test.all_geom[0]["atoms"], skip=["link", "atomtype", "charge", "layer"]))
+        
+        test = FileReader(os.path.join(prefix, "test_files", "zmat2.log"), get_all=True)
+        self.assertTrue(self.validate_atoms(ref, test, skip=["link", "atomtype", "charge", "layer"]))        
+        self.assertTrue(self.validate_atoms(input_ref, test.all_geom[0]["atoms"], skip=["link", "atomtype", "charge", "layer"]))
+        
+        test = FileReader(os.path.join(prefix, "test_files", "zmat3.log"), get_all=True)
+        self.assertTrue(self.validate_atoms(ref, test, skip=["link", "atomtype", "charge", "layer"]))        
+        self.assertTrue(self.validate_atoms(input_ref, test.all_geom[0]["atoms"], skip=["link", "atomtype", "charge", "layer"]))
 
     def test_read_log_energies(self):
         """reading the correct energy from Gaussian output"""

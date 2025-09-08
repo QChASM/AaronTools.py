@@ -1008,6 +1008,16 @@ def get_outfile(basename, **substitutions):
     return new_name
 
 
+def xyzzy_cross(v1, v2):
+    """quick cross product of two 3-D vectors"""
+    # this tends to be faster than np.cross
+    out = np.zeros(3)
+    out[0] = v1[1] * v2[2] - v1[2] * v2[1]
+    out[1] = v1[2] * v2[0] - v1[0] * v2[2]
+    out[2] = v1[0] * v2[1] - v1[1] * v2[0]
+    return out
+
+
 class classproperty:
     def __init__(self, f):
         self._f = f

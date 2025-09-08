@@ -2080,9 +2080,11 @@ class FileReader:
                 
                     if line.strip().startswith("Total Energy ="):
                         self.other["energy"] = float(line.split()[-1])
+                        self.other["energy_context"] = line
     
                     elif line.strip().startswith("Total E0"):
                         self.other["energy"] = float(line.split()[-2])
+                        self.other["energy_context"] = line
     
                     elif line.strip().startswith("Correction ZPE"):
                         self.other["ZPVE"] = float(line.split()[-4])
@@ -2278,13 +2280,15 @@ class FileReader:
                         self.other[item] = float(line.split()[-1])
                         # hopefully the highest level energy gets printed last
                         self.other["energy"] = self.other[item]
-    
+                        self.other["energy_context"] = line
+
                     elif "Total Energy" in line and "=" in line:
                         item = line.split("=")[0].strip().strip("*").strip()
                         self.other[item] = float(line.split()[-2])
                         # hopefully the highest level energy gets printed last
                         self.other["energy"] = self.other[item]
-    
+                        self.other["energy_context"] = line
+
                     elif "Correlation Energy" in line and "=" in line:
                         item = line.split("=")[0].strip().strip("*").strip()
                         if "DFT Exchange-Correlation" in item:
@@ -2382,6 +2386,8 @@ class FileReader:
         masses = []
         orca_version = 0
         nmr_data = None
+        _reading_layer = None
+        _has_layers = set()
 
         def add_grad(grad, name, line):
             grad[name] = {}
@@ -2441,6 +2447,14 @@ class FileReader:
                         f, get_all=get_all, just_geom=just_geom, scan_read_all=scan_read_all
                     )
     
+                if "SMALL SYSTEM" in line:
+                    _reading_layer = "small"
+                    _has_layers.add(_reading_layer)
+                
+                if "FULL SYSTEM" in line:
+                    _reading_layer = "full"
+                    _has_layers.add(_reading_layer)
+
                 if line.startswith("CARTESIAN COORDINATES (A.U.)") and not masses:
                     self.skip_lines(f, 2)
                     n += 2
@@ -2460,7 +2474,7 @@ class FileReader:
                             "atoms": deepcopy(self.atoms),
                             "data": deepcopy(self.other),
                         }]
-    
+
                     elif (not is_scan_job or scan_read_all) and get_all and len(self.atoms) > 0:
                         if self.all_geom is None:
                             self.all_geom = []
@@ -2470,6 +2484,10 @@ class FileReader:
                         }]
     
                     self.atoms, n = get_atoms(f, n)
+                    if _reading_layer == "small":
+                        self.small_atoms = self.atoms
+                    elif _reading_layer == "full":
+                        self.full_atoms = self.atoms
                     step_converged = False
     
                 if just_geom:
@@ -2492,11 +2510,14 @@ class FileReader:
                         # to the energy so we can't use line.split()[-1]
                         try:
                             self.other["energy"] = float(line.split()[4])
+                            self.other["energy_context"] = line
+
                         except ValueError:
                             kind = line.split()[4]
                             nrg = float(line.split()[5])
                             self.other["energy " + kind] = nrg
-    
+                            self.other["energy " + kind + "_context"] = line
+
                     if line.startswith("TOTAL SCF ENERGY"):
                         self.skip_lines(f, 2)
                         line = f.readline()
@@ -2569,6 +2590,7 @@ class FileReader:
                     elif re.match("E\(\S+\)\s+...\s+-?\d+\.\d+$", line):
                         nrg = re.match("(E\(\S+\))\s+...\s+(-?\d+\.\d+)$", line)
                         self.other["energy"] = float(nrg.group(2))
+                        self.other["energy_context"] = line
                         self.other[nrg.group(1)] = float(nrg.group(2))
     
                     elif "*    Relaxed Surface Scan    *" in line:
@@ -2640,28 +2662,33 @@ class FileReader:
                     elif line.startswith("CARTESIAN GRADIENT"):
                         try:
                             gradient = np.zeros((len(self.atoms), 3))
-                            if "NUMERICAL" in line:
-                                self.skip_lines(f, 1)
-                                n += 1
-                            else:
-                                self.skip_lines(f, 2)
-                                n += 2
-                            for i in range(0, len(self.atoms)):
+                            reading_grad = False
+                            i = 0
+                            while True:
                                 n += 1
                                 line = f.readline()
                                 # orca prints a warning before gradient if some
                                 # coordinates are constrained
                                 if line.startswith("WARNING:"):
                                     continue
+                                grad_match = re.search(":\s*-?\d+\.\d+", line)
+                                if grad_match and not reading_grad:
+                                    reading_grad = True
+                                if reading_grad and not grad_match:
+                                    break
+                                if not reading_grad:
+                                    continue
                                 info = line.split()
                                 gradient[i] = np.array([float(x) for x in info[3:]])
+                                i += 1
         
                             self.other["forces"] = -gradient
-                        except ValueError:
+                        except ValueError as e:
                             if log is None:
                                 log = self.LOG
                             log.warning("error while reading ORCA gradient")
                             log.warning("data read:\n%s" % repr(gradient))
+                            raise e
                             pass
     
                     elif line.startswith("VIBRATIONAL FREQUENCIES"):
@@ -2705,8 +2732,11 @@ class FileReader:
     
                         if all(hit.values()):
                             try:
+                                atoms = self.atoms
+                                if hasattr(self, "full_atoms"):
+                                    atoms = self.full_atoms
                                 self.other["frequency"] = Frequency(
-                                    freq_str, hpmodes=False, style="orca", atoms=self.atoms,
+                                    freq_str, hpmodes=False, style="orca", atoms=atoms,
                                 )
                             except Exception as e:
                                 if not log:
@@ -3248,6 +3278,9 @@ class FileReader:
                         pass
                     raise e
 
+        if "full" in _has_layers:
+            self.atoms = self.full_atoms
+
         if get_all:
             self.all_geom += [{
                 "atoms": self.atoms,
@@ -3337,6 +3370,7 @@ class FileReader:
                 else:
                     if "energy in the final basis set" in line:
                         self.other["energy"] = float(line.split()[-1])
+                        self.other["energy_context"] = line
                         if "SCF" in line:
                             self.other["scf_energy"] = self.other["energy"]
     
@@ -3348,16 +3382,21 @@ class FileReader:
                             if "correlation" not in kind and len(kind.split()) <= 2:
                                 self.other["E(%s)" % kind.split()[0]] = val
                                 self.other["energy"] = val
+                                self.other["energy_context"] = line
+
                             else:
                                 self.other["E(corr)(%s)" % kind.split()[0]] = val
     
                     if "Total energy:" in line:
                         self.other["energy"] = float(line.split()[-2])
-    
+                        self.other["energy_context"] = line
+
                     #MPn energy is printed as EMPn(SDQ)
                     if re.search("EMP\d(?:[A-Z]+)?\s+=\s*-?\d+.\d+$", line):
                         self.other["energy"] = float(line.split()[-1])
                         self.other["E(%s)" % line.split()[0][1:]] = self.other["energy"]
+                        self.other["energy_context"] = line
+
     
                     if "Molecular Point Group" in line:
                         self.other["full_point_group"] = line.split()[3]
@@ -3578,10 +3617,7 @@ class FileReader:
         mp_energies = re.compile(r"([RU]MP\d+(?:\(\S+\))?)\s*=\s*(\S+)")
         # temperature = re.compile(r"^ Temperature\s*\d+\.\d+")
        
-        input_count = 0
-        standard_count = 0
-        only_read_input = False
-        only_read_standard = False
+        orientations_read = dict()
 
         def get_atoms(f, n):
             rv = self.atoms
@@ -3592,21 +3628,18 @@ class FileReader:
             while "--" not in line:
                 line = line.strip()
                 line = line.split()
-                for l in line:
-                    try:
-                        float(l)
-                    except ValueError:
-                        msg = "Error detected with log file on line {}"
-                        raise IOError(msg.format(n))
                 try:
-                    rv[atnum].coords = np.array(line[3:], dtype=float)
+                    rv[atnum].coords = np.array([float(x) for x in line[3:]])
                 except IndexError:
-                    pass
                     rv.append(Atom(
                         element=ELEMENTS[int(line[1])],
                         name=str(atnum + 1),
+                        coords=np.array([float(x) for x in line[3:]]),
                     ))
-                    rv[atnum].coords = np.array(line[3:], dtype=float)
+                except ValueError:
+                    msg = "Error detected with log file on line {}"
+                    raise IOError(msg.format(n))
+ 
 
                 atnum += 1
                 line = f.readline()
@@ -3719,26 +3752,30 @@ class FileReader:
                     if len(info) == 1:
                         continue
 
-                    bond_ndx = int(info[1])
+                    cartesian = info[1][0] in "-0."
                     # if the first thing is > 0, it defines a distance
                     # between this atom and the bond_ndx atom
                     # otherwise, it is cartesian coordinates
-                    if bond_ndx <= 0:
+                    if cartesian:
                         # if bond_ndx < 0:
                         #     rv[-1].flag = True
                         # if the number after the element is 0, then
                         # the input is cartesian coordinates
-                        coords = info[2:]
+                        start = 1
+                        if any([info[1] == x for x in ["0", "-1"]]):
+                            start = 2
+                        coords = info[start:start + 3]
                         for j, coord in enumerate(coords):
-                            try:
+                            coords[j] = coord
+                            if coord in variables:
                                 coords[j] = variables[coord]
-                            except KeyError:
-                                pass
+                            elif coord.lstrip("-") in variables:
+                                coords[j] = "-%s" % variables[coord.lstrip("-")]
                         coords = [float(coord) for coord in coords]
                         rv[-1].coords = np.array(coords)
                         continue
 
-                    bond_ndx -= 1
+                    bond_ndx = int(info[1]) - 1
                     rv[-1].coords += rv[bond_ndx].coords
                     bond_length = info[2]
                     sign = 1
@@ -3847,7 +3884,7 @@ class FileReader:
                 # print("")
                 # for a in rv:
                 #     print(a.element, *a.coords)
-
+                
                 return rv, n
 
             while len(line.split()) > 1:
@@ -3864,27 +3901,6 @@ class FileReader:
                 elif len(line) == 4:
                     a += 1
                     rv += [Atom(element=element, coords=line[1:], name=str(a))]
-                line = f.readline()
-                n += 1
-            return rv, n
-
-        def get_oniom_atoms(f, n):
-            rv = self.atoms
-            self.skip_lines(f, 4)
-            line = f.readline()
-            n += 5
-            atnum = 0
-            while "--" not in line:
-                line = line.strip()
-                line = line.split()
-                for l in line:
-                    try:
-                        float(l)
-                    except ValueError:
-                        msg = "Error detected with log file on line {}"
-                        raise IOError(msg.format(n))
-                rv[atnum].coords = np.array(line[3:], dtype=float)
-                atnum += 1
                 line = f.readline()
                 n += 1
             return rv, n
@@ -4085,84 +4101,30 @@ class FileReader:
         has_params = False
         while line != "":
             try:
-                if line.strip().startswith("AtFile"):
-                    parameters = line.split()[1]
-                    has_params = True
-                # route
-                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
-                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
-                # pmodes,noraman,temperature=313.15)
-                if line.strip().startswith("#") and route is None:
-                    route = ""
-                    while "------" not in line:
-                        if len(line.rstrip()) > 1:
-                            route += line[1:].splitlines()[0]
-                        n += 1
-                        line = f.readline()
-                    oniom = "oniom" in route.lower()
-                # archive entry
-                elif line.strip().startswith("1\\1\\"):
-                    found_archive = True
-                    self.other["archive"] = line.strip()
-                elif found_archive and line.strip().endswith("@"):
-                    self.other["archive"] += line.strip()
-                    found_archive = False
-                elif found_archive:
-                    self.other["archive"] += line.strip()
-                    line = f.readline()
-                    continue
-    
                 # input atom specs and charge/mult
                 if not oniom and "Symbolic Z-matrix:" in line:
-                    self.atoms, n = get_input(f, n)
-    
-                if "Structure from the checkpoint file" in line:
-                    done = False
-                    while not done:
-                        if "Charge =" in line:
-                            charge = int(line.split()[2])
-                            mult = int(line.split()[5])
-                            self.other["charge"] = charge
-                            self.other["multiplicity"] = mult
-                            done = True
-                        line = f.readline()
-   
-                #Pseudopotential info
-                elif "Pseudopotential Parameters" in line:
-                    self.other["ECP"] = []
-                    self.skip_lines(f, 4)
-                    n += 5
-                    line = f.readline()
-                    while "=====" not in line:
-                        line = line.split()
-                        if line[0].isdigit() and line[1].isdigit():
-                            ele = line[1]
-                            n += 1
-                            line = f.readline().split()
-                            if line[0] != "No":
-                                self.other["ECP"].append(ELEMENTS[int(ele)])
-                        n += 1
-                        line = f.readline()
-    
+                    try:
+                        self.atoms, n = get_input(f, n)
+                    except Exception as e:
+                        self.LOG.warning("failed to parse input data")
+                        if "route" in self.other:
+                            self.LOG.warning("route: ", self.other["route"])
+
                 # geometry
-                elif not oniom and (
-                    "Input orientation" in line or
-                    "Standard orientation" in line
+                elif (
+                    "orientation" in line and
+                    (
+                        "Z-matrix" in line or
+                        "Standard" in line or
+                        "Input" in line
+                    )
                 ):
-                    if "Input" in line:
-                        input_count += 1
-                    elif "Standard" in line:
-                        standard_count += 1
-                    if input_count >= 2 and input_count >= standard_count and not only_read_standard:
-                        only_read_input = True
-                    elif standard_count >= 1 and standard_count >= input_count and not only_read_input:
-                        only_read_standard = True
-                    
+                    kind = line.split()[0]
+                    orientations_read.setdefault(kind, 0)
                     record_coords = (
-                        "Input" in line and only_read_input
-                    ) or (
-                        "Standard" in line and only_read_standard
-                    ) or not any((only_read_input, only_read_standard))
+                        max(orientations_read.values()) == orientations_read[kind]
+                    )
+                    orientations_read[kind] += 1
                     if "scan" in constraints:
                         record_coords = False
                         if not scan_read_all:
@@ -4185,32 +4147,79 @@ class FileReader:
                             pass
                     if record_coords:
                         self.atoms, n = get_atoms(f, n)
+
                     self.other["opt_steps"] += 1
-    
-                elif oniom and (
-                    "Input orientation" in line or
-                    "Standard orientation" in line
-                ):
-                    if get_all and len(self.atoms) > 0:
-                        self.all_geom += [{
-                            "atoms": deepcopy(self.atoms),
-                            "data": deepcopy(self.other),
-                        }]
-                    self.atoms, n = get_oniom_atoms(f, n)
-                    self.other["opt_steps"] += 1
-    
-                #oniom atom types and input charges
-                elif oniom and "Symbolic Z-matrix" in line:
-                    self.atoms, n = get_oniom_info(f, n)
-    
-                elif "The following ModRedundant input section has been read:" in line:
-                    constraints, n = get_modredundant(f, n)
-    
+
                 elif just_geom:
                     line = f.readline()
                     n += 1
                     continue
                     # z-matrix parameters
+    
+                if "Structure from the checkpoint file" in line:
+                    done = False
+                    while not done:
+                        if "Charge =" in line:
+                            charge = int(line.split()[2])
+                            mult = int(line.split()[5])
+                            self.other["charge"] = charge
+                            self.other["multiplicity"] = mult
+                            done = True
+                        line = f.readline()
+
+                # route
+                # we need to grab the route b/c sometimes 'hpmodes' can get split onto multiple lines:
+                # B3LYP/genecp EmpiricalDispersion=GD3 int=(grid=superfinegrid) freq=(h
+                # pmodes,noraman,temperature=313.15)
+                elif line.strip().startswith("#") and route is None:
+                    route = ""
+                    while "------" not in line:
+                        if len(line.rstrip()) > 1:
+                            route += line[1:].splitlines()[0]
+                        n += 1
+                        line = f.readline()
+                    oniom = "oniom" in route.lower()
+
+                #oniom atom types and input charges
+                elif oniom and "Symbolic Z-matrix" in line:
+                    self.atoms, n = get_oniom_info(f, n)
+
+                #Pseudopotential info
+                elif "Pseudopotential Parameters" in line:
+                    self.other["ECP"] = []
+                    self.skip_lines(f, 4)
+                    n += 5
+                    line = f.readline()
+                    while "=====" not in line:
+                        line = line.split()
+                        if line[0].isdigit() and line[1].isdigit():
+                            ele = line[1]
+                            n += 1
+                            line = f.readline().split()
+                            if line[0] != "No":
+                                self.other["ECP"].append(ELEMENTS[int(ele)])
+                        n += 1
+                        line = f.readline()
+    
+                if line.strip().startswith("AtFile"):
+                    parameters = line.split()[1]
+                    has_params = True
+
+                # archive entry
+                elif line.strip().startswith("1\\1\\"):
+                    found_archive = True
+                    self.other["archive"] = line.strip()
+                elif found_archive and line.strip().endswith("@"):
+                    self.other["archive"] += line.strip()
+                    found_archive = False
+                elif found_archive:
+                    self.other["archive"] += line.strip()
+                    line = f.readline()
+                    continue
+    
+                elif "The following ModRedundant input section has been read:" in line:
+                    constraints, n = get_modredundant(f, n)
+    
                 # elif "!   Optimized Parameters   !" in line:
                 elif "!   Optimized Parameters   !" in line:
                     self.other["params"], n = get_params(f, n)
@@ -4224,6 +4233,7 @@ class FileReader:
                     tmp = [word.strip() for word in line.split()]
                     idx = tmp.index("=")
                     self.other["energy"] = float(tmp[idx + 1])
+                    self.other["energy_context"] = line
                     self.other["scf_energy"] = float(tmp[idx + 1])
     
                 elif line.startswith(" Entering Link"):
@@ -4235,16 +4245,19 @@ class FileReader:
     
                 elif line.startswith(" Energy= "):
                     self.other["energy"] = float(line.split()[1])
+                    self.other["energy_context"] = line
     
                 elif "ONIOM: extrapolated energy" in line:
                     self.other["ONIOM energy"] = float(line.split()[-1])
                     self.other["energy"] = self.other["ONIOM energy"]
-    
+                    self.other["energy_context"] = line
+
                 # CC energy
                 elif line.startswith(" CCSD(T)= "):
                     self.other["energy"] = float(line.split()[-1].replace("D", "E"))
                     self.other["E(CCSD(T))"] = self.other["energy"]
-    
+                    self.other["energy_context"] = line
+
                 # basis set details
                 elif line.startswith(" NBasis") and "NFC" in line:
                     n_basis = int(re.match(" NBasis=\s*(\d+)", line).group(1))
@@ -4362,7 +4375,8 @@ class FileReader:
                             )
                             self.other["E(%s)" % nrg.group(1)] = float(nrg.group(2))
                             self.other["energy"] = float(nrg.group(2))
-    
+                            self.other["energy_context"] = line
+
                         line = f.readline()
                     if stability_test:
                         continue
@@ -4627,10 +4641,13 @@ class FileReader:
                         nrg = float(nrg_match.group(2).replace("D", "E"))
                         if nrg_match.group(1) != "E(TD-HF/TD-DFT)":
                             self.other["energy"] = nrg
+                            self.other["energy_context"] = line
+
                         self.other[nrg_match.group(1)] = nrg
                     # MP energies
                     elif mp_match:
                         self.other["energy"] = float(mp_match.group(2).replace("D", "E"))
+                        self.other["energy_context"] = line
                         self.other["E(%s)" % mp_match.group(1)] = self.other["energy"]
     
                 # capture errors
@@ -4956,6 +4973,7 @@ class FileReader:
         atoms = []
         other = {}
         line = f.readline()
+        is_oniom = False
         while line != "":
             # header
             if line.startswith("%"):
@@ -4966,6 +4984,7 @@ class FileReader:
                 line = f.readline()
                 while line.strip():
                     route += line
+                    line = f.readline()
                 methods = np.loadtxt(os.path.join(
                         AARONTOOLS, "theory", "valid_methods", "gaussian.txt"
                     ),
@@ -4978,7 +4997,6 @@ class FileReader:
                 #   any valid delimiter
                 route_words = route.split()
                 other["method"] = ""
-                is_oniom = False
                 for word in route_words:
                     for m in methods:
                         m = m.replace("(", "\(").replace(")", "\)").replace("+", "\+")
@@ -5021,6 +5039,7 @@ class FileReader:
                 # but there should be a blank line between the route and the comment
                 # and another between the comment and the charge+mult
                 blank_lines = 0
+                
                 other.setdefault("comment", "")
                 line = f.readline()
                 while line.strip():
@@ -5236,6 +5255,7 @@ class FileReader:
                     atom_coords, i = parse_to_list(i, f, int(value), float)
                 elif data == "Total Energy":
                     other["energy"] = float(value)
+                    self.other["energy_context"] = line
                 elif not just_geom:
                     if real_match.group(2):
                         other[data], i = parse_to_list(
@@ -5580,6 +5600,7 @@ class FileReader:
                 )
             elif "E lowest" in line:
                 self.other["energy"] = float(float_num.findall(line)[0])
+                self.other["energy_context"] = line
             elif "T /K" in line:
                 self.other["temperature"] = float(float_num.findall(line)[0])
             elif (
@@ -5647,6 +5668,7 @@ class FileReader:
                 self.other["energy"] = (
                     float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
                 )
+                self.other["energy_context"] = line
             if "zero point energy" in line:
                 self.other["ZPVE"] = (
                     float(float_num.findall(line)[0]) * UNIT.HART_TO_KCAL
@@ -5708,6 +5730,7 @@ class FileReader:
                 self.other["energy"] = (
                     float(line.split()[4]) / UNIT.HART_TO_KCAL
                 )
+                self.other["energy_context"] = line
 
             i += 1
 
