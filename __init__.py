@@ -95,11 +95,27 @@ class CustomFilter(logging.Filter):
                 r"\n(\S)", lambda x: "\n  %s" % x.group(1), record.msg
             )
         msg = ["\n  "]
-        for word in re.findall(r"\S+\s*", record.getMessage()):
-            if len("".join(msg).split("\n")[-1]) + len(word) < 80:
-                msg.append(word)
+        for line in record.getMessage().splitlines():
+            if len(line) < 80:
+                msg.append("\n  " + line)
             else:
-                msg.append("\n  {}".format(word))
+                updated_line = "\n  "
+                words = re.findall(r"\S+\s*", line)
+                n_word = 0
+                for i in range(0, len(words)):
+                    updated_line += words[i]
+                    if i < (len(words) - 1) and (len(updated_line) + len(words[i + 1])) > 80:
+                        msg.append(updated_line)
+                        updated_line = "\n  "
+                    
+                    elif i == len(words) - 1:
+                        msg.append(updated_line)
+                    
+        # for word in re.findall(r"\S+\s*", record.getMessage()):
+        #     if len("".join(msg).split("\n")[-1]) + len(word) < 80:
+        #         msg.append(word)
+        #     else:
+        #         msg.append("\n  {}".format(word))
         record.getMessage = lambda: "".join(msg)
 
 

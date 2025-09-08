@@ -823,10 +823,13 @@ class Frequency(Signals):
                     # if hpmodes, want just the first set of freqs
                     break
                 continue
-            if not hpmodes and "Frequencies" in line and "---" in line:
+            if not hpmodes and "Frequencies" in line and "---" in line and not re.search("---\d", line):
                 hpmodes = True
+            
             if "Frequencies" in line and (
-                (hpmodes and "---" in line) or (" -- " in line and not hpmodes)
+                (hpmodes and "---" in line) or
+                (" -- " in line and not hpmodes) or 
+                (re.search("---\d", line) and not hpmodes) # very large negative frequency
             ):
                 for i, symm in zip(
                     float_num.findall(line), lines[k - 1].split()
