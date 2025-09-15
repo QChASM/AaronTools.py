@@ -2204,9 +2204,9 @@ class ValenceExcitations(Signals):
         if y_label is None and plot_type.lower().startswith("transmittance"):
             y_label = "Transmittance (%)"
         elif y_label is None and "uv-vis" in plot_type.lower():
-            y_label = "Aborptivity (arb.)"
+            y_label = "Absorptivity (arb.)"
         elif y_label is None and "ecd" in plot_type.lower():
-            y_label = "ΔAborptivity (arb.)"
+            y_label = "ΔAbsorptivity (arb.)"
 
         self.plot_spectrum(
             figure,

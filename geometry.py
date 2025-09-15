@@ -721,7 +721,6 @@ class Geometry:
             # TODO: have a way to distiguish whether the ring is
             # in the axial-equitorial or equitorial-equitorial
             "bent 2 planar": "trigonal bipyramidal",
-            "trigonal planar": "trigonal bipyramidal",
             "bent 3 tetrahedral": "tetrahedral",
             "t shaped": "octahedral",
             "tetrahedral": "tetrahedral",
@@ -806,6 +805,7 @@ class Geometry:
         flexible_torsions = []
         ring_torsions = []
         torsion_options = []
+        exclude_rings = []
         kinds = ["common"]
         if include_uncommon:
             kinds.append("uncommon")
@@ -823,6 +823,12 @@ class Geometry:
                 group2 = atom2 + 1
                 if group2 >= len(ring):
                     group2 -= len(ring)
+                
+                vsepr, err = geometry.atoms[ring[atom1]].get_vsepr()
+                try:
+                    vseprs.append(normal_vseprs[vsepr])
+                except KeyError:
+                    vseprs.append(vsepr)
 
                 for torsion in ric.coordinates["torsions"]:
                     if (
@@ -831,29 +837,21 @@ class Geometry:
                         torsion.group1[0] == ring[group1] and 
                         torsion.group2[0] == ring[group2]
                     ):
-                        vsepr, err = geometry.atoms[atom1].get_vsepr()
-                        try:
-                            vseprs.append(normal_vseprs[vsepr])
-                        except KeyError:
-                            vseprs.append(vsepr)
-                        
                         flexible_torsions.append(torsion)
                         ring_torsions[-1].append(torsion)
+                        break
                 
-                    if (
+                    elif (
                         torsion.atom1 == ring[atom2] and
                         torsion.atom2 == ring[atom1] and 
                         torsion.group1[0] == ring[group2] and 
                         torsion.group2[0] == ring[group1]
                     ):
-                        vsepr, err = geometry.atoms[atom2].get_vsepr()
-                        try:
-                            vseprs.append(normal_vseprs[vsepr])
-                        except KeyError:
-                            vseprs.append(vsepr)
-                        
+                        torsion.group1, torsion.group2 = torsion.group2, torsion.group1
+                        torsion.atom1, torsion.atom2 = torsion.atom2, torsion.atom1
                         flexible_torsions.append(torsion)
                         ring_torsions[-1].append(torsion)
+                        break
             
             # this could probably only happen if there's a linear angle
             # in a ring
@@ -880,12 +878,17 @@ class Geometry:
                 except KeyError:
                     continue
             else:
+                ring_torsions.pop(-1)
+                exclude_rings.append(ring)
                 cls.LOG.debug(
                     "unknown ring type with %i atoms and %s VSEPR pattern" % (
                         len(ring), ring_type
                     )
                 )
-        
+
+        for ring in exclude_rings:
+            rings.remove(ring)
+
         # need to remove torsions that connect to these
         # rings, but that are not part of the ring
         # otherwise the changes we try to make to the
@@ -925,6 +928,9 @@ class Geometry:
             dq = np.zeros(ric.n_dimensions)
             visited = set()
             for j, (ring, torsions) in enumerate(zip(rings, ring_torsions)):
+                print(ring)
+                for t, v in zip(torsions, combo[j]):
+                    print(t, v)
                 for k, torsion in enumerate(torsions):
                     n = 0
                     for coord_type in ric.coordinates:
@@ -954,6 +960,7 @@ class Geometry:
             
             # there will be at least one combination with basically no changes
             if np.linalg.norm(dq) < 1e-3:
+                # print("no changes")
                 continue
             
             if probably_useless:
@@ -962,8 +969,8 @@ class Geometry:
             
             # try setting the torsions
             new_coords, err = ric.apply_change_2(coords, dq, convergence=1e-7)
-            if err > 1e-3:
-                # print("significant deviation from expected torsions: %.2f" % err)
+            if (err / len(rings)) > 1e-1:
+                print("significant deviation from expected torsions: %.2f" % err)
                 continue
             
             # print("generated conformer")
