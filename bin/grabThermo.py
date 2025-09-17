@@ -16,6 +16,17 @@ from AaronTools.utils.utils import glob_files
 
 thermo_parser = argparse.ArgumentParser(
     description="print gas-phase thermal corrections and free energy",
+    epilog="some abbreviations used in the output:\n" + \
+    "  * RRHO = rigid rotot-harmonic oscillator\n" + \
+    "  * anh = anharmonic\n"
+    "  * ZPE = zero-point energy\n"
+    "  * G(quasi-RRHO) = free energy calculated using RRHO enthalpy and quasi-RRHO entropy\n" + \
+    "  * G(full quasi-RRHO) = free energy calculated using quasi-RRHO for both H and S\n" + \
+    "\n\n" +
+    "references:\n" + \
+    "  * quasi-RRHO for entropy: 10.1002/chem.201200497\n" + \
+    "  * quasi-RRHO applied to enthalpy: 10.1021/jp509921r\n" + \
+    "  * quasi-harmonic treatment for entropy: 10.1021/jp205508z\n",
     formatter_class=argparse.RawTextHelpFormatter
 )
 

@@ -282,6 +282,15 @@ class CompOutput:
             * QHARM - Truhlar's quasi-harmonic
               see J. Phys. Chem. B 2011, 115, 49, 14556–14562
               (DOI: 10.1021/jp205508z) for details
+        
+        :param str enthalpy_method: treatment of enthalpy\:
+            
+            * RRHO  - no quasi treatment
+            * QRRHO - quasi-RRHO
+              see Yi-Pei Li, Joseph Gomes, Shaama Mallikarjun Sharada, Alexis T. Bell, and Martin Head-Gordon
+              The Journal of Physical Chemistry C 2015 119 (4), 1840-1850
+              DOI: 10.1021/jp509921r for details      
+        
         """
         if self.frequency is None:
             msg = "Vibrational frequencies not found, "
