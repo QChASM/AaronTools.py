@@ -2086,11 +2086,20 @@ class FileReader:
                         self.other["energy"] = float(line.split()[-2])
                         self.other["energy_context"] = line
     
+                    # These don't seem to work for Psi4 v 1.9.1
                     elif line.strip().startswith("Correction ZPE"):
                         self.other["ZPVE"] = float(line.split()[-4])
     
                     elif line.strip().startswith("Total ZPE"):
                         self.other["E_ZPVE"] = float(line.split()[-2])
+
+                    # for Psi4 v 1.9.1
+                    elif line.strip().startswith("Correction ZPVE to E_e"):
+                        self.other["ZPVE"] = float(line.split()[-4])
+    
+                    elif line.strip().startswith("Total E_0"):
+                        self.other["E_ZPVE"] = float(line.split()[-2])
+
     
                     elif line.strip().startswith("Total H, Enthalpy"):
                         self.other["enthalpy"] = float(line.split()[-2])
