@@ -155,6 +155,8 @@ class SubmitProcess:
                         "PD",
                     ]:
                         job_ids.append(jobid)
+                        # SEW ###############
+                        print(jobid, job_path, job_status, directory)
 
                 return job_ids
 
