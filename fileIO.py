@@ -2086,11 +2086,20 @@ class FileReader:
                         self.other["energy"] = float(line.split()[-2])
                         self.other["energy_context"] = line
     
+                    # These don't seem to work for Psi4 v 1.9.1
                     elif line.strip().startswith("Correction ZPE"):
                         self.other["ZPVE"] = float(line.split()[-4])
     
                     elif line.strip().startswith("Total ZPE"):
                         self.other["E_ZPVE"] = float(line.split()[-2])
+
+                    # for Psi4 v 1.9.1
+                    elif line.strip().startswith("Correction ZPVE to E_e"):
+                        self.other["ZPVE"] = float(line.split()[-4])
+    
+                    elif line.strip().startswith("Total E_0"):
+                        self.other["E_ZPVE"] = float(line.split()[-2])
+
     
                     elif line.strip().startswith("Total H, Enthalpy"):
                         self.other["enthalpy"] = float(line.split()[-2])
@@ -3298,6 +3307,8 @@ class FileReader:
         :param bool get_all: retrieves all geoms in file instead of just one
 
         """
+        self.all_geom = []
+
         def get_atoms(f, n):
             """parse atom info"""
             rv = []
@@ -3342,16 +3353,6 @@ class FileReader:
                         f, get_all=get_all, just_geom=just_geom
                     )
     
-    
-                if (
-                    "A Quantum Leap Into The Future Of Chemistry"
-                    in line
-                ):
-                    self.file_type = "qout"
-                    return self.read_qchem_out(
-                        f, get_all=get_all, just_geom=just_geom
-                    )
-    
                 if "Standard Nuclear Orientation (Angstroms)" in line:
                     if get_all and len(self.atoms) > 0:
                         if self.all_geom is None:
@@ -3374,7 +3375,7 @@ class FileReader:
                         if "SCF" in line:
                             self.other["scf_energy"] = self.other["energy"]
     
-                    if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
+                    if re.search(r"energy\s+=\s+-?\d+\.\d+", line) and "Nucleus-field" not in line:
                         info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
                         kind = info.group(1)
                         if len(kind.split()) <= 2:

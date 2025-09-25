@@ -81,7 +81,7 @@ class CartesianCoordinate(Coordinate):
     def __repr__(self):
         return "Cartesian coordinate for atom %i" % self.atom
 
-    def value(self, coords):
+    def value(self, coords, precomputed_dist=None, precomputed_e_ij=None):
         return coords[self.atom]
     
     def s_vector(self, coords, precomputed_dist=None, precomputed_e_ij=None):
