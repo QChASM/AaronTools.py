@@ -3307,6 +3307,8 @@ class FileReader:
         :param bool get_all: retrieves all geoms in file instead of just one
 
         """
+        self.all_geom = []
+
         def get_atoms(f, n):
             """parse atom info"""
             rv = []
@@ -3351,16 +3353,6 @@ class FileReader:
                         f, get_all=get_all, just_geom=just_geom
                     )
     
-    
-                if (
-                    "A Quantum Leap Into The Future Of Chemistry"
-                    in line
-                ):
-                    self.file_type = "qout"
-                    return self.read_qchem_out(
-                        f, get_all=get_all, just_geom=just_geom
-                    )
-    
                 if "Standard Nuclear Orientation (Angstroms)" in line:
                     if get_all and len(self.atoms) > 0:
                         if self.all_geom is None:
@@ -3383,7 +3375,7 @@ class FileReader:
                         if "SCF" in line:
                             self.other["scf_energy"] = self.other["energy"]
     
-                    if re.search(r"energy\s+=\s+-?\d+\.\d+", line):
+                    if re.search(r"energy\s+=\s+-?\d+\.\d+", line) and "Nucleus-field" not in line:
                         info = re.search(r"\s*([\S\s]+)\s+energy\s+=\s+(-?\d+\.\d+)", line)
                         kind = info.group(1)
                         if len(kind.split()) <= 2:
