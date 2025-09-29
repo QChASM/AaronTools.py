@@ -2000,6 +2000,10 @@ class FileReader:
                 # might be a ghost atom - like for sapt
                 if "Gh" in element:
                     element = element.strip("Gh(").strip(")")
+
+                # for two-letter elements Psi4 prints in ALL CAPS (e.g. change CL back to Cl)
+                if len(element) == 2:
+                    element = element[0] + element[1].lower()
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
                     coords *= UNIT.BOHR_TO_ANG
