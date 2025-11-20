@@ -1631,6 +1631,31 @@ class ForceJob(JobType):
     def get_xtb(self):
         return {XTB_COMMAND_LINE: {"grad": []}}, []
 
+    @staticmethod
+    def resolve_error(error, theory, exec_type, geometry=None):
+        """
+        resolves gradient-specific errors
+        errors resolved by JobType take priority
+        """
+        try:
+            return super(ForceJob, ForceJob).resolve_error(
+                error, theory, exec_type, geometry=geometry
+            )
+        except NotImplementedError:
+            pass
+        
+        if exec_type.lower() == "orca":
+            if error.upper() == "NUMGRAD":
+                # analytical gradients are not available
+                for job in theory.job_type:
+                    if isinstance(job, ForceJob):
+                        job.numerical = True
+                return None
+        
+        raise NotImplementedError(
+            "cannot fix %s errors for %s; check your input" % (error, exec_type)
+        )
+
 
 class ConformerSearchJob(JobType):
     """conformer search (basically only for crest)"""
