@@ -116,6 +116,7 @@ ERROR_ORCA = {
     "Error  (ORCA_SCF): Not enough memory available!": "MEM",
     "WARNING: Analytical MP2 frequency calculations": "NUMFREQ",
     "WARNING: Analytical Hessians are not yet implemented for meta-GGA functionals": "NUMFREQ",
+    "WARNING: Analytic gradient is not available": "NUMGRAD",
     "ORCA finished with error return": "UNKNOWN",
     "UNRECOGNIZED OR DUPLICATED KEYWORD(S) IN SIMPLE INPUT LINE": "TYPO",
     "Error (ORCA_GSTEP): Geometry optimization in internals failed and can not switch to Cartesian.": "INT_COORD",
@@ -2668,11 +2669,10 @@ class FileReader:
                             log.warning("data read:\n%s" % repr(gradient))
                             pass
     
-                    elif line.startswith("CARTESIAN GRADIENT"):
+                    elif line.startswith("CARTESIAN GRADIENT") and "kcal/mol" not in line:
                         try:
-                            gradient = np.zeros((len(self.atoms), 3))
+                            gradient = []
                             reading_grad = False
-                            i = 0
                             while True:
                                 n += 1
                                 line = f.readline()
@@ -2688,10 +2688,9 @@ class FileReader:
                                 if not reading_grad:
                                     continue
                                 info = line.split()
-                                gradient[i] = np.array([float(x) for x in info[3:]])
-                                i += 1
+                                gradient.append([float(x) for x in info[3:]])
         
-                            self.other["forces"] = -gradient
+                            self.other["forces"] = -np.array(gradient)
                         except ValueError as e:
                             if log is None:
                                 log = self.LOG
