@@ -2001,6 +2001,10 @@ class FileReader:
                 # might be a ghost atom - like for sapt
                 if "Gh" in element:
                     element = element.strip("Gh(").strip(")")
+
+                # for two-letter elements Psi4 prints in ALL CAPS (e.g. change CL back to Cl)
+                if len(element) == 2:
+                    element = element[0] + element[1].lower()
                 coords = np.array([float(x) for x in atom_info[1:-1]])
                 if bohr:
                     coords *= UNIT.BOHR_TO_ANG
@@ -2082,7 +2086,10 @@ class FileReader:
                     if line.strip().startswith("Total Energy ="):
                         self.other["energy"] = float(line.split()[-1])
                         self.other["energy_context"] = line
-    
+                        if "SAPT step" in self.other:
+                            item = "%s %s" % (self.other["SAPT step"], "energy")
+                            self.other[item] = self.other["energy"]
+ 
                     elif line.strip().startswith("Total E0"):
                         self.other["energy"] = float(line.split()[-2])
                         self.other["energy_context"] = line
@@ -2253,6 +2260,17 @@ class FileReader:
     
                         self.other["forces"] = -gradient
     
+                    elif "//" in line and ("Dimer" in line or "Monomer" in line):
+                        self.other["SAPT step"] = line.strip().strip("//").strip()
+    
+                    elif ("(A<-B)" in line or "(B<-A)" in line) and "=" in line:
+                        # charge transfer SAPT results, e.g.
+                        #     Exch-Ind20,r (A<-B) =     number [Eh]
+                        item = line.split("=")[0].strip()
+                        if "SAPT step" in self.other:
+                            item = "%s %s" % (self.other["SAPT step"], item)
+                        self.other[item] = float(line.split()[-2].strip())
+    
                     elif "SAPT Results" in line:
                         self.skip_lines(f, 1)
                         n += 1
@@ -2266,6 +2284,8 @@ class FileReader:
                                     continue
                                 item = line[:26].strip()
                                 val = 1e-3 * float(line[34:47])
+                                if "SAPT step" in self.other:
+                                    item = "%s %s" % (self.other["SAPT step"], item)
                                 self.other[item] = val
     
                     elif "SCF energy" in line:
