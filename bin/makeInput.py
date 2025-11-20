@@ -499,8 +499,10 @@ gaussian_options.add_argument(
     nargs="+",
     default=[],
     dest=GAUSSIAN_ROUTE,
-    metavar=("KEYWORD", "OPTION"),
+    metavar=("KEYWORD", "OPTIONS"),
     help="route options\n" +
+    "example: \"--route scf xqc MaxCycle=100\" will add scf=(xqc,MaxCycle=100) to your\n" +
+    "Gaussian input\n" +
     "input file(s) should not be right after --route",
 )
 
@@ -512,6 +514,9 @@ gaussian_options.add_argument(
     dest=GAUSSIAN_PRE_ROUTE,
     metavar=("COMMAND", "VALUE"),
     help="Link 0 commands (without %%)\n" +
+    "example: \"--link0 chk {{name}}.chk\" will add %%chk={{name}}.chk to your input\n" +
+    "if the -o/--output flag is used, {{name}} will be replaced with the\n" +
+    "output file's basename\n"
     "input file(s) should not be right after --link0",
 )
 
