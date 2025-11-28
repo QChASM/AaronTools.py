@@ -233,12 +233,12 @@ for i, mode in enumerate(modes):
             )
             if args.outfile:
                 outfile = get_outfile(
-                    args.outfile,
+                    outfile,
                     INFILE=get_filename(args.input_file, include_parent_dir=False),
                     INDIR=dirname(args.input_file),
                 )
                 followed_geom.write(
-                    append=False,
+                    append=append,
                     outfile=outfile,
                 )
             else:

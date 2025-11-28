@@ -3641,7 +3641,7 @@ class FileReader:
         orientations_read = dict()
 
         def get_atoms(f, n):
-            rv = self.atoms
+            rv = [] # self.atoms
             self.skip_lines(f, 4)
             line = f.readline()
             n += 5
@@ -4167,7 +4167,13 @@ class FileReader:
                         except KeyError:
                             pass
                     if record_coords:
+                        self.other["orientation"] = kind
                         self.atoms, n = get_atoms(f, n)
+                    if kind == "Standard" and record_coords:
+                        self.other["standard_orientation"] = np.array([a.coords for a in self.atoms])
+                    elif kind == "Standard" and not record_coords:
+                        atoms, n = get_atoms(f, n)
+                        self.other["standard_orientation"] = np.array([a.coords for a in atoms])
 
                     self.other["opt_steps"] += 1
 
@@ -4176,7 +4182,7 @@ class FileReader:
                     n += 1
                     continue
                     # z-matrix parameters
-    
+
                 if "Structure from the checkpoint file" in line:
                     done = False
                     while not done:
@@ -4315,6 +4321,32 @@ class FileReader:
                         self.other["frequency"] = Frequency(
                             freq_str, hpmodes=self.other["hpmodes"], atoms=self.atoms,
                         )
+
+                        if (
+                            "orientation" in self.other and
+                            self.other["orientation"] == "Input" and
+                            "standard_orientation" in self.other
+                        ):
+                            input_coords = np.zeros((len(self.atoms), 3))
+                            coz = np.zeros(3)
+                            z_tot = 0
+                            for i, atom in enumerate(self.atoms):
+                                z = ELEMENTS.index(atom.element)
+                                coz += z * atom.coords
+                                z_tot += z
+                                input_coords[i] = atom.coords
+                            coz /= z_tot
+                            input_coords -= coz
+
+                            H = np.matmul(self.other["standard_orientation"].T, input_coords)
+                            u, s, v = np.linalg.svd(H)
+                            d = [1, 1, np.sign(np.linalg.det(u) * np.linalg.det(v))]
+                            R = np.matmul(u, np.diag(d))
+                            R = np.matmul(R, v)
+                            
+                            if R is not None:
+                                for mode in self.other["frequency"].data:
+                                    mode.vector = np.matmul(mode.vector, R)
                     except Exception as e:
                         log.warning("an error occured while parsing Gaussian frequency data")
                         log.warning("frequency data read:\n%s" % freq_str)
