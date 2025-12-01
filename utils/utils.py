@@ -608,7 +608,7 @@ def to_closing(string, brace, allow_escapes=False):
     returns the portion of string from the beginning to the closing
     paratheses or bracket denoted by brace
     
-    brace can be '(', '{', or '['
+    brace can be '(', '{', '[', '"', or '
     
     if the closing paratheses is not found, returns None instead
     """
@@ -618,14 +618,20 @@ def to_closing(string, brace, allow_escapes=False):
         pair = ("{", "}")
     elif brace == "[":
         pair = ("[", "]")
+    elif brace == "\"":
+        pair = (None, "\"")
+    elif brace == "'":
+        pair = (None, "'")
     else:
-        raise RuntimeError("brace must be '(', '{', or '['")
+        raise RuntimeError("brace must be '(', '{', '[', '\"', or \"'\"")
 
     out = ""
     count = 0
     escaped = False
-    for x in string:
-        if not escaped and x == pair[0]:
+    for i, x in enumerate(string):
+        if i == 0 and (brace == "\"" or brace == "'"):
+            count += 1
+        elif not escaped and x == pair[0]:
             count += 1
         elif not escaped and x == pair[1]:
             count -= 1

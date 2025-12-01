@@ -28,6 +28,7 @@ from AaronTools.utils.utils import (
     perp_vector,
     rotation_matrix,
     angle_between_vectors,
+    to_closing,
 )
 
 read_types = [
@@ -4810,7 +4811,26 @@ class FileReader:
                     if has_params:
                         other_kwargs["parameters"] = parameters
 
-                    route_options = route.split()
+                    route_options = []
+                    words = []
+                    word = ""
+                    i = 0
+                    while i < len(route):
+                        letter = route[i]
+                        if letter.strip():
+                            if letter == "\"" or letter == "'":
+                                quoted = to_closing(route[i:], letter)
+                                i += len(quoted)
+                                word += quoted
+                            else:
+                                word += letter
+                                i += 1
+                        elif word:
+                            words.append(word)
+                            word = ""
+                            i += 1
+                        
+                    route_options = words
                     job_type = []
                     grid = None
                     solvent = None
