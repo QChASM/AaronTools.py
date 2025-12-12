@@ -2590,7 +2590,7 @@ class FileReader:
                         atoms = [int(x) for x in line.split()[6:]]
                         line = f.readline()
                         n += 1
-                        while line.split()[0].isdigit():
+                        while line.strip() and line.split()[0].isdigit():
                             atoms.extend([int(x) for x in line.split()])
                             line = f.readline()
                             n += 1
