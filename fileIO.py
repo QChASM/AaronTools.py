@@ -3307,7 +3307,7 @@ class FileReader:
                         pass
                     raise e
 
-        if "full" in _has_layers:
+        if "full" in _has_layers and hasattr(self, "full_atoms"):
             self.atoms = self.full_atoms
 
         if get_all:
