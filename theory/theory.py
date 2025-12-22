@@ -340,8 +340,8 @@ class Theory:
             elif self.high_basis is not None and self.medium_basis is None and self.low_basis is None:
                 if self.low_method.is_mm == True:
                     self.basis = BasisSet(basis = self.high_basis)
-                elif not self.low_method.is_semiempirical: 
-                    raise ValueError("low_method requires low_basis if not an MM method")
+                # elif not self.low_method.is_semiempirical: 
+                #     raise ValueError("low_method requires low_basis if not an MM method")
         #print("basis is " + str(self.basis))
 
         if ecp is not None:
@@ -1037,20 +1037,25 @@ class Theory:
                 if warning:
                     warnings.append(warning)
                 out_str += "%s" % func
-                if not (method.is_semiempirical or method.is_mm):
+                if not (
+                    method.is_semiempirical or
+                    method.is_mm or
+                    method.name.lower().startswith("external")
+                ):
                     try:
                         basis = basis_sets[layer]
                         basis.refresh_elements(self.geometry)
+                        basis_info, basis_warnings = basis.get_gaussian_basis_info()
+                        warnings.extend(basis_warnings)
+                        if GAUSSIAN_ROUTE in basis_info:
+                            for key in basis_info[GAUSSIAN_ROUTE]:
+                                if "/" in key:
+                                    out_str += "%s" % key
+                                del basis_info[GAUSSIAN_ROUTE][key]
+                                break
+                    
                     except KeyError:
-                        raise AttributeError("need to include a basis set for %s" % method.name)
-                    basis_info, basis_warnings = basis.get_gaussian_basis_info()
-                    warnings.extend(basis_warnings)
-                    if GAUSSIAN_ROUTE in basis_info:
-                        for key in basis_info[GAUSSIAN_ROUTE]:
-                            if "/" in key:
-                                out_str += "%s" % key
-                            del basis_info[GAUSSIAN_ROUTE][key]
-                            break
+                        warnings.append("no basis set for %method '%s'" % method.name)
 
                     if isinstance(self.basis, Basis):
                         if basis.oniom_layer.lower() == layer[0]:
