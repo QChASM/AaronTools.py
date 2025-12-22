@@ -966,9 +966,10 @@ class Theory:
                 warnings.append(warning)
             out_str += "%s" % func
             if (
-                not self.method.is_semiempirical 
-                and not self.method.is_mm
-                and self.basis is not None
+                not self.method.is_semiempirical and
+                not self.method.is_mm and
+                self.basis is not None and
+                not self.method.name.lower().startswith("external")
             ):
                 basis_info, basis_warnings = self.basis.get_gaussian_basis_info()
                 warnings.extend(basis_warnings)
