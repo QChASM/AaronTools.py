@@ -3974,7 +3974,7 @@ class FileReader:
                 if not has_flag:
                     coords = line[1:4]
                 if len(line) > 6:
-                    link_atom = line[len(line)-2:].split()
+                    link_atom = line[6:]
                     link_info["connected"] = link_atom[1]
                     info = link_atom[0].split("-")
                     link_info["element"] = info[0]
