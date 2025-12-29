@@ -4309,12 +4309,13 @@ class FileReader:
                 elif "Harmonic frequencies" in line:
                     if route is not None and "hpmodes" in route.lower():
                         self.other["hpmodes"] = True
-                    freq_str = line
+                    freq_data = [line]
                     line = f.readline()
                     while line.strip():
                         n += 1
-                        freq_str += line
+                        freq_data.append(line)
                         line = f.readline()
+                    freq_str = "".join(freq_data)
                     if "hpmodes" not in self.other:
                         self.other["hpmodes"] = False
                     try:
