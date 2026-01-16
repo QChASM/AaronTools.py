@@ -241,7 +241,7 @@ class Theory:
 
         # if method, basis, etc aren't the expected classes, make them so
         if method is not None:
-            if not isinstance(method, Method):
+            if isinstance(method, str):
                 self.method = Method(
                     method, method.upper() in KNOWN_SEMI_EMPIRICAL
                 )
@@ -1311,7 +1311,7 @@ class Theory:
                     pass
                 else:
                     s += " %s" % atom.link_info["element"]
-                    if has_type:
+                    if hasattr(atom, "atomtype") and atom.atomtype:
                         try:
                             s += "-%s" % atom.link_info["atomtype"]
                         except KeyError:
@@ -1332,7 +1332,7 @@ class Theory:
                                 elif "C" not in connected_elements and "P" in connected_elements:
                                     link_type = "hp"
                             s += "-%s" % link_type
-                    if has_charge:
+                    if hasattr(atom, "charge"):
                         try:
                             s += "-%s" % atom.link_info["charge"]
                         except KeyError:
