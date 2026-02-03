@@ -1336,7 +1336,10 @@ class Theory:
                         try:
                             s += "-%s" % atom.link_info["charge"]
                         except KeyError:
-                            s += "-%f" % atom.charge
+                            try:
+                                s += "-%f" % atom.charge
+                            except (AttributeError, TypeError):
+                                pass
                     s += " %s" % atom.link_info["connected"]
                     #scale_fax = re.search("scale factors ([()0-9,]+)", str(atom.tags))
                     #if scale_fax:
