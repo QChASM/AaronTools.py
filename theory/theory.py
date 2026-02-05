@@ -1008,16 +1008,16 @@ class Theory:
                 raise RuntimeError("at least two layers must be defined for ONIOM")
             basis_sets = {layer: getattr(self, "%s_basis" % layer) for layer in ["high", "medium", "low"] if getattr(self, "%s_basis" % layer)}
             if self.basis:
-                for basis in self.basis.basis:
+                for basis in list(self.basis.basis):
                     if basis.oniom_layer == "H":
                         basis_sets.setdefault("high", [])
-                        basis_sets["high"].append(basis)
+                        basis_sets["high"].basis.append(basis)
                     elif basis.oniom_layer == "M":
                         basis_sets.setdefault("medium", [])
-                        basis_sets["medium"].append(basis)
+                        basis_sets["medium"].basis.append(basis)
                     elif basis.oniom_layer == "L":
                         basis_sets.setdefault("low", [])
-                        basis_sets["low"].append(basis)
+                        basis_sets["low"].basis.append(basis)
             out_str += "oniom("
             for i, layer in enumerate(["high", "medium", "low"], start=1):
                 try:
