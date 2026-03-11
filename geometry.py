@@ -16,7 +16,17 @@ import AaronTools.utils.utils as utils
 from AaronTools import addlogger
 from AaronTools.atoms import Atom, BondOrder
 from AaronTools.config import Config
-from AaronTools.const import AARONLIB, AARONTOOLS, BONDI_RADII, D_CUTOFF, ELEMENTS, TMETAL, VDW_RADII, RADII
+from AaronTools.const import (
+    AARONLIB,
+    AARONTOOLS,
+    BONDI_RADII,
+    D_CUTOFF,
+    ELEMENTS,
+    RADII,
+    SAMBVCA_RADII,
+    TMETAL,
+    VDW_RADII,
+)
 from AaronTools.fileIO import FileReader, FileWriter, read_types
 from AaronTools.finders import Finder, OfType, WithinRadiusFromPoint, WithinRadiusFromAtom, WithinBondsOf
 from AaronTools.utils.prime_numbers import Primes
@@ -3537,7 +3547,7 @@ class Geometry:
         :param targets: atoms to use in calculation, defaults to all non-center if there
             is only one center, otherwise all atoms
         :param float radius: sphere radius around center atom
-        :param str|dict radii: "umn" or "bondi", VDW radii to use
+        :param str|dict radii: "umn", "bondi", or sambvca - VDW radii to use
             can also be a dict() with atom symbols as the keys and
             their respective radii as the values
         :param float scale: scale VDW radii by this
@@ -3596,9 +3606,11 @@ class Geometry:
             radii_dict = VDW_RADII
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
+        elif radii.lower() == "sambvca":
+            radii_dict = SAMBVCA_RADII
         else:
             raise RuntimeError(
-                "received %s for radii, must be umn or bondi" % radii
+                "received %s for radii, must be a dictionary, umn, bondi, or sambvca" % radii
             )
 
         # list of scaled VDW radii for each atom that's close enough to
@@ -3865,7 +3877,7 @@ class Geometry:
         :param center: atom, list of atoms, or array specifiying the origin
         :param key_atoms: list of ligand key atoms. Atoms on these ligands will be in the steric map.
         :param list(Atom) targets: atoms to be included in the map, defaults to all
-        :param str|dict radii: "umn", "bondi", or dict() specifying the VDW radii to use
+        :param str|dict radii: "umn", "bondi", "sambvca", or dict() specifying the VDW radii to use
         :param float radius: atomic radius to be considered in Angstroms, default 3.5
         :param np.ndarray oop_vector: None or array specifying the direction out of the plane of the steric map
             if None, oop_vector is determined using the average vector from the key
@@ -3920,9 +3932,11 @@ class Geometry:
             radii_dict = VDW_RADII
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
+        elif radii.lower() == "sambvca":
+            radii_dict = SAMBVCA_RADII
         else:
             raise RuntimeError(
-                "received %s for radii, must be umn or bondi" % radii
+                "received %s for radii, must be a dictionary, umn, sambvca, or bondi" % radii
             )
 
         if key_atoms is None:
@@ -4058,6 +4072,7 @@ class Geometry:
             
             * "bondi" - Bondi vdW radii
             * "umn"   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            * "sambvca"   - radii used by sambvca
             * dict()  - radii are values and elements are keys
             * list()  - list of radii corresponding to targets
 
@@ -4135,6 +4150,8 @@ class Geometry:
             radius_list = radii
         elif radii.lower() == "bondi":
             radii_dict = BONDI_RADII
+        elif radii.lower() == "sambvcaa":
+            radii_dict = SAMBVCA_RADII
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
 

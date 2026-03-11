@@ -640,8 +640,8 @@ class Config(configparser.ConfigParser):
                 out[option] = value.splitlines()
 
         for option in theory_kwargs:
-            value = self[section].get(option, fallback=False)
-            if value:
+            value = self[section].get(option, fallback=None)
+            if value is not None:
                 out[option] = value
 
         return out

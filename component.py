@@ -10,6 +10,7 @@ from AaronTools.const import (
     AARONTOOLS,
     BONDI_RADII,
     ELEMENTS,
+    SAMBVCA_RADII,
     VDW_RADII,
 )
 from AaronTools.fileIO import read_types
@@ -527,6 +528,7 @@ class Component(Geometry):
         :param str|dict radii:
             * 'bondi' - Bondi vdW radii
             * 'umn'   - vdW radii from Mantina, Chamberlin, Valero, Cramer, and Truhlar
+            * "sambvca"   - radii used by sambvca
             * dict() with elements as keys and radii as values
         """
         from AaronTools.utils.utils import xyzzy_cross
@@ -544,6 +546,8 @@ class Component(Geometry):
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
+        elif radii.lower() == "sambvca":
+            radii_dict = SAMBVCA_RADII
 
         # list of cone data for printing bild file or w/e
         cones = []
@@ -993,7 +997,7 @@ class Component(Geometry):
         calculate the solid angle of a ligand
         
         :param Atom center: atoms or point to denote the center of the sphere
-        :param str|dict radii: "umn", "bondi", or a dictionary with elements as
+        :param str|dict radii: "umn", "sambvca", "bondi", or a dictionary with elements as
             the keys and radii as the values
         :param int grid: number of points in lebedev grid
         :param bool return_solid_cone: return solid ligand cone angle (degrees)
@@ -1010,6 +1014,8 @@ class Component(Geometry):
             radii_dict = BONDI_RADII
         elif radii.lower() == "umn":
             radii_dict = VDW_RADII
+        elif radii.lower() == "sambvca":
+            radii_dict = SAMBVCA_RADII
 
         radii_list = np.array([
             radii_dict[atom.element] for atom in self.atoms
