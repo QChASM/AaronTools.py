@@ -681,14 +681,19 @@ class Orbitals:
 
             shell_i += n_prim
 
+        try:
+            self.n_orbs = filereader["Number of independent functions"]
+        except KeyError:
+            self.n_orbs = self.n_mos
+
         self.alpha_coefficients = np.reshape(
             filereader["Alpha MO coefficients"],
-            (self.n_mos, self.n_mos),
+            (self.n_orbs, self.n_mos),
         )
         if "Beta MO coefficients" in filereader.keys():
             self.beta_coefficients = np.reshape(
                 filereader["Beta MO coefficients"],
-                (self.n_mos, self.n_mos),
+                (self.n_orbs, self.n_mos),
             )
         else:
             self.beta_coefficients = None
