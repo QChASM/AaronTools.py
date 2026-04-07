@@ -1185,7 +1185,10 @@ class Theory:
                     [x.rstrip() for x in other_kw_dict[GAUSSIAN_COMMENT]]
                 )
                 for x in other_kw_dict[GAUSSIAN_COMMENT]:
-                    for c in "@#!-_\\":
+                    # these are the characters gaussian says are bad
+                    # they seem to be mostly fine
+                    # for c in "@#!-_\\":
+                    for c in "@#":
                         if c in x:
                             warnings.append("avoid using %s in the comment/title section of Gaussian input" % c)
                         
