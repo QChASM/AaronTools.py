@@ -1206,7 +1206,11 @@ class Orbitals:
         self.basis_set_by_ele = filereader["basis_set_by_ele"]
         self.alpha_nrgs = np.array(filereader["alpha_nrgs"])
         self.alpha_coefficients = np.array(filereader["alpha_coefficients"])
-        if "beta_nrgs" not in filereader or not filereader["beta_nrgs"]:
+        if (
+            "beta_nrgs" not in filereader or
+            filereader["beta_nrgs"] is None or
+            len(filereader["beta_nrgs"]) == 0
+        ):
             self.beta_nrgs = None
             self.beta_coefficients = None
         else:
