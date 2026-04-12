@@ -1840,6 +1840,8 @@ class Geometry:
             but were screened out using the && argument form
         """
 
+        name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
+        elements_set = set(ELEMENTS)
         def _find(arg):
             """find a single atom"""
             # print(arg)
@@ -1852,8 +1854,7 @@ class Geometry:
                 # print("finder")
                 rv += arg.get_matching_atoms(self.atoms, self)
 
-            name_str = re.compile("^(\*|\d)+(\.?\*|\.\d+)*$")
-            if isinstance(arg, str) and name_str.match(arg) is not None:
+            elif isinstance(arg, str) and name_str.match(arg) is not None:
                 # print("name")
                 test_name = arg.replace(".", "\.")
                 test_name = test_name.replace("*", "(\.?\d+\.?)*")
@@ -1884,7 +1885,7 @@ class Geometry:
                 # print("range list")
                 rv += _find_between(arg)
 
-            elif isinstance(arg, str) and arg in ELEMENTS:
+            elif isinstance(arg, str) and arg in elements_set:
                 # print("element")
                 # this is an element
                 for a in self.atoms:

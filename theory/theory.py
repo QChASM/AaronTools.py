@@ -500,11 +500,22 @@ class Theory:
             self.kwargs, new_kwargs
         )
 
+    def refresh_basis(self):
+        if self.basis is not None:
+            self.basis.refresh_elements(self.geometry)
+        if self.high_basis is not None:
+            self.high_basis.refresh_elements(self.geometry)
+        if self.medium_basis is not None:
+            self.medium_basis.refresh_elements(self.geometry)
+        if self.low_basis is not None:
+            self.low_basis.refresh_elements(self.geometry)
+
     def make_header(
         self,
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        refresh_basis=True,
         sanity_check_method=False,
         **kwargs,
     ):
@@ -533,10 +544,9 @@ class Theory:
 
         if geom is not None:
             self.geometry = geom
-        if self.basis is not None:
-            self.basis.refresh_elements(self.geometry)
-            #self.basis.refresh_atoms(self.geometry)
-
+        if refresh_basis:
+            self.refresh_basis()
+            
         kwargs = combine_dicts(self.kwargs, kwargs)
 
         other_kw_dict = {}
@@ -625,6 +635,7 @@ class Theory:
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        refresh_basis=True,
         return_warnings=True,
         **kwargs,
     ):
@@ -643,8 +654,9 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
-        if self.basis is not None:
-            self.basis.refresh_elements(geom)
+        if refresh_basis:
+            self.refresh_basis()
+
             #self.basis.refresh_atoms(geom)
 
         kwargs = combine_dicts(self.kwargs, kwargs)
@@ -760,6 +772,7 @@ class Theory:
         geom=None,
         style="gaussian",
         conditional_kwargs=None,
+        refresh_basis=True,
         sanity_check_method=False,
         **kwargs,
     ):
@@ -777,8 +790,8 @@ class Theory:
         if conditional_kwargs is None:
             conditional_kwargs = {}
 
-        if self.basis is not None:
-            self.basis.refresh_elements(geom)
+        if refresh_basis:
+            self.refresh_basis()
 
         kwargs = combine_dicts(self.kwargs, kwargs)
 
@@ -1044,7 +1057,6 @@ class Theory:
                 ):
                     try:
                         basis = basis_sets[layer]
-                        basis.refresh_elements(self.geometry)
                         basis_info, basis_warnings = basis.get_gaussian_basis_info()
                         warnings.extend(basis_warnings)
                         if GAUSSIAN_ROUTE in basis_info:

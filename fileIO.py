@@ -823,14 +823,16 @@ class FileWriter:
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
         # get file content string
+        theory.geometry = geom
+        theory.refresh_basis()
         header, header_warnings = theory.make_header(
-            geom, return_warnings=True, **kwargs
+            geom, refresh_basis=False, return_warnings=True, **kwargs
         )
         mol, mol_warnings = theory.make_molecule(
-            geom, return_warnings=True, **kwargs
+            geom, refresh_basis=False, return_warnings=True, **kwargs
         )
         footer, footer_warnings = theory.make_footer(
-            geom, return_warnings=True, **kwargs
+            geom, refresh_basis=False, return_warnings=True, **kwargs
         )
 
         s = header + mol + footer
@@ -877,6 +879,8 @@ class FileWriter:
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
+        theory.geometry = geom
+        theory.refresh_basis()
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         header, warnings = theory.make_header(
             geom, style="orca", return_warnings=True, **kwargs
@@ -935,6 +939,8 @@ class FileWriter:
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
+        theory.geometry = geom
+        theory.refresh_basis()
         fmt = "{:<3s} {: 9.5f} {: 9.5f} {: 9.5f}\n"
         header, header_warnings = theory.make_header(
             geom, style="qchem", return_warnings=True, **kwargs
@@ -986,6 +992,8 @@ class FileWriter:
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
+        theory.geometry = geom
+        theory.refresh_basis()
         header, header_warnings = theory.make_header(
             geom, style="psi4", return_warnings=True, **kwargs
         )
@@ -1039,6 +1047,8 @@ class FileWriter:
             set might be misspelled
         :param kwargs: passed to Theory methods (make_header, make_molecule, etc.)
         """
+        theory.geometry = geom
+        theory.refresh_basis()
         header, header_warnings = theory.make_header(
             geom, style="sqm", return_warnings=True, **kwargs
         )
@@ -1393,6 +1403,8 @@ class FileWriter:
         :param bool return_warnings: whether or not warnings should be returned
         """
         theory.geometry = geom
+        theory.refresh_basis()
+        theory.geometry = geom
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):
@@ -1455,6 +1467,8 @@ class FileWriter:
 
         :param bool return_warnings: whether or not warnings should be returned
         """
+        theory.geometry = geom
+        theory.refresh_basis()
         if theory.job_type:
             for job in theory.job_type:
                 if hasattr(job, "geometry"):

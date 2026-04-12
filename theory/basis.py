@@ -264,7 +264,9 @@ class Basis:
     def refresh_elements(self, geometry):
         """sets self's elements for the geometry"""
         atoms = geometry.find(self.ele_selection, NotAny(*self.not_anys))
-        elements = set([atom.element for atom in atoms])
+        elements = set()
+        for atom in atoms:
+            elements.add(atom.element)
         self.elements = sorted(elements)
 
     def refresh_atoms(self, geometry):
@@ -328,18 +330,18 @@ class Basis:
                 "cannot validate basis names for %s" % program
             )
 
-        if not any(
+        for basis in valid:
             # need to escape () b/c they aren't capturing groups, it's ccsd(t) or something
-            match(
+            if match(
                 "%s$"
                 % (basis.replace("(", "\(").replace(")", "\)"))
                 .replace("*", "\*")
                 .replace("+", "\+"),
                 name,
                 flags=IGNORECASE,
-            )
-            for basis in valid
-        ):
+            ):
+                break
+        else:
             warning = (
                 "basis '%s' may not be available in %s\n" % (name, program)
                 + "if this is incorrect, please submit a bug report at https://github.com/QChASM/AaronTools.py/issues"
@@ -767,6 +769,7 @@ class BasisSet:
             for basis in self.basis:
                 basis.refresh_atoms(geometry)
 
+    @profile
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""
         info = {GAUSSIAN_ROUTE: {}}
