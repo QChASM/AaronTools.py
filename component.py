@@ -276,7 +276,7 @@ class Component(Geometry):
                 v /= len(self.key_atoms)
                 L_axis += v
         else:
-            L_axis = self.COM(self.key_atoms) - center.coords
+            L_axis = self.COM(self.key_atoms, mass_weight=False) - center.coords
             L_axis /= np.linalg.norm(L_axis)
 
         return super().sterimol(L_axis, center, self.atoms, **kwargs)

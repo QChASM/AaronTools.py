@@ -4250,7 +4250,7 @@ class Geometry:
         # adjust the radii of atoms that do intersect to be the
         # radius of the circle formed by the interection of the
         # plane with the VDW sphere and adjust the coordinates
-        # so it loos like the atom is in that plane
+        # so it looks like the atom is in that plane
         if at_L is not None:
             if not any(L >= at_L for L in L_vals):
                 at_L = max(L_vals)
