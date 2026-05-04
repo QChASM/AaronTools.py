@@ -419,6 +419,15 @@ class Geometry:
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
         comp_ndx = {x: i for i, x in enumerate(Component.list())}
+        for x in monodentate_names:
+            if x not in comp_ndx:
+                comp_ndx[x] = len(comp_ndx)
+        for x in symm_bidentate_names:
+            if x not in comp_ndx:
+                comp_ndx[x] = len(comp_ndx)
+        for x in asymm_bidentate_names:
+            if x not in comp_ndx:
+                comp_ndx[x] = len(comp_ndx)
 
         monodentate_names = sorted(
             monodentate_names,
@@ -507,7 +516,10 @@ class Geometry:
                 for lig in monodentate_names:
                     key = mapping[start]
                     start += 1
-                    comp = Component(lig)
+                    if isinstance(lig, Component):
+                        comp = lig.copy()
+                    else:
+                        comp = Component(lig)
                     d = 2.5
                     # adjust distance to key atoms to what they should be for the new ligand
                     try:
@@ -528,7 +540,10 @@ class Geometry:
                 for lig in symm_bidentate_names:
                     keys = mapping[start : start + 2]
                     start += 2
-                    comp = Component(lig)
+                    if isinstance(lig, Component):
+                        comp = lig.copy()
+                    else:
+                        comp = Component(lig)
                     for old_key, new_key in zip(keys, comp.key_atoms):
                         d = 2.5
                         try:
@@ -550,7 +565,10 @@ class Geometry:
                 for lig in asymm_bidentate_names:
                     keys = mapping[start : start + 2]
                     start += 2
-                    comp = Component(lig)
+                    if isinstance(lig, Component):
+                        comp = lig.copy()
+                    else:
+                        comp = Component(lig)
                     for old_key, new_key in zip(keys, comp.key_atoms):
                         d = 2.5
                         try:
@@ -1132,6 +1150,8 @@ class Geometry:
             same numbers of elements
             coordinates of atoms similar
         """
+        if not isinstance(other, self.__class__):
+            return False
         if id(self) == id(other):
             return True
         if len(self.atoms) != len(other.atoms):
@@ -6324,15 +6344,21 @@ class Geometry:
 
                 old_vec /= np.linalg.norm(old_vec)
 
-            new_walk = ligand.shortest_path(*new_keys)
-            if len(new_walk) == 2:
-                new_con = set([])
-                for k in new_keys:
-                    for c in k.connected:
-                        new_con.add(c)
-                new_vec = ligand.COM(targets=new_con) - center
-            else:
-                new_vec = ligand.COM(targets=new_walk[1:-1]) - center
+            try:
+                new_walk = ligand.shortest_path(*new_keys)
+                if len(new_walk) == 2:
+                    new_con = set([])
+                    for k in new_keys:
+                        for c in k.connected:
+                            new_con.add(c)
+                    new_vec = ligand.COM(targets=new_con) - center
+                else:
+                    new_vec = ligand.COM(targets=new_walk[1:-1]) - center
+            except LookupError:
+                if len(ligand.atoms) == 2:
+                    new_vec = ligand.COM()
+                else:
+                    new_vec = ligand.COM(targets=[a for a in ligand.atoms if a not in new_keys])
 
             w, angle = get_rotation(old_vec, new_vec)
             if rev_ang:
