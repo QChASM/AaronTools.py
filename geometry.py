@@ -373,29 +373,44 @@ class Geometry:
         # ligands are sorted monodentate, followed by symmetric bidentate, followed by
         # asymmetric bidentate, then by decreasing count
         # e.g., Ca(CO)2(ACN)4 is Ma4b2
+        all_names = []
         alphabet = "abcdefghi"
         symmbet = ["AA", "BB", "CC", "DD"]
         asymmbet = ["AB", "CD", "EF", "GH"]
+        monodentate_ligands = []
         monodentate_names = []
+        symm_bidentate_ligands = []
         symm_bidentate_names = []
+        asymm_bidentate_ligands = []
         asymm_bidentate_names = []
 
         n_bidentate = 0
         # determine types of ligands
         for i, lig in enumerate(ligands):
+            name = lig
+            if hasattr(lig, "name"):
+                name = lig.name
+            if not name:
+                cls.LOG.warning("ligand %i has no name, results might not be correct" % (i + 1))
+            all_names.append(name)
             comp = Component(lig)
             if len(comp.key_atoms) == 1:
-                monodentate_names.append(lig)
+                monodentate_names.append(name)
+                monodentate_ligands.append(lig)
+
             elif len(comp.key_atoms) == 2:
                 if len(ligands) == len(c2_symmetric):
                     c2 = c2_symmetric[i]
                 else:
                     c2 = c2_symmetric[n_bidentate]
                 n_bidentate += 1
+
                 if c2:
-                    symm_bidentate_names.append(lig)
+                    symm_bidentate_names.append(name)
+                    symm_bidentate_ligands.append(lig)
                 else:
-                    asymm_bidentate_names.append(lig)
+                    asymm_bidentate_names.append(name)
+                    asymm_bidentate_ligands.append(lig)
             else:
                 # tridentate or something
                 raise NotImplementedError(
@@ -418,82 +433,73 @@ class Geometry:
         # sorted by name count is insufficient when there's multiple monodentate ligands
         # with the same count (e.g. Ma3b3)
         # add the index in the library to offset this
-        comp_ndx = {x: i for i, x in enumerate(Component.list())}
-        for x in monodentate_names:
-            if x not in comp_ndx:
-                comp_ndx[x] = len(comp_ndx)
-        for x in symm_bidentate_names:
-            if x not in comp_ndx:
-                comp_ndx[x] = len(comp_ndx)
-        for x in asymm_bidentate_names:
-            if x not in comp_ndx:
-                comp_ndx[x] = len(comp_ndx)
+        sorted_names = sorted(set(all_names))
+        comp_ndx = {x: i for i, x in enumerate(sorted_names)}
 
-        monodentate_names = sorted(
-            monodentate_names,
-            key=lambda x: 10000 * monodentate_names.count(x)
-            + comp_ndx[x],
+        monodentate_sorted = sorted(
+            zip(monodentate_ligands, monodentate_names),
+            key=lambda x: 10000 * monodentate_names.count(x[1])
+            + comp_ndx[x[1]],
             reverse=True,
         )
-        for i, mono_lig in enumerate(
-            sorted(
-                set(monodentate_names),
-                key=lambda x: 10000 * monodentate_names.count(x)
-                + comp_ndx[x],
-                reverse=True,
-            )
-        ):
+        monodentate_ligands = [x[0] for x in monodentate_sorted]
+        monodentate_names = [x[1] for x in monodentate_sorted]
+
+        i = 0
+        for j, (lig, name) in enumerate(zip(monodentate_ligands, monodentate_names)):
+            if j > 0 and name == monodentate_names[j - 1]:
+                continue
             cc_type += alphabet[i]
-            this_name += "(%s)" % mono_lig
-            if monodentate_names.count(mono_lig) > 1:
-                cc_type += "%i" % monodentate_names.count(mono_lig)
-                this_name += "%i" % monodentate_names.count(mono_lig)
-
-        symm_bidentate_names = sorted(
-            symm_bidentate_names,
-            key=lambda x: 10000 * symm_bidentate_names.count(x)
-            + comp_ndx[x],
+            this_name += "(%s)" % name
+            if monodentate_names.count(name) > 1:
+                cc_type += "%i" % monodentate_names.count(name)
+                this_name += "%i" % monodentate_names.count(name)
+            i += 1
+        
+        symm_sorted = sorted(
+            zip(symm_bidentate_ligands, symm_bidentate_names),
+            key=lambda x: 10000 * symm_bidentate_names.count(x[1])
+            + comp_ndx[x[1]],
             reverse=True,
         )
-        for i, symbi_lig in enumerate(
-            sorted(
-                set(symm_bidentate_names),
-                key=lambda x: 10000 * symm_bidentate_names.count(x)
-                + comp_ndx[x],
-                reverse=True,
-            )
-        ):
+        symm_bidentate_ligands = [x[0] for x in symm_sorted]
+        symm_bidentate_names = [x[1] for x in symm_sorted]
+        i = 0
+        for j, (lig, name) in enumerate(zip(symm_bidentate_ligands, symm_bidentate_names)):
+            if i > 0 and name == symm_bidentate_names[j - 1]:
+                continue
             cc_type += "(%s)" % symmbet[i]
-            this_name += "(%s)" % symbi_lig
-            if symm_bidentate_names.count(symbi_lig) > 1:
-                cc_type += "%i" % symm_bidentate_names.count(symbi_lig)
-                this_name += "%i" % symm_bidentate_names.count(symbi_lig)
-        asymm_bidentate_names = sorted(
-            asymm_bidentate_names,
-            key=lambda x: 10000 * asymm_bidentate_names.count(x)
-            + comp_ndx[x],
+            this_name += "(%s)" % name
+            if symm_bidentate_names.count(name) > 1:
+                cc_type += "%i" % symm_bidentate_names.count(name)
+                this_name += "%i" % symm_bidentate_names.count(name)
+            i += 1
+
+        asymm_sorted = sorted(
+            zip(asymm_bidentate_ligands, asymm_bidentate_names),
+            key=lambda x: 10000 * asymm_bidentate_names.count(x[1])
+            + comp_ndx[x[1]],
             reverse=True,
         )
-        for i, asymbi_lig in enumerate(
-            sorted(
-                set(asymm_bidentate_names),
-                key=lambda x: 10000 * asymm_bidentate_names.count(x)
-                + comp_ndx[x],
-                reverse=True,
-            )
-        ):
+        asymm_bidentate_ligands = [x[0] for x in asymm_sorted]
+        asymm_bidentate_names = [x[1] for x in asymm_sorted]
+        i = 0
+        for j, (lig, name) in enumerate(zip(asymm_bidentate_ligands, asymm_bidentate_names)):
+            if i > 0 and name == asymm_bidentate_names[j - 1]:
+                continue
             cc_type += "(%s)" % asymmbet[i]
-            this_name += "(%s)" % asymbi_lig
-            if asymm_bidentate_names.count(asymbi_lig) > 1:
-                cc_type += "%i" % asymm_bidentate_names.count(asymbi_lig)
-                this_name += "%i" % asymm_bidentate_names.count(asymbi_lig)
+            this_name += "(%s)" % name
+            if asymm_bidentate_names.count(name) > 1:
+                cc_type += "%i" % asymm_bidentate_names.count(name)
+                this_name += "%i" % asymm_bidentate_names.count(name)
+            i += 1
 
         # load the key atoms for ligand mapping from the template file
         libdir = os.path.join(
             AARONTOOLS, "coordination_complex", shape, cc_type
         )
         if not os.path.exists(libdir):
-            raise RuntimeError("no templates for %s %s" % (cc_type, shape))
+            raise LookupError("no templates for %s %s" % (cc_type, shape))
 
         geoms = []
         for f in os.listdir(libdir):
@@ -513,7 +519,7 @@ class Geometry:
 
                 start = 0
                 minimizable = []
-                for lig in monodentate_names:
+                for lig in monodentate_ligands:
                     key = mapping[start]
                     start += 1
                     if isinstance(lig, Component):
@@ -537,7 +543,7 @@ class Geometry:
                     
                     minimizable.append(comp)
 
-                for lig in symm_bidentate_names:
+                for lig in symm_bidentate_ligands:
                     keys = mapping[start : start + 2]
                     start += 2
                     if isinstance(lig, Component):
@@ -562,7 +568,7 @@ class Geometry:
                         geom_copy.atoms[0].connected.add(key)
                         key.connected.add(geom_copy.atoms[0])
 
-                for lig in asymm_bidentate_names:
+                for lig in asymm_bidentate_ligands:
                     keys = mapping[start : start + 2]
                     start += 2
                     if isinstance(lig, Component):
@@ -6265,7 +6271,8 @@ class Geometry:
 
             # align COM of key atoms
             center = old_ligand.COM(targets=old_keys)
-            shift = center - ligand.COM(targets=new_keys)
+            ligand_com = ligand.COM(targets=new_keys)
+            shift = center - ligand_com
             ligand.coord_shift(shift)
             remove_centers = []
 
@@ -6356,7 +6363,7 @@ class Geometry:
                     new_vec = ligand.COM(targets=new_walk[1:-1]) - center
             except LookupError:
                 if len(ligand.atoms) == 2:
-                    new_vec = ligand.COM()
+                    new_vec = utils.perp_vector(new_keys[0].bond(new_keys[1]))
                 else:
                     new_vec = ligand.COM(targets=[a for a in ligand.atoms if a not in new_keys])
 
