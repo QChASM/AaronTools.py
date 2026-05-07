@@ -96,6 +96,8 @@ class Atom:
     """
 
     LOG = None
+    
+    MASS_WARNING = True
 
     _bo = BondOrder()
     
@@ -516,7 +518,7 @@ class Atom:
             return self._mass
         if self.element in MASS:
             return MASS[self.element]
-        elif not (self.is_dummy or self.is_ghost):
+        elif not (self.is_dummy or self.is_ghost) and self.MASS_WARNING:
             self.LOG.warning("no mass for %s" % self.element)
         return 0
 
