@@ -769,7 +769,6 @@ class BasisSet:
             for basis in self.basis:
                 basis.refresh_atoms(geometry)
 
-    @profile
     def get_gaussian_basis_info(self):
         """returns dict used by get_gaussian_header/footer with basis info"""
         info = {GAUSSIAN_ROUTE: {}}

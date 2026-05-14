@@ -322,6 +322,8 @@ class Geometry:
 
         :param str center: - element of center atom
         :param list(str) ligands: - list of ligand names in the ligand library
+                       if a ligand is None, one position will be left as a dummy atom
+                       if a ligand is (None, None), it will behave as a bidentate dummy ligand
         :param str shape: coordination geometry (e.g. octahedral) - see Atom.get_shape
         :param list(bool) c2_symmetric: specify which of the bidentate ligands are C2-symmetric
                        if this list is as long as the ligands list, the nth item corresponds
@@ -342,6 +344,12 @@ class Geometry:
         if c2_symmetric is None:
             c2_symmetric = []
             for lig in ligands:
+                if lig is None:
+                    c2_symmetric.append(False)
+                    continue
+                if hasattr(lig, "__iter__") and len(lig) == 2 and lig[0] is None and lig[1] is None:
+                    c2_symmetric.append(False)
+                    continue
                 comp = Component(lig)
                 if not len(comp.key_atoms) == 2:
                     c2_symmetric.append(False)
@@ -390,9 +398,25 @@ class Geometry:
             name = lig
             if hasattr(lig, "name"):
                 name = lig.name
-            if not name:
+            if not name and lig is not None:
                 cls.LOG.warning("ligand %i has no name, results might not be correct" % (i + 1))
             all_names.append(name)
+            if lig is None:
+                monodentate_names.append("dummy1")
+                monodentate_ligands.append(lig)
+                all_names[-1] = monodentate_names[-1]
+                continue
+            elif hasattr(lig, "__iter__") and len(lig) == 2 and lig[0] is None and lig[1] is None:
+                symm_bidentate_names.append("dummy2")
+                symm_bidentate_ligands.append(lig)
+                if len(ligands) == len(c2_symmetric):
+                    c2 = c2_symmetric[i]
+                else:
+                    c2 = c2_symmetric[n_bidentate]
+                n_bidentate += 1
+                all_names[-1] = symm_bidentate_names[-1]
+                continue
+                
             comp = Component(lig)
             if len(comp.key_atoms) == 1:
                 monodentate_names.append(name)
@@ -524,6 +548,13 @@ class Geometry:
                     start += 1
                     if isinstance(lig, Component):
                         comp = lig.copy()
+                    elif lig is None:
+                        a = geom_copy.find(key)[0]
+                        a.element = "X"
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0], a, dist=2, fix=1
+                        )
+                        continue
                     else:
                         comp = Component(lig)
                     d = 2.5
@@ -548,8 +579,17 @@ class Geometry:
                     start += 2
                     if isinstance(lig, Component):
                         comp = lig.copy()
+                    elif hasattr(lig, "__iter__") and len(lig) == 2 and lig[0] is None and lig[1] is None:
+                        for a in geom_copy.find(keys):
+                            a.element = "X"
+                            geom_copy.change_distance(
+                                geom_copy.atoms[0], a, dist=2, fix=1
+                            )
+
+                        continue
                     else:
                         comp = Component(lig)
+                    
                     for old_key, new_key in zip(keys, comp.key_atoms):
                         d = 2.5
                         try:
