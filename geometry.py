@@ -580,11 +580,16 @@ class Geometry:
                     if isinstance(lig, Component):
                         comp = lig.copy()
                     elif hasattr(lig, "__iter__") and len(lig) == 2 and lig[0] is None and lig[1] is None:
-                        for a in geom_copy.find(keys):
-                            a.element = "X"
-                            geom_copy.change_distance(
-                                geom_copy.atoms[0], a, dist=2, fix=1
-                            )
+                        a1, a2 = geom_copy.find(keys)
+                        a1.element = "X"
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0], a1, dist=2, fix=1
+                        )
+                        a2.element = "X"
+                        geom_copy.change_distance(
+                            geom_copy.atoms[0], a2, dist=2, fix=1
+                        )
+                        a1.add_bond_to(a2)
 
                         continue
                     else:
