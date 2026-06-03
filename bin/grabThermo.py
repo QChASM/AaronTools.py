@@ -175,8 +175,6 @@ else:
                 full_glob = os.path.join(root, pattern)
                 infiles.extend(glob(full_glob))
 
-    infiles.sort()
-
 if args.sp_file != [None]:
     if args.pattern is None:
         sp_filenames = glob_files([f for f in args.sp_file])
@@ -196,10 +194,13 @@ if args.sp_file != [None]:
                     full_glob = os.path.join(root, pattern)
                     sp_filenames.extend(glob(full_glob))
 
-    sp_filenames.sort()
-
     sp_files = [FileReader(f, just_geom=False) for f in sp_filenames]
-    sp_energies = [sp_file.other["energy"] for sp_file in sp_files]
+    sp_energies = []
+    for sp_file, name in zip(sp_files, sp_filenames):
+        try:
+            sp_energies.append(sp_file.other["energy"])
+        except KeyError:
+            raise Exception("no energy found in %s" % name)            
 
 else:
     sp_energies = [None for f in infiles]
@@ -211,7 +212,6 @@ while len(sp_energies) < len(infiles):
 
 while len(infiles) < len(sp_filenames):
     infiles.extend(args.infile)
-
 
 for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
     if isinstance(f, str):
@@ -245,8 +245,11 @@ for sp_nrg, sp_file, f in zip(sp_energies, sp_filenames, infiles):
         nrg = sp_nrg
         sp_geom = Geometry(sp_file)
         freq_geom = Geometry(infile)
-        rmsd = sp_geom.RMSD(freq_geom)
-        if not isclose(rmsd, 0, atol=1e-5):
+        rmsd = 0
+        same_atoms = len(sp_geom.atoms) == len(freq_geom.atoms)
+        if same_atoms:
+            rmsd = sp_geom.RMSD(freq_geom)
+        if not same_atoms and not isclose(rmsd, 0, atol=1e-5):
             warn(
                 "\ngeometries in supposed single-point/thermochemistry pair appear\n" +
                 "to be different (rmsd = %.5f)\n" % rmsd +
