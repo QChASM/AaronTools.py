@@ -1020,7 +1020,7 @@ class Theory:
             if n_layers < 2:
                 raise RuntimeError("at least two layers must be defined for ONIOM")
             basis_sets = {layer: getattr(self, "%s_basis" % layer) for layer in ["high", "medium", "low"] if getattr(self, "%s_basis" % layer)}
-            if self.basis:
+            if not any(basis_sets[layer] for layer in ["high", "medium", "low"]) and self.basis:
                 for basis in list(self.basis.basis):
                     if basis.oniom_layer == "H":
                         basis_sets.setdefault("high", [])
