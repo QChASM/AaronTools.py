@@ -236,6 +236,19 @@ class ATEncoder(json.JSONEncoder):
         if obj.method:
             rv["method"] = obj.method.name
             rv["semi-empirical"] = obj.method.is_semiempirical
+            rv["is_mm"] = obj.method.is_mm
+        if obj.high_method:
+            rv["high_method"] = obj.high_method.name
+            rv["high_semi-empirical"] = obj.high_method.name
+            rv["high_mm"] = obj.high_method.name
+        if obj.medium_method:
+            rv["medium_method"] = obj.medium_method.name
+            rv["medium_semi-empirical"] = obj.medium_method.name
+            rv["medium_mm"] = obj.medium_method.name
+        if obj.low_method:
+            rv["low_method"] = obj.low_method.name
+            rv["low_semi-empirical"] = obj.low_method.name
+            rv["low_mm"] = obj.low_method.name
         if obj.grid:
             rv["grid"] = obj.grid.name
         if obj.empirical_dispersion:
@@ -262,7 +275,7 @@ class ATEncoder(json.JSONEncoder):
                         rv["jobs"][job_type][arg] = getattr(job, arg)
                     except AttributeError:
                         pass
-                
+
         if obj.basis:
             rv["basis"] = {"name": [], "elements":[], "file":[], "auxiliary":[]}
             if obj.basis.basis:
@@ -517,6 +530,33 @@ class ATDecoder(json.JSONDecoder):
             rv.method = obj["method"]
             if "semi-empirical" in obj:
                 rv.method.is_semiempirical = obj["semi-empirical"]
+        
+            if "is_mm" in obj:
+                rv.method.is_mm = obj["is_mm"]
+        
+        if "high_method" in obj:
+            rv.high_method = obj["high_method"]
+            if "high_semi-empirical" in obj:
+                rv.high_method.is_semiempirical = obj["high_semi-empirical"]
+        
+            if "high_mm" in obj:
+                rv.high_method.is_mm = obj["high_mm"]
+
+        if "medium_method" in obj:
+            rv.medium_method = obj["medium_method"]
+            if "medium_semi-empirical" in obj:
+                rv.medium_method.is_semiempirical = obj["medium_semi-empirical"]
+        
+            if "medium_mm" in obj:
+                rv.medium_method.is_mm = obj["medium_mm"]
+
+        if "low_method" in obj:
+            rv.low_method = obj["low_method"]
+            if "low_semi-empirical" in obj:
+                rv.low_method.is_semiempirical = obj["low_semi-empirical"]
+        
+            if "low_mm" in obj:
+                rv.low_method.is_mm = obj["low_mm"]
         
         if "grid" in obj:
             rv.grid = obj["grid"]
