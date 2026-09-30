@@ -1190,9 +1190,12 @@ class InternalCoordinateSet:
         """
         returns the B matrix (B_ij = dq_i/dx_j)
         """
+        if not isinstance(coords, np.ndarray):
+            coords = np.array(coords)
+
         d = distance.squareform(distance.pdist(coords))
         e_ij_mat = all_e_ij(coords, precomputed_dist=d)
-
+        
         B = np.zeros((self.n_dimensions, 3 * len(coords)))
         i = 0
         for coord_type in self.coordinates:

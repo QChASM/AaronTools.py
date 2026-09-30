@@ -4877,6 +4877,9 @@ class FileReader:
                             word = ""
                             i += 1
                         
+                    if (word and words and word != words[-1]) or (word and not words):
+                        words.append(word)
+
                     route_options = words
                     job_type = []
                     grid = None

@@ -1569,7 +1569,7 @@ class Theory:
                 warnings.extend(job_warnings)
 
         # if method isn't semi-empirical, get basis info to write later
-        if not self.method.is_semiempirical and self.basis is not None:
+        if (self.method is None or not self.method.is_semiempirical) and self.basis is not None:
             basis_info, basis_warnings = self.basis.get_orca_basis_info()
             warnings.extend(basis_warnings)
             if self.geometry is not None:
@@ -1728,7 +1728,7 @@ class Theory:
                 warnings.extend(job_warnings)
 
         # if method isn't semi-empirical, get basis info to write later
-        if not self.method.is_semiempirical and self.basis is not None:
+        if (self.method is None or not self.method.is_semiempirical) and self.basis is not None:
             basis_info, basis_warnings = self.basis.get_orca_basis_info()
             warnings.extend(basis_warnings)
             if self.geometry is not None:
