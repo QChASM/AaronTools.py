@@ -1749,7 +1749,8 @@ class Orbitals:
                 else:
                     prev_coords.append(coord)
                     add_to = len(arrays)
-                    arrays.append(np.zeros(self.n_mos))
+                    arrays.append(np.zeros(len(coeff)))
+                
                 arrays[add_to][ndx : ndx + self.funcs_per_shell[i]] = coeff[
                     ndx : ndx + self.funcs_per_shell[i]
                 ]
@@ -2233,9 +2234,8 @@ class Orbitals:
         from AaronTools.geometry import Geometry
         if isinstance(geom, Geometry):
             geom = geom.coords
-            COM = geom.COM()
-        else:
-            COM = np.mean(geom, axis=0)
+        
+        COM = np.mean(geom, axis=0)
 
         def get_standard_axis():
             """returns info to set up a grid along the x, y, and z axes"""

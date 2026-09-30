@@ -5987,10 +5987,24 @@ class FileReader:
         self.other["alpha_coefficients"] = []
         while len(self.other["alpha_coefficients"]) < sum(self.other["funcs_per_shell"]):
             mo_coeff = []
-            while len(mo_coeff) < sum(self.other["funcs_per_shell"]):
-                mo_coeff.extend([float(x) for x in lines[j].split()])
-                j += 1
-            self.other["alpha_coefficients"].append(mo_coeff)
+            # print(len(self.other["alpha_coefficients"]), sum(self.other["funcs_per_shell"]))
+            try:
+                while len(mo_coeff) < sum(self.other["funcs_per_shell"]):
+                    # print("\t", j, len(mo_coeff), sum(self.other["funcs_per_shell"]))
+                    # print("\t", "'" + lines[j] + "'")
+                    mo_coeff.extend([float(x) for x in lines[j].split()])
+                    j += 1
+                if len(mo_coeff) == sum(self.other["funcs_per_shell"]):
+                    self.other["alpha_coefficients"].append(mo_coeff)
+            except IndexError:
+                # fewer orbitals than expected. some remove due to redundancy?
+                break
+            except ValueError:
+                # some NBO files will have extra data after the orbital
+                # coefficients (e.g. orbital types). we could store this I guess
+                # for now we don't
+                break
+
         self.other["orbitals"] = Orbitals(self)
 
     def read_nbo_31(self, f, nbo_name=None):
