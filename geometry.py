@@ -3930,6 +3930,82 @@ class Geometry:
                     / (radius ** 3)
                 )
 
+    def molecule_volume(self, targets=None, radii="umn", rpoints=99, apoints=2702):
+        """
+        calculates the volume of a molecule based on the vdw radii of atoms
+        results are in cubic Angstroms, or cubic whatever the units of radii are
+        
+        :param targets: atoms to calculate the volume of
+        :param str|dict radii: VDW radii to use in calculating volume
+        :param int rpoints: radial points to use for Gauss-Legendre quadrature
+        :param int apoints: angular points to use for Lebedev quadrature
+        :returns: volume
+        :rtype: float
+        """
+        radii_dict = None
+        radii_list = None
+        if isinstance(radii, dict):
+            radii_dict = radii
+        elif isinstance(radii, list):
+            radii_list = radii
+        elif radii.lower() == "umn":
+            radii_dict = VDW_RADII
+        elif radii.lower() == "bondi":
+            radii_dict = BONDI_RADII
+        elif radii.lower() == "sambvca":
+            radii_dict = SAMBVCA_RADII
+        else:
+            raise RuntimeError(
+                "received %s for radii, must be a dictionary, umn, bondi, or sambvca" % radii
+            )
+
+        if targets is None:
+            targets = self.atoms
+        targets = self.find(targets)
+        coords = self.coordinates(targets)
+
+        if radii_dict is not None:
+            radii_list = [radii_dict[atom.element] for atom in targets]
+        
+        vol = 0
+        Dik = distance.squareform(distance.pdist(coords))
+        for i, atom in enumerate(targets):
+            # determine which other atoms' vdw radii intersect with
+            # this atom's vdw radius so we don't need to calculate
+            # as many distances
+            reduced_coords = [atom.coords]
+            reduced_radii = [radii_list[i]]
+            for k, atom2 in enumerate(targets):
+                if atom2 is atom:
+                    continue
+                if Dik[i, k] <= radii_list[i] + radii_list[k]:
+                    reduced_coords.append(atom2.coords)
+                    reduced_radii.append(radii_list[k])
+            
+            reduced_radii_2 = np.array(reduced_radii) ** 2
+            reduced_coords = np.array(reduced_coords)
+            
+            rgrid, rweights = utils.gauss_legendre_grid(
+                start=0, stop=radii_list[i], num=rpoints
+            )
+            agrid, aweights = utils.lebedev_sphere(
+                radius=1, center=np.zeros(3), num=apoints
+            )
+            
+            atom_vol = 0
+            for j, (rvalue, rweight) in enumerate(zip(rgrid, rweights)):
+                agrid_r = agrid * rvalue
+                agrid_r += atom.coords
+
+                D = distance.cdist(agrid_r, reduced_coords, "sqeuclidean")
+                diff_mat = D - reduced_radii_2
+                mask = np.argmin(diff_mat, axis=1) == 0
+                atom_vol += 4 * np.pi * rweight * sum(aweights[mask]) * rvalue ** 2
+
+            vol += atom_vol
+        
+        return vol
+
     def steric_map(
         self,
         center=None,

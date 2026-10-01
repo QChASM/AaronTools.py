@@ -2578,7 +2578,7 @@ class Orbitals:
                 radius=1, center=np.zeros(3), num=apoints
             )
     
-            found_pts = False
+            # found_pts = False
             for rvalue, rweight in zip(rgrid, rweights):
                 agrid_r = agrid * rvalue
                 agrid_r += t.coords
@@ -2590,9 +2590,9 @@ class Orbitals:
                 if any(mask):
                     power_points = np.append(power_points, agrid_r[mask], axis=0)
                     power_weights[i] = np.append(power_weights[i], rweight * aweights[mask])
-                    found_pts = True
-                elif found_pts:
-                    break
+                #     found_pts = True
+                # elif found_pts:
+                #     break
     
             # with open("test_%s.bild" % target.name, "w") as f:
             #     s = ""
