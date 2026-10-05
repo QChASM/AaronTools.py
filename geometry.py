@@ -3978,7 +3978,7 @@ class Geometry:
             for k, atom2 in enumerate(targets):
                 if atom2 is atom:
                     continue
-                if Dik[i, k] <= radii_list[i] + radii_list[k]:
+                if Dik[i, k] < radii_list[i] + radii_list[k]:
                     reduced_coords.append(atom2.coords)
                     reduced_radii.append(radii_list[k])
             

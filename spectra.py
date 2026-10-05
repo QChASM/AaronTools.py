@@ -177,6 +177,8 @@ class Signals:
             for nest in data[0].nested:
                 for d in data:
                     nest_attr = getattr(d, nest)
+                    if nest_attr is None:
+                        continue
                     if isinstance(nest_attr, dict):
                         for value in nest_attr.values():
                             if hasattr(value, "__iter__"):
@@ -681,6 +683,8 @@ class Signals:
                         if not isinstance(d.nested, str):
                             for attr in d.nested:
                                 nest = getattr(d, attr)
+                                if nest is None:
+                                    continue
                                 nest_vals = dict()
                                 if isinstance(nest, dict):
                                     for k, items in nest.items():
@@ -696,6 +700,7 @@ class Signals:
                                             new_vals[attr][k][i] = nest_cls(
                                                 nest_x_val, **nest_vals
                                             )
+                                
                                 elif hasattr(nest, "__iter__"):
                                     for i, item in enumerate(nest):
                                         nest_x_val = getattr(item, item.x_attr)
@@ -709,6 +714,7 @@ class Signals:
                                         new_vals[attr][i] = nest_cls(
                                             nest_x_val, **nest_vals
                                         )
+
                                 else:
                                     nest_x_val = getattr(nest, nest.x_attr)
                                     vals = nest.__dict__
@@ -755,15 +761,17 @@ class Frequency(Signals):
     """for spectra in the IR/NIR region based on vibrational modes"""
     
     def __init__(self, *args, harmonic=True, hpmodes=None, **kwargs):
-        super().__init__(*args, harmonic=harmonic, hpmodes=hpmodes, **kwargs)
         self.anharm_data = None
         self.imaginary_frequencies = None
         self.real_frequencies = None
         self.lowest_frequency = None
         self.by_frequency = {}
         self.is_TS = None
-        self.sort_frequencies()
         
+        super().__init__(*args, harmonic=harmonic, hpmodes=hpmodes, **kwargs)
+
+        self.sort_frequencies()
+
         # some software doesn't print reduced mass or force constants
         # we can calculate them if we have atom with mass, displacement
         # vectors, and vibrational frequencies
@@ -1083,6 +1091,11 @@ class Frequency(Signals):
         # block column 0 is the index of the mode
         # block column 1 is the frequency in 1/cm
         # skip line one b/c its just "VIBRATIONAL FREQUENCIES" with the way we got the lines
+        harmonics = []
+        fundamentals = []
+        combinations = []
+        overtones = []
+
         for n, line in enumerate(lines[1:]):
             if line == "NORMAL MODES":
                 break
@@ -1091,7 +1104,7 @@ class Frequency(Signals):
                 continue
 
             freq = line.split()[1]
-            self.data += [HarmonicVibration(float(freq))]
+            harmonics += [HarmonicVibration(float(freq))]
 
         atoms = kwargs["atoms"]
         masses = np.array([atom.mass for atom in atoms])
@@ -1106,7 +1119,7 @@ class Frequency(Signals):
         # all 3N modes are printed with six modes in each block
         # each column corresponds to one mode
         # the rows of the columns are x_1, y_1, z_1, x_2, y_2, z_2, ...
-        displacements = np.zeros((len(self.data), len(self.data)))
+        displacements = np.zeros((len(harmonics), len(harmonics)))
         carryover = 0
         row = None
         columns = None
@@ -1137,21 +1150,23 @@ class Frequency(Signals):
             i += 1
 
         # reshape columns into Nx3 arrays
-        for k, data in enumerate(self.data):
+        for k, data in enumerate(harmonics):
             data.vector = np.reshape(
-                displacements[:, k], (len(self.data) // 3, 3)
+                displacements[:, k], (len(harmonics) // 3, 3)
             )
             if symmetries:
                 data.symmetry = symmetries[k]
             
 
         # purge rotational and translational modes
-        n_data = len(self.data)
+        n_data = len(harmonics)
         k = 0
+        n_transrot = 0
         while k < n_data:
-            if self.data[k].frequency == 0:
-                del self.data[k]
+            if harmonics[k].frequency == 0:
+                del harmonics[k]
                 n_data -= 1
+                n_transrot += 1
             else:
                 k += 1
 
@@ -1170,29 +1185,66 @@ class Frequency(Signals):
         # the second column is the frequency
         # the third is the intensity, which we read next
         if intensity_start is not None:
-            t = sum([1 for mode in self.data if mode.frequency < 0])
+            t = sum([1 for mode in harmonics if mode.frequency < 0])
             for line in lines[intensity_start:]:
                 if not re.match(r"\s*\d+:", line):
                     continue
                 ir_info = line.split()
                 inten = float(ir_info[ndx])
-                self.data[t].intensity = inten
-                t += 1
-                if t >= len(self.data):
+                mode = int(ir_info[0].strip(":"))
+                harmonics[mode - t - n_transrot].intensity = inten
+                if mode - t - n_transrot + 1 >= len(harmonics):
                     break
-    
+            
+            for k, line in enumerate(lines):
+                if line.strip() == "OVERTONES AND COMBINATION BANDS":
+                    fundamentals = [
+                        AnharmonicVibration(
+                            mode.frequency,
+                            intensity=mode.intensity,
+                            harmonic=mode,
+                        ) for mode in harmonics
+                    ]
+
+                    t = sum([1 for mode in harmonics if mode.frequency < 0])
+                    for line in lines[k + 1:]:
+                        if not re.match(r"\s*\d+\s*\+\s*\d+:", line):
+                            continue
+                        combo, combo_info = line.split(":")
+                        n1, n2 = [int(x) for x in combo.split("+")]
+                        ir_info = combo_info.split()
+                        freq = float(ir_info[0])
+                        inten = float(ir_info[2])
+                        if n1 == n2:
+                            if fundamentals[n1 - t - n_transrot].overtones is None:
+                                fundamentals[n1 - t - n_transrot].overtones = []
+                            fundamentals[n1 - t - n_transrot].overtones.append(
+                                AnharmonicVibration(freq, intensity=inten, harmonic=harmonics[n1 - t - n_transrot])
+                            )
+                            if n1 - t - n_transrot >= len(fundamentals):
+                                break
+                        else:
+                            if fundamentals[n1 - t - n_transrot].combinations is None:
+                                fundamentals[n1 - t - n_transrot].combinations = dict()
+                            fundamentals[n1 - t - n_transrot].combinations[n2 - t - n_transrot] = \
+                                [AnharmonicVibration(freq, intensity=inten, harmonic=harmonics[n1 - t - n_transrot])]
+
             for k, line in enumerate(lines):
                 if line.strip() == "RAMAN SPECTRUM":
-                    t = 0
+                    t = sum([1 for mode in harmonics if mode.frequency < 0])
                     for line in lines[k + 1:]:
                         if not re.match(r"\s*\d+:", line):
                             continue
                         ir_info = line.split()
+                        mode = int(ir_info[0].strip(":"))
                         inten = float(ir_info[2])
-                        self.data[t].raman_activity = inten
-                        t += 1
-                        if t >= len(self.data):
+                        harmonics[mode - t - n_transrot].raman_activity = inten
+                        if mode - t - n_transrot + 1 >= len(harmonics):
                             break
+        
+        self.data = harmonics
+        if fundamentals:
+            self.anharm_data = fundamentals
 
     def parse_psi4_lines(self, lines, *args, **kwargs):
         """parse lines of psi4 output related to frequencies

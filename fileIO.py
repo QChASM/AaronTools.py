@@ -2569,7 +2569,7 @@ class FileReader:
                         n += 3
                         self.other["scf_energy"] = float(line.split()[3])
     
-                    if line.startswith("QM Subsystem"):
+                    if line.startswith("QM Subsystem") or line.startswith("QM1 Subsystem"):
                         atoms = [int(x) for x in line.split()[3:]]
                         line = f.readline()
                         n += 1
@@ -2764,6 +2764,11 @@ class FileReader:
                                     break
                                 hit["spectrum"] = True
                                 stage = "IR"
+                                self.skip_lines(f, 2)
+                                n += 2
+    
+                            if "OVERTONES AND COMBINATION BANDS" in line:
+                                stage = "NEARIR"
                                 self.skip_lines(f, 2)
                                 n += 2
     
