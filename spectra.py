@@ -274,18 +274,17 @@ class Signals:
         :param float linear_scale: subtract linear_scale * frequency off each mode
         :param float quadratic_scale: subtract quadratic_scale * frequency^2 off each mode
         """
+
         other_y_list = []
         if peak_type.lower() != "delta":
             if point_spacing is not None:
                 x_values = []
                 x = -point_spacing
-                stop = max(signal_centers)
-                stop += 10 * fwhm
-                while x < stop:
-                    x += point_spacing
-                    x_values.append(x)
-            
-                x_values = np.array(x_values)
+                left = max(signal_centers)
+                right = min(signal_centers)
+                left -= 2 + 10 * fwhm
+                right += 2 + 10 * fwhm
+                x_values = np.linspace(left, right, endpoint=True)
             
             else:
                 xmax = max(signal_centers) + 10 * (fwhm + 1)
