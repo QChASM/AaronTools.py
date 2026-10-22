@@ -263,6 +263,154 @@ class CompOutput:
             zpve = 0.5 * hc * vib
         return zpve
 
+    def translational_entropy(self, temperature=None, pressure=1):
+        """
+        returns translational entropy"
+        
+        :param float temperature: temperature in K. If None, use self.temperature
+        :param float pressure: pressuse in atm
+        """
+        mass = self.mass
+
+        T = temperature
+        if T is None:
+            T = self.temperature
+        if T <= 0:
+            return 0
+            
+        qt = 2 * np.pi * mass * PHYSICAL.KB * T / (PHYSICAL.PLANCK ** 2)
+        qt = qt ** (3 / 2)
+        qt *= PHYSICAL.KB * T / pressure
+        St = PHYSICAL.GAS_CONSTANT * (np.log(qt) + (5 / 2))
+        
+        return St / (UNIT.HART_TO_KCAL * 1000)
+
+    def rotational_entropy(self, temperature=None):
+        """
+        returns rotational entropy"
+        
+        :param float temperature: temperature in K. If None, use self.temperature
+        """
+        T = temperature
+        if T is None:
+            T = self.temperature
+        if T <= 0:
+            return 0
+        
+        rot = [temp for temp in self.rotational_temperature if temp != 0]
+        sigmar = self.rotational_symmetry_number
+        if sigmar is None and len(self.geometry.atoms) == 1:
+            sigmar = 3
+            
+        if all(r == np.inf for r in rot):
+            # atomic
+            qr = 1
+            Sr = 0
+        elif len(rot) == 3:
+            # non linear molecules
+            qr = np.sqrt(np.pi) / sigmar
+            qr *= T ** (3 / 2) / np.sqrt(rot[0] * rot[1] * rot[2])
+            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 3 / 2)
+        elif len(rot) == 2:
+            # linear molecules
+            qr = (1 / sigmar) * (T / np.sqrt(rot[0] * rot[1]))
+            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 1)
+        else:
+            # atoms
+            qr = 1
+            Sr = 0
+
+        return Sr / (UNIT.HART_TO_KCAL * 1000)
+
+    def vibrational_entropy(self, temperature=None, v0=100, method="RRHO"):
+        """
+        calculate vibrational entropy
+        
+        :param float temperature: temperature in K- None will use self.temperature
+        :param float v0: float, cutoff/damping parameter for quasi G corrections
+        :param str method: treatment of entropy\:
+            
+            * RRHO  - no quasi treatment
+            * QRRHO - Grimme's quasi-RRHO
+              see Grimme, S. (2012), Supramolecular Binding Thermodynamics by
+              Dispersion‐Corrected Density Functional Theory. Chem. Eur. J.,
+              18: 9955-9964. (DOI: 10.1002/chem.201200497) for details
+            * QHARM - Truhlar's quasi-harmonic
+              see J. Phys. Chem. B 2011, 115, 49, 14556–14562
+              (DOI: 10.1021/jp205508z) for details
+        """
+        T = temperature
+        if T is None:
+            T = self.temperature
+        if T <= 0:
+            return 0
+        
+
+        vib_unit_convert = (
+            PHYSICAL.SPEED_OF_LIGHT * PHYSICAL.PLANCK / PHYSICAL.KB
+        )
+        freqs = np.array(self.frequency.real_frequencies)
+        vibtemps = np.array(
+            [f_i * vib_unit_convert for f_i in freqs if f_i > 0]
+        )
+        
+        if method == self.QUASI_HARMONIC:
+            harm_vibtemps = np.array(
+                [
+                    f_i * vib_unit_convert
+                    if f_i > v0
+                    else v0 * vib_unit_convert
+                    for f_i in freqs
+                    if f_i > 0
+                ]
+            )
+        else:
+            harm_vibtemps = vibtemps
+
+        Sv = 0
+        if method == self.QUASI_HARMONIC:
+            Sv = np.sum(
+                harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
+                - np.log(1 - np.exp(-harm_vibtemps / T))
+            )
+        elif method == self.RRHO:
+            Sv = np.sum(
+                vibtemps / (T * (np.exp(vibtemps / T) - 1))
+                - np.log(1 - np.exp(-vibtemps / T))
+            )
+        elif method == self.QUASI_RRHO:
+            rot = [temp for temp in self.rotational_temperature if temp != 0]
+            Bav = PHYSICAL.PLANCK ** 2 / (24 * np.pi ** 2 * PHYSICAL.KB)
+            Bav *= sum([1 / r for r in rot])
+
+            mu = PHYSICAL.PLANCK
+            mu /= 8 * np.pi ** 2 * freqs * PHYSICAL.SPEED_OF_LIGHT
+            mu = mu * Bav / (mu + Bav)
+            Sr_eff = 1 / 2 + np.log(
+                np.sqrt(
+                    8
+                    * np.pi ** 3
+                    * mu
+                    * PHYSICAL.KB
+                    * T
+                    / PHYSICAL.PLANCK ** 2
+                )
+            )
+
+            weights = 1 / (1 + (v0 / freqs) ** 4)
+
+            Sv = np.sum(
+                weights
+                * (
+                    harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
+                    - np.log(1 - np.exp(-harm_vibtemps / T))
+                )
+                + (1 - weights) * Sr_eff
+            )
+        
+        Sv *= PHYSICAL.GAS_CONSTANT
+        return Sv / (UNIT.HART_TO_KCAL * 1000)
+
     def therm_corr(self, temperature=None, v0=100, method="RRHO", enthalpy_method="RRHO", pressure=1):
         """
         returns thermal correction to energy, enthalpy correction to energy, and entropy
@@ -337,33 +485,11 @@ class CompOutput:
         Bav *= sum([1 / r for r in rot])
 
         # Translational
-        qt = 2 * np.pi * mass * PHYSICAL.KB * T / (PHYSICAL.PLANCK ** 2)
-        qt = qt ** (3 / 2)
-        qt *= PHYSICAL.KB * T / pressure
-        St = PHYSICAL.GAS_CONSTANT * (np.log(qt) + (5 / 2))
+        St = self.translational_entropy(temperature=T, pressure=pressure)
         Et = 3 * PHYSICAL.GAS_CONSTANT * T / 2
 
-        # Electronic
-        Se = PHYSICAL.GAS_CONSTANT * (np.log(mult))
-
         # Rotational
-        if all(r == np.inf for r in rot):
-            # atomic
-            qr = 1
-            Sr = 0
-        elif len(rot) == 3:
-            # non linear molecules
-            qr = np.sqrt(np.pi) / sigmar
-            qr *= T ** (3 / 2) / np.sqrt(rot[0] * rot[1] * rot[2])
-            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 3 / 2)
-        elif len(rot) == 2:
-            # linear molecules
-            qr = (1 / sigmar) * (T / np.sqrt(rot[0] * rot[1]))
-            Sr = PHYSICAL.GAS_CONSTANT * (np.log(qr) + 1)
-        else:
-            # atoms
-            qr = 1
-            Sr = 0
+        Sr = self.rotational_entropy(T)
 
         if all(r == np.inf for r in rot):
             Er = 0
@@ -371,42 +497,7 @@ class CompOutput:
             Er = len(rot) * PHYSICAL.GAS_CONSTANT * T / 2
 
         # Vibrational
-        Sv = 0
-        if method == self.QUASI_HARMONIC:
-            Sv = np.sum(
-                harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
-                - np.log(1 - np.exp(-harm_vibtemps / T))
-            )
-        elif method == self.RRHO:
-            Sv = np.sum(
-                vibtemps / (T * (np.exp(vibtemps / T) - 1))
-                - np.log(1 - np.exp(-vibtemps / T))
-            )
-        elif method == self.QUASI_RRHO:
-            mu = PHYSICAL.PLANCK
-            mu /= 8 * np.pi ** 2 * freqs * PHYSICAL.SPEED_OF_LIGHT
-            mu = mu * Bav / (mu + Bav)
-            Sr_eff = 1 / 2 + np.log(
-                np.sqrt(
-                    8
-                    * np.pi ** 3
-                    * mu
-                    * PHYSICAL.KB
-                    * T
-                    / PHYSICAL.PLANCK ** 2
-                )
-            )
-
-            weights = 1 / (1 + (v0 / freqs) ** 4)
-
-            Sv = np.sum(
-                weights
-                * (
-                    harm_vibtemps / (T * (np.exp(harm_vibtemps / T) - 1))
-                    - np.log(1 - np.exp(-harm_vibtemps / T))
-                )
-                + (1 - weights) * Sr_eff
-            )
+        Sv = self.vibrational_entropy(temperature=T, v0=v0, method=method)
         
         if enthalpy_method == self.RRHO:
             Ev = np.sum(vibtemps * (1.0 / 2 + 1 / (np.exp(vibtemps / T) - 1)))
@@ -422,13 +513,12 @@ class CompOutput:
             raise TypeError("unknown enthalpy type: %s" % enthalpy_method)
 
         Ev *= PHYSICAL.GAS_CONSTANT
-        Sv *= PHYSICAL.GAS_CONSTANT
 
         Ecorr = (Et + Er + Ev) / (UNIT.HART_TO_KCAL * 1000)
         Hcorr = Ecorr + (
             PHYSICAL.GAS_CONSTANT * T / (UNIT.HART_TO_KCAL * 1000)
         )
-        Stot = (St + Sr + Sv + Se) / (UNIT.HART_TO_KCAL * 1000)
+        Stot = St + Sr + Sv
 
         return Ecorr, Hcorr, Stot
 
