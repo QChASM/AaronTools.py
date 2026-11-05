@@ -127,6 +127,38 @@ class TestFileIO(TestWithTimer):
         test = FileReader(self.orca_orbit_file, just_geom=False)
         self.assertEqual(test.other["orbitals"].n_mos, 168)
 
+    def test_read_orca_extopt(self):
+        # ORCA as external optimizer (! ExtOpt) labels the energy:
+        # FINAL SINGLE POINT ENERGY (From external program)      -149.617798536331
+        # and prints no SCF section: charge and multiplicity come from "* xyz 1 2"
+        test = FileReader(
+            os.path.join(prefix, "test_files", "orca_extopt.out"), just_geom=False
+        )
+        self.assertAlmostEqual(test.other["energy"], -149.617798536331, places=10)
+        self.assertEqual(test.other["charge"], 1)
+        self.assertEqual(test.other["multiplicity"], 2)
+        self.assertEqual(len(test.atoms), 6)
+
+    def test_read_orca_open_shell_populations(self):
+        # "MULLIKEN ATOMIC CHARGES AND SPIN POPULATIONS": charge, then spin
+        test = FileReader(
+            os.path.join(prefix, "test_files", "orca_uhf_triplet.out"), just_geom=False
+        )
+        for kind in ("Mulliken", "Löwdin"):
+            charges = test.other["%s Charges" % kind]
+            spins = test.other["%s Spin Populations" % kind]
+            self.assertTrue(np.allclose(charges, 0, atol=1e-5))
+            self.assertAlmostEqual(spins.sum(), 2.0, places=5)
+            self.assertTrue(np.allclose(spins, 1.0, atol=1e-5))
+        # ORCA 6 prints no N(Alpha)/N(Beta): the counts come from the occupations
+        orbitals = test.other["orbitals"]
+        self.assertEqual((orbitals.n_alpha, orbitals.n_beta), (9, 7))
+
+    def test_read_orca_closed_shell_charges(self):
+        # one column: no spin populations
+        test = FileReader(self.orca_orbit_file, just_geom=False)
+        self.assertNotIn("Mulliken Spin Populations", test.other)
+
     def test_read_psi4_dat_structure(self):
         ref = FileReader(os.path.join(prefix, "ref_files", "psi4_geom.xyz"))
         test = FileReader((self.psi4_output_file, "dat", None))
