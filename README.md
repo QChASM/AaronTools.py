@@ -10,8 +10,12 @@ AaronTools provides a collection of tools for automating routine tasks encounter
 
 These tools can be used either directly within a Python script using AaronTools objects, or via a series of command-line scripts. 
 
+## License
+As of November 10, 2026, AaronTools is licensed under [LGPL-3.0](https://github.com/QChASM/AaronTools.py/blob/master/LICENSE.LESSER).
+The final GPL-3.0 version is available [here](https://github.com/QChASM/AaronTools.py/releases/tag/v1.1.1-GPL)
+
 ## Documentation
-AaronTools documenation, including tutorials on the Python API, can be found on our <a href="https://aarontools.readthedocs.io/en/latest/">Read-the-Docs Page</a>.
+AaronTools documentation, including tutorials on the Python API, can be found on our <a href="https://aarontools.readthedocs.io/en/latest/">Read-the-Docs Page</a>.
 
 ## Installation
 * with pypi: <code>pip install AaronTools</code>
