@@ -2850,7 +2850,9 @@ class Theory:
     
                 out_str += "$end\n\n"
         
-        return out_str, warnings
+        if return_warnings:
+            return out_str, warnings
+        return out_str
     
     def get_qchem_molecule(
         self,
