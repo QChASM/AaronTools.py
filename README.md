@@ -71,4 +71,4 @@ However, users are <em>strongly urged</em> to use the Python version since it ha
 
 
 ## Contact
-If you have any questions or would like to discuss bugs or additional needed features, feel free to contact us at qchasm@uga.edu
+If you have any questions or would like to discuss bugs or additional needed features, feel free to contact us at help@qchasm.org
