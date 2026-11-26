@@ -1577,15 +1577,26 @@ class Orbitals:
 
         self.n_mos = len(self.alpha_coefficients)
 
-        if "n_alpha" not in filereader.keys():
+        if "n_alpha" in filereader.keys():
+            self.n_alpha = filereader["n_alpha"]
+            self.n_beta = filereader["n_beta"]
+        elif "alpha_occupancies" in filereader.keys() and filereader["alpha_occupancies"]:
+            # ORCA 6 no longer prints N(Alpha)/N(Beta): count the electrons in the
+            # occupations of the orbitals just read (open shells included)
+            alpha_occ = np.array(filereader["alpha_occupancies"])
+            if "beta_occupancies" in filereader.keys() and filereader["beta_occupancies"]:
+                self.n_alpha = int(np.rint(alpha_occ.sum()))
+                self.n_beta = int(np.rint(np.sum(filereader["beta_occupancies"])))
+            else:
+                # restricted: 2 per doubly, 1 per singly occupied orbital
+                self.n_alpha = int(np.sum(alpha_occ > 0.5))
+                self.n_beta = int(np.rint(alpha_occ.sum())) - self.n_alpha
+        else:
             tot_electrons = sum(
                 ELEMENTS.index(atom.element) for atom in filereader["atoms"]
             ) - filereader["charge"]
             self.n_beta = tot_electrons // 2
             self.n_alpha = tot_electrons - self.n_beta
-        else:
-            self.n_alpha = filereader["n_alpha"]
-            self.n_beta = filereader["n_beta"]
 
         if "alpha_occupancies" in filereader:
             self.alpha_occupancies = filereader["alpha_occupancies"]

@@ -2461,6 +2461,28 @@ class FileReader:
 
             return rv, n
 
+        def get_charges(f, n):
+            """
+            per-atom charges after a MULLIKEN/LOEWDIN ATOMIC CHARGES header
+            closed shell: one column (charge)
+            open shell ("... AND SPIN POPULATIONS"): charge, then spin population
+            returns charges, spin populations (None for closed shell), n
+            """
+            self.skip_lines(f, 1)
+            n += 1
+            charges = np.zeros(len(self.atoms))
+            spins = np.zeros(len(self.atoms))
+            open_shell = False
+            for i in range(0, len(self.atoms)):
+                line = f.readline()
+                n += 1
+                info = line.split(":")[-1].split()
+                charges[i] = float(info[0])
+                if len(info) > 1:
+                    open_shell = True
+                    spins[i] = float(info[1])
+            return charges, spins if open_shell else None, n
+
         line = f.readline()
         n = 1
         while line != "":
@@ -2473,7 +2495,7 @@ class FileReader:
                     return self.read_psi4_out(
                         f, get_all=get_all, just_geom=just_geom
                     )
-    
+
                 if (
                     "A Quantum Leap Into The Future Of Chemistry"
                     in line
@@ -2558,10 +2580,24 @@ class FileReader:
                             self.other["energy_context"] = line
 
                         except ValueError:
-                            kind = line.split()[4]
-                            nrg = float(line.split()[5])
-                            self.other["energy " + kind] = nrg
-                            self.other["energy " + kind + "_context"] = line
+                            # a label between ENERGY and the number, which may
+                            # contain spaces; with ORCA as external optimizer (ExtOpt):
+                            # FINAL SINGLE POINT ENERGY (From external program)   -149.666373378282
+                            labelled = re.match(
+                                r"FINAL SINGLE POINT ENERGY\s+(\(.*?\)|\S+)\s+(-?\d+\.\d+)", line
+                            )
+                            if labelled and labelled.group(1) == "(From external program)":
+                                # the energy of the job, computed by the external program
+                                self.other["energy"] = float(labelled.group(2))
+                                self.other["energy_context"] = line
+                            else:
+                                kind = line.split()[4]
+                                if labelled:
+                                    nrg = float(labelled.group(2))
+                                else:
+                                    nrg = float(line.split()[5])
+                                self.other["energy " + kind] = nrg
+                                self.other["energy " + kind + "_context"] = line
 
                     if line.startswith("TOTAL SCF ENERGY"):
                         self.skip_lines(f, 2)
@@ -2955,24 +2991,16 @@ class FileReader:
                             self.other[data[header][0]] = np.array(data[header][1])
     
                     elif line.startswith("LOEWDIN ATOMIC CHARGES"):
-                        self.skip_lines(f, 1)
-                        n += 1
-                        charges = np.zeros(len(self.atoms))
-                        for i in range(0, len(self.atoms)):
-                            line = f.readline()
-                            n += 1
-                            charges[i] = float(line.split()[-1])
+                        charges, spins, n = get_charges(f, n)
                         self.other["Löwdin Charges"] = charges
-    
+                        if spins is not None:
+                            self.other["Löwdin Spin Populations"] = spins
+
                     elif line.startswith("MULLIKEN ATOMIC CHARGES"):
-                        self.skip_lines(f, 1)
-                        n += 1
-                        charges = np.zeros(len(self.atoms))
-                        for i in range(0, len(self.atoms)):
-                            line = f.readline()
-                            n += 1
-                            charges[i] = float(line.split()[-1])
+                        charges, spins, n = get_charges(f, n)
                         self.other["Mulliken Charges"] = charges
+                        if spins is not None:
+                            self.other["Mulliken Spin Populations"] = spins
     
                     elif line.startswith("BASIS SET IN INPUT FORMAT"):
                         # read basis set primitive info
@@ -3143,15 +3171,24 @@ class FileReader:
                     if "INPUT FILE" in line:
                         input_file = ""
                         try:
-                            coord_match = re.compile("\*\s*(xyz|int|gzmat)\s+-?\d+\s+(\d+)", re.IGNORECASE)
+                            coord_match = re.compile(
+                                r"\*\s*(xyzfile|xyz|int|gzmtfile|gzmat)\s+(-?\d+)\s+(\d+)", re.IGNORECASE
+                            )
+                            mult_match = re.compile(r"\bmult\s+(\d+)", re.IGNORECASE)
                             while "****END OF INPUT****" not in line:
                                 input_file += line
                                 line = f.readline()
                                 n += 1
-                                if "mult" in line.lower():
-                                    self.other["multiplicity"] = int(float(line.split()[-1]))
-                                if coord_match.search(line):
-                                    self.other["multiplicity"] = int(coord_match.search(line).group(2))
+                                # the input line without ORCA's "|  6> " prefix and
+                                # without comments (# ... ; #! lines of external programs)
+                                content = line.split(">", 1)[-1].split("#", 1)[0]
+                                if mult_match.search(content):
+                                    self.other["multiplicity"] = int(mult_match.search(content).group(1))
+                                if coord_match.search(content):
+                                    # the SCF section's "Total Charge", read later, takes
+                                    # precedence; jobs without one (ExtOpt) keep this
+                                    self.other["charge"] = int(coord_match.search(content).group(2))
+                                    self.other["multiplicity"] = int(coord_match.search(content).group(3))
     
                         except ValueError:
                             pass
